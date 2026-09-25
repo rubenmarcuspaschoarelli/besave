@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; a spec do ticket já fixa trait, funções e regras)
-**Status**: In progress
+**Status**: Done
 
 ---
 
@@ -181,10 +181,10 @@ T3 → T4 → T5
 
 **Done when**:
 
-- [ ] `BESAVE_FONTE=fake cargo run -- --gerar --saida <tmp>` cria a árvore e imprime o relatório
-- [ ] `--gerar --dry-run` e `--gerar` sem `--saida` saem com erro sem panic
-- [ ] README atualizado
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] `BESAVE_FONTE=fake cargo run -- --gerar --saida <tmp>` cria a árvore e imprime o relatório
+- [x] `--gerar --dry-run` e `--gerar` sem `--saida` saem com erro sem panic
+- [x] README atualizado
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: integration
 **Gate**: build

@@ -186,9 +186,9 @@ implementar para o S3.
 | CIC-04 | P1: Ciclo | T4 | Implemented |
 | CIC-05 | P1: Ciclo | T4 | Implemented |
 | CIC-06 | P1: Ciclo | T4 | Implemented |
-| CLI-01 | P1: Binário | T5 | Pending |
-| CLI-02 | P1: Binário | T5 | Pending |
-| CLI-03 | P1: Binário | T5 | Pending |
+| CLI-01 | P1: Binário | T5 | Implemented |
+| CLI-02 | P1: Binário | T5 | Implemented |
+| CLI-03 | P1: Binário | T5 | Implemented |
 
 **Coverage:** 27 total, 27 mapped to tasks, 0 unmapped
 
