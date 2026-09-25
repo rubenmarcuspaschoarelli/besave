@@ -166,9 +166,9 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | FN-01 | P1: Functions | T1 | Implemented |
 | FN-02 | P1: Functions | T1 | Implemented |
 | FN-03 | P1: Functions | T1 | Implemented |
-| FN-04 | P1: Functions | T2 | Pending |
-| FN-05 | P1: Functions | T2 | Pending |
-| FN-06 | P1: Functions | T2 | Pending |
+| FN-04 | P1: Functions | T2 | Implemented |
+| FN-05 | P1: Functions | T2 | Implemented |
+| FN-06 | P1: Functions | T2 | Implemented |
 | FN-07 | P1: Functions | T5 | Pending |
 | S3-01 | P1: Buckets | T3 | Pending |
 | S3-02 | P1: Buckets | T3 | Pending |

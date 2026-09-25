@@ -95,10 +95,10 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] id presente → 302, `location` = valor, `cache-control: no-store`
-- [ ] id ausente (get lança) → 302 `/` + `no-store`
-- [ ] `/ir/`, `/ir/abc`, `/ir/12/x` → 302 `/` sem chamar a KVS
-- [ ] Gate check passes: `npm test`
+- [x] id presente → 302, `location` = valor, `cache-control: no-store`
+- [x] id ausente (get lança) → 302 `/` + `no-store`
+- [x] `/ir/`, `/ir/abc`, `/ir/12/x` → 302 `/` sem chamar a KVS
+- [x] Gate check passes: `npm test`
 
 **Tests**: unit
 **Gate**: quick
