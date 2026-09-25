@@ -125,11 +125,11 @@ T3 → T4 → T5
 
 **Done when**:
 
-- [ ] Manifest válido contra `manifest.schema.json`; campos conforme MAN-02..04
-- [ ] Headers de chunk e manifest conforme MANIFEST §4; manifest é a última gravação
-- [ ] Chunk > 61 440 B → `ChunkAcimaDoOrcamento`, nada gravado; falha ao gravar chunk → sem manifest
-- [ ] `Relatorio` com todas as contagens
-- [ ] Gate check passes: `cargo test`
+- [x] Manifest válido contra `manifest.schema.json`; campos conforme MAN-02..04
+- [x] Headers de chunk e manifest conforme MANIFEST §4; manifest é a última gravação
+- [x] Chunk > 61 440 B → `ChunkAcimaDoOrcamento`, nada gravado; falha ao gravar chunk → sem manifest
+- [x] `Relatorio` com todas as contagens
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick

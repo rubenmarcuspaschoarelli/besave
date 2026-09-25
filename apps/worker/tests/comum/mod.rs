@@ -73,3 +73,94 @@ pub fn validar_schema(nome: &str, instancia: &serde_json::Value) {
     let erros: Vec<String> = v.iter_errors(instancia).map(|e| e.to_string()).collect();
     assert!(erros.is_empty(), "{nome}: {erros:?}");
 }
+
+/// 2026-09-24T12:40:00Z
+pub const AGORA: i64 = 1_790_253_600;
+pub const DIA: i64 = 86_400;
+
+pub fn mapeamento() -> worker::mapeamento::Mapeamento {
+    worker::mapeamento::Mapeamento::carregar(caminho_mapeamento()).unwrap()
+}
+
+/// Linha válida e ativa em TECH, faixa `id / 1000`.
+pub fn linha(id: i64) -> worker::conversao::LinhaOferta {
+    worker::conversao::LinhaOferta {
+        id,
+        id_produto: Some(id),
+        loja: Some("Amazon".into()),
+        titulo: Some(format!("Oferta {id}")),
+        preco_por: Some(10.0),
+        dt_oferta: Some(AGORA - 3600),
+        area: Some("Tech".into()),
+        publico: Some("U".into()),
+        ativo: true,
+        ..Default::default()
+    }
+}
+
+/// Linhas equivalentes aos 3 registros de `chunk-ok.json` (5420 expirada).
+pub fn linhas_fixture() -> Vec<worker::conversao::LinhaOferta> {
+    use worker::conversao::LinhaOferta;
+    vec![
+        LinhaOferta {
+            id: 5412,
+            id_produto: Some(910),
+            loja: Some("Amazon".into()),
+            titulo: Some("Fone Bluetooth XYZ com ANC".into()),
+            preco_de: Some(299.90),
+            preco_por: Some(199.90),
+            cupom: Some("besave10".into()),
+            dt_oferta: Some(1_790_253_600),
+            area: Some("Tecnologia".into()),
+            publico: Some("Unissex".into()),
+            ativo: true,
+            ..Default::default()
+        },
+        LinhaOferta {
+            id: 5413,
+            id_produto: Some(911),
+            loja: Some("Shopee".into()),
+            titulo: Some("Kit Skincare Vitamina C 3 passos".into()),
+            preco_por: Some(89.90),
+            dt_oferta: Some(1_790_253_660),
+            area: Some("Elas".into()),
+            publico: Some("Mulher".into()),
+            ativo: true,
+            ..Default::default()
+        },
+        LinhaOferta {
+            id: 5420,
+            id_produto: Some(912),
+            loja: Some("MercadoLivre".into()),
+            titulo: Some("Ração Premium Cães Adultos 15kg".into()),
+            preco_de: Some(249.00),
+            preco_por: Some(199.00),
+            dt_oferta: Some(1_790_150_400),
+            area: Some("Pet".into()),
+            publico: Some("U".into()),
+            ativo: false,
+            dt_desativacao: Some(AGORA - DIA),
+            ..Default::default()
+        },
+    ]
+}
+
+/// Texto pseudoaleatório (letras e espaços) de `n` caracteres: comprime mal.
+pub fn texto_aleatorio(semente: u64, n: usize) -> String {
+    let mut x = semente
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1);
+    (0..n)
+        .map(|i| {
+            x = x
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let k = (x >> 33) % 27;
+            if k == 26 || i == 0 || i + 1 == n {
+                if i == 0 || i + 1 == n { 'x' } else { ' ' }
+            } else {
+                char::from(b'a' + k as u8)
+            }
+        })
+        .collect()
+}
