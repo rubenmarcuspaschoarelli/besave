@@ -1,0 +1,96 @@
+-- =============================================================================
+-- STP_OFERTA_FILA_CAPTURA_INSERT
+-- Insere uma oferta capturada pelo Agente de Captura WhatsApp na tabela
+-- OFERTA_FILA_CAPTURA. Os 17 parametros IN correspondem, 1 para 1, as colunas de
+-- saida do CSV (storage.COLUNAS / monitor._montar_linha). As demais colunas da
+-- tabela (DS_LOJA, LS_*, precos detalhados, recorrencia, etc.) ficam NULL: serao
+-- preenchidas por um programa posterior de enriquecimento.
+--
+-- ST_CAPTURA e a EXCECAO: gravamos sempre '0' (constante, nao vem do CSV). Esse
+-- valor e o status de leitura consumido por outro projeto downstream -- '0' marca
+-- a linha como recem-capturada / ainda nao lida.
+--
+-- Retorno (controlado pelo programa Python):
+--   PV_RETORNO = 'TRUE'  -> insert OK (commit feito pelo cliente)
+--   PV_RETORNO = 'FALSE' -> erro; PV_ERRO traz o SQLERRM
+-- Nao usamos BOOLEAN de PL/SQL porque ele nao pode ser vinculado por clientes OCI
+-- no Oracle 11g -> devolvemos VARCHAR2 'TRUE'/'FALSE'.
+--
+-- Observacoes:
+--   * DS_OFERTA e NOT NULL na tabela, mas anuncios do tipo CUPOM nao tem nome de
+--     produto -> NVL(...,'-') evita a violacao (todo CUPOM falharia sem isso).
+--   * SUBSTR defensivo nas colunas mais curtas evita ORA-12899 (valor grande demais).
+--   * A procedure NAO faz COMMIT: o cliente confirma 1 linha por vez, para nao
+--     perder linhas se o processo cair no meio de um run longo.
+--   * Rodar este arquivo no schema dono da tabela OFERTA_FILA_CAPTURA.
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE STP_OFERTA_FILA_CAPTURA_INSERT (
+  P_DS_TIPO_ORIGEM         IN  VARCHAR2,
+  P_DS_ORIGEM              IN  VARCHAR2,
+  P_DS_TIPO_OFERTA         IN  VARCHAR2,
+  P_ID_OFERTA              IN  NUMBER,
+  P_DT_CAPTACAO            IN  DATE,
+  P_DT_OFERTA              IN  DATE,
+  P_DS_OFERTA              IN  VARCHAR2,
+  P_DS_IMAGEM_OFERTA       IN  VARCHAR2,
+  P_DS_OFERTA_AVISO        IN  VARCHAR2,
+  P_VL_PRECO_DE            IN  NUMBER,
+  P_VL_PRECO_POR           IN  NUMBER,
+  P_DS_DESCRICAO_PAGAMENTO IN  VARCHAR2,
+  P_DS_URL_ORIGEM          IN  VARCHAR2,
+  P_DS_MSG_FINAL           IN  VARCHAR2,
+  P_DS_CUPOM               IN  VARCHAR2,
+  P_DS_CUPOM_COMENTARIO    IN  VARCHAR2,
+  P_DS_CUPOM_LOJA          IN  VARCHAR2,
+  PV_RETORNO               OUT VARCHAR2,
+  PV_ERRO                  OUT VARCHAR2
+) AS
+BEGIN
+  INSERT INTO OFERTA_FILA_CAPTURA (
+    ID_OFERTA,
+    DS_OFERTA,
+    DT_OFERTA,
+    DT_CAPTACAO,
+    DS_TIPO_ORIGEM,
+    DS_ORIGEM,
+    DS_TIPO_OFERTA,
+    DS_IMAGEM_OFERTA,
+    DS_OFERTA_AVISO,
+    VL_PRECO_DE,
+    VL_PRECO_POR,
+    DS_DESCRICAO_PAGAMENTO,
+    DS_URL_ORIGEM,
+    DS_MSG_FINAL,
+    DS_CUPOM,
+    DS_CUPOM_COMENTARIO,
+    DS_CUPOM_LOJA,
+    ST_CAPTURA
+  ) VALUES (
+    P_ID_OFERTA,
+    NVL(SUBSTR(P_DS_OFERTA, 1, 350), '-'),
+    P_DT_OFERTA,
+    P_DT_CAPTACAO,
+    SUBSTR(P_DS_TIPO_ORIGEM, 1, 30),
+    SUBSTR(P_DS_ORIGEM, 1, 100),
+    SUBSTR(P_DS_TIPO_OFERTA, 1, 30),
+    SUBSTR(P_DS_IMAGEM_OFERTA, 1, 350),
+    SUBSTR(P_DS_OFERTA_AVISO, 1, 350),
+    P_VL_PRECO_DE,
+    P_VL_PRECO_POR,
+    SUBSTR(P_DS_DESCRICAO_PAGAMENTO, 1, 50),
+    SUBSTR(P_DS_URL_ORIGEM, 1, 350),
+    SUBSTR(P_DS_MSG_FINAL, 1, 350),
+    SUBSTR(P_DS_CUPOM, 1, 30),
+    SUBSTR(P_DS_CUPOM_COMENTARIO, 1, 50),
+    SUBSTR(P_DS_CUPOM_LOJA, 1, 50),
+    '0'
+  );
+
+  PV_RETORNO := 'TRUE';
+  PV_ERRO    := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_OFERTA_FILA_CAPTURA_INSERT;
+/

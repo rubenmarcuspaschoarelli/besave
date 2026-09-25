@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://besave.com.br/contract/oferta-pagina.schema.json",
+  "title": "OfertaPagina",
+  "description": "Projeção completa da oferta, embutida no HTML estático. Ver docs/CONTRATO.md §4.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "slug", "id_produto", "loja", "titulo", "preco_de", "preco_por", "desconto_pct", "cupom", "nota", "qt_avaliacoes", "dt_oferta", "area", "publico", "status", "produto"],
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "slug": { "$ref": "enums.schema.json#/$defs/Slug" },
+    "id_produto": { "type": "integer", "minimum": 1 },
+    "loja": { "$ref": "enums.schema.json#/$defs/Loja" },
+    "titulo": { "type": "string", "minLength": 1, "maxLength": 400 },
+    "preco_de": { "oneOf": [ { "$ref": "enums.schema.json#/$defs/Centavos" }, { "type": "null" } ] },
+    "preco_por": { "type": "integer", "minimum": 1 },
+    "desconto_pct": { "oneOf": [ { "type": "integer", "minimum": 0, "maximum": 99 }, { "type": "null" } ] },
+    "cupom": { "oneOf": [ { "type": "string", "minLength": 1, "maxLength": 30 }, { "type": "null" } ] },
+    "nota": { "oneOf": [ { "type": "number", "minimum": 0, "maximum": 5 }, { "type": "null" } ] },
+    "qt_avaliacoes": { "oneOf": [ { "type": "integer", "minimum": 0 }, { "type": "null" } ] },
+    "dt_oferta": { "$ref": "enums.schema.json#/$defs/DataHora" },
+    "area": { "$ref": "enums.schema.json#/$defs/Area" },
+    "publico": { "$ref": "enums.schema.json#/$defs/Publico" },
+    "status": { "$ref": "enums.schema.json#/$defs/Status" },
+    "produto": { "oneOf": [ { "$ref": "#/$defs/Produto" }, { "type": "null" } ] }
+  },
+  "$defs": {
+    "Produto": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["descricao"],
+      "properties": {
+        "descricao": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "marca": { "type": ["string", "null"], "maxLength": 40 },
+        "fabricante": { "type": ["string", "null"], "maxLength": 80 },
+        "modelo": { "type": ["string", "null"], "maxLength": 200 },
+        "pais_origem": { "type": ["string", "null"], "maxLength": 40 },
+        "genero": { "type": ["string", "null"], "maxLength": 20 },
+        "faixa_etaria": { "type": ["string", "null"], "maxLength": 20 },
+        "preco_min": { "oneOf": [ { "$ref": "enums.schema.json#/$defs/Centavos" }, { "type": "null" } ] },
+        "preco_max": { "oneOf": [ { "$ref": "enums.schema.json#/$defs/Centavos" }, { "type": "null" } ] }
+      }
+    }
+  }
+}

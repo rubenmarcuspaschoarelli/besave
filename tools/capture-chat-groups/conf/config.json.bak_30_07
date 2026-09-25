@@ -1,0 +1,41 @@
+{
+  "grupos": {
+    "Promos da Ly ✨": {
+      "ultima_data_hora": "30/07/2026 08:37",
+      "atualizado_em": "30/07/2026 01:39:51",
+      "ultimo_data_id": "2A7D768F82D113463621"
+    },
+    "Achadinhos diaenoite #03 👩": {
+      "ultima_data_hora": "30/07/2026 08:40",
+      "atualizado_em": "30/07/2026 01:38:42",
+      "ultimo_data_id": "3EB03593C8A0F932C0E9E8"
+    },
+    "@achadinhoscomcarol 🛍️ 9": {
+      "ultima_data_hora": "29/07/2026 15:29",
+      "atualizado_em": "30/07/2026 01:37:32",
+      "ultimo_data_id": "3A89011707B0D0822329"
+    }
+  },
+  "controle": {
+    "ultimo_id_processado": 3126
+  },
+  "db": {
+    "habilitado": true,
+    "modo": "thick",
+    "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
+    "host": "LOCALHOST",
+    "porta": 1521,
+    "servico": "XE",
+    "usuario": "BESAVE",
+    "senha": "amonra"
+  },
+  "imagem": {
+    "imagem_marca_dagua": "besave.jpg",
+    "marca_dagua_tecnica": "keyed",
+    "marca_dagua_opacidade": 0.4,
+    "marca_dagua_largura_rel": 0.35,
+    "qualidade_jpeg": 0.95,
+    "resolucao_minima": 400,
+    "espera_imagem_s": 8
+  }
+}

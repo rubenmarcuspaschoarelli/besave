@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://besave.com.br/contract/oferta-card.schema.json",
+  "title": "OfertaCard",
+  "description": "Projeção compacta da oferta para chunks da lista e da busca. Ver docs/CONTRATO.md §3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "s", "l", "t", "pp", "dt", "a", "p"],
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "s":  { "$ref": "enums.schema.json#/$defs/Slug" },
+    "l":  { "$ref": "enums.schema.json#/$defs/Loja" },
+    "t":  { "type": "string", "minLength": 1, "maxLength": 200 },
+    "pd": { "oneOf": [ { "$ref": "enums.schema.json#/$defs/Centavos" }, { "type": "null" } ] },
+    "pp": { "type": "integer", "minimum": 1 },
+    "c":  { "type": "string", "minLength": 1, "maxLength": 30, "pattern": "^[A-Z0-9_-]+$" },
+    "dt": { "$ref": "enums.schema.json#/$defs/DataHora" },
+    "a":  { "$ref": "enums.schema.json#/$defs/Area" },
+    "p":  { "$ref": "enums.schema.json#/$defs/Publico" }
+  }
+}

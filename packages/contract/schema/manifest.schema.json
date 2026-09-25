@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://besave.com.br/contract/manifest.schema.json",
+  "title": "Manifest",
+  "description": "manifest.json publicado na raiz do bucket. Ver docs/MANIFEST.md §2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contrato", "versao", "gerado_em", "total_ofertas", "chunks", "busca", "areas"],
+  "properties": {
+    "contrato": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "versao": { "type": "integer", "minimum": 20260101000000 },
+    "gerado_em": { "$ref": "enums.schema.json#/$defs/DataHora" },
+    "total_ofertas": { "type": "integer", "minimum": 0 },
+    "chunks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["n", "arquivo", "ids", "qtd", "bytes"],
+        "properties": {
+          "n": { "type": "integer", "minimum": 0 },
+          "arquivo": { "type": "string", "pattern": "^data/chunks/\\d+-[0-9a-f]{16}\\.json\\.br$" },
+          "ids": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "minItems": 2, "maxItems": 2 },
+          "qtd": { "type": "integer", "minimum": 1 },
+          "bytes": { "type": "integer", "minimum": 1, "maximum": 61440 }
+        }
+      }
+    },
+    "busca": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object", "additionalProperties": false, "required": ["arquivo", "bytes"],
+          "properties": {
+            "arquivo": { "type": "string", "pattern": "^data/busca/[0-9a-f]{16}\\.json\\.br$" },
+            "bytes": { "type": "integer", "minimum": 1, "maximum": 2097152 }
+          }
+        }
+      ]
+    },
+    "areas": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "TECH": {"type":"integer","minimum":0}, "PLAYERS": {"type":"integer","minimum":0},
+        "MEU_LAR": {"type":"integer","minimum":0}, "ELAS": {"type":"integer","minimum":0},
+        "ELES": {"type":"integer","minimum":0}, "CULTURA": {"type":"integer","minimum":0},
+        "FAMILIA": {"type":"integer","minimum":0}, "PETS": {"type":"integer","minimum":0},
+        "ESPORTE_VIDA": {"type":"integer","minimum":0}
+      }
+    }
+  }
+}

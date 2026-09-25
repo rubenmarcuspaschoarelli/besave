@@ -1,0 +1,27 @@
+{
+  "_doc": "Único lugar onde texto livre do Oracle vira enum. Chave = valor normalizado (maiúsculas, sem acento, trim, espaços simples). Ver docs/CONTRATO.md §2.",
+  "loja": {
+    "AMAZON": "AMAZON",
+    "SHOPEE": "SHOPEE",
+    "MERCADO LIVRE": "MERCADO_LIVRE",
+    "MERCADOLIVRE": "MERCADO_LIVRE",
+    "ML": "MERCADO_LIVRE"
+  },
+  "publico": {
+    "FEMININO": "FEMININO", "MULHER": "FEMININO", "F": "FEMININO",
+    "MASCULINO": "MASCULINO", "HOMEM": "MASCULINO", "M": "MASCULINO",
+    "UNISSEX": "UNISSEX", "UNISEX": "UNISSEX", "U": "UNISSEX",
+    "INFANTIL": "INFANTIL", "CRIANCA": "INFANTIL", "I": "INFANTIL"
+  },
+  "area": {
+    "TECH": "TECH", "TECNOLOGIA": "TECH",
+    "PLAYERS": "PLAYERS", "GAMES": "PLAYERS", "GAMER": "PLAYERS",
+    "MEU LAR": "MEU_LAR", "LAR": "MEU_LAR", "CASA": "MEU_LAR",
+    "ELAS": "ELAS",
+    "ELES": "ELES",
+    "CULTURA": "CULTURA",
+    "FAMILIA": "FAMILIA", "FAMILIA & FILHOS": "FAMILIA", "FAMILIA E FILHOS": "FAMILIA",
+    "PETS": "PETS", "PET": "PETS",
+    "ESPORTE": "ESPORTE_VIDA", "ESPORTE & VIDA": "ESPORTE_VIDA", "ESPORTE E VIDA": "ESPORTE_VIDA"
+  }
+}

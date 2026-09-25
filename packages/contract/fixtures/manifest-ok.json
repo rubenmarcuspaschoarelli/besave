@@ -1,0 +1,11 @@
+{
+  "contrato": "1.0.0",
+  "versao": 20260924130500,
+  "gerado_em": "2026-09-24T13:05:00Z",
+  "total_ofertas": 3,
+  "chunks": [
+    { "n": 5, "arquivo": "data/chunks/5-9f2a1c3b4d5e6f70.json.br", "ids": [5000, 5999], "qtd": 3, "bytes": 412 }
+  ],
+  "busca": null,
+  "areas": { "TECH": 1, "ELAS": 1, "PETS": 1 }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "@besave/contract",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Schema canônico Besave (docs/CONTRATO.md, docs/MANIFEST.md). Fixtures validadas no CI.",
+  "scripts": { "validate": "node validate.mjs" },
+  "devDependencies": { "ajv": "^8.17.1", "ajv-formats": "^3.0.1" }
+}

@@ -1,0 +1,12 @@
+{
+  "id": 5412, "slug": "5412-fone-bluetooth-xyz-com-anc", "id_produto": 910,
+  "loja": "AMAZON", "titulo": "Fone Bluetooth XYZ com ANC, 40h de bateria, resistente a água",
+  "preco_de": 29990, "preco_por": 19990, "desconto_pct": 33, "cupom": "BESAVE10",
+  "nota": 4.6, "qt_avaliacoes": 1832, "dt_oferta": "2026-09-24T12:40:00Z",
+  "area": "TECH", "publico": "UNISSEX", "status": "ATIVA",
+  "produto": {
+    "descricao": "Fone over-ear com cancelamento ativo de ruído e 40 horas de bateria.",
+    "marca": "XYZ", "fabricante": "XYZ Audio Ltda", "modelo": "XZ-400", "pais_origem": "China",
+    "genero": null, "faixa_etaria": null, "preco_min": 17990, "preco_max": 34990
+  }
+}

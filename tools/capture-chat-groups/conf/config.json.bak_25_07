@@ -1,0 +1,46 @@
+{
+  "grupos": {
+    "Promos da Ly ✨": {
+      "ultima_data_hora": "19/07/2026 21:32",
+      "atualizado_em": "19/07/2026 21:33:12",
+      "ultimo_data_id": "3EB0D6B47590460AF56F00"
+    },
+    "#03 achadinhos.dediaedenoite 💄": {
+      "ultima_data_hora": "25/07/2026 20:55",
+      "atualizado_em": "25/07/2026 23:14:26",
+      "ultimo_data_id": "3EB01A38172E92F4F8CDC6"
+    },
+    "@achadinhoscomcarol 🛍️ 9": {
+      "ultima_data_hora": "19/07/2026 18:07",
+      "atualizado_em": "19/07/2026 20:55:30",
+      "ultimo_data_id": "AC19ACB25E5F19645199CDDC581CDA1E"
+    },
+    "@achadinhoscomcarol 🛍 9": {
+      "ultima_data_hora": "25/07/2026 15:27",
+      "ultimo_data_id": "3AE35C5C87B7F231B8D5",
+      "atualizado_em": "25/07/2026 23:14:33"
+    }
+  },
+  "controle": {
+    "ultimo_id_processado": 1095
+  },
+  "db": {
+    "habilitado": true,
+    "modo": "thick",
+    "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
+    "host": "LOCALHOST",
+    "porta": 1521,
+    "servico": "XE",
+    "usuario": "BESAVE",
+    "senha": "amonra"
+  },
+  "imagem": {
+    "imagem_marca_dagua": "besave.jpg",
+    "marca_dagua_tecnica": "keyed",
+    "marca_dagua_opacidade": 0.4,
+    "marca_dagua_largura_rel": 0.35,
+    "qualidade_jpeg": 0.95,
+    "resolucao_minima": 400,
+    "espera_imagem_s": 8
+  }
+}

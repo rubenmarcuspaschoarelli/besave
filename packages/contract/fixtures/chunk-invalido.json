@@ -1,0 +1,5 @@
+[
+  {"id":1,"s":"1-x","l":"AMERICANAS","t":"Loja fora do enum","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"},
+  {"id":2,"s":"2-x","l":"AMAZON","t":"Preço float","pp":19.9,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"},
+  {"id":3,"s":"3-x","l":"AMAZON","t":"Campo extra proibido","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX","url":"https://x"}
+]

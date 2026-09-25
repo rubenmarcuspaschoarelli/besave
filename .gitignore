@@ -1,0 +1,13 @@
+node_modules/
+target/
+.svelte-kit/
+build/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+# credenciais dos robôs nunca entram
+tools/**/config.local.*
+tools/**/*.secret*
