@@ -215,10 +215,10 @@ T6 → T7
 
 **Done when**:
 
-- [ ] `existe`=HeadObject (404→false), `ler`=GetObject (NoSuchKey→None), `gravar`=PutObject com headers da `Meta`, `remover`=DeleteObject, `listar`=ListObjectsV2 paginado
-- [ ] `RedirectsKvs`: ListKeys paginado; UpdateKeys em lotes de 50 com `IfMatch` encadeado
-- [ ] Nenhum campo de credencial; config só `BESAVE_BUCKET`, `BESAVE_KVS_ARN` e cadeia do SDK
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] `existe`=HeadObject (404→false), `ler`=GetObject (NoSuchKey→None), `gravar`=PutObject com headers da `Meta`, `remover`=DeleteObject, `listar`=ListObjectsV2 paginado
+- [x] `RedirectsKvs`: ListKeys paginado; UpdateKeys em lotes de 50 com `IfMatch` encadeado
+- [x] Nenhum campo de credencial; config só `BESAVE_BUCKET`, `BESAVE_KVS_ARN` e cadeia do SDK
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: none
 **Gate**: build

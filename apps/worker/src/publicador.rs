@@ -14,6 +14,12 @@ pub enum ErroPublicador {
         chave: String,
         fonte: std::io::Error,
     },
+    #[error("S3 {operacao} {chave}: {fonte}")]
+    Aws {
+        operacao: &'static str,
+        chave: String,
+        fonte: String,
+    },
     #[error("serializando headers de {chave}: {fonte}")]
     Meta {
         chave: String,
