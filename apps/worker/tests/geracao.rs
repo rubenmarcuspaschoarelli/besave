@@ -10,7 +10,7 @@ use comum::{
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
-use worker::geracao::{ErroGeracao, Relatorio, gerar};
+use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, gerar};
 use worker::modelo::{Area, Manifest};
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
@@ -154,6 +154,18 @@ fn chunk_acima_do_orcamento_falha_sem_gravar_nada() {
     );
     assert!(p.gravacoes().is_empty());
     assert!(!p.existe("manifest.json").unwrap());
+}
+
+#[test]
+fn orcamento_aceita_61440_e_recusa_61441() {
+    assert!(checar_orcamento(0, 61_440).is_ok());
+    assert!(matches!(
+        checar_orcamento(3, 61_441),
+        Err(ErroGeracao::ChunkAcimaDoOrcamento {
+            n: 3,
+            bytes: 61_441
+        })
+    ));
 }
 
 /// Falha na 2ª gravação de chunk.

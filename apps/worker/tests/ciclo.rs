@@ -181,3 +181,21 @@ fn trinta_mil_cards_em_ate_10_segundos() {
     assert_eq!(manifest(&p).chunks.len(), 31);
     assert!(tempo <= Duration::from_secs(10), "{tempo:?}");
 }
+
+#[test]
+fn manifest_anterior_json_sem_forma_de_manifest_falha_sem_gravar() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    p.gravar(
+        "manifest.json",
+        br#"{"versao":1}"#,
+        &worker::publicador::META_MANIFEST,
+    )
+    .unwrap();
+    let erro = rodar(&fonte(), &mut p, &m, AGORA).unwrap_err();
+    assert!(
+        matches!(erro, ErroGeracao::ManifestAnteriorInvalido(_)),
+        "{erro:?}"
+    );
+    assert_eq!(p.gravacoes(), ["manifest.json"]);
+}

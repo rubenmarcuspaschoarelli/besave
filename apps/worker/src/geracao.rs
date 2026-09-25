@@ -114,9 +114,7 @@ pub fn gerar(
         let (json, hash) = serializar_chunk(&cs)?;
         let br = comprimir_br(&json)?;
         let bytes = br.len() as u64;
-        if bytes > ORCAMENTO_CHUNK {
-            return Err(ErroGeracao::ChunkAcimaDoOrcamento { n, bytes });
-        }
+        checar_orcamento(n, bytes)?;
         let r = ChunkRef {
             n,
             arquivo: chave_chunk(n, &hash),
@@ -186,6 +184,14 @@ pub fn gerar(
         "manifest publicado"
     );
     Ok(rel)
+}
+
+/// Chunk comprimido de até `ORCAMENTO_CHUNK` bytes passa; acima disso, erro.
+pub fn checar_orcamento(n: u64, bytes: u64) -> Result<()> {
+    if bytes > ORCAMENTO_CHUNK {
+        return Err(ErroGeracao::ChunkAcimaDoOrcamento { n, bytes });
+    }
+    Ok(())
 }
 
 /// Card publicável: válido e com página possível (`id_produto`), as mesmas regras do `--dry-run`.
