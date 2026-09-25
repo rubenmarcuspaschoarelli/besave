@@ -5,10 +5,9 @@
   "description": "Projeção compacta da oferta para chunks da lista e da busca. Ver docs/CONTRATO.md §3.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "s", "l", "t", "pp", "dt", "a", "p"],
+  "required": ["id", "l", "t", "pp", "dt", "a", "p"],
   "properties": {
     "id": { "type": "integer", "minimum": 1 },
-    "s":  { "$ref": "enums.schema.json#/$defs/Slug" },
     "l":  { "$ref": "enums.schema.json#/$defs/Loja" },
     "t":  { "type": "string", "minLength": 1, "maxLength": 200 },
     "pd": { "oneOf": [ { "$ref": "enums.schema.json#/$defs/Centavos" }, { "type": "null" } ] },

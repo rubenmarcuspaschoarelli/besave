@@ -15,7 +15,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /manifest.json                      ← ÚNICO arquivo mutável de dados
 /data/chunks/{n}-{hash}.json.br     ← OfertaCard[] (imutável)
 /data/busca/{hash}.json.br          ← índice de busca compacto (F3, imutável)
-/oferta/{slug}/index.html           ← página estática da oferta (OfertaPagina)
+/oferta/{id}/index.html             ← página estática da oferta (OfertaPagina)
 /{area}/index.html                  ← página de área, prerender (ex.: /elas/)
 /{area}/{publico}/index.html        ← ex.: /elas/feminino/
 /img/ofertas/{id}.webp
@@ -36,7 +36,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.1.0",
+  "contrato": "1.2.0",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,
@@ -132,7 +132,7 @@ depois; o dado já existe).
 5. **Por último**, upload do `manifest.json`.
 6. Limpeza de chunks órfãos (> 24 h fora do manifest).
 7. Ids presentes no manifest anterior e ausentes no Oracle (expurgo, CONTRATO.md §7) → apagar
-   `oferta/{slug}/`, `img/ofertas/{id}*` e a chave na KVS.
+   `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
 
 Se falhar antes do passo 5, o manifest antigo continua válido e aponta para arquivos que
 ainda existem. Idempotente: rodar duas vezes sem mudança no Oracle não altera nenhum

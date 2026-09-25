@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.1.0** (SemVer; mudança incompatível = major).
-Histórico: 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.2.0** (SemVer; mudança incompatível = major).
+Histórico: 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -23,7 +23,7 @@ Histórico: 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias
 5. **Enums, não texto livre.** `loja`, `publico`, `area` são enums fechados; valor fora do
    enum = registro rejeitado pelo worker (e logado), não publicado.
 6. **Imagem é derivada do id**, nunca campo. Ver §6.
-7. **Identidade e ordem vêm do Oracle** (`ID_OFERTA`); `slug` é derivado e estável.
+7. **Identidade e URL vêm do `ID_OFERTA`.** URL da oferta é `/oferta/{id}/`; não há slug (AD-018).
 
 ---
 
@@ -69,7 +69,6 @@ Orçamento: **≤ 220 bytes por registro em JSON bruto** (meta ~150). Chaves cur
 | campo | tipo | origem | regra |
 |---|---|---|---|
 | `id` | integer ≥ 1 | `ID_OFERTA` | chave |
-| `s` | string | derivado | slug, ver §5 |
 | `l` | `Loja` | `DS_LOJA` | enum |
 | `t` | string 1..200 | `DS_TITULO` | trim; se > 200, corta em 197 + `…` na última fronteira de palavra |
 | `pd` | integer ≥ 0 \| null | `VL_PRECO_DE` | centavos; `null` se ausente ou ≤ `pp` |
@@ -80,7 +79,7 @@ Orçamento: **≤ 220 bytes por registro em JSON bruto** (meta ~150). Chaves cur
 | `p` | `Publico` | `DS_PUBLICO` | enum |
 | `x` | `1` \| ausente | `ST_ATIVO = 0` | **expirada**; só presente quando inativa (custa 6 bytes só nelas) |
 
-Não entram no card (decidido): `ID_PRODUTO`, URLs, `VR_PRECO_1`, `DS_CUPOM_COMENTARIO`,
+Não entram no card (decidido): slug (não existe), `ID_PRODUTO`, URLs, `VR_PRECO_1`, `DS_CUPOM_COMENTARIO`,
 nota/qtd de avaliação, `DT_CAPTACAO`, `DT_PUBLICACAO`, campos de afiliado.
 
 Cliente: lista esconde `x:1` por padrão (toggle "mostrar expiradas"); busca mostra em cinza.
@@ -89,7 +88,7 @@ Desconto (%) **não é campo**: o cliente calcula `round((1 - pp/pd) * 100)` qua
 
 Exemplo:
 ```json
-{"id":5412,"s":"5412-fone-bluetooth-xyz-anc","l":"AMAZON","t":"Fone Bluetooth XYZ com ANC","pd":29990,"pp":19990,"c":"BESAVE10","dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"}
+{"id":5412,"l":"AMAZON","t":"Fone Bluetooth XYZ com ANC","pd":29990,"pp":19990,"c":"BESAVE10","dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"}
 ```
 
 ---
@@ -102,7 +101,6 @@ Consumida só pelo template do worker. Chaves legíveis (não há orçamento de 
 | campo | tipo | origem | regra |
 |---|---|---|---|
 | `id` | integer | `ID_OFERTA` | |
-| `slug` | string | derivado | §5 |
 | `id_produto` | integer | `ID_PRODUTO` | liga ao §4.2 |
 | `loja` | `Loja` | `DS_LOJA` | |
 | `titulo` | string 1..400 | `DS_TITULO` | integral |
@@ -141,18 +139,18 @@ Indicador de faixa de preço (barra de calor min → atual → max) só renderiz
 
 ---
 
-## 5. Slug
+## 5. URL da oferta e links curtos
 
-`slug = "{id}-{titulo_slugificado}"`
-
-- `titulo_slugificado`: NFKD, remove diacríticos, minúsculas, `[^a-z0-9]+` → `-`, trim de
-  `-`, máximo **60 caracteres** cortando na última fronteira de `-`.
-- O `id` na frente garante unicidade e estabilidade; o título só serve ao SEO.
-- Slug **nunca muda** depois de publicado, mesmo que o título mude no Oracle.
-- URL da oferta: `/oferta/{slug}/`. Se alguém acessar `/oferta/{id}` ou um slug com título
-  antigo, o site resolve pelo prefixo numérico (client-side em F3; redirect de borda depois).
-
----
+- URL canônica: **`/oferta/{id}/`** (ex.: `/oferta/5412/`). Sem slug de título: o dono quer
+  links curtos numéricos para canais (`https://besave.io/5412`), e título na URL é um sinal de
+  SEO pequeno comparado a `<title>`, `<h1>` e `schema.org`. Ganhos: URL nunca muda, nenhuma coluna
+  extra, card 30–40 bytes menor, encurtador trivial (AD-018).
+- Domínio curto (`besave.io` ou `besave.me`, a definir): distribuição CloudFront própria com uma
+  Function que faz `301 https://besave.com.br/oferta/{id}/` para `/{id}`. Sem KVS, sem estado.
+  Variante para conversão direta em canais: `/{id}/ir` → mesmo redirect de afiliado de `/ir/{id}`.
+  Entra em BSV-4 como distribuição opcional (ticket separado quando o domínio for escolhido).
+- `<title>` e `<h1>` da página carregam o título integral; `<link rel="canonical">` aponta para
+  `https://besave.com.br/oferta/{id}/`.
 
 ## 6. Imagens
 
@@ -174,26 +172,23 @@ Sem imagem no Oracle/S3 → card e página usam placeholder por `area`
 Colunas já criadas pelo dono: `ST_ATIVO NUMBER(1)` (1 ativa, 0 inativa) e `DT_DESATIVACAO DATE`
 (preenchida pelo robô quando `ST_ATIVO` vai a 0).
 
-Recomendadas (decisão do dono; o worker funciona sem elas):
+Opcional (decisão do dono; o worker funciona sem ela):
 
 ```sql
-ALTER TABLE OFERTA ADD (
-  DS_SLUG             VARCHAR2(80 CHAR),   -- ver §5; worker grava na 1ª publicação, nunca altera
-  DT_ULT_ATUALIZACAO  DATE                 -- trigger BEFORE UPDATE; permite regerar só o que mudou
-);
+ALTER TABLE OFERTA ADD (DT_ULT_ATUALIZACAO DATE);  -- trigger BEFORE UPDATE; regerar só o que mudou
 ```
 
-Sem `DS_SLUG`, o worker guarda o slug no próprio estado (o chunk publicado já traz `s`) e
-reaproveita; se o estado se perder, títulos alterados mudam a URL. Sem `DT_ULT_ATUALIZACAO`,
-o worker regera tudo a cada ciclo (30k páginas ≤ 2 min) e o hash evita uploads repetidos —
-funciona, só gasta CPU local.
+Sem ela, o worker regera tudo a cada ciclo (30k páginas ≤ 2 min) e o hash evita uploads
+repetidos — funciona, só gasta CPU local. `DS_SLUG` **não é mais necessária** (§5).
 
 Regras:
 - **Ativa** = `ST_ATIVO = 1`. **Expirada** = `ST_ATIVO = 0`.
 - Expiradas **continuam** nos chunks (com `x:1`) e nas páginas, até o expurgo.
-- **Expurgo** (política do dono): `ST_ATIVO = 0 AND DT_DESATIVACAO < SYSDATE - 7`. O robô/job
-  apaga do Oracle. O worker detecta ids que sumiram comparando com o último manifest publicado
-  e apaga HTML, imagens e a entrada de redirect. Depois disso a URL responde 404.
+- **Expurgo do site** (política do dono): o registro **fica no Oracle**; o worker deixa de
+  publicar quando `ST_ATIVO = 0 AND DT_DESATIVACAO < SYSDATE - 7`. Query de publicação:
+  `WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7`. Ids que estavam no último manifest
+  e saíram do resultado → worker apaga `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
+  Depois disso a URL responde 404 (410 via função de borda fica para depois).
 
 ### 7.1 Página de oferta expirada
 - Renderizada **pelo worker** com `status: ENCERRADA` (não por JavaScript: o worker sabe o status
@@ -234,4 +229,5 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
    redirect `/ir/{id}` usa `DS_URL_AFILIADO`; `DS_URL_BESAVE`/`DS_URL_FINAL` ficam só no banco.
 2. `DS_GENERO`/`DS_FAIXA_ETARIA` do produto são texto livre — ok por ora (só exibição).
 3. Cupons da tabela `CUPOM` aparecem na home (F3) ou só em página própria (F4)?
-4. `DS_SLUG` e `DT_ULT_ATUALIZACAO`: criar ou não? (ver §7)
+4. `DT_ULT_ATUALIZACAO`: criar ou não? (ver §7)
+5. Domínio curto: `besave.io` ou `besave.me`?

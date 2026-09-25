@@ -1,6 +1,6 @@
 # BSV-10 · Worker: leitura do Oracle atrás de trait, com fake em memória
 
-**Papel:** Backend Rust · **Pasta:** `apps/worker/` · **Depende de:** BSV-1 (CONTRATO.md §2, §3, §4, §5, §7, §9)
+**Papel:** Backend Rust · **Pasta:** `apps/worker/` · **Depende de:** BSV-1 (CONTRATO.md §2, §3, §4, §7, §9)
 
 ## Contexto
 Primeiro ticket do worker. O objetivo é a **fronteira**: tudo que o worker sabe do Oracle passa
@@ -14,14 +14,14 @@ por um trait. `cargo run -- --dry-run` imprime contagens (lidas / válidas / rej
 
 ## Entradas
 - Colunas de OFERTA e PRODUTO listadas em CONTRATO.md §3, §4, §7 (`ST_ATIVO`, `DT_DESATIVACAO`;
-  `DS_SLUG`/`DT_ULT_ATUALIZACAO` **opcionais** — o código funciona se não existirem).
+  `DT_ULT_ATUALIZACAO` **opcional** — o código funciona se não existir).
 - `packages/contract/mapeamento.json` (carregado em tempo de execução, caminho configurável).
 - Fixtures de `packages/contract/fixtures/` como casos de teste.
 
 ## Saídas (lib)
 ```rust
 pub trait FonteOfertas {
-    fn ofertas(&self) -> Result<Vec<LinhaOferta>>;   // linhas cruas (ativas + inativas)
+    fn ofertas(&self) -> Result<Vec<LinhaOferta>>;   // ST_ATIVO=1 OR DT_DESATIVACAO >= hoje-7 (CONTRATO §7)
     fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>>;
 }
 pub struct OracleFonte { /* python-oracledb não; usar crate `oracle` (OCI) — Oracle XE 11.2 */ }
@@ -29,7 +29,6 @@ pub struct FakeFonte { /* Vec em memória, construível em teste */ }
 
 pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao>;
 pub fn para_pagina(l: &LinhaOferta, p: Option<&LinhaProduto>, m: &Mapeamento) -> Result<OfertaPagina, Rejeicao>;
-pub fn slug(id: i64, titulo: &str) -> String;       // CONTRATO §5
 pub fn centavos(n: f64) -> i64;                       // round half up
 ```
 `OfertaCard`/`OfertaPagina`/`Manifest` com `serde`, nomes de campo idênticos ao JSON Schema
@@ -52,7 +51,7 @@ Geração de chunks/manifest/HTML (BSV-11), imagens (BSV-13), upload S3 (BSV-12)
 
 ## Critério de aceite
 - `cargo test` passa sem Oracle disponível (FakeFonte) e cobre: cada motivo de rejeição, `pd ≤ pp`,
-  truncamento de título, slug (acentos, símbolos, 60 chars), centavos (19.995 → 2000), enum via
+  truncamento de título, filtro de expurgo (inativa há 8 dias não sai da fonte fake), centavos (19.995 → 2000), enum via
   sinônimo (`MERCADOLIVRE` → `MERCADO_LIVRE`), `ST_ATIVO = 0` → `x`/`ENCERRADA`.
 - Serialização de `OfertaCard` de uma fixture ≤ 220 bytes; média das 3 ≤ 160.
 - `cargo clippy --all-targets -- -D warnings` limpo.
@@ -61,5 +60,5 @@ Geração de chunks/manifest/HTML (BSV-11), imagens (BSV-13), upload S3 (BSV-12)
 
 ## Definition of done
 PR com README da crate (como rodar com fake e com Oracle), testes verdes, sem dependência além de
-`oracle`, `serde`, `serde_json`, `thiserror`, `anyhow`, `tracing`, `tracing-subscriber`, `unicode-normalization`,
-`clap` sem justificar.
+`oracle`, `serde`, `serde_json`, `thiserror`, `anyhow`, `tracing`, `tracing-subscriber`, `unicode-normalization` (só para a normalização do mapeamento),
+`clap` sem justificar. Sem `unicode-normalization` se não houver mais uso (slug caiu).

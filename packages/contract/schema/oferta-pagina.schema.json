@@ -5,10 +5,9 @@
   "description": "Projeção completa da oferta, embutida no HTML estático. Ver docs/CONTRATO.md §4.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "slug", "id_produto", "loja", "titulo", "preco_de", "preco_por", "desconto_pct", "cupom", "nota", "qt_avaliacoes", "dt_oferta", "area", "publico", "status", "produto"],
+  "required": ["id", "id_produto", "loja", "titulo", "preco_de", "preco_por", "desconto_pct", "cupom", "nota", "qt_avaliacoes", "dt_oferta", "area", "publico", "status", "produto"],
   "properties": {
     "id": { "type": "integer", "minimum": 1 },
-    "slug": { "$ref": "enums.schema.json#/$defs/Slug" },
     "id_produto": { "type": "integer", "minimum": 1 },
     "loja": { "$ref": "enums.schema.json#/$defs/Loja" },
     "titulo": { "type": "string", "minLength": 1, "maxLength": 400 },

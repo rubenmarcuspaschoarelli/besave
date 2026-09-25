@@ -20,4 +20,5 @@ Agentes em worktree relatam propostas no PR; não editam este arquivo.
 - AD-015 · 2026-09-25 · Preço permanece inteiro em centavos; string rejeitada · string obriga parse em cada consumidor, impede ordenação/desconto e é maior · string formatada
 - AD-016 · 2026-09-25 · Infra nova em IaC (Terraform) ao lado da atual: bucket privado `besave-site` + OAC + distribuição nova + KVS; virada por DNS no Route53 · não quebrar o protótipo no ar; bucket website público não suporta OAC/funções como precisamos · reconfigurar `E28G93A17WHHD` no lugar (sem rollback)
 - AD-017 · 2026-09-25 · Segredos nunca no repositório; robôs leem credenciais de `.env`/variáveis; `conf/config.json` sai do git · repo é público · manter config com senha versionada
-
+- AD-018 · 2026-09-25 · URL da oferta é `/oferta/{id}/`, sem slug; link curto `besave.io/{id}` via 301 em CloudFront Function · dono precisa de links numéricos para canais; título na URL é sinal de SEO menor que title/h1/schema.org; elimina `DS_SLUG` e o problema de retítulo · slug com id na frente (AD anterior, revogado)
+- AD-019 · 2026-09-25 · Expurgo não apaga do Oracle: worker publica `ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje-7` e remove do S3 o que saiu do resultado · histórico preservado no banco; worker continua sem estado além do último manifest · apagar do banco
