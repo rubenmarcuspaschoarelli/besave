@@ -17,6 +17,8 @@ pub enum ErroRedirects {
         "url de afiliado da oferta {id} tem {bytes} bytes; limite da KVS é {LIMITE_VALOR_BYTES}"
     )]
     ValorGrandeDemais { id: i64, bytes: usize },
+    #[error("url de afiliado da oferta {id} vazia; a KVS não recebe valor vazio")]
+    ValorVazio { id: i64 },
     #[error("KVS ficaria com {bytes} bytes; limite é {LIMITE_KVS_BYTES}")]
     KvsAcimaDoLimite { bytes: usize },
     #[error("KVS {operacao}: {fonte}")]
@@ -52,6 +54,9 @@ pub fn sincronizar_redirects(
     let alvo: BTreeMap<i64, &str> = ativos.iter().map(|(id, u)| (*id, u.trim())).collect();
     let mut bytes = 0;
     for (id, url) in &alvo {
+        if url.is_empty() {
+            return Err(ErroRedirects::ValorVazio { id: *id });
+        }
         if url.len() > LIMITE_VALOR_BYTES {
             return Err(ErroRedirects::ValorGrandeDemais {
                 id: *id,

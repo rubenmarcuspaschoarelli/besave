@@ -165,3 +165,19 @@ fn acima_de_40_mil_entradas_avisa_e_sincroniza() {
     });
     assert!(!logs.contains("WARN"), "{logs}");
 }
+
+/// KVS-08: valor vazio nunca chega à KVS.
+#[test]
+fn valor_vazio_e_erro_nomeado_sem_aplicar() {
+    for url in ["", "  "] {
+        let mut kvs = RedirectsMemoria::com(estado(&[(1, "a")]));
+        let erro =
+            sincronizar_redirects(&[(1, "a".into()), (9, url.into())], &mut kvs).unwrap_err();
+        assert!(
+            matches!(erro, ErroRedirects::ValorVazio { id: 9 }),
+            "{url:?}: {erro:?}"
+        );
+        assert!(kvs.aplicados().is_empty());
+        assert_eq!(kvs.listar().unwrap(), estado(&[(1, "a")]));
+    }
+}

@@ -30,6 +30,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             area: Some("Tecnologia".into()),
             publico: Some("unisex".into()),
             ativo: true,
+            url_afiliado: "https://loja.example/5412".into(),
             ..Default::default()
         },
         LinhaOferta {
@@ -42,6 +43,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             area: Some("Elas".into()),
             publico: Some("Mulher".into()),
             ativo: true,
+            url_afiliado: "https://loja.example/5413".into(),
             ..Default::default()
         },
         LinhaOferta {
@@ -55,6 +57,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             publico: Some("U".into()),
             ativo: false,
             dt_desativacao: Some(DT_5420),
+            url_afiliado: "https://loja.example/5420".into(),
             ..Default::default()
         },
     ]
@@ -266,4 +269,27 @@ fn data_iso_8601_utc() {
     assert_eq!(iso_utc(0), "1970-01-01T00:00:00Z");
     assert_eq!(iso_utc(951_868_799), "2000-02-29T23:59:59Z");
     assert_eq!(iso_utc(DT_5412), "2026-09-24T12:40:00Z");
+}
+
+/// URL-04: sem DS_URL_AFILIADO o card não existe (CONTRATO §10.1), nem a página.
+#[test]
+fn url_afiliado_vazia_rejeita_card_e_pagina() {
+    let m = m();
+    for url in ["", "   ", "\t\n"] {
+        let l = LinhaOferta {
+            url_afiliado: url.into(),
+            id_produto: Some(911),
+            ..valida()
+        };
+        assert_eq!(
+            para_card(&l, &m),
+            Err(Rejeicao::UrlAfiliadoAusente),
+            "{url:?}"
+        );
+        assert_eq!(
+            worker::conversao::para_pagina(&l, None, &m),
+            Err(Rejeicao::UrlAfiliadoAusente),
+            "{url:?}"
+        );
+    }
 }

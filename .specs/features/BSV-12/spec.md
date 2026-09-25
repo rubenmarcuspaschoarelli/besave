@@ -178,7 +178,7 @@ bucket errado.
 | URL-01 | P1: URL de afiliado | T1 | Implemented |
 | URL-02 | P1: URL de afiliado | T1 | Implemented |
 | URL-03 | P1: URL de afiliado | T1 | Implemented |
-| URL-04 | P1: URL de afiliado | T8 | Pending |
+| URL-04 | P1: URL de afiliado | T8 | Implemented |
 | HDR-01 | P1: Headers | T2 | Implemented |
 | HDR-02 | P1: Headers | T2 | Implemented |
 | HDR-03 | P1: Headers | T2 | Implemented |
@@ -190,7 +190,7 @@ bucket errado.
 | KVS-05 | P1: KVS | T3 | Implemented |
 | KVS-06 | P1: KVS | T3 | Implemented |
 | KVS-07 | P1: KVS | T3 | Implemented |
-| KVS-08 | P1: KVS | T8 | Pending |
+| KVS-08 | P1: KVS | T8 | Implemented |
 | KVS-09 | P1: KVS | T9 | Pending |
 | ORD-01 | P1: Ordem | T4 | Implemented |
 | ORD-02 | P1: Ordem | T4 | Implemented |

@@ -97,6 +97,8 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
         .publico(&texto(&l.publico))
         .ok_or(Rejeicao::PublicoSemMapeamento)?;
     let dt = l.dt_oferta.ok_or(Rejeicao::DataNula)?;
+    // O CTA `/ir/{id}` depende da URL de afiliado: sem ela, nem card nem página.
+    url_afiliado(l)?;
 
     Ok(OfertaCard {
         id: l.id,
@@ -130,7 +132,6 @@ pub fn para_pagina(
         .id_produto
         .filter(|&id| id >= 1)
         .ok_or(Rejeicao::IdProdutoAusente)?;
-    url_afiliado(l)?;
     let integral = l.titulo.as_deref().unwrap_or_default().trim();
     let titulo = truncar(integral, MAX_TITULO_PAGINA);
     if titulo.len() != integral.len() {

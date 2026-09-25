@@ -275,9 +275,9 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] `""` e `"   "` → `Rejeicao::UrlAfiliadoAusente` em `para_card` e `para_pagina`
-- [ ] Valor vazio nos ativos → `ValorVazio { id }` sem `aplicar`
-- [ ] Gate check passes: `cargo test`
+- [x] `""` e `"   "` → `Rejeicao::UrlAfiliadoAusente` em `para_card` e `para_pagina`
+- [x] Valor vazio nos ativos → `ValorVazio { id }` sem `aplicar`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
