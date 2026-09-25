@@ -8,3 +8,4 @@ pub mod mapeamento;
 pub mod modelo;
 pub mod oracle;
 pub mod publicador;
+pub mod redirects;

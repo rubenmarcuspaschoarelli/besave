@@ -132,11 +132,11 @@ T6 → T7
 
 **Done when**:
 
-- [ ] Cenários {1→a,2→b} → {1→a,2→c,3→d} → {1→a} → repetição, com put/del exatos
-- [ ] `ValorGrandeDemais` e `KvsAcimaDoLimite` sem chamar `aplicar`
-- [ ] `WARN` acima de 40 000 capturado no teste
-- [ ] Chave não numérica preservada; URL trimada
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Cenários {1→a,2→b} → {1→a,2→c,3→d} → {1→a} → repetição, com put/del exatos
+- [x] `ValorGrandeDemais` e `KvsAcimaDoLimite` sem chamar `aplicar`
+- [x] `WARN` acima de 40 000 capturado no teste
+- [x] Chave não numérica preservada; URL trimada
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build
