@@ -125,7 +125,7 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CONV-01 | P1: Conversão | Tasks | Pending |
+| CONV-01 | P1: Conversão | T2 | Implemented |
 | CONV-02 | P1: Conversão | Tasks | Pending |
 | CONV-03 | P1: Conversão | Tasks | Pending |
 | CONV-04 | P1: Conversão | Tasks | Pending |

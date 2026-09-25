@@ -97,9 +97,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `MERCADOLIVRE`, `Mercado  Livre`, `Família & filhos`, ` criança ` mapeiam para o enum certo
-- [ ] Texto sem mapeamento devolve `None`
-- [ ] Gate check passes: `cargo test`
+- [x] `MERCADOLIVRE`, `Mercado  Livre`, `Família & filhos`, ` criança ` mapeiam para o enum certo
+- [x] Texto sem mapeamento devolve `None`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
