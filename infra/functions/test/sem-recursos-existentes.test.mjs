@@ -22,3 +22,13 @@ test('OPS-02: nenhum .tf cita a distribuição E28G93A17WHHD nem tem bloco impor
 test('OPS-02: nenhum .tf declara bucket com o nome do protótipo', () => {
   for (const [f, src] of tf) assert.doesNotMatch(src, /bucket\s*=\s*"besave\.com\.br"/, f);
 });
+
+// IAM-01: o Terraform nunca cria credencial do worker (ficaria no state local).
+test('IAM-01: nenhum .tf cria access key nem login de console', () => {
+  for (const [f, src] of tf) assert.doesNotMatch(src, /resource\s+"aws_iam_(access_key|user_login_profile)"/, f);
+});
+
+// S3-01: bucket privado, sem website hosting.
+test('S3-01: nenhum .tf configura website hosting', () => {
+  for (const [f, src] of tf) assert.doesNotMatch(src, /resource\s+"aws_s3_bucket_website_configuration"|^\s*website\s*\{/m, f);
+});

@@ -15,7 +15,7 @@ Spec: `spec.md`. Terraform em `infra/`, um módulo raiz, state local.
 | `infra/outputs.tf` | bucket, domínio CF, ARN KVS, ARN distribuição |
 | `infra/functions/*.js` | código das Functions, lido com `file()` |
 | `infra/functions/test/*.test.mjs` | `node:test`; carrega o `.js` trocando `import cf from 'cloudfront'` por um `cf` falso |
-| `infra/tests/*.tftest.hcl` | `terraform test` com `mock_provider "aws"` e `command = plan` |
+| `infra/tests/*.tftest.hcl` | `terraform test` com `mock_provider "aws"` e `command = apply` |
 | `infra/static/404.html` | placeholder da página 404 |
 
 A spec pede `main.tf`: ele guarda provider e `locals`; os recursos ficam em arquivos por serviço.
@@ -41,7 +41,7 @@ não por `domain_validation_options`, para o plano não depender de valor comput
 
 **D-4 · Chave de cache = path** em todas as políticas próprias; gzip/br só onde o CloudFront comprime.
 
-**D-5 · Testes de Terraform com `mock_provider`**, sem conta AWS. O CI atual roda `fmt` + `validate`;
+**D-5 · Testes de Terraform com `mock_provider` e `command = apply`**, sem conta AWS (o mock não cria nada e torna conhecidos os valores computados, que em `plan` ficariam desconhecidos). Ausência de recursos proibidos (access key, login, website, recursos do protótipo) é checada por teste Node sobre os `.tf`. O CI atual roda `fmt` + `validate`;
 propor no PR o passo `terraform test` no job `infra` (editar `ci.yml` não foi autorizado neste ticket).
 
 ## Function `redirect-afiliado`
