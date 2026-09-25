@@ -147,8 +147,8 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Certificado com `domain_name = besave.com.br`, SAN `www.besave.com.br`, `validation_method = DNS`; 2 registros de validação na zona
-- [ ] Gate check passes: `terraform validate && terraform test`
+- [x] Certificado com `domain_name = besave.com.br`, SAN `www.besave.com.br`, `validation_method = DNS`; 2 registros de validação na zona
+- [x] Gate check passes: `terraform validate && terraform test`
 
 **Tests**: integration
 **Gate**: full

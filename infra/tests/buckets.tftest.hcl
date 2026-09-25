@@ -1,4 +1,6 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  source = "./tests/mocks"
+}
 
 run "buckets" {
   command = apply # mock_provider: nada é criado; valores computados viram falsos conhecidos

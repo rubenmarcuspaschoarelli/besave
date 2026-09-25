@@ -183,7 +183,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | CF-07 | P1: Distribuição | T5 | Pending |
 | CF-08 | P1: Distribuição | T5 | Pending |
 | CF-09 | P1: Distribuição | T5 | Pending |
-| CF-10 | P1: Distribuição | T4 | Pending |
+| CF-10 | P1: Distribuição | T4 | Implemented |
 | CF-11 | P1: Distribuição | T5 | Pending |
 | CF-12 | P1: Distribuição | T5 | Pending |
 | IAM-01 | P1: IAM | T6 | Pending |
