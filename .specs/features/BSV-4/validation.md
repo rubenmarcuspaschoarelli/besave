@@ -1,12 +1,12 @@
 # BSV-4 Validation
 
-**Verdict**: PASS ✅ (iteração 1 de 3, re-verificação: 30/30 ACs com evidência `file:line`, gate verde com 5 runs `terraform test` + 14 testes `node:test`; os 3 sobreviventes da iteração 0 (M24, M25, M26) agora morrem, e 9 mutantes já mortos foram re-testados sem regressão)
+**Verdict**: PASS ✅ (iteração 3 de 3: 32/32 ACs com evidência `file:line`, gate verde com 7 runs `terraform test` + 14 testes `node:test`; os sobreviventes da iteração 2, M39 e M42, agora morrem, junto com as variantes `//` (M50), literal `"besave-site"` (M51) e comentado + `false` (M52); 14/14 mortos na iteração 3; uma sonda confirma que o helper ainda enxerga os 21 blocos `resource` do HEAD)
 
-> Histórico: iteração 0 = FAIL (M24/M25/M26 sobreviveram: ausências exigidas por IAM-01 e S3-01 sem teste). Fechado em `805be99` e re-verificado.
+> Histórico: iteração 0 = FAIL (M24/M25/M26: ausências de IAM-01/S3-01 sem teste), fechado em `805be99`. Iteração 1 = PASS. Iteração 2 = FAIL, na re-verificação após 4 ajustes do dono (`9434c7f`..`3efae2b`: S3-02 revisado, CF-13, S3-04 estendido, OPS-05): M42 e M39 sobreviveram no helper `tests/inspecao`. Fechado em `bb999e8`. Iteração 3 = PASS.
 
 **Date**: 2026-09-25
 **Spec**: `.specs/features/BSV-4/spec.md` + `.specs/features/BSV-4/design.md` + `docs/specs/BSV-4.md` + critérios do dono no chat (AD-020: `/nao-existe` → 404 `text/html`; `/data/chunks/0-ffff.json.br` → 404, nunca 200)
-**Diff range**: `1653949..HEAD` (HEAD `805be99`; spec em `d9fff45` + 7 commits de feature `f409c38`..`18c4458` + fix `805be99`; arquivos só em `infra/`, `docs/MANIFEST.md` e `.specs/features/BSV-4/`)
+**Diff range**: `1653949..HEAD` (HEAD `bb999e8`; spec em `d9fff45` + 7 commits de feature `f409c38`..`18c4458` + fix `805be99` + relatório `f4b1e7f` + revisão do dono `9434c7f`..`3efae2b` + fix `bb999e8`; arquivos em `infra/`, `docs/MANIFEST.md`, `.github/workflows/ci.yml` e `.specs/features/BSV-4/`)
 **Verifier**: sub-agente independente (author ≠ verifier)
 
 ---
@@ -23,6 +23,11 @@
 | T6 IAM + outputs | ✅ Done | `8bcbd47` |
 | T7 README + MANIFEST §5 | ✅ Done | `18c4458` |
 | Fix 1 + Fix 2 (iteração 1) | ✅ Done | `805be99` (2 testes textuais + D-5 no design) |
+| T8 site sem expiração (S3-02 revisado) | ✅ Done | `9434c7f` |
+| T9 `prevent_destroy` ACM/Route53 (CF-13) | ✅ Done | `dc87215` |
+| T10 ACL `awslogsdelivery` (S3-04 estendido) | ✅ Done | `15bb86b`, `34d1680` |
+| T11 `terraform test` no CI (OPS-05) | ✅ Done | `3efae2b` |
+| Fix 3 + Fix 4 (iteração 3) | ✅ Done | `bb999e8` (helper ignora comentários; casa `var.bucket_site`/`"besave-site"`) |
 
 ---
 
@@ -47,9 +52,9 @@ Terraform: `infra/tests/*.tftest.hcl` (`mock_provider "aws"`, `command = apply` 
 | Criterion | Spec-defined outcome | `file:line` + assertion | Result |
 | --------- | -------------------- | ----------------------- | ------ |
 | S3-01 `besave-site` | us-east-1, BPA 4 flags, **sem website hosting** | `infra/tests/buckets.tftest.hcl:10` - `bucket == "besave-site"`; `:14-15` - 4 flags `true` nos dois buckets; `:19` - BPA aponta para os buckets certos; `infra/functions/test/sem-recursos-existentes.test.mjs:33` - `doesNotMatch(src, /resource\s+"aws_s3_bucket_website_configuration"\|^\s*website\s*\{/m)` em todo `.tf` (M25 morto na iteração 1). Região: vem de `var.regiao` (`infra/variables.tf:4`, padrão `us-east-1`), não afirmada; é observação, não gap | ✅ PASS |
-| S3-02 lifecycle | `data/chunks/` e `data/busca/` expiram em 7 dias | `infra/tests/buckets.tftest.hcl:25-27` - para cada prefixo exatamente 1 regra `Enabled` com `filter[0].prefix == p && expiration[0].days == 7`; `:31` - `length(rule) == 2` | ✅ PASS |
+| S3-02 (revisado) sem expiração | `besave-site` sem regra de lifecycle com expiração | `infra/tests/buckets.tftest.hcl:55` - `contains(output.recursos, "aws_s3_bucket.site")` (sanidade do helper); `:59` - `output.expiracao_no_site == []`; helper `infra/tests/inspecao/main.tf:6` (linhas `#`/`//` removidas) e `:19-23` (bloco com `expir` que seja `aws_s3_bucket.site`, ou `aws_s3_bucket_lifecycle_configuration.*` que cite `aws_s3_bucket.site.`, `var.bucket_site` ou `"besave-site"`). M37, M38, M39 (var) e M51 (literal) mortos na iteração 3 | ✅ PASS |
 | S3-03 política OAC | só `s3:GetObject` para `cloudfront.amazonaws.com` com `AWS:SourceArn` = ARN da distribuição nova | `infra/tests/cloudfront.tftest.hcl:136-146` - `jsondecode(policy) == {…}` igualdade estrutural completa (1 statement, `Action = "s3:GetObject"`, `Resource = "${site.arn}/*"`, `Condition.StringEquals."AWS:SourceArn" == distribution.arn`); `:150` - policy no bucket do site | ✅ PASS |
-| S3-04 `besave-logs` + logs `cf/` | BPA 4 flags, `BucketOwnerPreferred`, logs padrão com prefixo `cf/` | `infra/tests/buckets.tftest.hcl:14-15` (BPA), `:37` - `bucket == "besave-logs"`, `:41` - `object_ownership == "BucketOwnerPreferred"`; `infra/tests/cloudfront.tftest.hcl:156-157` - `logging_config[0].bucket == logs.bucket_domain_name && prefix == "cf/"` | ✅ PASS |
+| S3-04 (estendido) `besave-logs` + ACL + logs `cf/` | BPA 4 flags; `BucketOwnerPreferred`; ACL `FULL_CONTROL` para o dono e para `awslogsdelivery` (`c4c1ede6…d2d0`); logs legacy com prefixo `cf/` | `infra/tests/buckets.tftest.hcl:14-15` (BPA); `:25` - `bucket == "besave-logs"`; `:29` - `object_ownership == "BucketOwnerPreferred"`; `:35` - `owner[0].id == <dono mockado> && acl.bucket == logs.id`; `:39-42` - `toset(grants) == toset(["FULL_CONTROL CanonicalUser <dono>", "FULL_CONTROL CanonicalUser c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"])` (conjunto exato: exclui grant extra); `infra/tests/cloudfront.tftest.hcl:156-157` - `logging_config[0].bucket == logs.bucket_domain_name && prefix == "cf/"` | ✅ PASS (ver nota do panic abaixo) |
 
 ### P1: Distribuição CloudFront
 
@@ -65,6 +70,7 @@ Terraform: `infra/tests/*.tftest.hcl` (`mock_provider "aws"`, `command = apply` 
 | CF-08 chave = path | sem cookie/header/query string nas 4 políticas próprias | `infra/tests/cloudfront.tftest.hcl:112-115` - nas 4 políticas `cookie_behavior`, `header_behavior`, `query_string_behavior == "none"` | ✅ PASS |
 | CF-09 error responses (AD-020) | 403→404 e 404→404, `/404.html`, `error_caching_min_ttl = 60`, nenhuma com 200 | `infra/tests/cloudfront.tftest.hcl:121-122` - `toset([for e in custom_error_response : [error_code, response_code, response_page_path, error_caching_min_ttl]]) == toset([[403,404,"/404.html",60],[404,404,"/404.html",60]])` (igualdade de conjunto: exclui qualquer entrada extra, inclusive com 200) | ✅ PASS |
 | CF-10 ACM | cobre `besave.com.br` + `www`; validação DNS em registros Route53 criados pelo Terraform | `infra/tests/acm.tftest.hcl:10` - `domain_name == "besave.com.br"`, SANs `== ["www.besave.com.br"]`; `:14` - `validation_method == "DNS"`; `:18-19` - registros na zona mockada, `CNAME`, `allow_overwrite`; `:23-26` - nome/valor de cada registro = o pedido pelo ACM (mock); `:30` - validação espera 2 FQDNs | ✅ PASS |
+| CF-13 `prevent_destroy` | certificado ACM e registros de validação com `lifecycle { prevent_destroy = true }` | `infra/tests/acm.tftest.hcl:43` - `output.prevent_destroy["aws_acm_certificate.site"] && output.prevent_destroy["aws_route53_record.validacao_acm"]`; `:47` - `!output.prevent_destroy["aws_s3_bucket.site"]` (sanidade); helper `infra/tests/inspecao/main.tf:26-28` (regex `lifecycle\s*\{[^}]*prevent_destroy\s*=\s*true` sobre o texto já sem comentários, `:6`). M40, M41, M43, M42 (`#`), M50 (`//`) e M52 (comentado + `false`) mortos na iteração 3 | ✅ PASS |
 | CF-11 `ativar_dominios` | `false`: sem aliases, cert padrão; `true`: 2 aliases, ACM validado, `sni-only`, `TLSv1.2_2021` | `infra/tests/cloudfront.tftest.hcl:128-130` - `length(aliases) == 0`, `cloudfront_default_certificate`, `acm_certificate_arn == null`; `:171-175` (run `distribuicao_com_dominios`) - aliases `== {besave.com.br, www.besave.com.br}`, `acm_certificate_arn == aws_acm_certificate_validation.site.certificate_arn`, `!cloudfront_default_certificate`, `sni-only`, `TLSv1.2_2021` | ✅ PASS |
 | CF-12 `404.html` | `noindex`, link para `/` e para as 9 áreas | `infra/functions/test/pagina-404.test.mjs:11` - `match(/<meta name="robots" content="noindex">/)`; `:15` - `href="/"`; `:16` - `href="/${area}/"` para as 9 áreas de `:8` | ✅ PASS |
 
@@ -84,8 +90,9 @@ Terraform: `infra/tests/*.tftest.hcl` (`mock_provider "aws"`, `command = apply` 
 | OPS-02 nada existente no plano | nenhum recurso do bucket `besave.com.br` nem de `E28G93A17WHHD` | `infra/tests/iam.tftest.hcl:68` - `!contains([site.bucket, logs.bucket], "besave.com.br")`; `infra/functions/test/sem-recursos-existentes.test.mjs:17-18` - nenhum `.tf` cita `E28G93A17WHHD` nem tem bloco `import`; `:23` - nenhum `bucket = "besave.com.br"` | ✅ PASS |
 | OPS-03 README | pré-requisitos, init/plan/apply, state local, access key manual, curls, upload `/404.html`, virada | leitura: `infra/README.md:16-20` (pré-requisitos), `:22-30` (init/plan/apply), `:36-37` (state local), `:41-43` (access key), `:44-49` (upload 404), `:51-65` (4 curls + index de teste), `:79-86` (virada `ativar_dominios`) | ✅ PASS (leitura) |
 | OPS-04 MANIFEST §5 | linha 6 sem fallback SPA; 403/404 → 404 `/404.html` | leitura: `docs/MANIFEST.md:116` (linha 6: "Sem fallback SPA (AD-020)") e `:118-121` (403/404 → 404 `/404.html`, TTL 60 s, nenhuma 200) | ✅ PASS (leitura) |
+| OPS-05 CI | job `infra` roda `terraform test` depois de `validate` | leitura: `.github/workflows/ci.yml:104` - `run: terraform validate`, `:105` - `run: terraform test` (mesmo job `infra`, `working-directory: infra`, `:98`). Sem guarda automática (M49 sobrevive), como OPS-03/04; T11 declara `Tests: none` | ✅ PASS (leitura) |
 
-**Status**: 30/30 ACs com evidência `file:line` e valor alinhado ao spec (iteração 1: as ausências de IAM-01 e S3-01 agora são testadas).
+**Status**: 32/32 ACs com evidência `file:line` e valor alinhado ao spec (iteração 3: CF-13 e S3-02 discriminam os casos M42/M39 e suas variantes).
 
 ### Critérios do dono (AD-020) e do ticket, pós-apply
 
@@ -103,7 +110,9 @@ Terraform: `infra/tests/*.tftest.hcl` (`mock_provider "aws"`, `command = apply` 
 | Ponto | Código | Avaliação |
 | ----- | ------ | --------- |
 | `viewer_certificate` com certificado padrão | `infra/cloudfront.tf:240-245`: `cloudfront_default_certificate = true`, `acm_certificate_arn = null`, `ssl_support_method = null`, `minimum_protocol_version = "TLSv1"` | ✅ Com o certificado `*.cloudfront.net` a AWS só aceita/retorna `TLSv1`; qualquer outro valor gera diff perpétuo. Com `ativar_dominios`: ACM + `sni-only` + `TLSv1.2_2021`, válido. |
-| `logging_config.bucket` | `infra/cloudfront.tf:229` = `aws_s3_bucket.logs.bucket_domain_name` | ✅ Formato exigido é `bucket.s3.amazonaws.com` (o `bucket_domain_name`, não o nome nem o regional). ACL habilitada (`BucketOwnerPreferred`) e `depends_on` na ownership (`:247`). |
+| `logging_config.bucket` | `infra/cloudfront.tf:229` = `aws_s3_bucket.logs.bucket_domain_name` | ✅ Formato exigido é `bucket.s3.amazonaws.com` (o `bucket_domain_name`, não o nome nem o regional). ACL habilitada (`BucketOwnerPreferred`); a distribuição agora tem `depends_on = [aws_s3_bucket_acl.logs]` (`:247`), e a ACL depende da ownership (`infra/s3.tf:77`). |
+| ACL do bucket de logs (iteração 2) | `infra/s3.tf:46-78` | ✅ `c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0` é o canonical ID documentado do `awslogsdelivery` para logging legacy do CloudFront. `access_control_policy` com `owner` = `data.aws_canonical_user_id` é o formato do provider. Grants `CanonicalUser` não são públicos, então não colidem com `block_public_acls = true`. O CloudFront colocaria o mesmo grant sozinho; declará-lo evita drift. |
+| `prevent_destroy` + `create_before_destroy` (iteração 2) | `infra/acm.tf:11-14`, `:30-32` | ✅ Válido. Consequência: mudar SANs/domínio (que força replace) faz o `plan` falhar até remover a proteção. É o comportamento pretendido, documentado em `infra/README.md` ("Cuidados"). |
 | OAC + política | `infra/s3.tf:34-49`, `infra/cloudfront.tf:9-15` | ✅ Padrão AWS (`Service` principal + `AWS:SourceArn`). Sem `ListBucket` → objeto ausente = 403, convertido em 404 por CF-09 (coerente com AD-020). |
 | KVS em Function | `infra/cloudfront.tf:31-38` | ✅ Associação exige `cloudfront-js-2.0`. ⚠️ Risco: `cf.kvs()` sem id (`infra/functions/redirect-afiliado.js:4`) segue a doc citada no design, mas não é verificável sem conta; se falhar, `/ir/999` dá 503 e o curl do dono pega. Recomendado `aws cloudfront test-function` (README `:76-77`). |
 | ARN para `cloudfront-keyvaluestore:*` | `infra/iam.tf:33` = `aws_cloudfront_key_value_store.redirects.arn` | ✅ Recurso `key-value-store` usa o mesmo ARN `arn:aws:cloudfront::<conta>:key-value-store/<id>`. |
@@ -177,7 +186,66 @@ Scratch: novo `git worktree add --detach <scratchpad>/verif HEAD` + cópia de `i
 | M32 | `infra/functions/redirect-afiliado.js:12` | sem `no-store` (regressão) | ✅ Killed (FN-04/05/06) |
 | M35 | `infra/static/404.html:6` | sem `noindex` (regressão) | ✅ Killed (CF-12) |
 
-**Result**: 12/12 killed na iteração 1; acumulado: 36 mutantes distintos, todos mortos (M24/M25/M26 re-testados) - PASS ✅
+**Result (iteração 1)**: 12/12 killed; acumulado: 36 mutantes distintos, todos mortos (M24/M25/M26 re-testados) - PASS ✅
+
+### Iteração 2 (re-verificação após a revisão do dono, HEAD `3efae2b`)
+
+Scratch: novo `git worktree add --detach <scratchpad>/verif HEAD` + cópia de `infra/.terraform` (agora com `modules/`, porque o `init` foi refeito para o módulo `tests/inspecao`). Mesmo script: uma mutação por vez, as duas suítes por mutante, arquivo restaurado byte a byte. M00 = baseline sem mutação: 7/7 runs e 14/14 testes verdes. M17/M18 (lifecycle de 7 dias) ficaram obsoletos com a revisão de S3-02. Depois: processos órfãos do provider parados, `git worktree remove --force` + `rmdir` com caminho estendido + `git worktree prune`. `git status --porcelain` do tree real: vazio antes e vazio depois (idêntico).
+
+| Mutation | File:line | Description | Killed? |
+| -------- | --------- | ----------- | ------- |
+| M00 | — | baseline, sem mutação | (verde, 0 falhas) |
+| M37 | `infra/s3.tf` (novo recurso) | `aws_s3_bucket_lifecycle_configuration` com `expiration { days = 7 }` e `bucket = aws_s3_bucket.site.id` | ✅ Killed (`sem_expiracao_no_site`) |
+| M38 | `infra/s3.tf:2-4` | `lifecycle_rule` inline com `expiration` em `aws_s3_bucket.site` | ✅ Killed (`sem_expiracao_no_site`) |
+| M39 | `infra/s3.tf` (novo recurso) | mesmo lifecycle de M37, mas com `bucket = var.bucket_site` | ❌ Survived → Fix 4 |
+| M40 | `infra/acm.tf:13` | remove `prevent_destroy` do certificado | ✅ Killed (`protecao_contra_destroy`) |
+| M41 | `infra/acm.tf:30-32` | remove o `lifecycle` dos registros de validação | ✅ Killed (`protecao_contra_destroy`) |
+| M42 | `infra/acm.tf:13` | `# prevent_destroy = true` (comentado) no certificado | ❌ Survived → Fix 3 |
+| M43 | `infra/acm.tf:31` | `prevent_destroy = false` nos registros | ✅ Killed (`protecao_contra_destroy`) |
+| M44 | `infra/s3.tf:47` | canonical ID do `awslogsdelivery` com 1 caractere trocado | ✅ Killed (`buckets` fail, exit 11, panic) |
+| M45 | `infra/s3.tf:68-74` | remove o grant do `awslogsdelivery` | ✅ Killed (`buckets` fail, exit 11, panic) |
+| M46 | `infra/s3.tf:68-74` | grant extra `READ` para `AllUsers` | ✅ Killed (`buckets`: "Invalid template interpolation value") |
+| M47 | `infra/s3.tf:69` | `awslogsdelivery` com `WRITE` em vez de `FULL_CONTROL` | ✅ Killed (`buckets` fail, exit 11, panic) |
+| M48 | `infra/s3.tf:57` | `owner` da ACL = `awslogsdelivery` | ✅ Killed (`buckets`) |
+| M21 | `infra/s3.tf:40` | ownership `BucketOwnerEnforced` | ✅ Killed (`buckets`, S3-04) |
+| M49 | `.github/workflows/ci.yml:105` | remove o passo `terraform test` | ⏭️ Survived, esperado: OPS-05 é AC de leitura (T11 `Tests: none`), conferido estaticamente em `ci.yml:104-105` |
+| M01 | `infra/cloudfront.tf:222` | error response → 200 (regressão) | ✅ Killed (CF-09) |
+| M09 | `infra/cloudfront.tf:37` | sem associação KVS (regressão) | ✅ Killed (FN-07) |
+| M19 | `infra/s3.tf:23` | policy OAC com `ListBucket` (regressão) | ✅ Killed (S3-03) |
+| M23 | `infra/iam.tf:39` | `CreateInvalidation` em `*` (regressão) | ✅ Killed (IAM-03) |
+| M24 | `infra/iam.tf` (novo recurso) | `aws_iam_access_key` (regressão) | ✅ Killed (IAM-01) |
+| M30 | `infra/functions/redirect-afiliado.js:19` | regex sem âncora final (regressão) | ✅ Killed (FN-06) |
+| M35 | `infra/static/404.html:6` | sem `noindex` (regressão) | ✅ Killed (CF-12) |
+
+**Result (iteração 2)**: 18/20 mutantes testáveis mortos (21 injetados; M49 fica fora da conta por ser AC de leitura). Sobreviventes relevantes: M39 e M42 - FAIL ❌
+
+### Iteração 3 (re-verificação, HEAD `bb999e8`, última antes de escalar)
+
+Scratch: novo `git worktree add --detach <scratchpad>/verif HEAD` + cópia de `infra/.terraform`; mesmo script e mesmas regras. M00 = baseline sem mutação: 7/7 runs e 14/14 testes verdes. Depois: processos órfãos do provider parados, `git worktree remove --force` + `rmdir` com caminho estendido + `git worktree prune`. `git status --porcelain` do tree real antes e depois: só ` M .specs/features/BSV-4/validation.md` (idêntico).
+
+**Sonda de não-regressão do helper** (arquivo temporário `tests/zz_sonda.tftest.hcl`, só no scratch e apagado em seguida, `command = plan` no módulo `tests/inspecao`, contra o HEAD sem mutação): `length(output.recursos) == 21` (= `grep -c '^resource '` nos `.tf` da raiz: acm 3, cloudfront 9, iam 2, s3 7); `toset([for k, v in output.prevent_destroy : k if v]) == toset(["aws_acm_certificate.site", "aws_route53_record.validacao_acm"])`; `aws_s3_bucket.site`, `aws_s3_bucket_acl.logs` e `aws_cloudfront_distribution.site` presentes; `expiracao_no_site == []`. Resultado: `run "sonda"... pass` (8/8 com os runs do repo). A remoção de comentários não quebrou a detecção dos blocos reais.
+
+| Mutation | File:line | Description | Killed? |
+| -------- | --------- | ----------- | ------- |
+| M00 | — | baseline, sem mutação | (verde, 0 falhas) |
+| M37 | `infra/s3.tf` (novo recurso) | lifecycle com expiração via `aws_s3_bucket.site.id` | ✅ Killed (`sem_expiracao_no_site`) |
+| M38 | `infra/s3.tf:2-4` | `lifecycle_rule` inline com expiração | ✅ Killed (`sem_expiracao_no_site`) |
+| M39 | `infra/s3.tf` (novo recurso) | lifecycle com expiração via `var.bucket_site` | ✅ Killed (`sem_expiracao_no_site`), antes sobrevivia |
+| M51 | `infra/s3.tf` (novo recurso) | lifecycle com expiração via literal `"besave-site"` | ✅ Killed (`sem_expiracao_no_site`) |
+| M40 | `infra/acm.tf:13` | sem `prevent_destroy` no certificado | ✅ Killed (`protecao_contra_destroy`) |
+| M41 | `infra/acm.tf:30-32` | sem `lifecycle` nos registros | ✅ Killed (`protecao_contra_destroy`) |
+| M42 | `infra/acm.tf:13` | `# prevent_destroy = true` | ✅ Killed (`protecao_contra_destroy`), antes sobrevivia |
+| M50 | `infra/acm.tf:13` | `// prevent_destroy = true` | ✅ Killed (`protecao_contra_destroy`) |
+| M52 | `infra/acm.tf:13` | `# prevent_destroy = true` + `prevent_destroy = false` | ✅ Killed (`protecao_contra_destroy`) |
+| M43 | `infra/acm.tf:31` | `prevent_destroy = false` nos registros | ✅ Killed (`protecao_contra_destroy`) |
+| M44 | `infra/s3.tf:47` | canonical ID do `awslogsdelivery` alterado (regressão) | ✅ Killed (`buckets`, exit 11) |
+| M21 | `infra/s3.tf:40` | ownership `BucketOwnerEnforced` (regressão) | ✅ Killed (`buckets`) |
+| M24 | `infra/iam.tf` (novo recurso) | `aws_iam_access_key` (regressão) | ✅ Killed (IAM-01) |
+| M01 | `infra/cloudfront.tf:222` | error response → 200 (regressão) | ✅ Killed (CF-09) |
+
+**Result**: 14/14 killed na iteração 3; acumulado nas 4 iterações: 51 mutantes distintos (M01–M52), com M17/M18 obsoletos pela revisão de S3-02 e M49 fora da conta (AC de leitura OPS-05); nenhum sobrevivente em aberto. Cada mutante foi morto na sua execução mais recente; os que não foram re-rodados no HEAD `bb999e8` tocam código que `bb999e8` não alterou - PASS ✅
+
+**Panic do Terraform 1.16.4 (S3-04), avaliado.** Reproduzido com M44 isolado: `run "buckets"... fail`, depois `panic: unexpected error marshalling value: value has marks, so it cannot be serialized as JSON`, exit 11. **Aceitável como gate**, porque falha fechado: exit ≠ 0 derruba o passo do CI e o run fica marcado `fail`. Limitações: (1) a `error_message` da asserção se perde; (2) o panic aborta a suíte, e os arquivos seguintes (`cloudfront`, `iam`) não rodam nessa execução, então uma segunda regressão fica escondida até a primeira ser corrigida; (3) o CI usa `hashicorp/setup-terraform@v3` sem versão fixa, e o comportamento pode mudar. Recomendação opcional (não bloqueia): comparar uma projeção sem marks, p.ex. `sort(nonsensitive(...))`, ou afirmar `length` + `contains` por grant, para ter a mensagem em vez do panic.
 
 ---
 
@@ -186,11 +254,11 @@ Scratch: novo `git worktree add --detach <scratchpad>/verif HEAD` + cópia de `i
 | Principle | Status |
 | --------- | ------ |
 | Minimum code | ✅ (um módulo raiz, recursos por serviço; `locals` mínimos) |
-| Surgical changes | ✅ (só `infra/`, `docs/MANIFEST.md` §5 e `.specs/features/BSV-4/`; `ci.yml` não tocado, D-5) |
+| Surgical changes | ✅ (só `infra/`, `docs/MANIFEST.md` §5, `.specs/features/BSV-4/` e, na iteração 2, 1 linha em `.github/workflows/ci.yml` pedida por OPS-05) |
 | No scope creep | ✅ (sem DNS da virada, sem backend remoto, sem popular KVS) |
 | Matches patterns | ✅ (testes em `node:test` sem dependência nova; nomes em português como no resto) |
 | Spec-anchored outcome check | ✅ (igualdades estruturais completas nas policies; TTLs, ordem e error responses literais) |
-| Per-layer Coverage Expectation | ✅ Functions 1:1 com FN-01..06 + edge; Terraform cobre valores; ausências de IAM-01/S3-01 por inspeção textual dos `.tf` |
+| Per-layer Coverage Expectation | ✅ Functions 1:1 com FN-01..06 + edge; Terraform cobre valores; ausências de IAM-01/S3-01 por inspeção textual dos `.tf`; o helper `tests/inspecao` (S3-02, CF-13) ignora comentários e reconhece o bucket por recurso, variável ou literal (corrigido em `bb999e8`) |
 | Every test maps to a spec requirement | ✅ (todos os `assert` têm comentário FN/S3/CF/IAM/OPS) |
 | Documented guidelines followed: `CLAUDE.md`, `docs/specs/BSV-4.md` | ✅ |
 
@@ -212,8 +280,10 @@ Observação (iteração 0): o design dizia `command = plan`, mas os testes usam
 - **Terraform**: v1.16.4, provider `hashicorp/aws` v6.66.0. `fmt` limpo; `init` ok; `validate`: "Success! The configuration is valid."; `test`: **"Success! 5 passed, 0 failed."** (`acm`, `buckets`, `distribuicao_padrao`, `distribuicao_com_dominios`, `iam_e_outputs`)
 - **Functions** (Node v24.21.0): `npm ci` "found 0 vulnerabilities"; `npm test`: **tests 14, pass 14, fail 0, skipped 0** (re-verificação, HEAD `805be99`; iteração 0: 12/12)
 - **Terraform na iteração 1**: `fmt` limpo, `init` ok, `validate` ok, `test` "Success! 5 passed, 0 failed."
+- **Iteração 2 (HEAD `3efae2b`)**: `fmt -check -recursive` limpo; `init -backend=false` refeito ("Initializing modules...", "successfully initialized"); `validate` "Success! The configuration is valid."; `test` **"Success! 7 passed, 0 failed."** (`acm`, `protecao_contra_destroy`, `buckets`, `sem_expiracao_no_site`, `distribuicao_padrao`, `distribuicao_com_dominios`, `iam_e_outputs`); `npm ci` + `npm test` **14/14**
+- **Iteração 3 (HEAD `bb999e8`)**: `fmt` limpo; `init` ok; `validate` ok; `test` **"Success! 7 passed, 0 failed."**; `npm ci` + `npm test` **14/14**
 - **Test count before feature** (`1653949`): 0 (não havia `infra/`)
-- **Test count after feature**: 5 runs Terraform (39 `assert`) + 14 testes `node:test` (iteração 1: +2, IAM-01 e S3-01)
+- **Test count after feature**: 7 runs Terraform + 14 testes `node:test` (iteração 1: +2 IAM-01/S3-01; iteração 2: +2 runs, e as 2 asserções do lifecycle de 7 dias foram trocadas pela de ausência, como pede o S3-02 revisado; não é enfraquecimento)
 - **Skipped tests**: nenhum
 - **Failures**: nenhuma
 
@@ -221,7 +291,21 @@ Observação (iteração 0): o design dizia `command = plan`, mas os testes usam
 
 ## Fix Plans
 
-> Status: Fix 1 e Fix 2 foram aplicados em `805be99` e verificados na iteração 1 (M24, M25, M26 mortos). Ficam abaixo como histórico.
+> Status: Fix 1 e Fix 2 foram aplicados em `805be99` e verificados na iteração 1 (M24, M25, M26 mortos). Fix 3 e Fix 4 foram aplicados em `bb999e8` e verificados na iteração 3 (M39, M42, M50, M51, M52 mortos). Todos ficam abaixo como histórico.
+
+### Fix 3: CF-13 aceita `prevent_destroy` comentado (M42)
+
+- **Root cause**: `infra/tests/inspecao/main.tf:26` aplica a regex sobre o corpo bruto do bloco; `# prevent_destroy = true` casa. Comentar a linha é justamente a forma mais provável de "desligar" a proteção.
+- **Fix task**: no helper, remover as linhas de comentário antes de montar `blocos`, p.ex. `fontes = [for f in ... : replace(file(...), "/(?m)^\\s*(#|//).*$/", "")]`, ou exigir a atribuição no início da linha: `(?ms)lifecycle\\s*\\{[^}]*^\\s*prevent_destroy\\s*=\\s*true`. A limpeza de comentários também protege S3-02 (um `# expiration` hoje dá falso positivo, e um bloco comentado não conta).
+- **Verify**: re-rodar M42 (tem que morrer) e M40/M41/M43 (continuam mortos).
+- **Priority**: Major (CF-13 é a proteção contra derrubar o TLS de produção).
+
+### Fix 4: S3-02 não detecta lifecycle que aponta para o bucket do site por variável (M39)
+
+- **Root cause**: `infra/tests/inspecao/main.tf:21` só considera `aws_s3_bucket_lifecycle_configuration` cujo corpo contém `aws_s3_bucket.site.`; `bucket = var.bucket_site` (ou o literal `"besave-site"`) escapa.
+- **Fix task**: ampliar a condição para `aws_s3_bucket\\.site\\.|var\\.bucket_site|"besave-site"`. Outra opção: proibir qualquer lifecycle configuration com `expir` que não seja explicitamente do bucket de logs.
+- **Verify**: re-rodar M39 (tem que morrer) e M37/M38 (continuam mortos).
+- **Priority**: Minor.
 
 ### Fix 1: IAM-01 "sem console e sem access key" não é discriminado (M24, M26)
 
@@ -250,23 +334,27 @@ Observação (iteração 0): o design dizia `command = plan`, mas os testes usam
 | Requirement | Previous Status | New Status |
 | ----------- | --------------- | ---------- |
 | FN-01..07 | Implemented | ✅ Verified |
-| S3-01..04 | Implemented | ✅ Verified (S3-01: ausência de website hosting testada na iteração 1) |
+| S3-01, S3-03 | Implemented | ✅ Verified |
+| S3-02 (revisado) | Implemented | ✅ Verified (iteração 3) |
+| S3-04 (estendido) | Implemented | ✅ Verified (panic 1.16.4 aceito: falha fechado) |
 | CF-01..12 | Implemented | ✅ Verified |
-| IAM-01..03 | Implemented | ✅ Verified (IAM-01: ausência de console/access key testada na iteração 1) |
+| CF-13 | Implemented | ✅ Verified (iteração 3) |
+| IAM-01..03 | Implemented | ✅ Verified |
 | OPS-01..04 | Implemented | ✅ Verified |
+| OPS-05 | Implemented | ✅ Verified (leitura) |
 
 ---
 
 ## Summary
 
-**Overall**: ✅ PASS
+**Overall**: ✅ PASS (iteração 3)
 
-**Spec-anchored check**: 30/30 ACs com evidência; 0 spec-precision gaps
-**Sensor**: iteração 0 33/36; iteração 1 12/12 (M24/M25/M26 + 9 de regressão) → 0 sobreviventes
-**Gate**: Terraform 5/5 runs; Functions 14/14
+**Spec-anchored check**: 32/32 ACs com evidência; 0 spec-precision gaps
+**Sensor**: iteração 0 33/36; iteração 1 12/12; iteração 2 18/20; iteração 3 14/14 → 0 sobreviventes testáveis (M49 é AC de leitura)
+**Gate**: Terraform 7/7 runs; Functions 14/14
 
 **What works**: Functions (rewrite e redirect com regex ancorada, `no-store`, KVS só para id decimal), behaviors na ordem e TTLs de MANIFEST §5, error responses AD-020 (403/404 → 404 `/404.html`, sem 200), OAC e policy do bucket exatas, IAM mínimo com igualdade estrutural, certificado/validação ACM, `ativar_dominios` nos dois estados, logs `cf/` com o formato certo de `bucket_domain_name`.
 
-**Issues found**: nenhuma em aberto (as ausências de IAM-01 e S3-01 foram fechadas em `805be99`).
+**Issues found**: nenhuma em aberto (Fix 3 e Fix 4 fechados em `bb999e8`). Observação não bloqueante: o panic do Terraform 1.16.4 na asserção de grants de S3-04 falha fechado (exit 11), mas esconde a mensagem e aborta os arquivos de teste seguintes; o CI usa `setup-terraform@v3` sem versão fixa.
 
 **Next steps**: o dono faz `apply`, roda os curls do README (incluindo `/nao-existe` e `/data/chunks/0-ffff.json.br`) e `test-function` da `redirect-afiliado`, e cola o `plan` no PR.
