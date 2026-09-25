@@ -176,9 +176,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Inativa há 8 dias fica de fora; há 6 dias sai; ativa sai; inativa sem data fica de fora
-- [ ] `produto(id)` devolve o produto ou `None`
-- [ ] Gate check passes: `cargo test`
+- [x] Inativa há 8 dias fica de fora; há 6 dias sai; ativa sai; inativa sem data fica de fora
+- [x] `produto(id)` devolve o produto ou `None`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
