@@ -311,8 +311,8 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] grants exatos para o dono e `c4c1ede6…d2d0`, ownership `BucketOwnerPreferred`
-- [ ] Gate check passes: build
+- [x] grants exatos para o dono e `c4c1ede6…d2d0`, ownership `BucketOwnerPreferred`
+- [x] Gate check passes: build
 
 **Tests**: integration
 **Gate**: build

@@ -41,6 +41,42 @@ resource "aws_s3_bucket_ownership_controls" "logs" {
   }
 }
 
+# Logs padrão (legacy, S3): awslogsdelivery precisa de FULL_CONTROL na ACL. O CloudFront colocaria o
+# grant sozinho ao criar a distribuição; declarado aqui para não depender disso nem gerar drift.
+locals {
+  awslogsdelivery = "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"
+}
+
+data "aws_canonical_user_id" "atual" {}
+
+resource "aws_s3_bucket_acl" "logs" {
+  bucket = aws_s3_bucket.logs.id
+
+  access_control_policy {
+    owner {
+      id = data.aws_canonical_user_id.atual.id
+    }
+
+    grant {
+      permission = "FULL_CONTROL"
+      grantee {
+        type = "CanonicalUser"
+        id   = data.aws_canonical_user_id.atual.id
+      }
+    }
+
+    grant {
+      permission = "FULL_CONTROL"
+      grantee {
+        type = "CanonicalUser"
+        id   = local.awslogsdelivery
+      }
+    }
+  }
+
+  depends_on = [aws_s3_bucket_ownership_controls.logs]
+}
+
 resource "aws_s3_bucket_public_access_block" "logs" {
   bucket                  = aws_s3_bucket.logs.id
   block_public_acls       = true

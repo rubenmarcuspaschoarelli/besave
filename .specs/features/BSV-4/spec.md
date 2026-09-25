@@ -175,7 +175,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | S3-01 | P1: Buckets | T3 | Implemented |
 | S3-02 | P1: Buckets | T8 | Implemented |
 | S3-03 | P1: Buckets | T5 | Implemented |
-| S3-04 | P1: Buckets | T10 | Pending |
+| S3-04 | P1: Buckets | T10 | Implemented |
 | CF-01 | P1: Distribuição | T5 | Implemented |
 | CF-02 | P1: Distribuição | T5 | Implemented |
 | CF-03 | P1: Distribuição | T5 | Implemented |

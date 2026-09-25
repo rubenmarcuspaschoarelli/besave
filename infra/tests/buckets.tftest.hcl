@@ -29,6 +29,15 @@ run "buckets" {
     condition     = aws_s3_bucket_ownership_controls.logs.rule[0].object_ownership == "BucketOwnerPreferred"
     error_message = "logs do CloudFront exigem ACL: ownership BucketOwnerPreferred"
   }
+  assert {
+    condition = (aws_s3_bucket_acl.logs.bucket == aws_s3_bucket.logs.id &&
+      aws_s3_bucket_acl.logs.access_control_policy[0].owner[0].id == "0000000000000000000000000000000000000000000000000000000000dono" &&
+      toset([for g in aws_s3_bucket_acl.logs.access_control_policy[0].grant : [g.permission, g.grantee[0].type, g.grantee[0].id]]) == toset([
+        ["FULL_CONTROL", "CanonicalUser", "0000000000000000000000000000000000000000000000000000000000dono"],
+        ["FULL_CONTROL", "CanonicalUser", "c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0"],
+    ]))
+    error_message = "ACL do bucket de logs: FULL_CONTROL só para o dono e para awslogsdelivery"
+  }
 }
 
 run "sem_expiracao_no_site" {

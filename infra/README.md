@@ -92,6 +92,8 @@ nova nasce sem aliases e com o certificado `*.cloudfront.net`. Na virada:
   esse registro. Por isso ele e o certificado ACM têm `prevent_destroy = true`: `terraform destroy`
   (ou um plan que os recrie) falha em vez de apagar e quebrar a renovação do certificado antigo.
   Para destruir de propósito, remova o `prevent_destroy` num commit explícito.
-- **Bucket de logs** usa ACL (`BucketOwnerPreferred`) porque o log padrão do CloudFront exige; o
-  CloudFront dá a si mesmo a permissão de escrita na criação da distribuição.
+- **Bucket de logs** usa logging padrão *legacy* para S3 (não o v2 via CloudWatch/Firehose: v2 cobra
+  por GB entregue e o dado só precisa estar no S3). Legacy exige ACL: ownership `BucketOwnerPreferred`
+  e `aws_s3_bucket_acl.logs` com `FULL_CONTROL` para o dono e para `awslogsdelivery`
+  (`c4c1ede6…d2d0`, ID documentado pela AWS). O grant é o mesmo que o CloudFront colocaria sozinho.
 - **KVS** limita 5 MB (~45k ofertas ativas, MANIFEST §5). O Terraform cria a store vazia; o worker popula.

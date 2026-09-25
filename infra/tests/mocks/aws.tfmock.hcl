@@ -29,3 +29,6 @@ override_resource {
   target = aws_cloudfront_function.redirect_afiliado
   values = { arn = "arn:aws:cloudfront::111111111111:function/redirect-afiliado" }
 }
+mock_data "aws_canonical_user_id" {
+  defaults = { id = "0000000000000000000000000000000000000000000000000000000000dono" }
+}

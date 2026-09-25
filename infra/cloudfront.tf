@@ -244,5 +244,5 @@ resource "aws_cloudfront_distribution" "site" {
     minimum_protocol_version       = var.ativar_dominios ? "TLSv1.2_2021" : "TLSv1"
   }
 
-  depends_on = [aws_s3_bucket_ownership_controls.logs]
+  depends_on = [aws_s3_bucket_acl.logs]
 }
