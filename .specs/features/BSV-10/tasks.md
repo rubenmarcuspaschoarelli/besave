@@ -123,10 +123,10 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Cada motivo de rejeição do §9 tem teste
-- [ ] `pd ≤ pp` → `pd: null`; truncamento 197 + `…`; `centavos(19.995) == 2000`; `ST_ATIVO=0` → `x:1`
-- [ ] Linhas equivalentes às 3 fixtures geram JSON idêntico; cada card ≤ 220 B, média ≤ 160 B
-- [ ] Gate check passes: `cargo test`
+- [x] Cada motivo de rejeição do §9 tem teste
+- [x] `pd ≤ pp` → `pd: null`; truncamento 197 + `…`; `centavos(19.995) == 2000`; `ST_ATIVO=0` → `x:1`
+- [x] Linhas equivalentes às 3 fixtures geram JSON idêntico; cada card ≤ 220 B, média ≤ 160 B
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
