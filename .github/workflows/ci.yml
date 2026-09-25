@@ -1,0 +1,112 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      contract: ${{ steps.f.outputs.contract }}
+      worker:   ${{ steps.f.outputs.worker }}
+      api:      ${{ steps.f.outputs.api }}
+      site:     ${{ steps.f.outputs.site }}
+      infra:    ${{ steps.f.outputs.infra }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: f
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            contract: ['packages/contract/**']
+            worker:   ['apps/worker/**', 'packages/contract/**']
+            api:      ['apps/api/**', 'packages/contract/**']
+            site:     ['apps/site/**', 'packages/contract/**']
+            infra:    ['infra/**']
+
+  contract:
+    needs: changes
+    if: needs.changes.outputs.contract == 'true'
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: packages/contract } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: packages/contract/package-lock.json }
+      - run: npm ci
+      - run: npm run validate
+
+  rust:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true' || needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [worker, api]
+    steps:
+      - uses: actions/checkout@v4
+      - id: exists
+        run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+      - if: steps.exists.outputs.ok == 'true'
+        uses: dtolnay/rust-toolchain@stable
+        with: { components: rustfmt, clippy }
+      - if: steps.exists.outputs.ok == 'true'
+        uses: Swatinem/rust-cache@v2
+        with: { workspaces: apps/${{ matrix.app }} }
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+
+  site:
+    needs: changes
+    if: needs.changes.outputs.site == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: exists
+        run: test -f apps/site/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+      - if: steps.exists.outputs.ok == 'true'
+        uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - if: steps.exists.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: apps/site/pnpm-lock.yaml }
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: apps/site
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm lint
+          pnpm check
+          pnpm test
+          pnpm build
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: infra } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check -recursive
+      - run: terraform init -backend=false
+      - run: terraform validate
+      - id: node
+        run: test -f functions/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+      - if: steps.node.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - if: steps.node.outputs.ok == 'true'
+        working-directory: infra/functions
+        run: npm ci && npm test
