@@ -7,5 +7,6 @@ pub mod geracao;
 pub mod mapeamento;
 pub mod modelo;
 pub mod oracle;
+pub mod plano;
 pub mod publicador;
 pub mod redirects;

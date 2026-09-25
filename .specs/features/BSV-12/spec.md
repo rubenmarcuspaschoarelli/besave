@@ -190,9 +190,9 @@ bucket errado.
 | ORD-03 | P1: Ordem | T4 | Implemented |
 | ORD-04 | P1: Ordem | T4 | Implemented |
 | ORD-05 | P1: Ordem | T4 | Implemented |
-| PLN-01 | P1: Plano | T5 | Pending |
-| PLN-02 | P1: Plano | T5 | Pending |
-| PLN-03 | P1: Plano | T5 | Pending |
+| PLN-01 | P1: Plano | T5 | Implemented |
+| PLN-02 | P1: Plano | T5 | Implemented |
+| PLN-03 | P1: Plano | T5 | Implemented |
 | AWS-01 | P1: Binário e AWS | T6 | Pending |
 | AWS-02 | P1: Binário e AWS | T6 | Pending |
 | AWS-03 | P1: Binário e AWS | T7 | Pending |

@@ -188,10 +188,10 @@ T6 → T7
 
 **Done when**:
 
-- [ ] Modo plano: espiões de destino recebem 0 `gravar`/`remover`/`aplicar`
-- [ ] Plano lista gravações (bytes, `Cache-Control`), remoções, putKey e deleteKey
-- [ ] `--sim`: escritas chegam ao destino, plano vazio
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Modo plano: espiões de destino recebem 0 `gravar`/`remover`/`aplicar`
+- [x] Plano lista gravações (bytes, `Cache-Control`), remoções, putKey e deleteKey
+- [x] `--sim`: escritas chegam ao destino, plano vazio
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build
