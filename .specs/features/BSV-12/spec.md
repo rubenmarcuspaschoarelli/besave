@@ -200,7 +200,7 @@ bucket errado.
 | PLN-01 | P1: Plano | T5 | Implemented |
 | PLN-02 | P1: Plano | T5 | Implemented |
 | PLN-03 | P1: Plano | T5 | Implemented |
-| PLN-04 | P1: Plano | T10 | Pending |
+| PLN-04 | P1: Plano | T10 | Implemented |
 | AWS-01 | P1: Binário e AWS | T6 | Implemented |
 | AWS-02 | P1: Binário e AWS | T6 | Implemented |
 | AWS-03 | P1: Binário e AWS | T7 | Implemented |

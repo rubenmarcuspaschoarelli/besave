@@ -238,3 +238,58 @@ fn sim_escreve_no_destino_e_plano_vem_vazio() {
     );
     assert!(p.dentro.listar("data/chunks/2-").unwrap().len() == 1);
 }
+
+/// PLN-04: plano direto contra `PublicadorMemoria` + `RedirectsMemoria` (que registram
+/// gravações, remoções e `aplicar`): nada muda, e o texto impresso lista o previsto.
+#[test]
+fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
+    let (espiao, kvs_espiao, orfao) = destino();
+    let (mut p, mut kvs) = (espiao.dentro, kvs_espiao.dentro);
+    let (gravacoes, remocoes, aplicados) = (
+        p.gravacoes().len(),
+        p.remocoes().len(),
+        kvs.aplicados().len(),
+    );
+    assert!(remocoes == 0 && aplicados > 0, "destino sem histórico");
+
+    let f3 = FakeFonte::new(
+        vec![titulo(1001, "Nova"), linha(2001), linha(5412)],
+        vec![],
+        AGORA,
+    );
+    let pb = publicar(&f3, &mapeamento(), &mut p, &mut kvs, AGORA + 1200, false).unwrap();
+
+    assert_eq!(p.gravacoes().len(), gravacoes);
+    assert_eq!(p.remocoes().len(), remocoes);
+    assert_eq!(kvs.aplicados().len(), aplicados);
+
+    let linhas = pb.plano.linhas();
+    for l in &linhas {
+        println!("{l}");
+    }
+    let s3 = linhas.iter().position(|l| l == "S3:").unwrap();
+    let kvs_em = linhas.iter().position(|l| l.starts_with("KVS")).unwrap();
+    assert!(s3 < kvs_em, "{linhas:?}");
+    let objetos: Vec<&str> = linhas[s3 + 1..kvs_em].iter().map(|l| l.trim()).collect();
+    let chaves: Vec<&str> = linhas[kvs_em + 1..].iter().map(|l| l.trim()).collect();
+    let tem = |prefixo: &str| objetos.iter().any(|l| l.starts_with(prefixo));
+    assert!(tem("gravar data/chunks/2-"), "{linhas:?}");
+    assert!(tem("gravar data/chunks/5-"), "{linhas:?}");
+    let n = objetos.len();
+    assert!(
+        objetos[n - 3].starts_with("gravar manifest.prev.json ("),
+        "{linhas:?}"
+    );
+    assert!(
+        objetos[n - 2].starts_with("gravar manifest.json ("),
+        "{linhas:?}"
+    );
+    assert_eq!(objetos[n - 1], format!("remover {orfao}"));
+    assert_eq!(
+        chaves,
+        [
+            format!("putKey 2001 {}", url(2001)),
+            "deleteKey 5413".to_owned()
+        ]
+    );
+}

@@ -98,8 +98,8 @@ fn publicar_aws(
         println!("PLANO: nada foi escrito. Rode com --sim para executar.");
         println!("bucket: {}", cfg.bucket);
         println!("kvs: {}", cfg.kvs_arn);
-        for op in pb.plano.objetos.iter().chain(&pb.plano.redirects) {
-            println!("  {op}");
+        for linha in pb.plano.linhas() {
+            println!("{linha}");
         }
     }
     imprimir_relatorio(&pb.relatorio);

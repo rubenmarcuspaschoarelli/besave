@@ -129,6 +129,19 @@ pub struct Plano {
     pub redirects: Vec<Operacao>,
 }
 
+impl Plano {
+    /// Texto que o `--publicar` imprime: uma seção por destino, uma operação por linha.
+    /// A KVS é sincronizada depois dos chunks e antes de `manifest.prev.json`/`manifest.json`.
+    pub fn linhas(&self) -> Vec<String> {
+        let op = |o: &Operacao| format!("  {o}");
+        let mut v = vec!["S3:".to_owned()];
+        v.extend(self.objetos.iter().map(op));
+        v.push("KVS (aplicada antes do manifest.json):".to_owned());
+        v.extend(self.redirects.iter().map(op));
+        v
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Publicacao {
     pub relatorio: Relatorio,

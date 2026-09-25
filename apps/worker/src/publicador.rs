@@ -220,6 +220,7 @@ fn coletar(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<()> {
 pub struct PublicadorMemoria {
     objetos: BTreeMap<String, (Vec<u8>, Meta)>,
     gravacoes: Vec<String>,
+    remocoes: Vec<String>,
 }
 
 impl PublicadorMemoria {
@@ -234,6 +235,11 @@ impl PublicadorMemoria {
     /// Chaves passadas a `gravar`, na ordem, desde a criação.
     pub fn gravacoes(&self) -> &[String] {
         &self.gravacoes
+    }
+
+    /// Chaves passadas a `remover`, na ordem, desde a criação.
+    pub fn remocoes(&self) -> &[String] {
+        &self.remocoes
     }
 }
 
@@ -255,6 +261,7 @@ impl Publicador for PublicadorMemoria {
 
     fn remover(&mut self, chave: &str) -> Result<()> {
         self.objetos.remove(chave);
+        self.remocoes.push(chave.to_owned());
         Ok(())
     }
 

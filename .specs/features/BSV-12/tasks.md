@@ -328,9 +328,9 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Modo plano: `gravacoes()`, `remocoes()` e `aplicados()` inalterados
-- [ ] `Plano::linhas()` lista `gravar`, `remover`, `putKey`, `deleteKey` previstos; o binário imprime essas linhas
-- [ ] Gate check passes: `cargo test`
+- [x] Modo plano: `gravacoes()`, `remocoes()` e `aplicados()` inalterados
+- [x] `Plano::linhas()` lista `gravar`, `remover`, `putKey`, `deleteKey` previstos; o binário imprime essas linhas
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
