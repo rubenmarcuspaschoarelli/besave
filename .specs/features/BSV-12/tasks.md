@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; a spec do ticket fixa trait, funções e regras; decisões em `spec.md` → Assumptions)
-**Status**: Done
+**Status**: In Progress (ajustes da revisão: T8–T11)
 
 ---
 
@@ -57,6 +57,12 @@ T4 → T5
 
 ```
 T6 → T7
+```
+
+### Phase 4: Ajustes da revisão do dono
+
+```
+T8 → T9 → T10 → T11
 ```
 
 ---
@@ -251,3 +257,108 @@ T6 → T7
 **Gate**: build
 
 **Commit**: `feat(worker): add --publicar command with plan and --sim modes`
+
+---
+
+### T8: URL vazia rejeitada em `para_card` e barrada na KVS
+
+**What**: `para_card` rejeita `url_afiliado` vazia/só espaços; `sincronizar_redirects` recusa valor vazio com `ErroRedirects::ValorVazio`.
+**Where**: `apps/worker/src/conversao.rs`, `apps/worker/src/geracao.rs`, `apps/worker/src/redirects.rs`, `apps/worker/tests/{card,redirects}.rs`
+**Depends on**: None (Phase 3 concluída)
+**Reuses**: `url_afiliado`, padrão de `ValorGrandeDemais`
+**Requirement**: URL-04, KVS-08
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] `""` e `"   "` → `Rejeicao::UrlAfiliadoAusente` em `para_card` e `para_pagina`
+- [ ] Valor vazio nos ativos → `ValorVazio { id }` sem `aplicar`
+- [ ] Gate check passes: `cargo test`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `fix(worker): reject empty affiliate URL in cards and in the KVS sync`
+
+---
+
+### T9: Lotes mistos de `UpdateKeys`
+
+**What**: Função pura `lotes_kvs(put, del)` com lotes de até 50 chaves, puts e deletes no mesmo lote; `RedirectsKvs::aplicar` faz um `UpdateKeys` por lote.
+**Where**: `apps/worker/src/redirects.rs`, `apps/worker/src/aws.rs`, `apps/worker/tests/redirects.rs`
+**Depends on**: T8
+**Reuses**: `LOTE_KVS`
+**Requirement**: KVS-09
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] Diff de 120 chaves → 3 lotes (50, 50, 20)
+- [ ] Lote da fronteira leva puts e deletes juntos
+- [ ] `RedirectsKvs::aplicar` itera `lotes_kvs`
+- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**Tests**: unit
+**Gate**: build
+
+**Commit**: `feat(worker): batch KVS puts and deletes together in UpdateKeys calls`
+
+---
+
+### T10: Plano contra destinos em memória e texto impresso
+
+**What**: `PublicadorMemoria` registra remoções; `Plano::linhas()` monta o texto que o binário imprime; teste do plano contra `PublicadorMemoria` + `RedirectsMemoria`.
+**Where**: `apps/worker/src/publicador.rs`, `apps/worker/src/plano.rs`, `apps/worker/src/main.rs`, `apps/worker/tests/plano.rs`
+**Depends on**: T9
+**Reuses**: `publicar`, `Operacao`
+**Requirement**: PLN-04
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] Modo plano: `gravacoes()`, `remocoes()` e `aplicados()` inalterados
+- [ ] `Plano::linhas()` lista `gravar`, `remover`, `putKey`, `deleteKey` previstos; o binário imprime essas linhas
+- [ ] Gate check passes: `cargo test`
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `test(worker): check plan mode against in-memory destinations and printed output`
+
+---
+
+### T11: Documentação da regra da KVS e da idempotência
+
+**What**: Comentário em `sincronizar_redirects` e README com a regra "KVS espelha o conjunto publicado"; frase de idempotência em `apps/worker/CLAUDE.md`.
+**Where**: `apps/worker/src/redirects.rs`, `apps/worker/README.md`, `apps/worker/CLAUDE.md`
+**Depends on**: T10
+**Reuses**: texto da revisão do dono
+**Requirement**: none (decisões 2 e 3 da revisão do dono; sem AC testável)
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] Comentário e README: KVS = `ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`, some no expurgo junto com a página
+- [ ] `apps/worker/CLAUDE.md`: "rodar duas vezes sem mudança não sobe nenhum objeto além de manifest.json e manifest.prev.json"
+- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**Tests**: none
+**Gate**: build
+
+**Commit**: `docs(worker): document KVS mirror rule and manifest heartbeat`
