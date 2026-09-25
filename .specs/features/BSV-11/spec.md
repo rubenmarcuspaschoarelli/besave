@@ -154,6 +154,7 @@ implementar para o S3.
 - WHEN a fonte não entrega nenhuma oferta válida THEN o manifest SHALL ter `chunks: []`, `total_ofertas: 0` e `areas: {}`.
 - WHEN todas as ofertas de uma área estão expiradas THEN a área SHALL estar ausente de `areas`, mas os cards SHALL continuar no chunk com `x:1`.
 - WHEN `data/chunks/` já tem um arquivo com o nome do chunk (execução anterior) THEN `gerar` SHALL contá-lo como reaproveitado e não regravá-lo.
+- IF o `manifest.json` anterior não é um `Manifest` válido THEN `gerar` SHALL falhar com `ErroGeracao::ManifestAnteriorInvalido` sem gravar nada.
 
 ---
 
@@ -179,12 +180,12 @@ implementar para o S3.
 | MAN-06 | P1: Manifest | T3 | Implemented |
 | MAN-07 | P1: Manifest | T3 | Implemented |
 | MAN-08 | P1: Manifest | T3 | Implemented |
-| CIC-01 | P1: Ciclo | T4 | Pending |
-| CIC-02 | P1: Ciclo | T4 | Pending |
-| CIC-03 | P1: Ciclo | T4 | Pending |
-| CIC-04 | P1: Ciclo | T4 | Pending |
-| CIC-05 | P1: Ciclo | T4 | Pending |
-| CIC-06 | P1: Ciclo | T4 | Pending |
+| CIC-01 | P1: Ciclo | T4 | Implemented |
+| CIC-02 | P1: Ciclo | T4 | Implemented |
+| CIC-03 | P1: Ciclo | T4 | Implemented |
+| CIC-04 | P1: Ciclo | T4 | Implemented |
+| CIC-05 | P1: Ciclo | T4 | Implemented |
+| CIC-06 | P1: Ciclo | T4 | Implemented |
 | CLI-01 | P1: Binário | T5 | Pending |
 | CLI-02 | P1: Binário | T5 | Pending |
 | CLI-03 | P1: Binário | T5 | Pending |

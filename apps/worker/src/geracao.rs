@@ -1,6 +1,6 @@
 //! Fonte → chunks + manifest publicados (MANIFEST §2, §3, §6).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use tracing::{debug, info, warn};
 
@@ -14,6 +14,9 @@ use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
 pub const ORCAMENTO_CHUNK: u64 = 61_440;
 pub const CHAVE_MANIFEST: &str = "manifest.json";
+/// Cópia do manifest da execução anterior (regra de órfãos: 2 últimos manifests).
+pub const CHAVE_MANIFEST_ANTERIOR: &str = "manifest.prev.json";
+pub const PREFIXO_CHUNKS: &str = "data/chunks/";
 
 const PACKAGE_CONTRATO: &str = include_str!("../../../packages/contract/package.json");
 
@@ -27,6 +30,8 @@ pub enum ErroGeracao {
     Publicador(#[from] ErroPublicador),
     #[error("chunk {n} tem {bytes} bytes comprimido; orçamento é {ORCAMENTO_CHUNK}")]
     ChunkAcimaDoOrcamento { n: u64, bytes: u64 },
+    #[error("manifest.json anterior inválido: {0}")]
+    ManifestAnteriorInvalido(serde_json::Error),
     #[error("serializando manifest: {0}")]
     Manifest(serde_json::Error),
     #[error("versão ilegível em packages/contract/package.json")]
@@ -60,7 +65,8 @@ pub fn versao_contrato() -> Result<String> {
         .ok_or(ErroGeracao::VersaoContrato)
 }
 
-/// Lê a fonte, grava os chunks e, por último, o manifest. `agora` em segundos Unix UTC.
+/// Lê a fonte, grava os chunks novos e, por último, o manifest; depois remove os chunks
+/// que não estão nem no manifest novo nem no anterior. `agora` em segundos Unix UTC.
 pub fn gerar(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
@@ -70,6 +76,12 @@ pub fn gerar(
     let contrato = versao_contrato()?;
     let gerado_em = iso_utc(agora);
     let versao = versao_de(&gerado_em);
+    let anterior_bytes = pub_.ler(CHAVE_MANIFEST)?;
+    let anterior: Option<Manifest> = anterior_bytes
+        .as_deref()
+        .map(serde_json::from_slice)
+        .transpose()
+        .map_err(ErroGeracao::ManifestAnteriorInvalido)?;
 
     let linhas = fonte.ofertas()?;
     let mut rel = Relatorio {
@@ -116,9 +128,14 @@ pub fn gerar(
     }
 
     for (r, br) in &prontos {
-        pub_.gravar(&r.arquivo, br, &META_CHUNK)?;
-        rel.chunks_escritos += 1;
-        debug!(n = r.n, arquivo = %r.arquivo, qtd = r.qtd, bytes = r.bytes, "chunk gravado");
+        if pub_.existe(&r.arquivo)? {
+            rel.chunks_reaproveitados += 1;
+            debug!(n = r.n, arquivo = %r.arquivo, "chunk reaproveitado");
+        } else {
+            pub_.gravar(&r.arquivo, br, &META_CHUNK)?;
+            rel.chunks_escritos += 1;
+            debug!(n = r.n, arquivo = %r.arquivo, qtd = r.qtd, bytes = r.bytes, "chunk gravado");
+        }
     }
     let chunks: Vec<ChunkRef> = prontos.into_iter().map(|(r, _)| r).collect();
     rel.bytes_totais = chunks.iter().map(|r| r.bytes).sum();
@@ -137,7 +154,24 @@ pub fn gerar(
         areas,
     };
     let json = serde_json::to_vec(&manifest).map_err(ErroGeracao::Manifest)?;
+    if let Some(b) = &anterior_bytes {
+        pub_.gravar(CHAVE_MANIFEST_ANTERIOR, b, &META_MANIFEST)?;
+    }
     pub_.gravar(CHAVE_MANIFEST, &json, &META_MANIFEST)?;
+
+    let vivos: HashSet<&str> = manifest
+        .chunks
+        .iter()
+        .chain(anterior.iter().flat_map(|a| &a.chunks))
+        .map(|r| r.arquivo.as_str())
+        .collect();
+    for chave in pub_.listar(PREFIXO_CHUNKS)? {
+        if !vivos.contains(chave.as_str()) {
+            pub_.remover(&chave)?;
+            rel.chunks_removidos += 1;
+            debug!(arquivo = %chave, "chunk órfão removido");
+        }
+    }
 
     info!(
         lidas = rel.lidas,

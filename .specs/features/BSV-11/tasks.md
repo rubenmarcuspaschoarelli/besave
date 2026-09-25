@@ -153,11 +153,11 @@ T3 → T4 → T5
 
 **Done when**:
 
-- [ ] 2ª execução sem mudança → 0 escritos, 0 removidos
-- [ ] Mudança no chunk 5 → só ele regravado; antigo removido só na 3ª execução
-- [ ] Expurgo muda o hash; faixa vazia some do manifest
-- [ ] 30 000 cards ≤ 10 s
-- [ ] Gate check passes: `cargo test`
+- [x] 2ª execução sem mudança → 0 escritos, 0 removidos
+- [x] Mudança no chunk 5 → só ele regravado; antigo removido só na 3ª execução
+- [x] Expurgo muda o hash; faixa vazia some do manifest
+- [x] 30 000 cards ≤ 10 s
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
