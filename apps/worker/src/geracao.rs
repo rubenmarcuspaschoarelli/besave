@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashSet};
 use tracing::{debug, info, warn};
 
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
-use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card};
+use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, url_afiliado};
 use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
@@ -194,12 +194,14 @@ pub fn checar_orcamento(n: u64, bytes: u64) -> Result<()> {
     Ok(())
 }
 
-/// Card publicável: válido e com página possível (`id_produto`), as mesmas regras do `--dry-run`.
+/// Card publicável: válido e com página possível (`id_produto`, URL de afiliado), as mesmas
+/// regras do `--dry-run`.
 fn publicavel(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
     let card = para_card(l, m)?;
     if l.id_produto.is_none_or(|id| id < 1) {
         return Err(Rejeicao::IdProdutoAusente);
     }
+    url_afiliado(l)?;
     Ok(card)
 }
 

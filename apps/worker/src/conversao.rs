@@ -30,6 +30,8 @@ pub struct LinhaOferta {
     /// `ST_ATIVO = 1`
     pub ativo: bool,
     pub dt_desativacao: Option<i64>,
+    /// `DS_URL_AFILIADO`; NULL vira `""`. Nunca vai para card nem página (CONTRATO §1.2).
+    pub url_afiliado: String,
 }
 
 /// Uma linha de PRODUTO. Preços em reais.
@@ -67,6 +69,8 @@ pub enum Rejeicao {
     DataNula,
     #[error("id_produto ausente")]
     IdProdutoAusente,
+    #[error("url_afiliado ausente")]
+    UrlAfiliadoAusente,
 }
 
 const MAX_TITULO_CARD: usize = 200;
@@ -108,6 +112,13 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
     })
 }
 
+/// URL de afiliado trimada; vazia = oferta não existe (CONTRATO §10.1).
+pub fn url_afiliado(l: &LinhaOferta) -> Result<&str, Rejeicao> {
+    Some(l.url_afiliado.trim())
+        .filter(|u| !u.is_empty())
+        .ok_or(Rejeicao::UrlAfiliadoAusente)
+}
+
 /// Página da oferta: card validado + campos completos. `id_produto` é obrigatório aqui.
 pub fn para_pagina(
     l: &LinhaOferta,
@@ -119,6 +130,7 @@ pub fn para_pagina(
         .id_produto
         .filter(|&id| id >= 1)
         .ok_or(Rejeicao::IdProdutoAusente)?;
+    url_afiliado(l)?;
     let integral = l.titulo.as_deref().unwrap_or_default().trim();
     let titulo = truncar(integral, MAX_TITULO_PAGINA);
     if titulo.len() != integral.len() {

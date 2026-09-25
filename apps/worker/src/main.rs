@@ -130,6 +130,7 @@ fn fake_demo(agora: i64) -> FakeFonte {
             area: Some(area.into()),
             publico: Some(publico.into()),
             ativo: true,
+            url_afiliado: format!("https://loja.example/{id}"),
             ..Default::default()
         }
     };

@@ -171,9 +171,9 @@ bucket errado.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| URL-01 | P1: URL de afiliado | T1 | Pending |
-| URL-02 | P1: URL de afiliado | T1 | Pending |
-| URL-03 | P1: URL de afiliado | T1 | Pending |
+| URL-01 | P1: URL de afiliado | T1 | Implemented |
+| URL-02 | P1: URL de afiliado | T1 | Implemented |
+| URL-03 | P1: URL de afiliado | T1 | Implemented |
 | HDR-01 | P1: Headers | T2 | Pending |
 | HDR-02 | P1: Headers | T2 | Pending |
 | HDR-03 | P1: Headers | T2 | Pending |

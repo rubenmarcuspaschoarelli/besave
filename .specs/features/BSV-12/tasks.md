@@ -78,10 +78,10 @@ T6 → T7
 
 **Done when**:
 
-- [ ] `SQL_OFERTAS` contém `DS_URL_AFILIADO`; `LinhaOferta.url_afiliado` lido dela (NULL → `""`)
-- [ ] URL vazia após trim → `UrlAfiliadoAusente` em `para_pagina` e card não publicado em `gerar`
-- [ ] Contagens do `--dry-run` da fake inalteradas
-- [ ] Gate check passes: `cargo test`
+- [x] `SQL_OFERTAS` contém `DS_URL_AFILIADO`; `LinhaOferta.url_afiliado` lido dela (NULL → `""`)
+- [x] URL vazia após trim → `UrlAfiliadoAusente` em `para_pagina` e card não publicado em `gerar`
+- [x] Contagens do `--dry-run` da fake inalteradas
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick

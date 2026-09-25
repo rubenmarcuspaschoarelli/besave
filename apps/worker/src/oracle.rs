@@ -94,6 +94,7 @@ pub const SQL_OFERTAS: &str = concat!(
     epoch_utc!("DT_OFERTA"),
     ", DS_COMUNIDADE, DS_PUBLICO, CASE WHEN ST_ATIVO = 1 THEN 1 ELSE 0 END, ",
     epoch_utc!("DT_DESATIVACAO"),
+    ", DS_URL_AFILIADO",
     " FROM OFERTA WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7 ORDER BY ID_OFERTA"
 );
 
@@ -135,6 +136,7 @@ fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
         publico: r.get(11)?,
         ativo: r.get::<_, i64>(12)? == 1,
         dt_desativacao: r.get(13)?,
+        url_afiliado: r.get::<_, Option<String>>(14)?.unwrap_or_default(),
     })
 }
 

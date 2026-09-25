@@ -247,3 +247,28 @@ fn fonte_vazia_gera_manifest_vazio() {
     assert_eq!(m.total_ofertas, 0);
     assert!(m.areas.is_empty());
 }
+
+/// URL-03: card sem URL de afiliado não é publicado e conta como rejeição.
+#[test]
+fn sem_url_de_afiliado_nao_publica_o_card() {
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar(
+        vec![
+            LinhaOferta {
+                url_afiliado: " ".into(),
+                ..linha(2000)
+            },
+            linha(2001),
+        ],
+        &mut p,
+    )
+    .unwrap();
+    assert_eq!(
+        rel.rejeitadas,
+        BTreeMap::from([(Rejeicao::UrlAfiliadoAusente, 1)])
+    );
+    assert_eq!(rel.validas, 1);
+    let m = manifest(&p);
+    assert_eq!(m.total_ofertas, 1);
+    assert_eq!(m.chunks[0].ids, [2001, 2001]);
+}

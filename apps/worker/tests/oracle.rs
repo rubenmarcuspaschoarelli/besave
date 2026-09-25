@@ -127,3 +127,9 @@ fn sql_de_ofertas_nao_usa_funcoes_de_fuso() {
     }
     assert!(sql.contains("ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7"));
 }
+
+/// URL-01: a KVS de redirects precisa da URL de afiliado.
+#[test]
+fn sql_de_ofertas_le_url_de_afiliado() {
+    assert!(SQL_OFERTAS.contains("DS_URL_AFILIADO"));
+}
