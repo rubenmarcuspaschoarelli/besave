@@ -174,10 +174,10 @@ bucket errado.
 | URL-01 | P1: URL de afiliado | T1 | Implemented |
 | URL-02 | P1: URL de afiliado | T1 | Implemented |
 | URL-03 | P1: URL de afiliado | T1 | Implemented |
-| HDR-01 | P1: Headers | T2 | Pending |
-| HDR-02 | P1: Headers | T2 | Pending |
-| HDR-03 | P1: Headers | T2 | Pending |
-| HDR-04 | P1: Headers | T2 | Pending |
+| HDR-01 | P1: Headers | T2 | Implemented |
+| HDR-02 | P1: Headers | T2 | Implemented |
+| HDR-03 | P1: Headers | T2 | Implemented |
+| HDR-04 | P1: Headers | T2 | Implemented |
 | KVS-01 | P1: KVS | T3 | Pending |
 | KVS-02 | P1: KVS | T3 | Pending |
 | KVS-03 | P1: KVS | T3 | Pending |

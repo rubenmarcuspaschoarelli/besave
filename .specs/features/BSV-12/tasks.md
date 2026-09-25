@@ -105,10 +105,10 @@ T6 → T7
 
 **Done when**:
 
-- [ ] Teste tabular: uma chave por linha de MANIFEST §4 → os três headers literais da tabela
-- [ ] `manifest.prev.json` → headers do manifest; chave desconhecida → `None`
-- [ ] Chunks e manifest gravados por `gerar` têm `meta == meta_para(chave)`
-- [ ] Gate check passes: `cargo test`
+- [x] Teste tabular: uma chave por linha de MANIFEST §4 → os três headers literais da tabela
+- [x] `manifest.prev.json` → headers do manifest; chave desconhecida → `None`
+- [x] Chunks e manifest gravados por `gerar` têm `meta == meta_para(chave)`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
