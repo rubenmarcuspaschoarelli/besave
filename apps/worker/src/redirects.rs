@@ -103,6 +103,40 @@ pub fn sincronizar_redirects(
     })
 }
 
+/// Quota do `UpdateKeys`: 50 chaves (ou 3 MB; com valor ≤ 1 KB, 50 chaves ficam em ~50 KB).
+pub const LOTE_KVS: usize = 50;
+
+/// Uma chamada `UpdateKeys`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LoteKvs {
+    pub puts: Vec<(i64, String)>,
+    pub dels: Vec<i64>,
+}
+
+/// Diff em lotes de até `LOTE_KVS` chaves, na ordem puts → deletes; o lote da fronteira leva
+/// os dois. Diff vazio → nenhum lote.
+pub fn lotes_kvs(put: &[(i64, String)], del: &[i64]) -> Vec<LoteKvs> {
+    let mut lotes: Vec<LoteKvs> = Vec::new();
+    let mut atual = LoteKvs::default();
+    let mut cheio = |atual: &mut LoteKvs| {
+        if atual.puts.len() + atual.dels.len() == LOTE_KVS {
+            lotes.push(std::mem::take(atual));
+        }
+    };
+    for p in put {
+        atual.puts.push(p.clone());
+        cheio(&mut atual);
+    }
+    for d in del {
+        atual.dels.push(*d);
+        cheio(&mut atual);
+    }
+    if !atual.puts.is_empty() || !atual.dels.is_empty() {
+        lotes.push(atual);
+    }
+    lotes
+}
+
 /// `"5412"` → `5412`; chave de outro dono → `None`.
 pub fn id_da_chave(chave: &str) -> Option<i64> {
     let id: i64 = chave.parse().ok()?;

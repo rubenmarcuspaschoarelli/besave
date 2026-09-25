@@ -301,10 +301,10 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Diff de 120 chaves → 3 lotes (50, 50, 20)
-- [ ] Lote da fronteira leva puts e deletes juntos
-- [ ] `RedirectsKvs::aplicar` itera `lotes_kvs`
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Diff de 120 chaves → 3 lotes (50, 50, 20)
+- [x] Lote da fronteira leva puts e deletes juntos
+- [x] `RedirectsKvs::aplicar` itera `lotes_kvs`
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build

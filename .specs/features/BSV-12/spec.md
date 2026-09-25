@@ -191,7 +191,7 @@ bucket errado.
 | KVS-06 | P1: KVS | T3 | Implemented |
 | KVS-07 | P1: KVS | T3 | Implemented |
 | KVS-08 | P1: KVS | T8 | Implemented |
-| KVS-09 | P1: KVS | T9 | Pending |
+| KVS-09 | P1: KVS | T9 | Implemented |
 | ORD-01 | P1: Ordem | T4 | Implemented |
 | ORD-02 | P1: Ordem | T4 | Implemented |
 | ORD-03 | P1: Ordem | T4 | Implemented |

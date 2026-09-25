@@ -13,10 +13,7 @@ use tokio::runtime::Runtime;
 use tracing::warn;
 
 use crate::publicador::{self, ErroPublicador, Meta, Publicador};
-use crate::redirects::{self, ErroRedirects, Redirects, id_da_chave};
-
-/// Quota do `UpdateKeys`: 50 chaves (ou 3 MB) por chamada.
-const LOTE_KVS: usize = 50;
+use crate::redirects::{self, ErroRedirects, Redirects, id_da_chave, lotes_kvs};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroAws {
@@ -256,28 +253,37 @@ impl Redirects for RedirectsKvs {
         Ok(mapa)
     }
 
-    /// `UpdateKeys` em lotes de 50 (puts, depois deletes), encadeando o `ETag` a partir de
-    /// `DescribeKeyValueStore`.
+    /// Um `UpdateKeys` por lote de `lotes_kvs` (puts e deletes juntos), encadeando o `ETag`
+    /// a partir de `DescribeKeyValueStore`.
     fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<()> {
-        let puts = put
-            .iter()
-            .map(|(id, url)| {
-                PutKeyRequestListItem::builder()
-                    .key(id.to_string())
-                    .value(url)
-                    .build()
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| erro_kvs("UpdateKeys", e))?;
-        let dels = del
-            .iter()
-            .map(|id| {
-                DeleteKeyRequestListItem::builder()
-                    .key(id.to_string())
-                    .build()
-            })
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| erro_kvs("UpdateKeys", e))?;
+        let mut chamadas = Vec::new();
+        for lote in lotes_kvs(put, del) {
+            let puts = lote
+                .puts
+                .iter()
+                .map(|(id, url)| {
+                    PutKeyRequestListItem::builder()
+                        .key(id.to_string())
+                        .value(url)
+                        .build()
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| erro_kvs("UpdateKeys", e))?;
+            let dels = lote
+                .dels
+                .iter()
+                .map(|id| {
+                    DeleteKeyRequestListItem::builder()
+                        .key(id.to_string())
+                        .build()
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| erro_kvs("UpdateKeys", e))?;
+            chamadas.push((
+                (!puts.is_empty()).then_some(puts),
+                (!dels.is_empty()).then_some(dels),
+            ));
+        }
         self.rt.block_on(async {
             let mut etag = self
                 .cliente
@@ -288,18 +294,14 @@ impl Redirects for RedirectsKvs {
                 .map_err(|e| erro_kvs("DescribeKeyValueStore", e))?
                 .e_tag()
                 .to_owned();
-            let lotes = puts
-                .chunks(LOTE_KVS)
-                .map(|p| (Some(p.to_vec()), None))
-                .chain(dels.chunks(LOTE_KVS).map(|d| (None, Some(d.to_vec()))));
-            for (p, d) in lotes {
+            for (puts, dels) in chamadas {
                 etag = self
                     .cliente
                     .update_keys()
                     .kvs_arn(&self.arn)
                     .if_match(etag)
-                    .set_puts(p)
-                    .set_deletes(d)
+                    .set_puts(puts)
+                    .set_deletes(dels)
                     .send()
                     .await
                     .map_err(|e| erro_kvs("UpdateKeys", e))?

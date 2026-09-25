@@ -181,3 +181,38 @@ fn valor_vazio_e_erro_nomeado_sem_aplicar() {
         assert_eq!(kvs.listar().unwrap(), estado(&[(1, "a")]));
     }
 }
+
+/// KVS-09: diff de 120 chaves → 3 chamadas `UpdateKeys`; puts e deletes dividem o lote da fronteira.
+#[test]
+fn diff_de_120_chaves_vira_3_lotes_mistos() {
+    use worker::redirects::{LOTE_KVS, LoteKvs, lotes_kvs};
+    assert_eq!(LOTE_KVS, 50);
+    let put: Vec<(i64, String)> = (1..=70).map(|id| (id, format!("u{id}"))).collect();
+    let del: Vec<i64> = (1001..=1050).collect();
+
+    let lotes = lotes_kvs(&put, &del);
+    assert_eq!(lotes.len(), 3);
+    let tamanhos: Vec<(usize, usize)> =
+        lotes.iter().map(|l| (l.puts.len(), l.dels.len())).collect();
+    assert_eq!(tamanhos, [(50, 0), (20, 30), (0, 20)]);
+    assert_eq!(
+        lotes[1],
+        LoteKvs {
+            puts: put[50..].to_vec(),
+            dels: del[..30].to_vec(),
+        }
+    );
+    let todos_puts: Vec<_> = lotes.iter().flat_map(|l| l.puts.clone()).collect();
+    let todos_dels: Vec<_> = lotes.iter().flat_map(|l| l.dels.clone()).collect();
+    assert_eq!(todos_puts, put);
+    assert_eq!(todos_dels, del);
+
+    let so_puts: Vec<(i64, String)> = (1..=120).map(|id| (id, "u".into())).collect();
+    let lotes = lotes_kvs(&so_puts, &[]);
+    assert_eq!(
+        lotes.iter().map(|l| l.puts.len()).collect::<Vec<_>>(),
+        [50, 50, 20]
+    );
+    assert!(lotes_kvs(&[], &[]).is_empty());
+    assert_eq!(lotes_kvs(&[], &(1..=50).collect::<Vec<_>>()).len(), 1);
+}
