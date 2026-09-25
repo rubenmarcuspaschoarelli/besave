@@ -47,6 +47,9 @@ pub struct RelatorioRedirects {
 
 /// Deixa a KVS igual a `ativos` (URLs trimadas) aplicando só o diff. Limites checados antes de
 /// qualquer escrita; sem diff, `aplicar` não é chamado.
+///
+/// Regra: a KVS espelha o conjunto **publicado** (`ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`),
+/// não `ST_ATIVO`. Oferta expirada mantém o redirect até o expurgo e some junto com a página.
 pub fn sincronizar_redirects(
     ativos: &[(i64, String)],
     kvs: &mut dyn Redirects,

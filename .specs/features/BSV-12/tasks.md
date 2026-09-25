@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; a spec do ticket fixa trait, funções e regras; decisões em `spec.md` → Assumptions)
-**Status**: In Progress (ajustes da revisão: T8–T11)
+**Status**: Done
 
 ---
 
@@ -354,9 +354,9 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] Comentário e README: KVS = `ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`, some no expurgo junto com a página
-- [ ] `apps/worker/CLAUDE.md`: "rodar duas vezes sem mudança não sobe nenhum objeto além de manifest.json e manifest.prev.json"
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Comentário e README: KVS = `ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`, some no expurgo junto com a página
+- [x] `apps/worker/CLAUDE.md`: "rodar duas vezes sem mudança não sobe nenhum objeto além de manifest.json e manifest.prev.json"
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: none
 **Gate**: build

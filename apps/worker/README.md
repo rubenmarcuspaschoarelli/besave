@@ -109,13 +109,17 @@ chunks, `ListObjectsV2`, `ListKeys`) e imprime cada escrita que faria, sem execu
 PLANO: nada foi escrito. Rode com --sim para executar.
 bucket: besave-site
 kvs: arn:aws:cloudfront::…:key-value-store/…
-  gravar data/chunks/5-89590e56ef6361dc.json.br (265 B, public, max-age=31536000, immutable)
-  gravar manifest.json (412 B, public, max-age=300, stale-while-revalidate=60)
-  remover data/chunks/5-0f1e2d3c4b5a6978.json.br
-  putKey 5412 https://amzn.to/…
-  deleteKey 1008
+S3:
+  gravar data/chunks/2-bfa8be13c9003787.json.br (104 B, public, max-age=31536000, immutable)
+  gravar data/chunks/5-ac3ee4364a3fd04e.json.br (106 B, public, max-age=31536000, immutable)
+  gravar manifest.prev.json (334 B, public, max-age=300, stale-while-revalidate=60)
+  gravar manifest.json (431 B, public, max-age=300, stale-while-revalidate=60)
+  remover data/chunks/1-6abb38a0bc3368d4.json.br
+KVS (aplicada antes do manifest.json):
+  putKey 2001 https://loja.example/2001
+  deleteKey 5413
 lidas: …
-redirects_put: 3
+redirects_put: 1
 redirects_del: 1
 redirects_total: 3
 ```
@@ -127,10 +131,12 @@ continua valendo.
 - Headers de cada objeto pela tabela de MANIFEST §4 (`meta_para`): chunks com
   `Content-Encoding: br` e `immutable`; manifest com `max-age=300, stale-while-revalidate=60`.
 - Chunk que já existe (`HeadObject`) não é regravado; o nome carrega o hash.
-- KVS: só o diff (`UpdateKeys` em lotes de 50 com `If-Match` do ETag). Entra todo card publicado,
-  inclusive expirado; a chave sai quando a oferta sai da fonte (expurgo). Chave não numérica na
-  KVS é ignorada. URL > 1 024 bytes ou KVS > 5 MB: erro, nada é escrito na KVS nem no manifest.
-  Acima de 40 000 entradas: `WARN` (MANIFEST §5).
+- KVS: só o diff, em chamadas `UpdateKeys` de até 50 chaves (puts e deletes no mesmo lote),
+  com `If-Match` do ETag. Chave não numérica na KVS é ignorada. URL vazia, URL > 1 024 bytes ou
+  KVS > 5 MB: erro, nada é escrito na KVS nem no manifest. Acima de 40 000 entradas: `WARN`
+  (MANIFEST §5).
+- **A KVS espelha o conjunto publicado** (`ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`), não
+  `ST_ATIVO`: oferta expirada mantém o redirect até o expurgo e some junto com a página.
 - Segunda execução sem mudança: 0 chunks e 0 put/del na KVS; `manifest.json` e
   `manifest.prev.json` são regravados (`versao` nova).
 - Retentativas: as do SDK.
