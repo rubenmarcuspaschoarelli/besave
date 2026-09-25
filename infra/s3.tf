@@ -11,25 +11,6 @@ resource "aws_s3_bucket_public_access_block" "site" {
   restrict_public_buckets = true
 }
 
-# Só órfãos vivem tanto: o manifest atual sempre aponta para arquivos recentes.
-resource "aws_s3_bucket_lifecycle_configuration" "site" {
-  bucket = aws_s3_bucket.site.id
-
-  dynamic "rule" {
-    for_each = toset(["data/chunks/", "data/busca/"])
-    content {
-      id     = "expira-${trimsuffix(replace(rule.value, "/", "-"), "-")}"
-      status = "Enabled"
-      filter {
-        prefix = rule.value
-      }
-      expiration {
-        days = 7
-      }
-    }
-  }
-}
-
 # Só a distribuição nova lê, via OAC.
 resource "aws_s3_bucket_policy" "site" {
   bucket = aws_s3_bucket.site.id

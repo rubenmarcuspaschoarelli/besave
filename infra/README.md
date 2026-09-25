@@ -4,7 +4,7 @@ Terraform que cria, ao lado do protótipo (AD-016), a infra do site novo:
 
 | recurso | nome | arquivo |
 |---|---|---|
-| bucket de origem, privado, Block Public Access total, lifecycle 7 dias em `data/chunks/` e `data/busca/` | `besave-site` | `s3.tf` |
+| bucket de origem, privado, Block Public Access total, **sem** lifecycle de expiração (só o worker remove órfãos, BSV-11) | `besave-site` | `s3.tf` |
 | bucket de logs padrão do CloudFront (prefixo `cf/`) | `besave-logs` | `s3.tf` |
 | certificado ACM `besave.com.br` + `www` com validação DNS no Route53 | — | `acm.tf` |
 | distribuição CloudFront com OAC, 6 behaviors de `docs/MANIFEST.md` §5, 403/404 → 404 `/404.html` | — | `cloudfront.tf` |

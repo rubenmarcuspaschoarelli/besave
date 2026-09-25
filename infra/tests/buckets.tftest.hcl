@@ -20,18 +20,6 @@ run "buckets" {
     error_message = "BPA deve apontar para os buckets certos"
   }
 
-  # S3-02
-  assert {
-    condition = alltrue([for p in ["data/chunks/", "data/busca/"] :
-      length([for r in aws_s3_bucket_lifecycle_configuration.site.rule : r
-    if r.status == "Enabled" && r.filter[0].prefix == p && r.expiration[0].days == 7]) == 1])
-    error_message = "data/chunks/ e data/busca/ devem expirar em 7 dias"
-  }
-  assert {
-    condition     = length(aws_s3_bucket_lifecycle_configuration.site.rule) == 2
-    error_message = "lifecycle do site deve ter só as 2 regras"
-  }
-
   # S3-04
   assert {
     condition     = aws_s3_bucket.logs.bucket == "besave-logs"
@@ -40,5 +28,22 @@ run "buckets" {
   assert {
     condition     = aws_s3_bucket_ownership_controls.logs.rule[0].object_ownership == "BucketOwnerPreferred"
     error_message = "logs do CloudFront exigem ACL: ownership BucketOwnerPreferred"
+  }
+}
+
+run "sem_expiracao_no_site" {
+  command = plan
+  module {
+    source = "./tests/inspecao"
+  }
+
+  # S3-02 (revisão do dono): só a limpeza de órfãos do worker remove chunks
+  assert {
+    condition     = contains(output.recursos, "aws_s3_bucket.site")
+    error_message = "inspeção deve enxergar os recursos da raiz"
+  }
+  assert {
+    condition     = output.expiracao_no_site == []
+    error_message = "besave-site não pode ter lifecycle com expiração"
   }
 }

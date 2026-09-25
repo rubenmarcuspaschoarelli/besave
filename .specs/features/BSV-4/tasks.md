@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `design.md`
-**Status**: Done
+**Status**: In Progress
 
 ---
 
@@ -48,6 +48,12 @@ T1 → T2
 
 ```
 T3 → T4 → T5 → T6 → T7
+```
+
+### Phase 3: Ajustes da revisão do dono (2026-09-25)
+
+```
+T8 → T9 → T10 → T11
 ```
 
 ---
@@ -235,3 +241,107 @@ T3 → T4 → T5 → T6 → T7
 **Gate**: build
 
 **Commit**: `docs(infra): add operations README and drop SPA fallback from MANIFEST`
+
+---
+
+### T8: Remover lifecycle de expiração do besave-site
+
+**What**: Apaga `aws_s3_bucket_lifecycle_configuration.site`; módulo de teste `tests/inspecao` lê os `.tf` da raiz; run que exige zero lifecycle com expiração no `besave-site`; README sem a menção.
+**Where**: `infra/s3.tf`, `infra/tests/inspecao/main.tf`, `infra/tests/buckets.tftest.hcl`, `infra/README.md`
+**Depends on**: None (Phase 2 concluída)
+**Reuses**: helper `tests/inspecao`
+**Requirement**: S3-02
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [x] nenhum `aws_s3_bucket_lifecycle_configuration` / `lifecycle_rule` / `expiration` para o bucket do site
+- [x] Gate check passes: build
+
+**Tests**: integration
+**Gate**: build
+
+**Commit**: `fix(infra): drop 7-day expiration from besave-site`
+
+
+---
+
+### T9: prevent_destroy no certificado e nos registros de validação
+
+**What**: `lifecycle { prevent_destroy = true }` em `aws_acm_certificate.site` e `aws_route53_record.validacao_acm`; run que inspeciona os blocos.
+**Where**: `infra/acm.tf`, `infra/tests/inspecao/main.tf`, `infra/tests/acm.tftest.hcl`
+**Depends on**: T8
+**Reuses**: helper `tests/inspecao`
+**Requirement**: CF-13
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] os dois recursos com `prevent_destroy = true`
+- [ ] Gate check passes: build
+
+**Tests**: integration
+**Gate**: build
+
+**Commit**: `feat(infra): protect ACM certificate and validation records from destroy`
+
+
+---
+
+### T10: ACL do bucket de logs para awslogsdelivery
+
+**What**: `aws_s3_bucket_acl.logs` com `access_control_policy`: dono (canonical id da conta) e `awslogsdelivery` com `FULL_CONTROL`; distribuição depende da ACL.
+**Where**: `infra/s3.tf`, `infra/cloudfront.tf`, `infra/tests/buckets.tftest.hcl`, `infra/tests/mocks/aws.tfmock.hcl`
+**Depends on**: T9
+**Reuses**: helper `tests/inspecao`
+**Requirement**: S3-04
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] grants exatos para o dono e `c4c1ede6…d2d0`, ownership `BucketOwnerPreferred`
+- [ ] Gate check passes: build
+
+**Tests**: integration
+**Gate**: build
+
+**Commit**: `fix(infra): grant awslogsdelivery on the log bucket ACL`
+
+
+---
+
+### T11: terraform test no CI
+
+**What**: Passo `terraform test` depois de `terraform validate` no job `infra`.
+**Where**: `.github/workflows/ci.yml`
+**Depends on**: T10
+**Reuses**: helper `tests/inspecao`
+**Requirement**: OPS-05
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [ ] job `infra` roda `terraform test` após `validate`
+- [ ] Gate check passes: build
+
+**Tests**: none
+**Gate**: build
+
+**Commit**: `ci(infra): run terraform test in the infra job`
+

@@ -8,13 +8,14 @@ Spec: `spec.md`. Terraform em `infra/`, um módulo raiz, state local.
 |---|---|
 | `infra/main.tf` | `required_version`, provider `aws` (us-east-1, `default_tags`), `locals` |
 | `infra/variables.tf` | `regiao`, `dominio`, `bucket_site`, `bucket_logs`, `ativar_dominios`, `classe_preco` |
-| `infra/s3.tf` | `besave-site` (BPA, lifecycle, policy OAC) e `besave-logs` (BPA, ownership) |
+| `infra/s3.tf` | `besave-site` (BPA, policy OAC, sem expiração) e `besave-logs` (BPA, ownership, ACL `awslogsdelivery`) |
 | `infra/acm.tf` | certificado + registros Route53 + `aws_acm_certificate_validation` |
 | `infra/cloudfront.tf` | OAC, KVS, 2 Functions, 4 políticas de cache, distribuição |
 | `infra/iam.tf` | usuário `besave-worker` + policy inline |
 | `infra/outputs.tf` | bucket, domínio CF, ARN KVS, ARN distribuição |
 | `infra/functions/*.js` | código das Functions, lido com `file()` |
 | `infra/functions/test/*.test.mjs` | `node:test`; carrega o `.js` trocando `import cf from 'cloudfront'` por um `cf` falso |
+| `infra/tests/inspecao/` | módulo só de teste: blocos `resource` dos `.tf` como texto (ausência, `prevent_destroy`) |
 | `infra/tests/*.tftest.hcl` | `terraform test` com `mock_provider "aws"` e `command = apply` |
 | `infra/static/404.html` | placeholder da página 404 |
 

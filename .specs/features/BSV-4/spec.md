@@ -40,7 +40,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | Aliases `besave.com.br`/`www` na distribuição nova | Variável `ativar_dominios` (padrão `false`): sem aliases e com certificado padrão do CloudFront até a virada | CloudFront recusa um CNAME já usado por outra distribuição (`CNAMEAlreadyExists`); `E28G93A17WHHD` usa esses nomes hoje. O certificado ACM é criado e validado já | n |
 | Registros de validação ACM | `allow_overwrite = true` | Mesma conta + mesmo domínio geram o mesmo CNAME de validação; se o certificado atual foi validado por DNS, o registro já existe | n |
 | Zona Route53 | `data "aws_route53_zone"` por nome (`var.dominio`) | Zona já existe; só leitura | n |
-| Bucket de logs | Novo, `besave-logs` (variável), ACL habilitada (`BucketOwnerPreferred`), sem acesso público | Log padrão do CloudFront exige ACL; reutilizar `logs.besave.com.br` faria o Terraform mexer em recurso existente | n |
+| Bucket de logs | Novo, `besave-logs` (variável), ACL habilitada (`BucketOwnerPreferred`) com grant explícito a `awslogsdelivery`, sem acesso público; logging legacy para S3 (não v2) | Log padrão do CloudFront exige ACL; reutilizar `logs.besave.com.br` faria o Terraform mexer em recurso existente | n |
 | Versionamento do `besave-site` | Nenhum recurso de versionamento (bucket novo já nasce sem) | `Disabled` explícito só vale para import | n |
 | Políticas de cache | `/ir/*` usa a gerenciada `CachingDisabled` (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`); demais são políticas próprias, sem query string/cookie/header na chave | TTLs exatos de MANIFEST §5; chave = path | n |
 | TTL máximo de `/oferta/*` e default | `/oferta/*` máx 86 400; default máx 31 536 000 | MANIFEST §5 só fixa o padrão; o máximo deixa valer o `Cache-Control` da origem (`_app/**` immutable) | n |
@@ -85,9 +85,9 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 **Acceptance Criteria**:
 
 1. The bucket `besave-site` SHALL existir em us-east-1 com Block Public Access nos 4 flags e sem website hosting.  <!-- S3-01 -->
-2. The lifecycle do `besave-site` SHALL expirar objetos de `data/chunks/` e `data/busca/` em 7 dias.  <!-- S3-02 -->
+2. The bucket `besave-site` SHALL não ter regra de lifecycle com expiração (revisão do dono 2026-09-25: chunk é por faixa de id e fica referenciado por semanas; a única remoção é a limpeza de órfãos do worker, BSV-11).  <!-- S3-02 -->
 3. The política do `besave-site` SHALL permitir só `s3:GetObject` ao principal `cloudfront.amazonaws.com` com `AWS:SourceArn` igual ao ARN da distribuição nova.  <!-- S3-03 -->
-4. The bucket `besave-logs` SHALL ter Block Public Access nos 4 flags e ownership `BucketOwnerPreferred`, e a distribuição SHALL gravar logs padrão nele com prefixo `cf/`.  <!-- S3-04 -->
+4. The bucket `besave-logs` SHALL ter Block Public Access nos 4 flags, ownership `BucketOwnerPreferred` e ACL com `FULL_CONTROL` para o dono da conta e para `awslogsdelivery` (canonical ID `c4c1ede66af53448b93c283ce9448c4ba468c9432aa01d700d3878632f77d2d0`), e a distribuição SHALL gravar logs padrão (legacy, S3) nele com prefixo `cf/`.  <!-- S3-04 -->
 
 **Independent Test**: `terraform test`.
 
@@ -111,6 +111,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 8. The políticas próprias SHALL não ter cookie, header nem query string na chave de cache.  <!-- CF-08 -->
 9. The distribuição SHALL ter `custom_error_response` 403 → 404 e 404 → 404, ambos com `/404.html` e `error_caching_min_ttl = 60`, e nenhuma error response com `response_code` 200.  <!-- CF-09 -->
 10. The certificado ACM SHALL cobrir `besave.com.br` e `www.besave.com.br` com validação DNS em registros Route53 criados pelo Terraform.  <!-- CF-10 -->
+13. The certificado ACM e os registros de validação Route53 SHALL ter `lifecycle { prevent_destroy = true }`.  <!-- CF-13 -->
 11. WHEN `ativar_dominios = false` (padrão) THEN a distribuição SHALL não ter aliases e usar o certificado padrão do CloudFront; WHEN `true` THEN SHALL ter os dois aliases com o certificado ACM validado (`sni-only`, `TLSv1.2_2021`).  <!-- CF-11 -->
 12. The `infra/static/404.html` SHALL ter `<meta name="robots" content="noindex">`, link para `/` e para as 9 áreas.  <!-- CF-12 -->
 
@@ -146,6 +147,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 2. The plano SHALL não conter recurso cujo nome/id seja o bucket `besave.com.br` ou a distribuição `E28G93A17WHHD`.  <!-- OPS-02 -->
 3. The `infra/README.md` SHALL explicar pré-requisitos, `init/plan/apply`, state local, geração manual da access key, os `curl` do critério de aceite, upload do `/404.html` e o passo da virada (`ativar_dominios`).  <!-- OPS-03 -->
 4. The `docs/MANIFEST.md` §5 linha 6 SHALL descrever o default sem fallback SPA (403/404 → 404 `/404.html`).  <!-- OPS-04 -->
+5. The job `infra` do `.github/workflows/ci.yml` SHALL rodar `terraform test` depois de `terraform validate`.  <!-- OPS-05 -->
 
 **Independent Test**: `terraform test` (OPS-01, OPS-02); leitura (OPS-03, OPS-04).
 
@@ -171,9 +173,9 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | FN-06 | P1: Functions | T2 | Implemented |
 | FN-07 | P1: Functions | T5 | Implemented |
 | S3-01 | P1: Buckets | T3 | Implemented |
-| S3-02 | P1: Buckets | T3 | Implemented |
+| S3-02 | P1: Buckets | T8 | Implemented |
 | S3-03 | P1: Buckets | T5 | Implemented |
-| S3-04 | P1: Buckets | T3 | Implemented |
+| S3-04 | P1: Buckets | T10 | Pending |
 | CF-01 | P1: Distribuição | T5 | Implemented |
 | CF-02 | P1: Distribuição | T5 | Implemented |
 | CF-03 | P1: Distribuição | T5 | Implemented |
@@ -186,6 +188,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | CF-10 | P1: Distribuição | T4 | Implemented |
 | CF-11 | P1: Distribuição | T5 | Implemented |
 | CF-12 | P1: Distribuição | T5 | Implemented |
+| CF-13 | P1: Distribuição | T9 | Pending |
 | IAM-01 | P1: IAM | T6 | Implemented |
 | IAM-02 | P1: IAM | T6 | Implemented |
 | IAM-03 | P1: IAM | T6 | Implemented |
@@ -193,8 +196,9 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | OPS-02 | P1: Operação | T6 | Implemented |
 | OPS-03 | P1: Operação | T7 | Implemented |
 | OPS-04 | P1: Operação | T7 | Implemented |
+| OPS-05 | P1: Operação | T11 | Pending |
 
-**Coverage:** 30 total, 30 mapped to tasks, 0 unmapped
+**Coverage:** 32 total, 32 mapped to tasks, 0 unmapped
 
 ---
 
