@@ -36,7 +36,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.0.0",
+  "contrato": "1.1.0",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,
@@ -102,7 +102,9 @@ mesmo assim — aceito: todos os browsers-alvo suportam Brotli.
 
 ## 5. CloudFront — behaviors (BSV-4)
 
-Uma distribuição, origem S3 com OAC (bucket privado, sem website hosting).
+Uma distribuição **nova** (ver specs/BSV-4.md), origem S3 com OAC (bucket privado `besave-site`,
+sem website hosting). A distribuição atual `E28G93A17WHHD` e o bucket público `besave.com.br`
+continuam servindo o protótipo até a virada de DNS.
 
 | ordem | path pattern | política de cache | compressão | função de borda |
 |---|---|---|---|---|
@@ -129,6 +131,8 @@ depois; o dado já existe).
 4. Atualização da KVS de redirects.
 5. **Por último**, upload do `manifest.json`.
 6. Limpeza de chunks órfãos (> 24 h fora do manifest).
+7. Ids presentes no manifest anterior e ausentes no Oracle (expurgo, CONTRATO.md §7) → apagar
+   `oferta/{slug}/`, `img/ofertas/{id}*` e a chave na KVS.
 
 Se falhar antes do passo 5, o manifest antigo continua válido e aponta para arquivos que
 ainda existem. Idempotente: rodar duas vezes sem mudança no Oracle não altera nenhum

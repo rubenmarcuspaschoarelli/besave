@@ -27,7 +27,7 @@ for (const [fixture, schemaId, esperado] of casos) {
   const passou = ok === esperado;
   console.log(`${passou ? "PASS" : "FAIL"}  ${fixture}  (válido=${ok}, esperado=${esperado})`);
   if (!passou) { falhas++; if (!ok) console.log(validate.errors); }
-  if (!ok && !esperado) console.log(`      rejeitado como esperado: ${validate.errors.length} erro(s)`);
+  if (!ok && !esperado) console.log(`      rejeitado como esperado: ${validate.errors.length} erro(s) em ${new Set(validate.errors.map(e=>e.instancePath.split("/")[1])).size} registro(s)`);
 }
 
 const enums = load("schema/enums.schema.json").$defs;

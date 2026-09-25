@@ -4,7 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.0.0** (SemVer; mudança incompatível = major).
+Versão do contrato: **1.1.0** (SemVer; mudança incompatível = major).
+Histórico: 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -77,9 +78,12 @@ Orçamento: **≤ 220 bytes por registro em JSON bruto** (meta ~150). Chaves cur
 | `dt` | string date-time | `DT_OFERTA` | ISO 8601 UTC |
 | `a` | `Area` | `DS_COMUNIDADE` | enum |
 | `p` | `Publico` | `DS_PUBLICO` | enum |
+| `x` | `1` \| ausente | `ST_ATIVO = 0` | **expirada**; só presente quando inativa (custa 6 bytes só nelas) |
 
 Não entram no card (decidido): `ID_PRODUTO`, URLs, `VR_PRECO_1`, `DS_CUPOM_COMENTARIO`,
 nota/qtd de avaliação, `DT_CAPTACAO`, `DT_PUBLICACAO`, campos de afiliado.
+
+Cliente: lista esconde `x:1` por padrão (toggle "mostrar expiradas"); busca mostra em cinza.
 
 Desconto (%) **não é campo**: o cliente calcula `round((1 - pp/pd) * 100)` quando `pd != null`.
 
@@ -111,7 +115,7 @@ Consumida só pelo template do worker. Chaves legíveis (não há orçamento de 
 | `dt_oferta` | date-time | `DT_OFERTA` | |
 | `area` | `Area` | `DS_COMUNIDADE` | |
 | `publico` | `Publico` | `DS_PUBLICO` | |
-| `status` | `ATIVA` \| `ENCERRADA` | derivado de `DT_DESATIVACAO` | ver §7 |
+| `status` | `ATIVA` \| `ENCERRADA` | `ST_ATIVO` (1/0) | ver §7 |
 | `produto` | `Produto` \| null | join | §4.2 |
 
 Não entram: nenhuma URL (CTA = `/ir/{id}`), `VR_PRECO_1`, `DS_CUPOM_COMENTARIO`,
@@ -165,37 +169,39 @@ Sem imagem no Oracle/S3 → card e página usam placeholder por `area`
 
 ---
 
-## 7. Versão, atualização e desativação — **exige 3 colunas novas no Oracle**
+## 7. Ativação, desativação e expurgo — colunas no Oracle
 
-A tabela `OFERTA` atual não tem como o worker saber *o que mudou* nem *o que foi
-desativado*. Adicionar (robô ou trigger preenche):
+Colunas já criadas pelo dono: `ST_ATIVO NUMBER(1)` (1 ativa, 0 inativa) e `DT_DESATIVACAO DATE`
+(preenchida pelo robô quando `ST_ATIVO` vai a 0).
+
+Recomendadas (decisão do dono; o worker funciona sem elas):
 
 ```sql
 ALTER TABLE OFERTA ADD (
-  DT_DESATIVACAO      DATE,                           -- robô grava quando a oferta morre
-  DT_ULT_ATUALIZACAO  DATE DEFAULT SYSDATE NOT NULL,  -- trigger BEFORE UPDATE
-  DS_SLUG             VARCHAR2(80 CHAR)               -- worker grava na 1ª publicação, nunca altera
+  DS_SLUG             VARCHAR2(80 CHAR),   -- ver §5; worker grava na 1ª publicação, nunca altera
+  DT_ULT_ATUALIZACAO  DATE                 -- trigger BEFORE UPDATE; permite regerar só o que mudou
 );
-CREATE INDEX IX_OFERTA_ULT_ATU ON OFERTA (DT_ULT_ATUALIZACAO);
 ```
 
+Sem `DS_SLUG`, o worker guarda o slug no próprio estado (o chunk publicado já traz `s`) e
+reaproveita; se o estado se perder, títulos alterados mudam a URL. Sem `DT_ULT_ATUALIZACAO`,
+o worker regera tudo a cada ciclo (30k páginas ≤ 2 min) e o hash evita uploads repetidos —
+funciona, só gasta CPU local.
+
 Regras:
-- **Ativa** = `DT_DESATIVACAO IS NULL`.
-- O worker seleciona ativas para os chunks; para páginas HTML, seleciona ativas + desativadas
-  nos últimos 30 dias (para publicar a versão "encerrada", §7.1).
-- `DT_ULT_ATUALIZACAO` permite ao worker regerar só o que mudou (`> última execução`).
-  Sem ela, o worker regera tudo a cada ciclo — funciona, só custa mais.
-- `DS_SLUG` guardado no banco evita que um retítulo mude a URL.
+- **Ativa** = `ST_ATIVO = 1`. **Expirada** = `ST_ATIVO = 0`.
+- Expiradas **continuam** nos chunks (com `x:1`) e nas páginas, até o expurgo.
+- **Expurgo** (política do dono): `ST_ATIVO = 0 AND DT_DESATIVACAO < SYSDATE - 7`. O robô/job
+  apaga do Oracle. O worker detecta ids que sumiram comparando com o último manifest publicado
+  e apaga HTML, imagens e a entrada de redirect. Depois disso a URL responde 404.
 
-### 7.1 Oferta encerrada
-- Sai dos chunks (o hash do chunk muda; o cliente rebaixa o chunk — ver MANIFEST.md).
-- A página HTML é **regerada** como "oferta encerrada": mesmo layout, preço riscado,
-  CTA desabilitado, `<meta name="robots" content="noindex">`, links para a área. Não é
-  apagada por 30 dias (tráfego residual do Google vira navegação, não 404).
-- Após 30 dias da desativação, a página é apagada e sai do sitemap. (410 real via função
-  de borda fica para depois; noindex resolve o SEO agora.)
-
----
+### 7.1 Página de oferta expirada
+- Renderizada **pelo worker** com `status: ENCERRADA` (não por JavaScript: o worker sabe o status
+  na geração; JS não é necessário e o Google vê o HTML final). Classe `encerrada` no `<body>`:
+  imagem em tons de cinza via CSS (`filter: grayscale(1)`), faixa "Oferta expirada" abaixo do
+  título, CTA desabilitado (sem link para `/ir/`), `<meta name="robots" content="noindex">`,
+  links para a área e para ofertas ativas similares.
+- Sai do sitemap no mesmo ciclo em que vira expirada.
 
 ## 8. `Cupom` (tabela CUPOM) — reservado para F3/F4
 
@@ -224,8 +230,8 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
 
 ## 10. Perguntas em aberto (respondidas = editar este arquivo e subir a versão)
 
-1. `DS_URL_BESAVE` vs `DS_URL_FINAL`: nenhuma entra no contrato. O redirect usa
-   `DS_URL_AFILIADO` (a curta, ex.: `https://s.shopee.com.br/...`). Confirmar que
-   `DS_URL_AFILIADO` está sempre preenchida nas 3 lojas.
+1. ~~`DS_URL_AFILIADO` sempre preenchida?~~ **Respondido:** sim, oferta sem ela não é gerada. O
+   redirect `/ir/{id}` usa `DS_URL_AFILIADO`; `DS_URL_BESAVE`/`DS_URL_FINAL` ficam só no banco.
 2. `DS_GENERO`/`DS_FAIXA_ETARIA` do produto são texto livre — ok por ora (só exibição).
 3. Cupons da tabela `CUPOM` aparecem na home (F3) ou só em página própria (F4)?
+4. `DS_SLUG` e `DT_ULT_ATUALIZACAO`: criar ou não? (ver §7)

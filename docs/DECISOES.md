@@ -15,3 +15,9 @@ Agentes em worktree relatam propostas no PR; não editam este arquivo.
 - AD-010 · 2026-09-24 · Oracle recebe `DT_DESATIVACAO`, `DT_ULT_ATUALIZACAO`, `DS_SLUG` · sem elas o worker não sabe o que mudou nem o que morreu · regerar tudo sempre (custo) ; slug recalculado (URL instável)
 - AD-011 · 2026-09-23 · Monorepo único; um ticket = uma pasta principal; `CLAUDE.md` por app · contrato compartilhado e worktrees do Orca · repo por projeto (drift de contrato)
 - AD-012 · 2026-09-24 · Skill `tlc-spec-driven` como workflow de execução; workers não gravam `STATE.md`/`LESSONS.md` em worktree · evita conflito entre PRs paralelos · cada worker gravando no log
+- AD-013 · 2026-09-25 · Estado da oferta vem de `ST_ATIVO` (1/0) + `DT_DESATIVACAO`; expiradas ficam nos chunks (`x:1`) e nas páginas até expurgo em 7 dias · decisão do dono: usuário vê "expirada" em vez de sumiço; Promobit faz igual · sumir imediatamente (perde contexto e tráfego residual)
+- AD-014 · 2026-09-25 · Página expirada é renderizada pelo worker (CSS grayscale + faixa + noindex), não por JavaScript · worker sabe o status na geração; Google vê o HTML final · JS no cliente (não indexável, estado duplicado)
+- AD-015 · 2026-09-25 · Preço permanece inteiro em centavos; string rejeitada · string obriga parse em cada consumidor, impede ordenação/desconto e é maior · string formatada
+- AD-016 · 2026-09-25 · Infra nova em IaC (Terraform) ao lado da atual: bucket privado `besave-site` + OAC + distribuição nova + KVS; virada por DNS no Route53 · não quebrar o protótipo no ar; bucket website público não suporta OAC/funções como precisamos · reconfigurar `E28G93A17WHHD` no lugar (sem rollback)
+- AD-017 · 2026-09-25 · Segredos nunca no repositório; robôs leem credenciais de `.env`/variáveis; `conf/config.json` sai do git · repo é público · manter config com senha versionada
+

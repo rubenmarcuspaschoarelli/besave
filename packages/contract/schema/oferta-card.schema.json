@@ -16,6 +16,7 @@
     "c":  { "type": "string", "minLength": 1, "maxLength": 30, "pattern": "^[A-Z0-9_-]+$" },
     "dt": { "$ref": "enums.schema.json#/$defs/DataHora" },
     "a":  { "$ref": "enums.schema.json#/$defs/Area" },
-    "p":  { "$ref": "enums.schema.json#/$defs/Publico" }
+    "p":  { "$ref": "enums.schema.json#/$defs/Publico" },
+    "x":  { "const": 1, "description": "expirada (ST_ATIVO=0); ausente quando ativa" }
   }
 }
