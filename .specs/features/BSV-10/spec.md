@@ -31,7 +31,7 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Fuso das colunas DATE do Oracle | Hora local fixa `-03:00`, convertida para UTC no SQL; configurável por `BESAVE_ORACLE_TZ` | Robôs gravam `datetime.now()` local (tools/capture-chat-groups). Offset fixo porque o arquivo de fuso do XE 11.2 é anterior ao fim do horário de verão (2019). | n |
+| Fuso das colunas DATE do Oracle | Hora local fixa `-03:00`, convertida para UTC no SQL só com aritmética de DATE (sem `FROM_TZ`: ORA-01882 com Instant Client 19); configurável por `BESAVE_ORACLE_TZ` no formato `±HH:MM` | Robôs gravam `datetime.now()` local (tools/capture-chat-groups). Offset fixo porque o arquivo de fuso do XE 11.2 é anterior ao fim do horário de verão (2019). | n |
 | Datas na `LinhaOferta` | Segundos Unix UTC (`i64`); ISO 8601 formatado em Rust | Sem `chrono` (lista de deps fechada); a fake precisa comparar datas para o expurgo. | n |
 | `centavos` e ponto flutuante | Arredonda sobre a representação decimal mais curta do `f64` (half up, meia para longe de zero) | `19.995 * 100` em f64 = 1999.4999…; a spec exige 2000. | n |
 | Truncamento do título do card | > 200 caracteres Unicode → primeiros 197, corta no último espaço, `trim`, + `…` | CONTRATO §3; `maxLength` do schema conta caracteres. Sem espaço: corta seco em 197. | n |
@@ -92,6 +92,8 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 2. WHEN `FakeFonte::produto(id)` é chamada THEN a fonte SHALL devolver o produto com aquele id ou `None`.  <!-- FONTE-02 -->
 3. The `OracleFonte` SHALL ler credenciais só de `BESAVE_ORACLE_DSN`, `BESAVE_ORACLE_USER`, `BESAVE_ORACLE_PASS` e aplicar o mesmo filtro de expurgo no SQL (`ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7`).  <!-- FONTE-03 -->
 4. IF uma variável de conexão falta THEN `OracleFonte` SHALL retornar erro nomeando a variável, sem panic.  <!-- FONTE-04 -->
+5. IF `BESAVE_ORACLE_TZ` não é offset `±HH:MM` THEN a config SHALL falhar nomeando a variável; o SQL SHALL converter DATE → UTC sem funções de região de fuso.  <!-- FONTE-05 -->
+6. WHEN `BESAVE_ORACLE_CLIENT_DIR` está definida THEN `OracleFonte` SHALL carregar o Instant Client só dessa pasta, ignorando o `PATH`.  <!-- FONTE-06 -->
 
 **Independent Test**: testes da fake; `OracleFonte` só compila no CI e roda com o dono.
 
@@ -141,6 +143,8 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 | FONTE-02 | P1: Fonte | T5 | Implemented |
 | FONTE-03 | P1: Fonte | T6 | Implemented |
 | FONTE-04 | P1: Fonte | T6 | Implemented |
+| FONTE-05 | P1: Fonte | fix pós-merge | Implemented |
+| FONTE-06 | P1: Fonte | fix pós-merge | Implemented |
 | DRY-01 | P1: Dry-run | T7 | Implemented |
 | DRY-02 | P1: Dry-run | T7 | Implemented |
 
