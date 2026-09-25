@@ -118,3 +118,35 @@ fn id_produto_ausente_rejeita_a_pagina() {
     };
     assert_eq!(para_pagina(&l, None, &m()), Err(Rejeicao::IdProdutoAusente));
 }
+
+#[test]
+fn desconto_pct_meia_para_cima_limitado_a_99() {
+    let m = m();
+    let pct = |pd: f64, pp: f64| {
+        let l = LinhaOferta {
+            preco_de: Some(pd),
+            preco_por: Some(pp),
+            ..linha()
+        };
+        para_pagina(&l, None, &m).unwrap().desconto_pct
+    };
+    assert_eq!(pct(100.00, 66.50), Some(34)); // 33,5 % → 34
+    assert_eq!(pct(100.00, 66.51), Some(33)); // 33,49 % → 33
+    assert_eq!(pct(100.00, 0.01), Some(99)); // 99,99 % → 100 → limitado a 99
+}
+
+#[test]
+fn nota_uma_casa_e_fora_de_0_a_5_vira_null() {
+    let m = m();
+    let nota = |n: f64| {
+        let l = LinhaOferta {
+            nota: Some(n),
+            ..linha()
+        };
+        para_pagina(&l, None, &m).unwrap().nota
+    };
+    assert_eq!(nota(4.66), Some(4.7));
+    assert_eq!(nota(4.64), Some(4.6));
+    assert_eq!(nota(5.5), None);
+    assert_eq!(nota(-1.0), None);
+}
