@@ -196,7 +196,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | OPS-02 | P1: Operação | T6 | Implemented |
 | OPS-03 | P1: Operação | T7 | Implemented |
 | OPS-04 | P1: Operação | T7 | Implemented |
-| OPS-05 | P1: Operação | T11 | Pending |
+| OPS-05 | P1: Operação | T11 | Implemented |
 
 **Coverage:** 32 total, 32 mapped to tasks, 0 unmapped
 

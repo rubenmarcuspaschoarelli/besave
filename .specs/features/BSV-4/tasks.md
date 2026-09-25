@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `design.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -337,8 +337,8 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] job `infra` roda `terraform test` após `validate`
-- [ ] Gate check passes: build
+- [x] job `infra` roda `terraform test` após `validate`
+- [x] Gate check passes: build
 
 **Tests**: none
 **Gate**: build
