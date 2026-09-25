@@ -150,9 +150,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Linha + produto equivalentes à fixture geram `oferta-pagina-ok.json` byte a byte
-- [ ] Título longo fica integral na página; `ST_ATIVO=0` → `ENCERRADA`
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Linha + produto equivalentes à fixture geram `oferta-pagina-ok.json` byte a byte
+- [x] Título longo fica integral na página; `ST_ATIVO=0` → `ENCERRADA`
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build

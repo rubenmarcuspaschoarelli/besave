@@ -3,7 +3,7 @@
 use tracing::warn;
 
 use crate::mapeamento::Mapeamento;
-use crate::modelo::OfertaCard;
+use crate::modelo::{OfertaCard, OfertaPagina, Produto, Status};
 
 /// Uma linha de OFERTA como a fonte entrega. Datas em segundos Unix UTC.
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -32,6 +32,24 @@ pub struct LinhaOferta {
     pub dt_desativacao: Option<i64>,
 }
 
+/// Uma linha de PRODUTO. Preços em reais.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct LinhaProduto {
+    pub id_produto: i64,
+    /// `DS_DESCRICAO_PRODUTO`
+    pub descricao: Option<String>,
+    pub marca: Option<String>,
+    pub fabricante: Option<String>,
+    pub modelo: Option<String>,
+    pub pais_origem: Option<String>,
+    pub genero: Option<String>,
+    pub faixa_etaria: Option<String>,
+    /// `VR_PRECO_MINIMO`
+    pub preco_min: Option<f64>,
+    /// `VR_PRECO_MAXIMO`
+    pub preco_max: Option<f64>,
+}
+
 /// Motivo de rejeição (CONTRATO §9). O registro não é publicado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, thiserror::Error)]
 pub enum Rejeicao {
@@ -53,6 +71,8 @@ pub enum Rejeicao {
 
 const MAX_TITULO_CARD: usize = 200;
 const MAX_CUPOM: usize = 30;
+const MAX_TITULO_PAGINA: usize = 400;
+const MAX_DESCRICAO: usize = 600;
 
 pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
     let pp = l
@@ -85,6 +105,84 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
         area,
         publico,
         x: (!l.ativo).then_some(1),
+    })
+}
+
+/// Página da oferta: card validado + campos completos. `id_produto` é obrigatório aqui.
+pub fn para_pagina(
+    l: &LinhaOferta,
+    p: Option<&LinhaProduto>,
+    m: &Mapeamento,
+) -> Result<OfertaPagina, Rejeicao> {
+    let card = para_card(l, m)?;
+    let id_produto = l
+        .id_produto
+        .filter(|&id| id >= 1)
+        .ok_or(Rejeicao::IdProdutoAusente)?;
+    let integral = l.titulo.as_deref().unwrap_or_default().trim();
+    let titulo = truncar(integral, MAX_TITULO_PAGINA);
+    if titulo.len() != integral.len() {
+        warn!(
+            id = l.id,
+            "titulo > {MAX_TITULO_PAGINA} caracteres; cortado na página"
+        );
+    }
+    Ok(OfertaPagina {
+        id: card.id,
+        id_produto,
+        loja: card.loja,
+        titulo,
+        preco_de: card.preco_de,
+        preco_por: card.preco_por,
+        desconto_pct: card.preco_de.map(|pd| desconto_pct(pd, card.preco_por)),
+        cupom: card.cupom,
+        nota: l
+            .nota
+            .filter(|n| (0.0..=5.0).contains(n))
+            .map(|n| (n * 10.0).round() / 10.0),
+        qt_avaliacoes: l.qt_avaliacoes.filter(|&q| q >= 0),
+        dt_oferta: card.dt_oferta,
+        area: card.area,
+        publico: card.publico,
+        status: if l.ativo {
+            Status::Ativa
+        } else {
+            Status::Encerrada
+        },
+        produto: p.and_then(produto),
+    })
+}
+
+/// `round((1 - pp/pd) * 100)` meia para cima, em inteiros, limitado a 0..=99. Exige `pd > pp > 0`.
+fn desconto_pct(pd: i64, pp: i64) -> i64 {
+    let pct = (200 * (pd - pp) + pd) / (2 * pd);
+    pct.clamp(0, 99)
+}
+
+fn produto(p: &LinhaProduto) -> Option<Produto> {
+    let descricao = p
+        .descricao
+        .as_deref()?
+        .replace("\r\n", "\n")
+        .split("\n\n")
+        .map(str::trim)
+        .find(|b| !b.is_empty())
+        .map(|b| truncar(b, MAX_DESCRICAO))?;
+    let texto = |s: &Option<String>, max: usize| {
+        let t = s.as_deref()?.trim();
+        (!t.is_empty()).then(|| t.chars().take(max).collect::<String>())
+    };
+    let preco = |v: Option<f64>| v.map(centavos).filter(|&c| c > 0);
+    Some(Produto {
+        descricao,
+        marca: texto(&p.marca, 40),
+        fabricante: texto(&p.fabricante, 80),
+        modelo: texto(&p.modelo, 200),
+        pais_origem: texto(&p.pais_origem, 40),
+        genero: texto(&p.genero, 20),
+        faixa_etaria: texto(&p.faixa_etaria, 20),
+        preco_min: preco(p.preco_min),
+        preco_max: preco(p.preco_max),
     })
 }
 

@@ -131,10 +131,10 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 | CONV-04 | P1: Conversão | T3 | Implemented |
 | CONV-05 | P1: Conversão | T3 | Implemented |
 | CONV-06 | P1: Conversão | T3 | Implemented |
-| CONV-07 | P1: Conversão | Tasks | Pending |
+| CONV-07 | P1: Conversão | T4 | Implemented |
 | CONV-08 | P1: Conversão | T3 | Implemented |
-| CONV-09 | P1: Conversão | Tasks | Pending |
-| CONV-10 | P1: Conversão | Tasks | Pending |
+| CONV-09 | P1: Conversão | T4 | Implemented |
+| CONV-10 | P1: Conversão | T4 | Implemented |
 | CONV-11 | P1: Conversão | T3 | Implemented |
 | CONV-12 | P1: Conversão | T1 | Implemented |
 | FONTE-01 | P1: Fonte | Tasks | Pending |
