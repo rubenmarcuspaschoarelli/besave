@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; nenhuma decisão de arquitetura além da spec do ticket)
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -228,9 +228,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `BESAVE_FONTE=fake cargo run -- --dry-run` imprime lidas / validas / rejeitadas por motivo e sai 0
-- [ ] README explica rodar com fake e com Oracle (Instant Client ≥ 19)
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] `BESAVE_FONTE=fake cargo run -- --dry-run` imprime lidas / validas / rejeitadas por motivo e sai 0
+- [x] README explica rodar com fake e com Oracle (Instant Client ≥ 19)
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: integration
 **Gate**: build

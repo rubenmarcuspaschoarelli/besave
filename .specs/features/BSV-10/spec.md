@@ -141,8 +141,8 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 | FONTE-02 | P1: Fonte | T5 | Implemented |
 | FONTE-03 | P1: Fonte | T6 | Implemented |
 | FONTE-04 | P1: Fonte | T6 | Implemented |
-| DRY-01 | P1: Dry-run | Tasks | Pending |
-| DRY-02 | P1: Dry-run | Tasks | Pending |
+| DRY-01 | P1: Dry-run | T7 | Implemented |
+| DRY-02 | P1: Dry-run | T7 | Implemented |
 
 **Coverage:** 18 total, 18 mapped to tasks, 0 unmapped
 
