@@ -7,18 +7,20 @@ use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
+use worker::aws::{ConfigAws, ContextoAws, PublicadorS3, RedirectsKvs};
 use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao, para_pagina};
 use worker::fonte::{FakeFonte, FonteOfertas};
-use worker::geracao::gerar;
+use worker::geracao::{Relatorio, gerar};
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
+use worker::plano::publicar;
 use worker::publicador::PublicadorLocal;
 use worker::redirects::RedirectsMemoria;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
 #[command(version)]
-#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar"])))]
+#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar", "publicar"])))]
 struct Args {
     /// Lê a fonte, converte e imprime contagens; não gera nem publica nada.
     #[arg(long)]
@@ -29,6 +31,13 @@ struct Args {
     /// Pasta de saída do `--gerar` (criada se não existir).
     #[arg(long, requires = "gerar")]
     saida: Option<PathBuf>,
+    /// Publica no bucket (`BESAVE_BUCKET`) e sincroniza a KVS (`BESAVE_KVS_ARN`). Sem `--sim`,
+    /// só imprime o plano.
+    #[arg(long)]
+    publicar: bool,
+    /// Executa o `--publicar` (sem ele, nada é escrito).
+    #[arg(long)]
+    sim: bool,
     /// Caminho do mapeamento.json do contrato.
     #[arg(
         long,
@@ -46,8 +55,18 @@ fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
+    // `requires` do clap não pega flag booleana (o padrão `false` conta como presente).
+    if args.sim && !args.publicar {
+        bail!("--sim só vale junto com --publicar");
+    }
     let m = Mapeamento::carregar(&args.mapeamento)?;
     let agora = agora()?;
+    // Config do destino antes de abrir o Oracle: erro de env não gasta conexão.
+    let aws = if args.publicar {
+        Some(ConfigAws::do_env()?)
+    } else {
+        None
+    };
     let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
         Ok("fake") => Box::new(fake_demo(agora)),
         Ok("oracle") | Err(_) => Box::new(
@@ -55,10 +74,40 @@ fn main() -> Result<()> {
         ),
         Ok(outra) => bail!("BESAVE_FONTE inválida: {outra} (use oracle ou fake)"),
     };
-    match args.saida {
-        Some(saida) if args.gerar => gerar_em(fonte.as_ref(), &m, saida, agora),
+    match (args.saida, aws) {
+        (Some(saida), _) if args.gerar => gerar_em(fonte.as_ref(), &m, saida, agora),
+        (_, Some(cfg)) => publicar_aws(fonte.as_ref(), &m, &cfg, agora, args.sim),
         _ => dry_run(fonte.as_ref(), &m),
     }
+}
+
+fn publicar_aws(
+    fonte: &dyn FonteOfertas,
+    m: &Mapeamento,
+    cfg: &ConfigAws,
+    agora: i64,
+    sim: bool,
+) -> Result<()> {
+    let inicio = Instant::now();
+    let ctx = ContextoAws::carregar()?;
+    let mut pub_ = PublicadorS3::new(&ctx, &cfg.bucket);
+    let mut kvs = RedirectsKvs::new(&ctx, &cfg.kvs_arn);
+    let pb = publicar(fonte, m, &mut pub_, &mut kvs, agora, sim)
+        .with_context(|| format!("publicando em s3://{}", cfg.bucket))?;
+    if !sim {
+        println!("PLANO: nada foi escrito. Rode com --sim para executar.");
+        println!("bucket: {}", cfg.bucket);
+        println!("kvs: {}", cfg.kvs_arn);
+        for op in pb.plano.objetos.iter().chain(&pb.plano.redirects) {
+            println!("  {op}");
+        }
+    }
+    imprimir_relatorio(&pb.relatorio);
+    println!("redirects_put: {}", pb.relatorio.redirects.puts);
+    println!("redirects_del: {}", pb.relatorio.redirects.dels);
+    println!("redirects_total: {}", pb.relatorio.redirects.total);
+    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
+    Ok(())
 }
 
 fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64) -> Result<()> {
@@ -67,6 +116,12 @@ fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64
     // Espelho local não tem KVS: os redirects só existem no `--publicar`.
     let rel = gerar(fonte, m, &mut pub_, &mut RedirectsMemoria::new(), agora)
         .with_context(|| format!("gerando em {}", saida.display()))?;
+    imprimir_relatorio(&rel);
+    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
+    Ok(())
+}
+
+fn imprimir_relatorio(rel: &Relatorio) {
     imprimir_contagens(rel.lidas, rel.validas, &rel.rejeitadas);
     println!("chunks_escritos: {}", rel.chunks_escritos);
     println!("chunks_reaproveitados: {}", rel.chunks_reaproveitados);
@@ -77,8 +132,6 @@ fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64
         None => println!("maior_chunk: -"),
     }
     println!("versao: {}", rel.versao);
-    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
-    Ok(())
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {

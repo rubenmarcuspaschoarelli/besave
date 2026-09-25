@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; a spec do ticket fixa trait, funções e regras; decisões em `spec.md` → Assumptions)
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -242,10 +242,10 @@ T6 → T7
 
 **Done when**:
 
-- [ ] `--publicar` sem `BESAVE_BUCKET` (ou `BESAVE_KVS_ARN`) → erro nomeando a variável, sem panic
-- [ ] `--sim` sem `--publicar` → erro, sem panic
-- [ ] README documenta `--publicar`, envs, plano e `--sim`
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] `--publicar` sem `BESAVE_BUCKET` (ou `BESAVE_KVS_ARN`) → erro nomeando a variável, sem panic
+- [x] `--sim` sem `--publicar` → erro, sem panic
+- [x] README documenta `--publicar`, envs, plano e `--sim`
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: integration
 **Gate**: build

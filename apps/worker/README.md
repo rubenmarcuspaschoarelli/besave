@@ -5,9 +5,11 @@ Lê OFERTA/PRODUTO do Oracle e converte cada linha em `OfertaCard` e `OfertaPagi
 
 - `--dry-run` (BSV-10): lê, converte e imprime contagens.
 - `--gerar --saida <dir>` (BSV-11): gera os chunks e o `manifest.json` numa pasta com o layout
-  do bucket (`docs/MANIFEST.md`). Upload para o S3 vem em BSV-12; páginas HTML em BSV-21.
+  do bucket (`docs/MANIFEST.md`). Páginas HTML em BSV-21.
+- `--publicar [--sim]` (BSV-12): o mesmo que `--gerar`, mas no bucket S3, e sincroniza a KVS de
+  redirects `id → DS_URL_AFILIADO`. Sem `--sim` só imprime o plano.
 
-Um dos dois modos é obrigatório; eles são mutuamente exclusivos.
+Um dos três modos é obrigatório; eles são mutuamente exclusivos.
 
 ## Rodar com a fonte fake (sem banco)
 
@@ -77,6 +79,64 @@ tempo: 0.01s
 
 As datas da fake de demonstração acompanham o relógio, então cada execução com ela regrava o
 chunk 5. Com a fonte parada (testes, Oracle sem mudança) a segunda execução grava 0 chunks.
+
+## Publicar no S3 e na KVS (`--publicar`)
+
+```sh
+cd apps/worker
+export BESAVE_BUCKET=besave-site
+export BESAVE_KVS_ARN=arn:aws:cloudfront::<conta>:key-value-store/<id>
+export AWS_REGION=sa-east-1          # região do bucket
+export AWS_PROFILE=besave-worker     # ou AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+cargo run --release -- --publicar          # plano: não escreve nada
+cargo run --release -- --publicar --sim    # executa
+```
+
+| variável | obrigatória | uso |
+|---|---|---|
+| `BESAVE_BUCKET` | sim | bucket de destino |
+| `BESAVE_KVS_ARN` | sim | ARN da KeyValueStore da Function `/ir/{id}` |
+| `AWS_REGION` | sim (ou região no perfil) | região do bucket |
+| credenciais | sim | só pela cadeia padrão do SDK: `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, SSO |
+
+Nenhuma credencial vai em arquivo versionado, argumento de CLI ou log. `BESAVE_BUCKET` e
+`BESAVE_KVS_ARN` são checadas antes de abrir o Oracle.
+
+**Plano (sem `--sim`).** O worker lê o destino de verdade (`manifest.json`, `HeadObject` dos
+chunks, `ListObjectsV2`, `ListKeys`) e imprime cada escrita que faria, sem executá-la:
+
+```
+PLANO: nada foi escrito. Rode com --sim para executar.
+bucket: besave-site
+kvs: arn:aws:cloudfront::…:key-value-store/…
+  gravar data/chunks/5-89590e56ef6361dc.json.br (265 B, public, max-age=31536000, immutable)
+  gravar manifest.json (412 B, public, max-age=300, stale-while-revalidate=60)
+  remover data/chunks/5-0f1e2d3c4b5a6978.json.br
+  putKey 5412 https://amzn.to/…
+  deleteKey 1008
+lidas: …
+redirects_put: 3
+redirects_del: 1
+redirects_total: 3
+```
+
+**Execução (`--sim`).** Ordem de MANIFEST §6: chunks novos → KVS → `manifest.prev.json` →
+`manifest.json` → remoção de chunks órfãos. Se a KVS falhar, o manifest não é gravado e o anterior
+continua valendo.
+
+- Headers de cada objeto pela tabela de MANIFEST §4 (`meta_para`): chunks com
+  `Content-Encoding: br` e `immutable`; manifest com `max-age=300, stale-while-revalidate=60`.
+- Chunk que já existe (`HeadObject`) não é regravado; o nome carrega o hash.
+- KVS: só o diff (`UpdateKeys` em lotes de 50 com `If-Match` do ETag). Entra todo card publicado,
+  inclusive expirado; a chave sai quando a oferta sai da fonte (expurgo). Chave não numérica na
+  KVS é ignorada. URL > 1 024 bytes ou KVS > 5 MB: erro, nada é escrito na KVS nem no manifest.
+  Acima de 40 000 entradas: `WARN` (MANIFEST §5).
+- Segunda execução sem mudança: 0 chunks e 0 put/del na KVS; `manifest.json` e
+  `manifest.prev.json` são regravados (`versao` nova).
+- Retentativas: as do SDK.
+
+Permissões IAM mínimas: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` no
+bucket; `cloudfront-keyvaluestore:DescribeKeyValueStore`, `ListKeys`, `UpdateKeys` na KVS.
 
 ## Rodar contra o Oracle
 

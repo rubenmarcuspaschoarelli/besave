@@ -195,8 +195,8 @@ bucket errado.
 | PLN-03 | P1: Plano | T5 | Implemented |
 | AWS-01 | P1: Binário e AWS | T6 | Implemented |
 | AWS-02 | P1: Binário e AWS | T6 | Implemented |
-| AWS-03 | P1: Binário e AWS | T7 | Pending |
-| AWS-04 | P1: Binário e AWS | T7 | Pending |
+| AWS-03 | P1: Binário e AWS | T7 | Implemented |
+| AWS-04 | P1: Binário e AWS | T7 | Implemented |
 | AWS-05 | P1: Binário e AWS | T6 | Implemented |
 
 **Coverage:** 27 total, 27 mapped to tasks, 0 unmapped
