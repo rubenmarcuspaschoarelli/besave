@@ -1,0 +1,25 @@
+[package]
+name = "besave-worker"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "Oracle → contrato Besave (CONTRATO.md, MANIFEST.md)"
+
+[lib]
+name = "worker"
+path = "src/lib.rs"
+
+[[bin]]
+name = "besave-worker"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive", "env"] }
+oracle = "0.6.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+unicode-normalization = "0.1.25"
