@@ -122,8 +122,8 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Plano (mock) tem os 4 flags de BPA `true` nos dois buckets, lifecycle `data/chunks/` e `data/busca/` = 7 dias, ownership `BucketOwnerPreferred` no de logs, nenhum `aws_s3_bucket_website_configuration`
-- [ ] Gate check passes: `terraform init -backend=false && terraform validate && terraform test`
+- [x] Plano (mock) tem os 4 flags de BPA `true` nos dois buckets, lifecycle `data/chunks/` e `data/busca/` = 7 dias, ownership `BucketOwnerPreferred` no de logs, nenhum `aws_s3_bucket_website_configuration`
+- [x] Gate check passes: `terraform init -backend=false && terraform validate && terraform test`
 
 **Tests**: integration
 **Gate**: full
