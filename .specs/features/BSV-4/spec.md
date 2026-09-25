@@ -186,11 +186,11 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | CF-10 | P1: Distribuição | T4 | Implemented |
 | CF-11 | P1: Distribuição | T5 | Implemented |
 | CF-12 | P1: Distribuição | T5 | Implemented |
-| IAM-01 | P1: IAM | T6 | Pending |
-| IAM-02 | P1: IAM | T6 | Pending |
-| IAM-03 | P1: IAM | T6 | Pending |
-| OPS-01 | P1: Operação | T6 | Pending |
-| OPS-02 | P1: Operação | T6 | Pending |
+| IAM-01 | P1: IAM | T6 | Implemented |
+| IAM-02 | P1: IAM | T6 | Implemented |
+| IAM-03 | P1: IAM | T6 | Implemented |
+| OPS-01 | P1: Operação | T6 | Implemented |
+| OPS-02 | P1: Operação | T6 | Implemented |
 | OPS-03 | P1: Operação | T7 | Pending |
 | OPS-04 | P1: Operação | T7 | Pending |
 

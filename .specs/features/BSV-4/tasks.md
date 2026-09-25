@@ -189,7 +189,7 @@ T3 → T4 → T5 → T6 → T7
 ### T6: IAM do worker e outputs
 
 **What**: `iam.tf` (usuário sem console/sem key, policy inline mínima), `outputs.tf`, teste de IAM/outputs e de ausência de recursos existentes.
-**Where**: `infra/iam.tf`, `infra/outputs.tf`, `infra/tests/iam.tftest.hcl`
+**Where**: `infra/iam.tf`, `infra/outputs.tf`, `infra/tests/iam.tftest.hcl`, `infra/functions/test/sem-recursos-existentes.test.mjs`
 **Depends on**: T5
 **Reuses**: ARNs de bucket, KVS e distribuição
 **Requirement**: IAM-01, IAM-02, IAM-03, OPS-01, OPS-02
@@ -201,9 +201,9 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Policy com exatamente as ações/recursos de IAM-02/03; sem `aws_iam_access_key` nem `aws_iam_user_login_profile`
-- [ ] 4 outputs; nenhum recurso do plano referencia `besave.com.br` como bucket nem `E28G93A17WHHD`
-- [ ] Gate check passes: build
+- [x] Policy com exatamente as ações/recursos de IAM-02/03; sem `aws_iam_access_key` nem `aws_iam_user_login_profile`
+- [x] 4 outputs; nenhum recurso do plano referencia `besave.com.br` como bucket nem `E28G93A17WHHD`
+- [x] Gate check passes: build
 
 **Tests**: integration
 **Gate**: build

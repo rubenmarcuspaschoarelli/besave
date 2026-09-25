@@ -1,4 +1,4 @@
-# Distribuição nova (AD-016), behaviors de MANIFEST.md §5. A atual (E28G93A17WHHD) não é tocada.
+# Distribuição nova (AD-016), behaviors de MANIFEST.md §5. A distribuição do protótipo não é tocada.
 
 locals {
   # Política gerenciada "CachingDisabled" (ID fixo da AWS).
