@@ -230,7 +230,7 @@ fn sim_escreve_no_destino_e_plano_vem_vazio() {
     assert!(pb.plano.redirects.is_empty());
     assert!(p.gravar >= 4, "chunks 2 e 5 + manifests: {}", p.gravar);
     assert_eq!(p.remover, 1);
-    assert_eq!(p.dentro.remocoes(), [orfao.clone()]);
+    assert_eq!(p.dentro.remocoes(), std::slice::from_ref(&orfao));
     assert_eq!(kvs.aplicar, 1);
     assert!(!p.dentro.existe(&orfao).unwrap());
     assert_eq!(
