@@ -98,10 +98,10 @@ T3 → T4 → T5
 
 **Done when**:
 
-- [ ] ids 999, 1000, 1999, 2000 → n 0, 1, 1, 2; ordem por id dentro do chunk
-- [ ] `chunk-ok.json` → JSON idêntico à fixture compactada e hash `89590e56ef6361dc`
-- [ ] Descomprimido = JSON do chunk e válido contra `chunk.schema.json`
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] ids 999, 1000, 1999, 2000 → n 0, 1, 1, 2; ordem por id dentro do chunk
+- [x] `chunk-ok.json` → JSON idêntico à fixture compactada e hash `89590e56ef6361dc`
+- [x] Descomprimido = JSON do chunk e válido contra `chunk.schema.json`
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build

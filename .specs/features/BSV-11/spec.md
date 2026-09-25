@@ -36,7 +36,7 @@ implementar para o S3.
 | Quais linhas viram card | As que passam em `para_card` **e** têm `id_produto ≥ 1` (mesmas rejeições do `--dry-run`); o produto não é buscado | Card cuja página é rejeitada apontaria para `/oferta/{id}/` inexistente; contagens ficam iguais às do `--dry-run` (critério "coerente com BSV-10") sem 30k consultas a PRODUTO | n |
 | `total_ofertas` | Número de cards publicados nos chunks (ativos + expirados `x:1`) = soma de `qtd` | MANIFEST §2 não define; é o total que o cliente vai ter após baixar tudo | n |
 | Chaves de `areas` | Só áreas com ≥ 1 card ativo; área ausente = 0 | Igual ao exemplo do MANIFEST §2; schema não exige as 9 | n |
-| `comprimir_br` | Retorna `Result<Vec<u8>, ErroGeracao>` em vez de `Vec<u8>` | `BrotliCompress` devolve `io::Result`; regra "sem `unwrap`" vence a assinatura ilustrativa da spec | n |
+| `serializar_chunk` e `comprimir_br` | Retornam `Result<_, ErroChunk>` em vez de tupla / `Vec<u8>` | `serde_json::to_vec` e `BrotliCompress` são falíveis; a regra "sem `unwrap`" vence a assinatura ilustrativa da spec | n |
 | Orçamento de 61 440 B | Todos os chunks são serializados e comprimidos antes de qualquer gravação; se algum excede, `gerar` falha sem gravar nada | Regra 6 ("não publica"); evita chunks órfãos de uma execução abortada | n |
 | "Manifest anterior" (regra 5) | O `manifest.json` lido no início da execução. Órfão = chave em `data/chunks/` que não está no manifest novo nem nesse anterior | Com o anterior protegendo 1 ciclo, o chunk antigo some na 3ª execução, como pede o critério de aceite | n |
 | `manifest.prev.json` | Cópia byte a byte do `manifest.json` anterior, gravada depois dos chunks e antes do manifest novo, com os mesmos headers do manifest; não é gravado na primeira execução | Spec pede guardar o anterior na saída | n |
@@ -166,10 +166,10 @@ implementar para o S3.
 | PUB-03 | P1: Publicador | T1 | Implemented |
 | PUB-04 | P1: Publicador | T1 | Implemented |
 | PUB-05 | P1: Publicador | T1 | Implemented |
-| CHK-01 | P1: Chunks | T2 | Pending |
-| CHK-02 | P1: Chunks | T2 | Pending |
-| CHK-03 | P1: Chunks | T2 | Pending |
-| CHK-04 | P1: Chunks | T2 | Pending |
+| CHK-01 | P1: Chunks | T2 | Implemented |
+| CHK-02 | P1: Chunks | T2 | Implemented |
+| CHK-03 | P1: Chunks | T2 | Implemented |
+| CHK-04 | P1: Chunks | T2 | Implemented |
 | CHK-05 | P1: Chunks | T3 | Pending |
 | MAN-01 | P1: Manifest | T3 | Pending |
 | MAN-02 | P1: Manifest | T3 | Pending |
