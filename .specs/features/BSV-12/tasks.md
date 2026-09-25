@@ -160,11 +160,11 @@ T6 → T7
 
 **Done when**:
 
-- [ ] KVS = cards publicados (inclui expirado, exclui rejeitado)
-- [ ] Ordem: chunks → KVS → `manifest.prev.json` → `manifest.json`
-- [ ] Falha injetada na KVS → `ErroGeracao::Redirects` e sem `manifest.json`
-- [ ] Expurgo apaga a chave; relatório com puts/dels
-- [ ] Gate check passes: `cargo test`
+- [x] KVS = cards publicados (inclui expirado, exclui rejeitado)
+- [x] Ordem: chunks → KVS → `manifest.prev.json` → `manifest.json`
+- [x] Falha injetada na KVS → `ErroGeracao::Redirects` e sem `manifest.json`
+- [x] Expurgo apaga a chave; relatório com puts/dels
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick

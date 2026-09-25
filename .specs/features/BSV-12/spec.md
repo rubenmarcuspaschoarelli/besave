@@ -185,11 +185,11 @@ bucket errado.
 | KVS-05 | P1: KVS | T3 | Implemented |
 | KVS-06 | P1: KVS | T3 | Implemented |
 | KVS-07 | P1: KVS | T3 | Implemented |
-| ORD-01 | P1: Ordem | T4 | Pending |
-| ORD-02 | P1: Ordem | T4 | Pending |
-| ORD-03 | P1: Ordem | T4 | Pending |
-| ORD-04 | P1: Ordem | T4 | Pending |
-| ORD-05 | P1: Ordem | T4 | Pending |
+| ORD-01 | P1: Ordem | T4 | Implemented |
+| ORD-02 | P1: Ordem | T4 | Implemented |
+| ORD-03 | P1: Ordem | T4 | Implemented |
+| ORD-04 | P1: Ordem | T4 | Implemented |
+| ORD-05 | P1: Ordem | T4 | Implemented |
 | PLN-01 | P1: Plano | T5 | Pending |
 | PLN-02 | P1: Plano | T5 | Pending |
 | PLN-03 | P1: Plano | T5 | Pending |

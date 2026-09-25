@@ -13,6 +13,7 @@ use worker::geracao::gerar;
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::publicador::PublicadorLocal;
+use worker::redirects::RedirectsMemoria;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
@@ -63,7 +64,8 @@ fn main() -> Result<()> {
 fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64) -> Result<()> {
     let inicio = Instant::now();
     let mut pub_ = PublicadorLocal::new(&saida);
-    let rel = gerar(fonte, m, &mut pub_, agora)
+    // Espelho local não tem KVS: os redirects só existem no `--publicar`.
+    let rel = gerar(fonte, m, &mut pub_, &mut RedirectsMemoria::new(), agora)
         .with_context(|| format!("gerando em {}", saida.display()))?;
     imprimir_contagens(rel.lidas, rel.validas, &rel.rejeitadas);
     println!("chunks_escritos: {}", rel.chunks_escritos);

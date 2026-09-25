@@ -6,6 +6,7 @@ use comum::{AGORA, linha, mapeamento};
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
 use worker::publicador::{Meta, Publicador, PublicadorMemoria, meta_para};
+use worker::redirects::RedirectsMemoria;
 
 const JSON: &str = "application/json";
 const HTML: &str = "text/html; charset=utf-8";
@@ -97,8 +98,22 @@ fn chave_fora_da_tabela_nao_tem_headers() {
 fn gerar_grava_com_a_meta_da_tabela() {
     let mut p = PublicadorMemoria::new();
     let fonte = FakeFonte::new(vec![linha(5412), linha(7001)], vec![], AGORA);
-    gerar(&fonte, &mapeamento(), &mut p, AGORA).unwrap();
-    gerar(&fonte, &mapeamento(), &mut p, AGORA + 600).unwrap();
+    gerar(
+        &fonte,
+        &mapeamento(),
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        AGORA,
+    )
+    .unwrap();
+    gerar(
+        &fonte,
+        &mapeamento(),
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        AGORA + 600,
+    )
+    .unwrap();
     let chaves = p.gravacoes().to_vec();
     assert!(
         chaves.iter().any(|c| c == "manifest.prev.json"),

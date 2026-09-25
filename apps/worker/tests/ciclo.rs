@@ -11,6 +11,7 @@ use worker::geracao::{ErroGeracao, Relatorio, gerar};
 use worker::mapeamento::Mapeamento;
 use worker::modelo::Manifest;
 use worker::publicador::{Publicador, PublicadorMemoria};
+use worker::redirects::{Redirects, RedirectsMemoria};
 
 fn rodar(
     linhas: &[LinhaOferta],
@@ -18,7 +19,23 @@ fn rodar(
     m: &Mapeamento,
     agora: i64,
 ) -> Result<Relatorio, ErroGeracao> {
-    gerar(&FakeFonte::new(linhas.to_vec(), vec![], agora), m, p, agora)
+    rodar_com(linhas, p, &mut RedirectsMemoria::new(), m, agora)
+}
+
+fn rodar_com(
+    linhas: &[LinhaOferta],
+    p: &mut PublicadorMemoria,
+    kvs: &mut RedirectsMemoria,
+    m: &Mapeamento,
+    agora: i64,
+) -> Result<Relatorio, ErroGeracao> {
+    gerar(
+        &FakeFonte::new(linhas.to_vec(), vec![], agora),
+        m,
+        p,
+        kvs,
+        agora,
+    )
 }
 
 fn manifest(p: &PublicadorMemoria) -> Manifest {
@@ -198,4 +215,30 @@ fn manifest_anterior_json_sem_forma_de_manifest_falha_sem_gravar() {
         "{erro:?}"
     );
     assert_eq!(p.gravacoes(), ["manifest.json"]);
+}
+
+/// ORD-05: oferta expurgada perde a chave na KVS; segunda execução sem mudança não escreve.
+#[test]
+fn expurgo_apaga_a_chave_na_kvs() {
+    let m = mapeamento();
+    let mut linhas = fonte();
+    linhas[2] = LinhaOferta {
+        ativo: false,
+        dt_desativacao: Some(AGORA - 6 * DIA),
+        ..linhas[2].clone()
+    }; // 5420
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar_com(&linhas, &mut p, &mut kvs, &m, AGORA).unwrap();
+    assert!(kvs.listar().unwrap().contains_key(&5420));
+
+    let r = rodar_com(&linhas, &mut p, &mut kvs, &m, AGORA + 600).unwrap();
+    assert_eq!((r.redirects.puts, r.redirects.dels), (0, 0));
+
+    let r = rodar_com(&linhas, &mut p, &mut kvs, &m, AGORA + 2 * DIA).unwrap();
+    assert_eq!((r.redirects.puts, r.redirects.dels), (0, 1));
+    assert_eq!(
+        kvs.listar().unwrap().into_keys().collect::<Vec<_>>(),
+        [1001, 5412, 5413, 7001]
+    );
 }
