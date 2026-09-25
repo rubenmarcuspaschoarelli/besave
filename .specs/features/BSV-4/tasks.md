@@ -172,12 +172,12 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Behaviors na ordem e com políticas/TTL/compress/Functions de MANIFEST §5 (atualizado por AD-020)
-- [ ] Error responses 403→404 e 404→404 `/404.html` TTL 60; nenhuma com 200
-- [ ] `ativar_dominios` false → sem aliases, certificado padrão; true → 2 aliases + ACM `sni-only`
-- [ ] Policy do bucket: só `s3:GetObject` para `cloudfront.amazonaws.com` com `AWS:SourceArn` da distribuição
-- [ ] `404.html` com `noindex`, link `/` e as 9 áreas
-- [ ] Gate check passes: build
+- [x] Behaviors na ordem e com políticas/TTL/compress/Functions de MANIFEST §5 (atualizado por AD-020)
+- [x] Error responses 403→404 e 404→404 `/404.html` TTL 60; nenhuma com 200
+- [x] `ativar_dominios` false → sem aliases, certificado padrão; true → 2 aliases + ACM `sni-only`
+- [x] Policy do bucket: só `s3:GetObject` para `cloudfront.amazonaws.com` com `AWS:SourceArn` da distribuição
+- [x] `404.html` com `noindex`, link `/` e as 9 áreas
+- [x] Gate check passes: build
 
 **Tests**: integration, unit
 **Gate**: build

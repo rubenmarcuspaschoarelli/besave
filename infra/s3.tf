@@ -30,6 +30,24 @@ resource "aws_s3_bucket_lifecycle_configuration" "site" {
   }
 }
 
+# Só a distribuição nova lê, via OAC.
+resource "aws_s3_bucket_policy" "site" {
+  bucket = aws_s3_bucket.site.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "CloudFrontOAC"
+      Effect    = "Allow"
+      Principal = { Service = "cloudfront.amazonaws.com" }
+      Action    = "s3:GetObject"
+      Resource  = "${aws_s3_bucket.site.arn}/*"
+      Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.site.arn } }
+    }]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.site]
+}
+
 # Logs padrão do CloudFront exigem ACL no bucket.
 resource "aws_s3_bucket" "logs" {
   bucket = var.bucket_logs
