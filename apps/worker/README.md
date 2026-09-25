@@ -2,8 +2,12 @@
 
 Lê OFERTA/PRODUTO do Oracle e converte cada linha em `OfertaCard` e `OfertaPagina`
 (`docs/CONTRATO.md`). Linhas inválidas são rejeitadas com motivo (CONTRATO §9) e logadas.
-Nesta versão (BSV-10) só existe `--dry-run`: lê, converte e imprime contagens. Geração e
-publicação vêm em BSV-11 e BSV-12.
+
+- `--dry-run` (BSV-10): lê, converte e imprime contagens.
+- `--gerar --saida <dir>` (BSV-11): gera os chunks e o `manifest.json` numa pasta com o layout
+  do bucket (`docs/MANIFEST.md`). Upload para o S3 vem em BSV-12; páginas HTML em BSV-21.
+
+Um dos dois modos é obrigatório; eles são mutuamente exclusivos.
 
 ## Rodar com a fonte fake (sem banco)
 
@@ -24,6 +28,55 @@ rejeitadas: 7
   preco_por ausente ou <= 0: 1
   ...
 ```
+
+## Gerar chunks e manifest (`--gerar`)
+
+```sh
+cd apps/worker
+BESAVE_FONTE=fake cargo run -- --gerar --saida ./out
+```
+
+PowerShell: `$env:BESAVE_FONTE='fake'; cargo run -- --gerar --saida ./out`.
+
+Saída (a pasta espelha o bucket):
+
+```
+out/
+  manifest.json                         ← único arquivo mutável (MANIFEST §2)
+  manifest.json.meta.json
+  manifest.prev.json                    ← manifest da execução anterior
+  manifest.prev.json.meta.json
+  data/chunks/{n}-{hash}.json.br        ← OfertaCard[] do id n*1000 a n*1000+999, Brotli 9
+  data/chunks/{n}-{hash}.json.br.meta.json
+```
+
+- `hash` = 16 hex do SHA-256 do JSON antes da compressão. Chunk que já existe não é regravado.
+- `.meta.json` guarda os headers que o upload vai aplicar (MANIFEST §4):
+  `{"content_type":"application/json","content_encoding":"br","cache_control":"public, max-age=31536000, immutable"}`
+  nos chunks; no manifest, `content_encoding: null` e `public, max-age=300, stale-while-revalidate=60`.
+- Ordem: chunks → `manifest.prev.json` → `manifest.json`. Depois, remove de `data/chunks/` o que
+  não está no manifest novo nem no anterior (um chunk substituído dura mais um ciclo).
+- Chunk comprimido acima de 61 440 bytes: erro, nada é gravado.
+- Mesmas rejeições do `--dry-run` (card sem `id_produto` não é publicado: a página não existiria).
+
+Relatório no stdout:
+
+```
+lidas: 10
+validas: 3
+rejeitadas: 7
+  ...
+chunks_escritos: 1
+chunks_reaproveitados: 0
+chunks_removidos: 0
+bytes_totais: 265
+maior_chunk: n=5 bytes=265
+versao: 20260925160252
+tempo: 0.01s
+```
+
+As datas da fake de demonstração acompanham o relógio, então cada execução com ela regrava o
+chunk 5. Com a fonte parada (testes, Oracle sem mudança) a segunda execução grava 0 chunks.
 
 ## Rodar contra o Oracle
 
@@ -53,6 +106,8 @@ BESAVE_ORACLE_DSN=localhost:1521/XE BESAVE_ORACLE_USER=... BESAVE_ORACLE_PASS=..
   cargo run --release -- --dry-run
 ```
 
+Para gerar os arquivos, troque `--dry-run` por `--gerar --saida ./out`.
+
 O worker lê `OFERTA` e `PRODUTO` do schema do usuário conectado, com o filtro de publicação
 `ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7`. Não lê `DT_ULT_ATUALIZACAO`: funciona com ou
 sem a coluna. As colunas `DATE` são tratadas como hora local no offset `BESAVE_ORACLE_TZ` e
@@ -69,5 +124,6 @@ encerra com código ≠ 0 e a mensagem do Oracle, sem panic.
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-Os testes não tocam o Oracle. Usam `FakeFonte` e as fixtures de `packages/contract/fixtures/`
-como resultado esperado (JSON idêntico byte a byte, mesma ordem de chaves).
+Os testes não tocam o Oracle nem a AWS. Usam `FakeFonte`, `PublicadorMemoria` e as fixtures de
+`packages/contract/fixtures/` como resultado esperado (JSON idêntico byte a byte, mesma ordem de
+chaves); chunks e manifest gerados são validados contra `packages/contract/schema/`.

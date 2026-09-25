@@ -1,24 +1,33 @@
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
-use clap::Parser;
+use clap::{ArgGroup, Parser};
 use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao, para_pagina};
 use worker::fonte::{FakeFonte, FonteOfertas};
+use worker::geracao::gerar;
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
+use worker::publicador::PublicadorLocal;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
 #[command(version)]
+#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar"])))]
 struct Args {
     /// Lê a fonte, converte e imprime contagens; não gera nem publica nada.
     #[arg(long)]
     dry_run: bool,
+    /// Gera chunks e manifest.json em `--saida`, no layout do bucket.
+    #[arg(long, requires = "saida")]
+    gerar: bool,
+    /// Pasta de saída do `--gerar` (criada se não existir).
+    #[arg(long, requires = "gerar")]
+    saida: Option<PathBuf>,
     /// Caminho do mapeamento.json do contrato.
     #[arg(
         long,
@@ -36,18 +45,38 @@ fn main() -> Result<()> {
         .init();
 
     let args = Args::parse();
-    if !args.dry_run {
-        bail!("só --dry-run existe nesta versão (geração e publicação: BSV-11/12)");
-    }
     let m = Mapeamento::carregar(&args.mapeamento)?;
+    let agora = agora()?;
     let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
-        Ok("fake") => Box::new(fake_demo(agora()?)),
+        Ok("fake") => Box::new(fake_demo(agora)),
         Ok("oracle") | Err(_) => Box::new(
             OracleFonte::conectar(&ConfigOracle::do_env()?).context("conectando ao Oracle")?,
         ),
         Ok(outra) => bail!("BESAVE_FONTE inválida: {outra} (use oracle ou fake)"),
     };
-    dry_run(fonte.as_ref(), &m)
+    match args.saida {
+        Some(saida) if args.gerar => gerar_em(fonte.as_ref(), &m, saida, agora),
+        _ => dry_run(fonte.as_ref(), &m),
+    }
+}
+
+fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64) -> Result<()> {
+    let inicio = Instant::now();
+    let mut pub_ = PublicadorLocal::new(&saida);
+    let rel = gerar(fonte, m, &mut pub_, agora)
+        .with_context(|| format!("gerando em {}", saida.display()))?;
+    imprimir_contagens(rel.lidas, rel.validas, &rel.rejeitadas);
+    println!("chunks_escritos: {}", rel.chunks_escritos);
+    println!("chunks_reaproveitados: {}", rel.chunks_reaproveitados);
+    println!("chunks_removidos: {}", rel.chunks_removidos);
+    println!("bytes_totais: {}", rel.bytes_totais);
+    match rel.maior_chunk {
+        Some((n, bytes)) => println!("maior_chunk: n={n} bytes={bytes}"),
+        None => println!("maior_chunk: -"),
+    }
+    println!("versao: {}", rel.versao);
+    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
+    Ok(())
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {
@@ -67,13 +96,17 @@ fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {
             }
         }
     }
-    println!("lidas: {}", linhas.len());
+    imprimir_contagens(linhas.len() as u64, validas, &rejeitadas);
+    Ok(())
+}
+
+fn imprimir_contagens(lidas: u64, validas: u64, rejeitadas: &BTreeMap<Rejeicao, u64>) {
+    println!("lidas: {lidas}");
     println!("validas: {validas}");
     println!("rejeitadas: {}", rejeitadas.values().sum::<u64>());
-    for (r, n) in &rejeitadas {
+    for (r, n) in rejeitadas {
         println!("  {r}: {n}");
     }
-    Ok(())
 }
 
 fn agora() -> Result<i64> {
