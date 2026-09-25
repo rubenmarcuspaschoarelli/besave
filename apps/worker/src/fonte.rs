@@ -6,6 +6,8 @@ use crate::conversao::{LinhaOferta, LinhaProduto};
 pub enum ErroFonte {
     #[error("variável de ambiente {0} ausente")]
     ConfigAusente(&'static str),
+    #[error("oracle: {0}")]
+    Oracle(#[from] oracle::Error),
 }
 
 pub type Result<T, E = ErroFonte> = std::result::Result<T, E>;

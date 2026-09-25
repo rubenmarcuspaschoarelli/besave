@@ -139,8 +139,8 @@ com implementação Oracle e fake, e a conversão linha → `OfertaCard`/`Oferta
 | CONV-12 | P1: Conversão | T1 | Implemented |
 | FONTE-01 | P1: Fonte | T5 | Implemented |
 | FONTE-02 | P1: Fonte | T5 | Implemented |
-| FONTE-03 | P1: Fonte | Tasks | Pending |
-| FONTE-04 | P1: Fonte | Tasks | Pending |
+| FONTE-03 | P1: Fonte | T6 | Implemented |
+| FONTE-04 | P1: Fonte | T6 | Implemented |
 | DRY-01 | P1: Dry-run | Tasks | Pending |
 | DRY-02 | P1: Dry-run | Tasks | Pending |
 

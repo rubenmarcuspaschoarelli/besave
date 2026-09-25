@@ -202,9 +202,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Variável de conexão ausente → erro com o nome da variável
-- [ ] Compila sem Instant Client (ODPI-C carrega OCI em runtime)
-- [ ] Gate check passes: `cargo test`
+- [x] Variável de conexão ausente → erro com o nome da variável
+- [x] Compila sem Instant Client (ODPI-C carrega OCI em runtime)
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
