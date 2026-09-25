@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: `design.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -227,9 +227,9 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] README cobre todos os itens de OPS-03
-- [ ] MANIFEST §5 linha 6 = 403/404 → 404 `/404.html`, sem fallback SPA
-- [ ] Gate check passes: build
+- [x] README cobre todos os itens de OPS-03
+- [x] MANIFEST §5 linha 6 = 403/404 → 404 `/404.html`, sem fallback SPA
+- [x] Gate check passes: build
 
 **Tests**: none
 **Gate**: build
