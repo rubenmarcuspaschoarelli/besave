@@ -6,6 +6,8 @@ use crate::conversao::{LinhaOferta, LinhaProduto};
 pub enum ErroFonte {
     #[error("variável de ambiente {0} ausente")]
     ConfigAusente(&'static str),
+    #[error("variável de ambiente {0} inválida: {1}")]
+    ConfigInvalida(&'static str, String),
     #[error("oracle: {0}")]
     Oracle(#[from] oracle::Error),
 }

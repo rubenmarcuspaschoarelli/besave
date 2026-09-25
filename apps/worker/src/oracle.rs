@@ -1,6 +1,6 @@
 //! `FonteOfertas` sobre Oracle XE 11.2 (crate `oracle`, OCI via Instant Client ≥ 19).
 
-use oracle::{Connection, Row};
+use oracle::{Connection, InitParams, Row};
 
 use crate::conversao::{LinhaOferta, LinhaProduto};
 use crate::fonte::{ErroFonte, FonteOfertas, Result};
@@ -14,8 +14,13 @@ pub struct ConfigOracle {
     pub dsn: String,
     pub usuario: String,
     senha: String,
-    /// `BESAVE_ORACLE_TZ`, opcional.
+    /// `BESAVE_ORACLE_TZ`, opcional, formato `±HH:MM`.
     pub fuso: String,
+    /// `fuso` em segundos (`-03:00` → `-10800`).
+    pub fuso_segundos: i64,
+    /// `BESAVE_ORACLE_CLIENT_DIR`, opcional: pasta do Instant Client; se definida, o `PATH`
+    /// não é consultado.
+    pub client_dir: Option<String>,
 }
 
 impl ConfigOracle {
@@ -24,50 +29,66 @@ impl ConfigOracle {
     }
 
     pub fn de(env: impl Fn(&str) -> Option<String>) -> Result<Self> {
-        let obrig = |k: &'static str| {
-            env(k)
-                .filter(|v| !v.is_empty())
-                .ok_or(ErroFonte::ConfigAusente(k))
-        };
+        let opc = |k: &str| env(k).filter(|v| !v.is_empty());
+        let obrig = |k: &'static str| opc(k).ok_or(ErroFonte::ConfigAusente(k));
+        let fuso = opc("BESAVE_ORACLE_TZ").unwrap_or_else(|| FUSO_PADRAO.to_owned());
+        let fuso_segundos = offset_segundos(&fuso).ok_or_else(|| {
+            ErroFonte::ConfigInvalida("BESAVE_ORACLE_TZ", format!("{fuso:?}, esperado ±HH:MM"))
+        })?;
         Ok(Self {
             dsn: obrig("BESAVE_ORACLE_DSN")?,
             usuario: obrig("BESAVE_ORACLE_USER")?,
             senha: obrig("BESAVE_ORACLE_PASS")?,
-            fuso: env("BESAVE_ORACLE_TZ")
-                .filter(|v| !v.is_empty())
-                .unwrap_or_else(|| FUSO_PADRAO.to_owned()),
+            fuso,
+            fuso_segundos,
+            client_dir: opc("BESAVE_ORACLE_CLIENT_DIR"),
         })
     }
+}
+
+/// `±HH:MM` → segundos. Só offset: nome de região exigiria o arquivo de fuso do servidor.
+fn offset_segundos(s: &str) -> Option<i64> {
+    let (sinal, resto) = match s.as_bytes().first()? {
+        b'+' => (1, &s[1..]),
+        b'-' => (-1, &s[1..]),
+        _ => return None,
+    };
+    let (h, m) = resto.split_once(':')?;
+    if h.len() != 2 || m.len() != 2 || !(h.bytes().chain(m.bytes()).all(|b| b.is_ascii_digit())) {
+        return None;
+    }
+    let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
+    (h <= 14 && m < 60).then_some(sinal * (h * 3600 + m * 60))
 }
 
 pub struct OracleFonte {
     conn: Connection,
-    fuso: String,
+    fuso_segundos: i64,
 }
 
 impl OracleFonte {
     pub fn conectar(cfg: &ConfigOracle) -> Result<Self> {
+        if let Some(dir) = &cfg.client_dir {
+            InitParams::new().oracle_client_lib_dir(dir)?.init()?;
+        }
         let conn = Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?;
         Ok(Self {
             conn,
-            fuso: cfg.fuso.clone(),
+            fuso_segundos: cfg.fuso_segundos,
         })
     }
 }
 
-/// DATE local → segundos Unix UTC.
+/// DATE local → segundos Unix UTC. Só aritmética de DATE: `FROM_TZ`/`SYS_EXTRACT_UTC`
+/// dão ORA-01882 com Instant Client 19 no XE 11.2.
 macro_rules! epoch_utc {
     ($col:literal) => {
-        concat!(
-            "ROUND((CAST(SYS_EXTRACT_UTC(FROM_TZ(CAST(",
-            $col,
-            " AS TIMESTAMP), :tz)) AS DATE) - DATE '1970-01-01') * 86400)"
-        )
+        concat!("ROUND((", $col, " - DATE '1970-01-01') * 86400) - :desloc")
     };
 }
 
 /// Query de publicação (CONTRATO §7). `DT_ULT_ATUALIZACAO` não é lida.
-const SQL_OFERTAS: &str = concat!(
+pub const SQL_OFERTAS: &str = concat!(
     "SELECT ID_OFERTA, ID_PRODUTO, DS_LOJA, DS_TITULO, VL_PRECO_DE, VL_PRECO_POR, DS_CUPOM, ",
     "NR_NOTA_AVALIACAO, QT_AVALIACAO, ",
     epoch_utc!("DT_OFERTA"),
@@ -82,7 +103,9 @@ const SQL_PRODUTO: &str = "SELECT ID_PRODUTO, DS_DESCRICAO_PRODUTO, DS_MARCA, DS
 
 impl FonteOfertas for OracleFonte {
     fn ofertas(&self) -> Result<Vec<LinhaOferta>> {
-        let linhas = self.conn.query_named(SQL_OFERTAS, &[("tz", &self.fuso)])?;
+        let linhas = self
+            .conn
+            .query_named(SQL_OFERTAS, &[("desloc", &self.fuso_segundos)])?;
         linhas.map(|r| linha_oferta(&r?)).collect()
     }
 
