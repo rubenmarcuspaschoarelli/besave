@@ -69,9 +69,9 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `/` → `/index.html`; `/oferta/1/` → `/oferta/1/index.html`; `/beleza` → `/beleza/index.html`; `/a.b/c` → `/a.b/c/index.html`
-- [ ] `/manifest.json`, `/_app/x.js` intactos
-- [ ] Gate check passes: `npm ci && npm test`
+- [x] `/` → `/index.html`; `/oferta/1/` → `/oferta/1/index.html`; `/beleza` → `/beleza/index.html`; `/a.b/c` → `/a.b/c/index.html`
+- [x] `/manifest.json`, `/_app/x.js` intactos
+- [x] Gate check passes: `npm ci && npm test`
 
 **Tests**: unit
 **Gate**: quick

@@ -163,9 +163,9 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| FN-01 | P1: Functions | T1 | Pending |
-| FN-02 | P1: Functions | T1 | Pending |
-| FN-03 | P1: Functions | T1 | Pending |
+| FN-01 | P1: Functions | T1 | Implemented |
+| FN-02 | P1: Functions | T1 | Implemented |
+| FN-03 | P1: Functions | T1 | Implemented |
 | FN-04 | P1: Functions | T2 | Pending |
 | FN-05 | P1: Functions | T2 | Pending |
 | FN-06 | P1: Functions | T2 | Pending |
