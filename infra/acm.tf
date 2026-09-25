@@ -7,8 +7,10 @@ resource "aws_acm_certificate" "site" {
   subject_alternative_names = ["www.${var.dominio}"]
   validation_method         = "DNS"
 
+  # Mesmo registro/certificado que a produção vai usar na virada: destroy acidental derruba o TLS.
   lifecycle {
     create_before_destroy = true
+    prevent_destroy       = true
   }
 }
 
@@ -23,6 +25,11 @@ resource "aws_route53_record" "validacao_acm" {
   records         = [one([for o in aws_acm_certificate.site.domain_validation_options : o.resource_record_value if o.domain_name == each.key])]
   ttl             = 300
   allow_overwrite = true
+
+  # O registro pode ser o mesmo do certificado atual (allow_overwrite): apagar quebra a renovação dele.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_acm_certificate_validation" "site" {

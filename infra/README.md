@@ -89,7 +89,9 @@ nova nasce sem aliases e com o certificado `*.cloudfront.net`. Na virada:
 
 - **Registros de validação ACM** usam `allow_overwrite`: o CNAME de validação é o mesmo para o mesmo
   domínio na mesma conta, e o certificado atual pode já tê-lo criado. O Terraform passa a gerenciar
-  esse registro; `terraform destroy` o apagaria e quebraria a renovação do certificado antigo.
+  esse registro. Por isso ele e o certificado ACM têm `prevent_destroy = true`: `terraform destroy`
+  (ou um plan que os recrie) falha em vez de apagar e quebrar a renovação do certificado antigo.
+  Para destruir de propósito, remova o `prevent_destroy` num commit explícito.
 - **Bucket de logs** usa ACL (`BucketOwnerPreferred`) porque o log padrão do CloudFront exige; o
   CloudFront dá a si mesmo a permissão de escrita na criação da distribuição.
 - **KVS** limita 5 MB (~45k ofertas ativas, MANIFEST §5). O Terraform cria a store vazia; o worker popula.

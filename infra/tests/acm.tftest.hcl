@@ -31,3 +31,20 @@ run "acm" {
     error_message = "validação deve esperar os 2 registros"
   }
 }
+
+run "protecao_contra_destroy" {
+  command = plan
+  module {
+    source = "./tests/inspecao"
+  }
+
+  # CF-13
+  assert {
+    condition     = output.prevent_destroy["aws_acm_certificate.site"] && output.prevent_destroy["aws_route53_record.validacao_acm"]
+    error_message = "certificado e registros de validação devem ter prevent_destroy = true"
+  }
+  assert {
+    condition     = !output.prevent_destroy["aws_s3_bucket.site"]
+    error_message = "inspeção deve distinguir recurso sem prevent_destroy"
+  }
+}

@@ -188,7 +188,7 @@ ar, sem tocar em `besave.com.br` (bucket) nem em `E28G93A17WHHD`.
 | CF-10 | P1: Distribuição | T4 | Implemented |
 | CF-11 | P1: Distribuição | T5 | Implemented |
 | CF-12 | P1: Distribuição | T5 | Implemented |
-| CF-13 | P1: Distribuição | T9 | Pending |
+| CF-13 | P1: Distribuição | T9 | Implemented |
 | IAM-01 | P1: IAM | T6 | Implemented |
 | IAM-02 | P1: IAM | T6 | Implemented |
 | IAM-03 | P1: IAM | T6 | Implemented |

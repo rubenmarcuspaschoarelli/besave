@@ -285,8 +285,8 @@ T8 → T9 → T10 → T11
 
 **Done when**:
 
-- [ ] os dois recursos com `prevent_destroy = true`
-- [ ] Gate check passes: build
+- [x] os dois recursos com `prevent_destroy = true`
+- [x] Gate check passes: build
 
 **Tests**: integration
 **Gate**: build
