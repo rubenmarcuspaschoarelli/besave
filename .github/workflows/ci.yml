@@ -98,10 +98,13 @@ jobs:
     defaults: { run: { working-directory: infra } }
     steps:
       - uses: actions/checkout@v4
+      # Versão fixa: 1.16.4 dá panic ao renderizar a asserção de ACL em falha (infra/tests/buckets.tftest.hcl).
       - uses: hashicorp/setup-terraform@v3
+        with: { terraform_version: "1.16.4" }
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false
       - run: terraform validate
+      - run: terraform test
       - id: node
         run: test -f functions/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
       - if: steps.node.outputs.ok == 'true'

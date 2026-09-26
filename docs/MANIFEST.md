@@ -113,7 +113,12 @@ continuam servindo o protótipo até a virada de DNS.
 | 3 | `/data/*` | TTL 1 ano, chave = path | não (pré-br) | — |
 | 4 | `/img/*` | TTL 1 ano, chave = path | não | — |
 | 5 | `/oferta/*` | TTL padrão 600 | gzip+br | Function `rewrite-index`: `/oferta/x/` → `/oferta/x/index.html` |
-| 6 | default `*` | TTL padrão 300 | gzip+br | Function `rewrite-index` + fallback SPA: 403/404 do S3 → `/index.html` 200 **só** para rotas sem extensão (não para `/oferta/*`, que deve dar 404 real) |
+| 6 | default `*` | TTL padrão 300 | gzip+br | Function `rewrite-index`. Sem fallback SPA (AD-020): o site não tem rota client-side |
+
+Erros (valem para a distribuição inteira): 403 e 404 do S3 → **404** com `/404.html`, TTL de erro 60 s.
+Com OAC o S3 devolve 403 para objeto inexistente; o visitante sempre vê 404. Nenhuma error response
+devolve 200 — chunk ausente em `/data/*` precisa falhar como 404. O deploy do site sempre publica
+`/404.html` (`noindex`); SvelteKit adapter-static com fallback desabilitado.
 
 KeyValueStore do CloudFront: limite 5 MB por store; 30k entradas de `id → url curta`
 (~90 B cada) ≈ 2,7 MB. Cabe hoje; **não cabe se dobrar** — acima de ~45k ofertas ativas,
