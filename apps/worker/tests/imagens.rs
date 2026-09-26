@@ -131,10 +131,13 @@ fn copia_direta_dentro_do_orcamento() {
     let grande = bytes_webp(90_000);
     escrever_origem(&dir, 5412, &pequena, &grande);
 
+    let bytes_esperados = (pequena.len() + grande.len()) as u64;
     let mut p = PublicadorMemoria::new();
     let rel = publicar_imagens(&[5412], &dir, &mut p).unwrap();
 
     assert_eq!(rel.publicadas, 1);
+    // Fix (validation.md, 2ª rodada): `bytes` soma os tamanhos publicados, não fica em 0.
+    assert_eq!(rel.bytes, bytes_esperados);
     assert_eq!(p.ler(&chave_small(5412)).unwrap(), Some(pequena));
     assert_eq!(p.ler(&chave_grande(5412)).unwrap(), Some(grande));
     assert_eq!(p.meta(&chave_small(5412)), Some(META_IMAGEM));

@@ -258,6 +258,10 @@ T5 → T6 → T7
 - [x] `PublicadorLocal`/`PublicadorMemoria` inalterados (sequencial, via `imagens::publicar_imagens`)
 - [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
+**Fix (2ª rodada do Verifier)**: `RelatorioImagens.bytes` (campo citado na AC de GER-02) nunca era
+asserido num valor real (mutante: zerar o acumulador não quebrava nenhum teste); adicionado
+`assert_eq!(rel.bytes, ...)` em `copia_direta_dentro_do_orcamento`.
+
 **Fix (1ª rodada do Verifier, pós-T7)**: 5 gaps corrigidos num commit `test(worker)` dedicado —
 (1) edge case "small oversized + grande inválida → dual reprocessadas+falhas" era estruturalmente
 impossível (checagem de assinatura roda antes do ramo de orçamento com `continue` antecipado);
