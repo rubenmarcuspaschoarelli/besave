@@ -97,3 +97,8 @@ Worktree temporário em `HEAD` (`git worktree add --detach`), `CARGO_TARGET_DIR`
   - ativa `/oferta/5412/`: Performance 100 · Acessibilidade 100 · Best Practices 79 · SEO 100 (FCP/LCP 1,3 s, TBT 0 ms, CLS 0)
   - encerrada `/oferta/5413/`: Performance 100 · Acessibilidade 100 · Best Practices 79 · SEO 66 (`is-crawlable`: `noindex` exigido pela spec)
   - Best Practices 79 = HTTP local (`is-on-https`) + erro de console da request bloqueada; some em HTTPS no CloudFront.
+
+Arquivos em `.specs/features/BSV-20/evidencias/`: `ativa-mobile-360.png`, `ativa-desktop-1280.png`,
+`encerrada-mobile-360.png`, `encerrada-desktop-1280.png`, `lighthouse-ativa-mobile.html`,
+`lighthouse-encerrada-mobile.html`. Nos relatórios, o GUID da instalação e o token `attr=` da URL
+bloqueada do antivírus foram trocados por `REDACTED` (repositório público); nenhuma métrica muda.
