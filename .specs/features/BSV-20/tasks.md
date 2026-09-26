@@ -64,8 +64,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Teste compara `areas.json` com a tabela de CONTRATO §2.3 e com a ordem de `enums.schema.json`
-- [ ] Gate check passes: `cargo test`
+- [x] Teste compara `areas.json` com a tabela de CONTRATO §2.3 e com a ordem de `enums.schema.json`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
