@@ -37,6 +37,38 @@ pub enum Area {
     Outros,
 }
 
+impl Area {
+    /// Todas as variantes, na ordem de declaração (mesma de `manifest.areas` e do enum do schema).
+    pub const TODAS: [Area; 10] = [
+        Area::Tech,
+        Area::Players,
+        Area::MeuLar,
+        Area::Elas,
+        Area::Eles,
+        Area::Cultura,
+        Area::Familia,
+        Area::Pets,
+        Area::EsporteVida,
+        Area::Outros,
+    ];
+
+    /// Chave de arquivo do placeholder (BSV-13): mesmo texto do serde (`"TECH"`, `"MEU_LAR"`, …).
+    pub fn chave_area(&self) -> &'static str {
+        match self {
+            Area::Tech => "TECH",
+            Area::Players => "PLAYERS",
+            Area::MeuLar => "MEU_LAR",
+            Area::Elas => "ELAS",
+            Area::Eles => "ELES",
+            Area::Cultura => "CULTURA",
+            Area::Familia => "FAMILIA",
+            Area::Pets => "PETS",
+            Area::EsporteVida => "ESPORTE_VIDA",
+            Area::Outros => "OUTROS",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum Status {

@@ -109,11 +109,11 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `chave_small(5412)` == `"img/ofertas/5412-small.webp"`; `chave_grande(5412)` == `"img/ofertas/5412.webp"`
-- [ ] `origem(dir, 5412)` == `(dir/5412/5412-small.webp, dir/5412/5412.webp)`
-- [ ] Função de assinatura (`e_webp(bytes: &[u8]) -> bool`) testada com bytes válidos e inválidos (vazio, JPEG, `RIFF` sem `WEBP`)
-- [ ] `Area::chave_area()` cobre as 10 variantes (teste tabular reaproveitando a lista de `enums.schema.json`)
-- [ ] Gate check passes: `cargo test`
+- [x] `chave_small(5412)` == `"img/ofertas/5412-small.webp"`; `chave_grande(5412)` == `"img/ofertas/5412.webp"`
+- [x] `origem(dir, 5412)` == `(dir/5412/5412-small.webp, dir/5412/5412.webp)`
+- [x] Função de assinatura (`e_webp(bytes: &[u8]) -> bool`) testada com bytes válidos e inválidos (vazio, JPEG, `RIFF` sem `WEBP`)
+- [x] `Area::chave_area()` cobre as 10 variantes (teste tabular reaproveitando a lista de `enums.schema.json`)
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
