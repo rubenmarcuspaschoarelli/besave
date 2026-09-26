@@ -42,7 +42,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ### Phase 1: Template
 
 ```
-T1 → T2 → T3 → T4
+T1 → T2 → T3 → T4 → T5
 ```
 
 ---
@@ -147,3 +147,28 @@ T1 → T2 → T3 → T4
 **Gate**: build
 
 **Commit**: `feat(worker): add render-oferta dev binary and golden pages`
+
+---
+
+### T5: Colunas da grade sem largura mínima implícita
+
+**What**: `minmax(0, 1fr)` nas grades de `.oferta` e `.compra`, `min-width: 0` no menu; rodapé alinhado ao conteúdo no desktop. Achado da inspeção visual a 360 px (o menu `nowrap` podia alargar o documento).
+**Where**: `apps/worker/assets/css/besave.css`
+**Depends on**: T4
+**Reuses**: NONE
+**Requirement**: TAB-02
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [x] A 360 px (puppeteer, `isMobile`): `scrollWidth == clientWidth == 360` nas duas páginas; a 1280 px o painel fica à direita da foto
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**Tests**: none
+**Gate**: build
+
+**Commit**: `fix(worker): keep offer page grid within narrow viewports`
