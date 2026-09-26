@@ -1,3 +1,6 @@
+// Runtime cloudfront-js-2.0 é um subconjunto do JS: `await` não pode ser argumento de função
+// ("await in arguments not supported"). Atribua a uma variável antes. Rode `aws cloudfront
+// test-function` após qualquer mudança; os testes Node não emulam o runtime.
 import cf from 'cloudfront';
 
 // viewer-request em /ir/*: /ir/{id} → 302 para a URL da KVS; ausente ou inválido → 302 /.
@@ -20,7 +23,8 @@ async function handler(event) {
     return redirecionar('/');
   }
   try {
-    return redirecionar(await kvs.get(id));
+    const url = await kvs.get(id);
+    return redirecionar(url);
   } catch (e) {
     return redirecionar('/');
   }
