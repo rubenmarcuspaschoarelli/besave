@@ -1,12 +1,38 @@
-//! CHV-01, CHV-02, CPY-01, CPY-02: chaves, origem e cópia direta das imagens de oferta (BSV-13).
+//! CHV-01, CHV-02, CPY-01, CPY-02, ORC-01..03: chaves, cópia e orçamento das imagens (BSV-13).
 
 use std::path::{Path, PathBuf};
 
+use image::ImageEncoder;
 use worker::imagens::{
-    MotivoFalhaImagem, chave_grande, chave_small, e_webp, origem, publicar_imagens,
+    AVISO_GRANDE, LADO_SMALL, MotivoFalhaImagem, ORCAMENTO_SMALL, ajustar_small, chave_grande,
+    chave_small, e_webp, origem, publicar_imagens,
 };
 use worker::modelo::Area;
 use worker::publicador::{META_IMAGEM, Publicador, PublicadorMemoria};
+
+/// Imagem WebP sem perdas com pixels pseudoaleatórios (comprime mal, fica bem maior que o
+/// orçamento de 25 600 B mesmo em resoluções pequenas), para exercitar a recodificação.
+fn webp_ruido(largura: u32, altura: u32) -> Vec<u8> {
+    let mut img = image::RgbaImage::new(largura, altura);
+    let mut x: u64 = 0x2545_F491_4F6C_DD1D;
+    for pixel in img.pixels_mut() {
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        let b = x.to_le_bytes();
+        *pixel = image::Rgba([b[0], b[1], b[2], 255]);
+    }
+    let mut saida = Vec::new();
+    image::codecs::webp::WebPEncoder::new_lossless(&mut saida)
+        .write_image(
+            img.as_raw(),
+            largura,
+            altura,
+            image::ExtendedColorType::Rgba8,
+        )
+        .unwrap();
+    saida
+}
 
 /// Pasta temporária isolada por teste (nunca reaproveitada entre execuções).
 fn dir_temp(nome: &str) -> PathBuf {
@@ -132,4 +158,56 @@ fn arquivo_nao_webp_vira_falha_e_o_loop_continua() {
     assert_eq!(rel.publicadas, 1);
     assert!(p.existe(&chave_small(5414)).unwrap());
     assert!(p.existe(&chave_grande(5414)).unwrap());
+}
+
+/// ORC-01: `ajustar_small` devolve WebP válido, dentro do orçamento e com o lado maior ≤ 320 px.
+#[test]
+fn ajustar_small_cabe_no_orcamento_e_no_lado_maximo() {
+    let origem = webp_ruido(400, 400);
+    assert!(
+        origem.len() > ORCAMENTO_SMALL,
+        "fixture não ficou grande o bastante: {} B",
+        origem.len()
+    );
+
+    let ajustada = ajustar_small(&origem).unwrap();
+
+    assert!(e_webp(&ajustada));
+    assert!(ajustada.len() <= ORCAMENTO_SMALL, "{} B", ajustada.len());
+    let decodificada =
+        image::load_from_memory_with_format(&ajustada, image::ImageFormat::WebP).unwrap();
+    assert!(decodificada.width().max(decodificada.height()) <= LADO_SMALL);
+}
+
+/// ORC-02: `-small.webp` acima do orçamento é recodificado e contado em `reprocessadas`.
+#[test]
+fn small_acima_do_orcamento_e_recodificado_e_contado() {
+    let dir = dir_temp("reprocessada");
+    let small_grande_demais = webp_ruido(400, 400);
+    assert!(small_grande_demais.len() > ORCAMENTO_SMALL);
+    escrever_origem(&dir, 6000, &small_grande_demais, &bytes_webp(1_000));
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[6000], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.reprocessadas, 1);
+    assert_eq!(rel.publicadas, 1);
+    let publicado = p.ler(&chave_small(6000)).unwrap().unwrap();
+    assert!(publicado.len() <= ORCAMENTO_SMALL);
+    assert_ne!(publicado, small_grande_demais);
+}
+
+/// ORC-03: imagem grande acima de 300 000 B publica sem alteração; `maior_grande` reflete o
+/// maior tamanho publicado na execução.
+#[test]
+fn imagem_grande_acima_do_aviso_publica_sem_alteracao() {
+    let dir = dir_temp("grande-acima-do-aviso");
+    let grande = bytes_webp(AVISO_GRANDE + 50_000);
+    escrever_origem(&dir, 7000, &bytes_webp(1_000), &grande);
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[7000], &dir, &mut p).unwrap();
+
+    assert_eq!(p.ler(&chave_grande(7000)).unwrap(), Some(grande.clone()));
+    assert_eq!(rel.maior_grande, grande.len() as u64);
 }

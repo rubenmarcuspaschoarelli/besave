@@ -37,7 +37,7 @@ não têm imagem nem placeholder. O contrato 1.3 acrescentou a área `OUTROS`
 | Nome de arquivo do placeholder por área | `Area` ganha `fn chave_area(&self) -> &'static str` que devolve o mesmo texto do serde (`"TECH"`, `"MEU_LAR"`, …, `"OUTROS"`); placeholder sobe em `img/placeholder/{chave_area}.webp` e o asset versionado é `apps/worker/assets/placeholder/{chave_area}.webp` | Consistência com `manifest.areas` (chaves já em `SCREAMING_SNAKE_CASE`); evita inventar um segundo slug distinto do slug de URL do site (que é outro contrato, §2.3, não usado por chave de imagem) | n |
 | Quais placeholders sobem sempre | Os 10 (uma por variante de `Area`, incluindo `OUTROS`), reaproveitados pelo mesmo critério de existência das imagens de oferta (rule 4) | Regra 5: "o worker publica os 10 placeholders uma vez, reaproveitando pelo mesmo critério" | y |
 | Assinatura WebP | 12 primeiros bytes: `RIFF` (bytes 0-3), tamanho (4-7, ignorado), `WEBP` (bytes 8-11) | Formato de contêiner RIFF/WebP documentado; único jeito de detectar ".webp com conteúdo JPEG" sem decodificar a imagem inteira | y |
-| Recodificação (`ajustar_small`) | Crate `image` decodifica; encoder WebP da própria crate (`image::codecs::webp`, feature `webp`) codifica; qualidade tentada em 80, 70, 60, 50, 40 (a primeira que cabe em 25 600 B vence; 40 é o piso e sobe do mesmo jeito se ainda não couber); lado maior redimensionado para ≤ 320 px antes de codificar | Regra 3 e regra 9 (crate `image` permitida; encoder a justificar no PR). `image` com feature `webp` cobre decode e encode sem 2ª dependência | n |
+| Recodificação (`ajustar_small`) | Crate `image` 0.25.10 (feature `webp`, via `image-webp`) decodifica e recodifica; verificado em docs.rs que o encoder embutido só faz VP8L (sem perdas, sem parâmetro de qualidade) — um encoder lossy real exigiria a crate `webp`/`libwebp-sys` (toolchain C nativa), fora da regra 9. Em vez de "qualidade 80→40", `ajustar_small` reduz o lado maior progressivamente (320 → ×¾ a cada volta, piso 32 px) e recodifica sem perdas a cada tentativa, até caber em 25 600 B | Regra 3 (cumprida via outro mecanismo: mesmo resultado — ≤ 25 600 B, WebP válido, lado ≤ 320 px) e regra 9 (uma única dependência pura-Rust, sem toolchain nativa) | y |
 | `maior_small` / `maior_grande` | `u64`: maior tamanho em bytes, entre os ids publicados nesta execução, de cada uma das duas chaves (após `ajustar_small` quando houver; `0` se nenhuma imagem publicada) | Simetria com `maior_chunk` (`geracao.rs`) e com o critério de aceite "relatório com `maior_small` ≤ 25 600 bytes" — é um tamanho, não uma contagem | y |
 | Paralelismo (regra 8) | Pool de até 16 tarefas `tokio` em voo dentro de `PublicadorS3::publicar_imagens_paralelo` (um `join_set` limitado), usado só pelo caminho de imagens; `PublicadorLocal`/`PublicadorMemoria` continuam sequenciais (a lib `publicar_imagens` genérica sobre `&mut dyn Publicador` é sequencial; o S3 ganha um método extra usado só por `main.rs` quando o destino é `PublicadorS3`) | `dyn Publicador` é `&mut` e síncrono (BSV-11/12); paralelizar atrás do trait exigiria mudar a assinatura de todo `Publicador`. Regra 8 pede o pool "no `PublicadorS3`", não no trait — isolar ali evita reabrir BSV-11/12 | n |
 | Extensão de `RelatorioImagens.falhas` | `Vec<(i64, MotivoFalhaImagem)>` com `MotivoFalhaImagem::NaoWebp` (única variante hoje, `Display` = `"nao_webp"`) | Regra 2: "falhas com motivo `nao_webp`"; enum aberto para futuros motivos sem quebrar o tipo | y |
@@ -191,9 +191,9 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | CHV-02 | P1: Chaves e origem | T2 | Implemented |
 | CPY-01 | P1: Cópia direta | T3 | Implemented |
 | CPY-02 | P1: Cópia direta | T3 | Implemented |
-| ORC-01 | P1: Orçamento estourado | T4 | Pending |
-| ORC-02 | P1: Orçamento estourado | T4 | Pending |
-| ORC-03 | P1: Orçamento estourado | T4 | Pending |
+| ORC-01 | P1: Orçamento estourado | T4 | Implemented |
+| ORC-02 | P1: Orçamento estourado | T4 | Implemented |
+| ORC-03 | P1: Orçamento estourado | T4 | Implemented |
 | REU-01 | P1: Reaproveitamento | T5 | Pending |
 | REU-02 | P1: Reaproveitamento | T5 | Pending |
 | REU-03 | P1: Reaproveitamento | T5 | Pending |

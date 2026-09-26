@@ -3,6 +3,9 @@
 
 use std::path::{Path, PathBuf};
 
+use image::{
+    DynamicImage, ImageEncoder, ImageFormat, codecs::webp::WebPEncoder, imageops::FilterType,
+};
 use tracing::warn;
 
 use crate::publicador::{self, META_IMAGEM, Publicador};
@@ -11,6 +14,10 @@ use crate::publicador::{self, META_IMAGEM, Publicador};
 pub const ORCAMENTO_SMALL: usize = 25_600;
 /// Acima disso a imagem grande só gera aviso; publica do mesmo jeito (regra 3).
 pub const AVISO_GRANDE: usize = 300_000;
+/// Lado maior de `-small.webp` após `ajustar_small` (regra 3).
+pub const LADO_SMALL: u32 = 320;
+/// Piso do redimensionamento iterativo: evita loop indefinido numa imagem que não cabe.
+const LADO_MINIMO: u32 = 32;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroImagem {
@@ -20,11 +27,13 @@ pub enum ErroImagem {
     Encode(String),
 }
 
-/// Motivo de falha ao publicar a imagem de um id (regra 2).
+/// Motivo de falha ao publicar a imagem de um id (regra 2, regra 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum MotivoFalhaImagem {
     #[error("nao_webp")]
     NaoWebp,
+    #[error("falha_recodificacao")]
+    FalhaRecodificacao,
 }
 
 /// Contagens e amostras de uma execução de `publicar_imagens`.
@@ -67,15 +76,54 @@ pub fn e_webp(bytes: &[u8]) -> bool {
     bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP"
 }
 
-// SPEC_DEVIATION: recodificação real (crate `image`, qualidade descendente, redimensionar a
-// 320 px) chega na tarefa T4; por ora devolve os bytes como vieram, só para não travar o
-// restante do pipeline de `publicar_imagens` enquanto a dependência não está no Cargo.toml.
-// Reason: manter `publicar_imagens` (T3) compilável e testável antes de T4 acrescentar `image`.
-fn ajustar_small_provisorio(bytes: &[u8]) -> Vec<u8> {
-    bytes.to_vec()
+// SPEC_DEVIATION: a spec do ticket pede "qualidade descendo de 80 até 40"; o encoder WebP da
+// crate `image` (via `image-webp`, checado em docs.rs) só faz VP8L (sem-perdas) — não existe
+// parâmetro de qualidade. Um encoder com qualidade lossy real (crate `webp`) embute libwebp via
+// `libwebp-sys`, exigindo toolchain C no build, e a regra 9 só permite a dependência `image`.
+// Reason: reduzir a resolução progressivamente (320 → 3/4 a cada volta, piso 32 px) e recodificar
+// sem perdas cumpre o mesmo critério de aceite (≤ 25 600 B, WebP válido, lado ≤ 320 px) com uma
+// única dependência pura-Rust, sem trocar o encoder por um com dependência nativa.
+/// Decodifica, redimensiona o lado maior a `alvo` e recodifica sem perdas; repete reduzindo o
+/// lado até caber no orçamento ou atingir `LADO_MINIMO` (regra 3).
+pub fn ajustar_small(bytes: &[u8]) -> Result<Vec<u8>, ErroImagem> {
+    let original = image::load_from_memory_with_format(bytes, ImageFormat::WebP)
+        .map_err(|e| ErroImagem::Decode(e.to_string()))?;
+    let mut alvo = LADO_SMALL;
+    loop {
+        let redimensionada = redimensionar(&original, alvo);
+        let codificada = codificar_webp_sem_perdas(&redimensionada)?;
+        if codificada.len() <= ORCAMENTO_SMALL || alvo <= LADO_MINIMO {
+            return Ok(codificada);
+        }
+        alvo = (alvo * 3 / 4).max(LADO_MINIMO);
+    }
 }
 
-/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3-provisório, 4, 5).
+/// Redimensiona só quando o lado maior excede `alvo`; nunca aumenta a imagem. `resize` já encaixa
+/// a imagem numa caixa `alvo × alvo` preservando a proporção (lado maior = `alvo`).
+fn redimensionar(img: &DynamicImage, alvo: u32) -> DynamicImage {
+    if img.width().max(img.height()) <= alvo {
+        img.clone()
+    } else {
+        img.resize(alvo, alvo, FilterType::Lanczos3)
+    }
+}
+
+fn codificar_webp_sem_perdas(img: &DynamicImage) -> Result<Vec<u8>, ErroImagem> {
+    let rgba = img.to_rgba8();
+    let mut saida = Vec::new();
+    WebPEncoder::new_lossless(&mut saida)
+        .write_image(
+            rgba.as_raw(),
+            rgba.width(),
+            rgba.height(),
+            image::ExtendedColorType::Rgba8,
+        )
+        .map_err(|e| ErroImagem::Encode(e.to_string()))?;
+    Ok(saida)
+}
+
+/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3, 4, 5).
 /// Reaproveitamento (regra 4) e ausência de origem (regra 5) nunca retornam erro; falha de
 /// assinatura WebP conta em `RelatorioImagens.falhas` e não interrompe o loop (regra 2).
 pub fn publicar_imagens(
@@ -108,7 +156,14 @@ pub fn publicar_imagens(
                 bytes = bytes_s.len(),
                 "small acima do orçamento; recodificando"
             );
-            ajustar_small_provisorio(&bytes_s)
+            match ajustar_small(&bytes_s) {
+                Ok(b) => b,
+                Err(e) => {
+                    warn!(id, erro = %e, "falha ao recodificar small; oferta sem imagem");
+                    rel.falhas.push((id, MotivoFalhaImagem::FalhaRecodificacao));
+                    continue;
+                }
+            }
         } else {
             bytes_s
         };

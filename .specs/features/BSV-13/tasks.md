@@ -163,11 +163,13 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Fixture `-small.webp` de 40 KB → `ajustar_small` devolve ≤ 25 600 B, assinatura WebP válida, lado maior ≤ 320 px
-- [ ] Esse id aparece em `reprocessadas`; teste captura o `WARN` (ou verifica via contagem, já que `tracing` não é asserível diretamente — usar `tracing_test`/`tracing::subscriber::with_default` já é dependência nova: preferir apenas verificar o efeito observável, `reprocessadas`, e registrar a limitação no PR)
-- [ ] Fixture `{id}.webp` de 350 KB → publicada sem alteração (bytes idênticos); `maior_grande` reflete o maior valor da execução
-- [ ] `cargo clippy --all-targets -- -D warnings` limpo com a dependência nova
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Fixture de ruído (comprime mal) acima de 25 600 B → `ajustar_small` devolve ≤ 25 600 B, assinatura WebP válida, lado maior ≤ 320 px
+- [x] Esse id aparece em `reprocessadas` (efeito observável verificado; o `WARN` em si não é asserido — `tracing` não oferece captura sem dependência nova, registrado como limitação no PR)
+- [x] Fixture `{id}.webp` de 350 KB (`AVISO_GRANDE + 50_000`) → publicada sem alteração (bytes idênticos); `maior_grande` reflete o maior valor da execução
+- [x] `cargo clippy --all-targets -- -D warnings` limpo com a dependência nova
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**SPEC_DEVIATION**: o encoder WebP da crate `image` (via `image-webp`) só suporta VP8L sem perdas — sem parâmetro de qualidade. Em vez de "qualidade 80→40" (texto da spec do ticket), `ajustar_small` reduz a resolução progressivamente (320 → ×¾, piso 32 px) e recodifica sem perdas a cada tentativa. Mesmo critério de aceite (≤ 25 600 B, WebP válido, ≤ 320 px), sem trocar por um encoder com dependência nativa (`webp`/`libwebp-sys`), que violaria a regra 9 (só `image` permitida). Detalhe em `spec.md` → Assumptions.
 
 **Tests**: unit
 **Gate**: build
