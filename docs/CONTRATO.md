@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.2.0** (SemVer; mudança incompatível = major).
-Histórico: 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.3.0** (SemVer; mudança incompatível = major).
+Histórico: 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -44,18 +44,23 @@ Histórico: 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, d
 | `UNISSEX` | `UNISSEX`, `UNISEX`, `U` |
 | `INFANTIL` | `INFANTIL`, `CRIANCA`, `I` |
 
-### 2.3 `Area` (as 9 áreas de interesse)
-| valor | rótulo de exibição | origem em `DS_COMUNIDADE` |
-|---|---|---|
-| `TECH` | Tech | `TECH`, `TECNOLOGIA` |
-| `PLAYERS` | Players | `PLAYERS`, `GAMES`, `GAMER` |
-| `MEU_LAR` | Meu Lar | `MEU LAR`, `LAR`, `CASA` |
-| `ELAS` | Elas | `ELAS` |
-| `ELES` | Eles | `ELES` |
-| `CULTURA` | Cultura | `CULTURA` |
-| `FAMILIA` | Família & filhos | `FAMILIA`, `FAMILIA & FILHOS`, `FAMILIA E FILHOS` |
-| `PETS` | Pets | `PETS`, `PET` |
-| `ESPORTE_VIDA` | Esporte & vida | `ESPORTE`, `ESPORTE & VIDA`, `ESPORTE E VIDA` |
+### 2.3 `Area` (as 9 áreas de interesse + Outros)
+| valor | rótulo de exibição | slug de URL | origem em `DS_COMUNIDADE` |
+|---|---|---|---|
+| `TECH` | Tech | `tech` | `TECH`, `TECNOLOGIA` |
+| `PLAYERS` | Players | `players` | `PLAYERS`, `GAMES`, `GAMER` |
+| `MEU_LAR` | Meu Lar | `meu-lar` | `MEU LAR`, `LAR`, `CASA` |
+| `ELAS` | Elas | `elas` | `ELAS` |
+| `ELES` | Eles | `eles` | `ELES` |
+| `CULTURA` | Cultura | `cultura` | `CULTURA` |
+| `FAMILIA` | Família & filhos | `familia` | `FAMILIA`, `FAMILIA & FILHOS`, `FAMILIA E FILHOS` |
+| `PETS` | Pets | `pets` | `PETS`, `PET` |
+| `ESPORTE_VIDA` | Esporte & vida | `esporte-vida` | `ESPORTE`, `ESPORTE & VIDA`, `ESPORTE E VIDA` |
+| `OUTROS` | Outros | `outros` | `OUTROS` — gravado pelo robô quando não classifica; vazio continua rejeitado |
+
+O slug de URL é o path da página de área (`/{slug}/`, `/{slug}/{publico}/`), usado pelo site,
+pelo worker e pela `404.html`. `Publico` usa o valor em minúsculas (`feminino`, `masculino`,
+`unissex`, `infantil`). `OUTROS` existe no menu, não na primeira dobra da home (regra para BSV-33).
 
 A tabela de mapeamento texto → enum vive em `packages/contract/mapeamento.json` e é o
 único lugar onde novos sinônimos entram. O worker rejeita o que não mapear.

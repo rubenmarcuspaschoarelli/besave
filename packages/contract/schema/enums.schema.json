@@ -5,7 +5,7 @@
   "$defs": {
     "Loja": { "type": "string", "enum": ["AMAZON", "SHOPEE", "MERCADO_LIVRE"] },
     "Publico": { "type": "string", "enum": ["FEMININO", "MASCULINO", "UNISSEX", "INFANTIL"] },
-    "Area": { "type": "string", "enum": ["TECH", "PLAYERS", "MEU_LAR", "ELAS", "ELES", "CULTURA", "FAMILIA", "PETS", "ESPORTE_VIDA"] },
+    "Area": { "type": "string", "enum": ["TECH", "PLAYERS", "MEU_LAR", "ELAS", "ELES", "CULTURA", "FAMILIA", "PETS", "ESPORTE_VIDA", "OUTROS"] },
     "Status": { "type": "string", "enum": ["ATIVA", "ENCERRADA"] },
     "Centavos": { "type": "integer", "minimum": 0 },
     "DataHora": { "type": "string", "format": "date-time", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" }

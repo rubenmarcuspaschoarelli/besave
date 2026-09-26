@@ -46,7 +46,8 @@
         "MEU_LAR": {"type":"integer","minimum":0}, "ELAS": {"type":"integer","minimum":0},
         "ELES": {"type":"integer","minimum":0}, "CULTURA": {"type":"integer","minimum":0},
         "FAMILIA": {"type":"integer","minimum":0}, "PETS": {"type":"integer","minimum":0},
-        "ESPORTE_VIDA": {"type":"integer","minimum":0}
+        "ESPORTE_VIDA": {"type":"integer","minimum":0},
+        "OUTROS": {"type":"integer","minimum":0}
       }
     }
   }
