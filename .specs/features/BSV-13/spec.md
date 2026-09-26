@@ -194,10 +194,10 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | ORC-01 | P1: Orçamento estourado | T4 | Implemented |
 | ORC-02 | P1: Orçamento estourado | T4 | Implemented |
 | ORC-03 | P1: Orçamento estourado | T4 | Implemented |
-| REU-01 | P1: Reaproveitamento | T5 | Pending |
-| REU-02 | P1: Reaproveitamento | T5 | Pending |
-| REU-03 | P1: Reaproveitamento | T5 | Pending |
-| REU-04 | P1: Reaproveitamento | T5 | Pending |
+| REU-01 | P1: Reaproveitamento | T5 | Implemented |
+| REU-02 | P1: Reaproveitamento | T5 | Implemented |
+| REU-03 | P1: Reaproveitamento | T5 | Implemented |
+| REU-04 | P1: Reaproveitamento | T5 | Implemented |
 | GER-01 | P1: Integração em gerar() | T6 | Pending |
 | GER-02 | P1: Integração em gerar() | T6 | Pending |
 | GER-03 | P1: Integração em gerar() | T6 | Pending |

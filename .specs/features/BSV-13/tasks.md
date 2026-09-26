@@ -193,12 +193,12 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Id já publicado (ambas as chaves existem no destino) com origem "trocada" na fixture → nada gravado, contado em `reaproveitadas`
-- [ ] Pasta ausente e pasta com só `{id}.webp` (sem `-small`) → `sem_origem` nos dois casos, sem erro, sem gravação
-- [ ] `cargo run --example gerar_placeholders` produzido e os 10 `.webp` resultantes comitados em `assets/placeholder/`, cada um ≤ 8 KB
-- [ ] Teste: primeira chamada de `publicar_imagens` publica os 10 placeholders; segunda chamada (mesmo destino) os reaproveita (0 gravações de placeholder)
-- [ ] Segunda execução completa de `publicar_imagens` com a mesma lista de ids → `publicadas == 0`, `reaproveitadas == N`
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Id já publicado (ambas as chaves existem no destino) com origem "trocada" na fixture → nada gravado, contado em `reaproveitadas`
+- [x] Pasta ausente e pasta com só `{id}.webp` (sem `-small`) → `sem_origem` nos dois casos, sem erro, sem gravação
+- [x] `cargo run --example gerar_placeholders` produzido e os 10 `.webp` resultantes comitados em `assets/placeholder/` (226-356 B cada, bem abaixo de 8 KB)
+- [x] Teste: primeira chamada de `publicar_imagens` publica os 10 placeholders; segunda chamada (mesmo destino) os reaproveita (0 gravações de placeholder)
+- [x] Segunda execução completa de `publicar_imagens` com a mesma lista de ids → `publicadas == 0`, `reaproveitadas == N`
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: unit
 **Gate**: build

@@ -1,11 +1,11 @@
-//! CHV-01, CHV-02, CPY-01, CPY-02, ORC-01..03: chaves, cópia e orçamento das imagens (BSV-13).
+//! CHV-01, CHV-02, CPY-01, CPY-02, ORC-01..03, REU-01..04: imagens de oferta (BSV-13).
 
 use std::path::{Path, PathBuf};
 
 use image::ImageEncoder;
 use worker::imagens::{
     AVISO_GRANDE, LADO_SMALL, MotivoFalhaImagem, ORCAMENTO_SMALL, ajustar_small, chave_grande,
-    chave_small, e_webp, origem, publicar_imagens,
+    chave_placeholder, chave_small, e_webp, origem, publicar_imagens,
 };
 use worker::modelo::Area;
 use worker::publicador::{META_IMAGEM, Publicador, PublicadorMemoria};
@@ -210,4 +210,88 @@ fn imagem_grande_acima_do_aviso_publica_sem_alteracao() {
 
     assert_eq!(p.ler(&chave_grande(7000)).unwrap(), Some(grande.clone()));
     assert_eq!(rel.maior_grande, grande.len() as u64);
+}
+
+/// REU-01: id já publicado (as duas chaves existem) é pulado mesmo com a origem "trocada" —
+/// nunca compara conteúdo.
+#[test]
+fn id_ja_publicado_e_reaproveitado_mesmo_com_origem_trocada() {
+    let dir = dir_temp("reaproveita");
+    let original_pequena = bytes_webp(1_000);
+    let original_grande = bytes_webp(1_000);
+    escrever_origem(&dir, 8000, &original_pequena, &original_grande);
+
+    let mut p = PublicadorMemoria::new();
+    publicar_imagens(&[8000], &dir, &mut p).unwrap();
+    let publicado_antes = p.ler(&chave_small(8000)).unwrap();
+
+    // Origem muda depois da 1ª publicação: a 2ª chamada não deve nem ler o disco de novo.
+    escrever_origem(&dir, 8000, &bytes_webp(2_000), &bytes_webp(2_000));
+    let rel = publicar_imagens(&[8000], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.reaproveitadas, 1);
+    assert_eq!(rel.publicadas, 0);
+    assert_eq!(p.ler(&chave_small(8000)).unwrap(), publicado_antes);
+}
+
+/// REU-02: pasta ausente e pasta com só um dos dois arquivos viram `sem_origem`, sem erro.
+#[test]
+fn sem_pasta_ou_com_um_so_arquivo_conta_sem_origem() {
+    let dir = dir_temp("sem-origem");
+    // 8100: pasta nunca criada.
+    // 8101: pasta criada, só o arquivo grande.
+    let pasta_parcial = dir.join("8101");
+    std::fs::create_dir_all(&pasta_parcial).unwrap();
+    std::fs::write(pasta_parcial.join("8101.webp"), bytes_webp(1_000)).unwrap();
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[8100, 8101], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.sem_origem, 2);
+    assert_eq!(rel.publicadas, 0);
+    assert!(rel.falhas.is_empty());
+    for id in [8100, 8101] {
+        assert!(!p.existe(&chave_small(id)).unwrap());
+        assert!(!p.existe(&chave_grande(id)).unwrap());
+    }
+}
+
+/// REU-03: os 10 placeholders são publicados na 1ª chamada e reaproveitados na 2ª (mesmo com
+/// a lista de ids vazia).
+#[test]
+fn placeholders_publicados_uma_vez_e_reaproveitados_depois() {
+    let dir = dir_temp("placeholders");
+    let mut p = PublicadorMemoria::new();
+
+    publicar_imagens(&[], &dir, &mut p).unwrap();
+    for area in Area::TODAS {
+        assert!(p.existe(&chave_placeholder(area)).unwrap(), "{area:?}");
+    }
+    let gravacoes_1a_chamada = p.gravacoes().len();
+    assert_eq!(gravacoes_1a_chamada, 10);
+
+    publicar_imagens(&[], &dir, &mut p).unwrap();
+    assert_eq!(
+        p.gravacoes().len(),
+        gravacoes_1a_chamada,
+        "2ª chamada não deveria regravar nenhum placeholder"
+    );
+}
+
+/// REU-04: segunda execução completa com os mesmos ids → 0 publicadas, todas reaproveitadas.
+#[test]
+fn segunda_execucao_completa_nao_publica_nada_de_novo() {
+    let dir = dir_temp("segunda-execucao");
+    let ids = [9000, 9001, 9002];
+    for id in ids {
+        escrever_origem(&dir, id, &bytes_webp(1_000), &bytes_webp(1_000));
+    }
+
+    let mut p = PublicadorMemoria::new();
+    let primeira = publicar_imagens(&ids, &dir, &mut p).unwrap();
+    assert_eq!(primeira.publicadas, ids.len() as u64);
+
+    let segunda = publicar_imagens(&ids, &dir, &mut p).unwrap();
+    assert_eq!(segunda.publicadas, 0);
+    assert_eq!(segunda.reaproveitadas, ids.len() as u64);
 }

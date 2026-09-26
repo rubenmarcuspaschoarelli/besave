@@ -8,6 +8,7 @@ use image::{
 };
 use tracing::warn;
 
+use crate::modelo::Area;
 use crate::publicador::{self, META_IMAGEM, Publicador};
 
 /// Orçamento da imagem pequena (MANIFEST §7): acima disso, `ajustar_small` recodifica.
@@ -123,14 +124,79 @@ fn codificar_webp_sem_perdas(img: &DynamicImage) -> Result<Vec<u8>, ErroImagem> 
     Ok(saida)
 }
 
-/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3, 4, 5).
-/// Reaproveitamento (regra 4) e ausência de origem (regra 5) nunca retornam erro; falha de
-/// assinatura WebP conta em `RelatorioImagens.falhas` e não interrompe o loop (regra 2).
+/// `"img/placeholder/{area}.webp"` (CONTRATO §6), mesma chave de arquivo de `Area::chave_area`.
+pub fn chave_placeholder(area: Area) -> String {
+    format!("img/placeholder/{}.webp", area.chave_area())
+}
+
+/// Os 10 placeholders versionados, embutidos no binário (regra 5): nenhuma dependência de
+/// arquivo em disco em tempo de execução, e o worker nunca falha por placeholder ausente.
+fn placeholders() -> [(Area, &'static [u8]); 10] {
+    [
+        (
+            Area::Tech,
+            include_bytes!("../assets/placeholder/TECH.webp"),
+        ),
+        (
+            Area::Players,
+            include_bytes!("../assets/placeholder/PLAYERS.webp"),
+        ),
+        (
+            Area::MeuLar,
+            include_bytes!("../assets/placeholder/MEU_LAR.webp"),
+        ),
+        (
+            Area::Elas,
+            include_bytes!("../assets/placeholder/ELAS.webp"),
+        ),
+        (
+            Area::Eles,
+            include_bytes!("../assets/placeholder/ELES.webp"),
+        ),
+        (
+            Area::Cultura,
+            include_bytes!("../assets/placeholder/CULTURA.webp"),
+        ),
+        (
+            Area::Familia,
+            include_bytes!("../assets/placeholder/FAMILIA.webp"),
+        ),
+        (
+            Area::Pets,
+            include_bytes!("../assets/placeholder/PETS.webp"),
+        ),
+        (
+            Area::EsporteVida,
+            include_bytes!("../assets/placeholder/ESPORTE_VIDA.webp"),
+        ),
+        (
+            Area::Outros,
+            include_bytes!("../assets/placeholder/OUTROS.webp"),
+        ),
+    ]
+}
+
+/// Publica os 10 placeholders que ainda não existem no destino; reaproveita os demais (regra 5).
+fn publicar_placeholders(pub_: &mut dyn Publicador) -> publicador::Result<()> {
+    for (area, bytes) in placeholders() {
+        let chave = chave_placeholder(area);
+        if !pub_.existe(&chave)? {
+            pub_.gravar(&chave, bytes, &META_IMAGEM)?;
+        }
+    }
+    Ok(())
+}
+
+/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3, 4, 5), e garante
+/// os 10 placeholders de área (regra 5). Reaproveitamento (regra 4) e ausência de origem
+/// (regra 5) nunca retornam erro; falha de assinatura WebP conta em `RelatorioImagens.falhas` e
+/// não interrompe o loop (regra 2).
 pub fn publicar_imagens(
     ids: &[i64],
     dir: &Path,
     pub_: &mut dyn Publicador,
 ) -> publicador::Result<RelatorioImagens> {
+    publicar_placeholders(pub_)?;
     let mut rel = RelatorioImagens::default();
     for &id in ids {
         let chave_s = chave_small(id);
