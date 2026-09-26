@@ -258,6 +258,17 @@ T5 → T6 → T7
 - [x] `PublicadorLocal`/`PublicadorMemoria` inalterados (sequencial, via `imagens::publicar_imagens`)
 - [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
+**Fix (1ª rodada do Verifier, pós-T7)**: 5 gaps corrigidos num commit `test(worker)` dedicado —
+(1) edge case "small oversized + grande inválida → dual reprocessadas+falhas" era estruturalmente
+impossível (checagem de assinatura roda antes do ramo de orçamento com `continue` antecipado);
+corrigido como decisão consciente (id é unidade atômica) documentada em `spec.md` Edge Cases,
+com teste confirmando o comportamento real; (2) reaproveitamento com só uma das duas chaves
+presentes agora tem teste dedicado (mutante `&&`→`\|\|` sobrevivente); (3) limite exato de
+`ORCAMENTO_SMALL` (25 600 B) agora tem teste de fronteira; (4) `--gerar` sem `BESAVE_IMAGENS_DIR`
+agora tem teste (`dry_run.rs`); (5) `maior_small` agora é asserido num valor não-zero. AREA-01
+também corrigida: a AC citava round-trip com fixtures compartilhadas que não usam `OUTROS`;
+trocada por round-trip serde direto (`tests/modelo.rs`).
+
 **SPEC_DEVIATION**: `main.rs` (`--publicar`) **não** foi religado para chamar `publicar_imagens_paralelo` nesta tarefa — continua usando o `gerar()` único (T6), que fala com `PublicadorS3` através do trait `Publicador` genérico e portanto publica imagens sequencialmente mesmo em S3. Reason: `gerar()` é o mesmo código para Local/Memória/S3 desde BSV-10/11 (testável sem AWS); trocar esse fluxo para usar um caminho S3-específico exigiria re-arquitetar a integração de imagens em `gerar()` (ex.: um hook/trait novo), fora do escopo desta spec. O método fica exposto e pronto (cumpre PAR-01 literalmente: "expõe um caminho"), mas a integração em `--publicar` é trabalho futuro — sinalizado ao dono no relatório final. Medição de desempenho real fica com o dono (critério de aceite da spec do ticket).
 
 **Tests**: none

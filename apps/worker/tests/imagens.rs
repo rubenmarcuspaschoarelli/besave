@@ -196,6 +196,65 @@ fn small_acima_do_orcamento_e_recodificado_e_contado() {
     let publicado = p.ler(&chave_small(6000)).unwrap().unwrap();
     assert!(publicado.len() <= ORCAMENTO_SMALL);
     assert_ne!(publicado, small_grande_demais);
+    // Fix 5 (validation.md): `maior_small` reflete o tamanho publicado, não fica em 0.
+    assert_eq!(rel.maior_small, publicado.len() as u64);
+    assert!(rel.maior_small > 0);
+}
+
+/// Fix 3 (validation.md, ORC-02 boundary): exatamente `ORCAMENTO_SMALL` não é reprocessado;
+/// um byte a mais já é.
+#[test]
+fn small_no_limite_exato_nao_e_reprocessado_um_byte_a_mais_e() {
+    let dir = dir_temp("limite-exato");
+    escrever_origem(&dir, 6100, &bytes_webp(ORCAMENTO_SMALL), &bytes_webp(1_000));
+    escrever_origem(
+        &dir,
+        6101,
+        &bytes_webp(ORCAMENTO_SMALL + 1),
+        &bytes_webp(1_000),
+    );
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[6100], &dir, &mut p).unwrap();
+    assert_eq!(
+        rel.reprocessadas, 0,
+        "exatamente no limite não deve recodificar"
+    );
+    assert_eq!(
+        p.ler(&chave_small(6100)).unwrap().unwrap().len(),
+        ORCAMENTO_SMALL
+    );
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[6101], &dir, &mut p).unwrap();
+    assert_eq!(
+        rel.reprocessadas, 1,
+        "um byte acima do limite já recodifica"
+    );
+}
+
+/// Fix 1 (validation.md): assinatura inválida em QUALQUER uma das duas chaves marca o id inteiro
+/// como `falhas` (unidade atômica — as duas chaves sobem juntas ou nenhuma sobe); mesmo que a
+/// small também estivesse acima do orçamento, o id nunca aparece em `reprocessadas`.
+#[test]
+fn grande_invalida_marca_falha_mesmo_com_small_acima_do_orcamento() {
+    let dir = dir_temp("grande-invalida-small-grande");
+    let small_grande_demais = webp_ruido(400, 400);
+    assert!(small_grande_demais.len() > ORCAMENTO_SMALL);
+    let grande_invalida = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0];
+    escrever_origem(&dir, 6200, &small_grande_demais, &grande_invalida);
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[6200], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.falhas, vec![(6200, MotivoFalhaImagem::NaoWebp)]);
+    assert_eq!(
+        rel.reprocessadas, 0,
+        "id atômico: falha barra o reprocessamento também"
+    );
+    assert_eq!(rel.publicadas, 0);
+    assert!(!p.existe(&chave_small(6200)).unwrap());
+    assert!(!p.existe(&chave_grande(6200)).unwrap());
 }
 
 /// ORC-03: imagem grande acima de 300 000 B publica sem alteração; `maior_grande` reflete o
@@ -233,6 +292,31 @@ fn id_ja_publicado_e_reaproveitado_mesmo_com_origem_trocada() {
     assert_eq!(rel.reaproveitadas, 1);
     assert_eq!(rel.publicadas, 0);
     assert_eq!(p.ler(&chave_small(8000)).unwrap(), publicado_antes);
+}
+
+/// Fix 2 (validation.md, REU-01 conjunction): só uma das duas chaves já existe no destino
+/// (ex.: publicação anterior interrompida a meio) — não conta como reaproveitada; as duas
+/// chaves saem gravadas ao final.
+#[test]
+fn apenas_uma_chave_existente_nao_e_reaproveitada() {
+    let dir = dir_temp("uma-chave-existente");
+    let pequena = bytes_webp(1_000);
+    let grande = bytes_webp(1_000);
+    escrever_origem(&dir, 8100, &pequena, &grande);
+
+    let mut p = PublicadorMemoria::new();
+    p.gravar(&chave_small(8100), &pequena, &META_IMAGEM)
+        .unwrap();
+
+    let rel = publicar_imagens(&[8100], &dir, &mut p).unwrap();
+
+    assert_eq!(
+        rel.reaproveitadas, 0,
+        "só uma chave presente não deve contar como reaproveitada"
+    );
+    assert_eq!(rel.publicadas, 1);
+    assert!(p.existe(&chave_small(8100)).unwrap());
+    assert!(p.existe(&chave_grande(8100)).unwrap());
 }
 
 /// REU-02: pasta ausente e pasta com só um dos dois arquivos viram `sem_origem`, sem erro.

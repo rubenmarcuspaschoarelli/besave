@@ -59,7 +59,7 @@ classificação e para o manifest contá-las.
 
 **Acceptance Criteria**:
 
-1. The `Area` enum SHALL ter a variante `Outros` serializada como `"OUTROS"` (round-trip com as fixtures do contrato 1.3 em `packages/contract/fixtures/`).  <!-- AREA-01 -->
+1. The `Area` enum SHALL ter a variante `Outros` que serializa como `"OUTROS"` e desserializa de volta para `Area::Outros` (round-trip serde direto). **Nota (pós-Verifier):** nenhuma fixture compartilhada em `packages/contract/fixtures/` usa `OUTROS` hoje (são ativos do contrato, não deste ticket); a AC original citava "round-trip com as fixtures" — corrigida para round-trip serde direto, testado à parte da validação de manifest (AREA-03, que usa um card sintético).  <!-- AREA-01 -->
 2. WHEN uma linha tem `DS_COMUNIDADE = "Outros"` THEN `para_card` SHALL produzir `a: "OUTROS"` (sem rejeição).  <!-- AREA-02 -->
 3. WHEN há ao menos uma oferta ativa com área `OUTROS` THEN `manifest.areas` SHALL incluir a chave `OUTROS` com a contagem, e o `manifest.json` gerado SHALL validar contra `manifest.schema.json` (npm `validate`).  <!-- AREA-03 -->
 4. The `Mapeamento::carregar` SHALL carregar `packages/contract/mapeamento.json` sem erro (já contém `"OUTROS": "OUTROS"` e `"OUTRO": "OUTROS"`).  <!-- AREA-04 -->
@@ -174,7 +174,7 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 ## Edge Cases
 
 - IF `BESAVE_IMAGENS_DIR`/`--imagens-dir` está ausente em `--gerar` ou `--publicar` THEN o binário SHALL sair com erro nomeando a variável, sem panic (mesmo padrão de `AWS-03` em BSV-12).
-- WHEN um id tem `-small.webp` com assinatura WebP válida mas maior que 25 600 B **e** o `{id}.webp` também é inválido (não-WebP) THEN o id SHALL aparecer em `reprocessadas` (para o small) e em `falhas` (para o grande), sem interromper os outros ids.
+- WHEN um id tem `-small.webp` com assinatura WebP válida mas maior que 25 600 B **e** o `{id}.webp` é inválido (não-WebP) THEN o id SHALL aparecer só em `falhas` (`NaoWebp`), sem interromper os outros ids. **Correção pós-Verifier (ver SPEC_DEVIATION em `tasks.md` T3/T6):** a checagem de assinatura roda para as duas chaves antes do ramo de orçamento, com `continue` antecipado — o id é uma unidade atômica (as duas chaves sobem juntas ou nenhuma sobe); ele nunca aparece em `reprocessadas` **e** `falhas` ao mesmo tempo. A redação anterior deste edge case pedia o oposto; era um exagero de especificação sem base no ticket original (BSV-13.md regra 2 trata a falha de assinatura como um evento por id, não por chave) e foi corrigida aqui.
 - WHEN a lista de ids publicáveis está vazia THEN `publicar_imagens` SHALL ainda publicar/reaproveitar os 10 placeholders e devolver um relatório com as demais contagens em 0.
 
 ---
