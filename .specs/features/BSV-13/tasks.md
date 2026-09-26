@@ -258,6 +258,13 @@ T5 → T6 → T7
 - [x] `PublicadorLocal`/`PublicadorMemoria` inalterados (sequencial, via `imagens::publicar_imagens`)
 - [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
+**Fix (3ª rodada do Verifier, loop esgotado)**: `maior_small`/`maior_grande` (semântica "maior entre
+todos os ids" do `spec.md` Assumptions) não tinham teste com mais de um id, então um mutante que
+trocasse `.max()` por atribuição direta sobrevivia. Adicionado
+`maior_small_e_maior_grande_refletem_o_maior_entre_varios_ids`. Este fix **não** passou por uma
+4ª rodada independente do Verifier (limite de 3 iterações do skill) — ver nota em
+`validation.md`.
+
 **Fix (2ª rodada do Verifier)**: `RelatorioImagens.bytes` (campo citado na AC de GER-02) nunca era
 asserido num valor real (mutante: zerar o acumulador não quebrava nenhum teste); adicionado
 `assert_eq!(rel.bytes, ...)` em `copia_direta_dentro_do_orcamento`.

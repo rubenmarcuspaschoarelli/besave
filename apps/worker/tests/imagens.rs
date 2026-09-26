@@ -204,6 +204,29 @@ fn small_acima_do_orcamento_e_recodificado_e_contado() {
     assert!(rel.maior_small > 0);
 }
 
+/// Fix (validation.md, 3ª rodada): `maior_small`/`maior_grande` são o maior valor **entre todos
+/// os ids** publicados na execução, não só o último processado — exige `.max()`, não overwrite.
+#[test]
+fn maior_small_e_maior_grande_refletem_o_maior_entre_varios_ids() {
+    let dir = dir_temp("maior-entre-varios");
+    // 9100 é o maior nos dois; 9101 (processado depois) é menor nos dois.
+    escrever_origem(&dir, 9100, &bytes_webp(3_000), &bytes_webp(5_000));
+    escrever_origem(&dir, 9101, &bytes_webp(1_000), &bytes_webp(2_000));
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[9100, 9101], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.publicadas, 2);
+    assert_eq!(
+        rel.maior_small, 3_000,
+        "não pode regredir para o valor do último id processado"
+    );
+    assert_eq!(
+        rel.maior_grande, 5_000,
+        "não pode regredir para o valor do último id processado"
+    );
+}
+
 /// Fix 3 (validation.md, ORC-02 boundary): exatamente `ORCAMENTO_SMALL` não é reprocessado;
 /// um byte a mais já é.
 #[test]
