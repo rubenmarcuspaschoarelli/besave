@@ -94,6 +94,7 @@ pub fn linha(id: i64) -> worker::conversao::LinhaOferta {
         area: Some("Tech".into()),
         publico: Some("U".into()),
         ativo: true,
+        url_afiliado: format!("https://loja.example/{id}"),
         ..Default::default()
     }
 }
@@ -114,6 +115,7 @@ pub fn linhas_fixture() -> Vec<worker::conversao::LinhaOferta> {
             area: Some("Tecnologia".into()),
             publico: Some("Unissex".into()),
             ativo: true,
+            url_afiliado: "https://loja.example/5412".into(),
             ..Default::default()
         },
         LinhaOferta {
@@ -126,6 +128,7 @@ pub fn linhas_fixture() -> Vec<worker::conversao::LinhaOferta> {
             area: Some("Elas".into()),
             publico: Some("Mulher".into()),
             ativo: true,
+            url_afiliado: "https://loja.example/5413".into(),
             ..Default::default()
         },
         LinhaOferta {
@@ -140,6 +143,7 @@ pub fn linhas_fixture() -> Vec<worker::conversao::LinhaOferta> {
             publico: Some("U".into()),
             ativo: false,
             dt_desativacao: Some(AGORA - DIA),
+            url_afiliado: "https://loja.example/5420".into(),
             ..Default::default()
         },
     ]

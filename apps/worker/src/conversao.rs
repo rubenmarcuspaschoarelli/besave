@@ -30,6 +30,8 @@ pub struct LinhaOferta {
     /// `ST_ATIVO = 1`
     pub ativo: bool,
     pub dt_desativacao: Option<i64>,
+    /// `DS_URL_AFILIADO`; NULL vira `""`. Nunca vai para card nem página (CONTRATO §1.2).
+    pub url_afiliado: String,
 }
 
 /// Uma linha de PRODUTO. Preços em reais.
@@ -67,6 +69,8 @@ pub enum Rejeicao {
     DataNula,
     #[error("id_produto ausente")]
     IdProdutoAusente,
+    #[error("url_afiliado ausente")]
+    UrlAfiliadoAusente,
 }
 
 const MAX_TITULO_CARD: usize = 200;
@@ -93,6 +97,8 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
         .publico(&texto(&l.publico))
         .ok_or(Rejeicao::PublicoSemMapeamento)?;
     let dt = l.dt_oferta.ok_or(Rejeicao::DataNula)?;
+    // O CTA `/ir/{id}` depende da URL de afiliado: sem ela, nem card nem página.
+    url_afiliado(l)?;
 
     Ok(OfertaCard {
         id: l.id,
@@ -106,6 +112,13 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
         publico,
         x: (!l.ativo).then_some(1),
     })
+}
+
+/// URL de afiliado trimada; vazia = oferta não existe (CONTRATO §10.1).
+pub fn url_afiliado(l: &LinhaOferta) -> Result<&str, Rejeicao> {
+    Some(l.url_afiliado.trim())
+        .filter(|u| !u.is_empty())
+        .ok_or(Rejeicao::UrlAfiliadoAusente)
 }
 
 /// Página da oferta: card validado + campos completos. `id_produto` é obrigatório aqui.

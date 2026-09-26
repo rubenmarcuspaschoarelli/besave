@@ -10,6 +10,7 @@ use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
+use crate::redirects::{ErroRedirects, Redirects, RelatorioRedirects, sincronizar_redirects};
 
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
 pub const ORCAMENTO_CHUNK: u64 = 61_440;
@@ -28,6 +29,8 @@ pub enum ErroGeracao {
     Chunk(#[from] ErroChunk),
     #[error(transparent)]
     Publicador(#[from] ErroPublicador),
+    #[error(transparent)]
+    Redirects(#[from] ErroRedirects),
     #[error("chunk {n} tem {bytes} bytes comprimido; orçamento é {ORCAMENTO_CHUNK}")]
     ChunkAcimaDoOrcamento { n: u64, bytes: u64 },
     #[error("manifest.json anterior inválido: {0}")]
@@ -53,6 +56,7 @@ pub struct Relatorio {
     /// `(n, bytes)` do maior chunk comprimido.
     pub maior_chunk: Option<(u64, u64)>,
     pub versao: u64,
+    pub redirects: RelatorioRedirects,
 }
 
 /// `version` de `packages/contract/package.json`, embutido no build.
@@ -65,12 +69,14 @@ pub fn versao_contrato() -> Result<String> {
         .ok_or(ErroGeracao::VersaoContrato)
 }
 
-/// Lê a fonte, grava os chunks novos e, por último, o manifest; depois remove os chunks
-/// que não estão nem no manifest novo nem no anterior. `agora` em segundos Unix UTC.
+/// Lê a fonte, grava os chunks novos, sincroniza a KVS de redirects e, por último, o manifest;
+/// depois remove os chunks que não estão nem no manifest novo nem no anterior. Falha na KVS
+/// mantém o manifest antigo (MANIFEST §6). `agora` em segundos Unix UTC.
 pub fn gerar(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
     pub_: &mut dyn Publicador,
+    redirects: &mut dyn Redirects,
     agora: i64,
 ) -> Result<Relatorio> {
     let contrato = versao_contrato()?;
@@ -90,9 +96,13 @@ pub fn gerar(
         ..Default::default()
     };
     let mut cards = Vec::with_capacity(linhas.len());
+    let mut urls = Vec::with_capacity(linhas.len());
     for l in &linhas {
         match publicavel(l, m) {
-            Ok(c) => cards.push(c),
+            Ok(c) => {
+                urls.push((c.id, l.url_afiliado.trim().to_owned()));
+                cards.push(c);
+            }
             Err(r) => {
                 warn!(id = l.id, motivo = %r, "oferta rejeitada");
                 *rel.rejeitadas.entry(r).or_default() += 1;
@@ -142,6 +152,8 @@ pub fn gerar(
         .max_by_key(|r| r.bytes)
         .map(|r| (r.n, r.bytes));
 
+    rel.redirects = sincronizar_redirects(&urls, redirects)?;
+
     let manifest = Manifest {
         contrato,
         versao,
@@ -180,6 +192,8 @@ pub fn gerar(
         reaproveitados = rel.chunks_reaproveitados,
         removidos = rel.chunks_removidos,
         bytes = rel.bytes_totais,
+        redirects_put = rel.redirects.puts,
+        redirects_del = rel.redirects.dels,
         versao,
         "manifest publicado"
     );
@@ -194,7 +208,8 @@ pub fn checar_orcamento(n: u64, bytes: u64) -> Result<()> {
     Ok(())
 }
 
-/// Card publicável: válido e com página possível (`id_produto`), as mesmas regras do `--dry-run`.
+/// Card publicável: válido (inclui URL de afiliado) e com página possível (`id_produto`), as
+/// mesmas regras do `--dry-run`.
 fn publicavel(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
     let card = para_card(l, m)?;
     if l.id_produto.is_none_or(|id| id < 1) {

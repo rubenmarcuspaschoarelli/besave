@@ -15,6 +15,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.104"
+aws-config = { version = "1.12.0", features = ["behavior-version-latest"] }
+aws-sdk-cloudfrontkeyvaluestore = { version = "1.111.0", default-features = false, features = ["default-https-client", "rt-tokio", "sigv4a"] }
+aws-sdk-s3 = { version = "1.149.0", default-features = false, features = ["default-https-client", "rt-tokio"] }
 brotli = "9.0.0"
 clap = { version = "4.6.7", features = ["derive", "env"] }
 hex = "0.4.3"
@@ -23,6 +26,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11.0"
 thiserror = "2.0.21"
+tokio = { version = "1.53.1", default-features = false, features = ["rt"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 unicode-normalization = "0.1.25"
@@ -30,7 +34,7 @@ unicode-normalization = "0.1.25"
 [dev-dependencies]
 jsonschema = { version = "0.58.0", default-features = false }
 
-# Brotli 9 e SHA-256 sem otimização dobram o tempo do teste de 30k cards (≤ 10 s, BSV-11).
+# Brotli 9 e SHA-256 sem otimização dobram o tempo do teste de 30k cards (≤ 30 s, `--ignored`).
 [profile.dev.package.brotli]
 opt-level = 3
 

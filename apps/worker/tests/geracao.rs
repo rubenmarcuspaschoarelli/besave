@@ -2,7 +2,9 @@
 
 mod comum;
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::rc::Rc;
 
 use comum::{
     AGORA, compactar, descomprimir, fixture, linha, linhas_fixture, mapeamento, texto_aleatorio,
@@ -15,12 +17,22 @@ use worker::modelo::{Area, Manifest};
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
 };
+use worker::redirects::{Redirects, RedirectsMemoria, RelatorioRedirects};
 
 fn rodar(linhas: Vec<LinhaOferta>, p: &mut dyn Publicador) -> Result<Relatorio, ErroGeracao> {
+    rodar_com(linhas, p, &mut RedirectsMemoria::new())
+}
+
+fn rodar_com(
+    linhas: Vec<LinhaOferta>,
+    p: &mut dyn Publicador,
+    kvs: &mut dyn Redirects,
+) -> Result<Relatorio, ErroGeracao> {
     gerar(
         &FakeFonte::new(linhas, vec![], AGORA),
         &mapeamento(),
         p,
+        kvs,
         AGORA,
     )
 }
@@ -234,6 +246,11 @@ fn relatorio_com_contagens() {
             bytes_totais: m.chunks.iter().map(|c| c.bytes).sum(),
             maior_chunk: Some((maior.n, maior.bytes)),
             versao: 20_260_924_124_000,
+            redirects: RelatorioRedirects {
+                puts: 5,
+                dels: 0,
+                total: 5,
+            },
         }
     );
 }
@@ -246,4 +263,135 @@ fn fonte_vazia_gera_manifest_vazio() {
     assert!(m.chunks.is_empty());
     assert_eq!(m.total_ofertas, 0);
     assert!(m.areas.is_empty());
+}
+
+/// URL-03: card sem URL de afiliado não é publicado e conta como rejeição.
+#[test]
+fn sem_url_de_afiliado_nao_publica_o_card() {
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar(
+        vec![
+            LinhaOferta {
+                url_afiliado: " ".into(),
+                ..linha(2000)
+            },
+            linha(2001),
+        ],
+        &mut p,
+    )
+    .unwrap();
+    assert_eq!(
+        rel.rejeitadas,
+        BTreeMap::from([(Rejeicao::UrlAfiliadoAusente, 1)])
+    );
+    assert_eq!(rel.validas, 1);
+    let m = manifest(&p);
+    assert_eq!(m.total_ofertas, 1);
+    assert_eq!(m.chunks[0].ids, [2001, 2001]);
+}
+
+/// ORD-01: KVS = todo card publicado (inclui expirado 5420), nenhum rejeitado (1700, 1800).
+#[test]
+fn kvs_recebe_url_de_todo_card_publicado() {
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar_com(fonte_mista(), &mut p, &mut kvs).unwrap();
+    let esperado: BTreeMap<i64, String> = [1001, 1500, 5412, 5413, 5420]
+        .into_iter()
+        .map(|id| (id, format!("https://loja.example/{id}")))
+        .collect();
+    assert_eq!(kvs.listar().unwrap(), esperado);
+}
+
+type Tempo = Rc<RefCell<Vec<String>>>;
+
+/// Registra gravações numa linha do tempo comum com a KVS.
+struct PubComTempo(PublicadorMemoria, Tempo);
+
+impl Publicador for PubComTempo {
+    fn existe(&self, chave: &str) -> worker::publicador::Result<bool> {
+        self.0.existe(chave)
+    }
+    fn ler(&self, chave: &str) -> worker::publicador::Result<Option<Vec<u8>>> {
+        self.0.ler(chave)
+    }
+    fn gravar(&mut self, chave: &str, bytes: &[u8], meta: &Meta) -> worker::publicador::Result<()> {
+        self.1.borrow_mut().push(chave.to_owned());
+        self.0.gravar(chave, bytes, meta)
+    }
+    fn remover(&mut self, chave: &str) -> worker::publicador::Result<()> {
+        self.0.remover(chave)
+    }
+    fn listar(&self, prefixo: &str) -> worker::publicador::Result<Vec<String>> {
+        self.0.listar(prefixo)
+    }
+}
+
+struct KvsComTempo(RedirectsMemoria, Tempo);
+
+impl Redirects for KvsComTempo {
+    fn listar(&self) -> worker::redirects::Result<BTreeMap<i64, String>> {
+        self.0.listar()
+    }
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> worker::redirects::Result<()> {
+        self.1.borrow_mut().push("KVS".into());
+        self.0.aplicar(put, del)
+    }
+}
+
+/// ORD-02: chunks → KVS → manifest.prev.json → manifest.json.
+#[test]
+fn kvs_entre_chunks_e_manifest() {
+    let tempo: Tempo = Rc::default();
+    let mut p = PubComTempo(PublicadorMemoria::new(), tempo.clone());
+    let mut kvs = KvsComTempo(RedirectsMemoria::new(), tempo.clone());
+    rodar_com(fonte_mista(), &mut p, &mut kvs).unwrap();
+    // Segunda rodada com oferta nova: existe manifest.prev.json, chunk 1 muda e há diff na KVS.
+    tempo.borrow_mut().clear();
+    let mut linhas = fonte_mista();
+    linhas.push(linha(1600));
+    rodar_com(linhas, &mut p, &mut kvs).unwrap();
+    let t = tempo.borrow().clone();
+    let kvs_em = t.iter().position(|x| x == "KVS").unwrap();
+    let ultimo_chunk = t
+        .iter()
+        .rposition(|x| x.starts_with("data/chunks/"))
+        .unwrap();
+    assert!(ultimo_chunk < kvs_em, "{t:?}");
+    assert_eq!(&t[kvs_em..], ["KVS", "manifest.prev.json", "manifest.json"]);
+}
+
+/// ORD-03: falha na KVS → erro e manifest não gravado (o anterior continua).
+#[test]
+fn falha_na_kvs_nao_grava_manifest() {
+    let mut p = PublicadorMemoria::new();
+    let erro = rodar_com(
+        fonte_mista(),
+        &mut p,
+        &mut RedirectsMemoria::new().falhando(),
+    )
+    .unwrap_err();
+    assert!(matches!(erro, ErroGeracao::Redirects(_)), "{erro:?}");
+    assert!(!p.existe("manifest.json").unwrap());
+    assert!(p.gravacoes().iter().all(|c| c.starts_with("data/chunks/")));
+
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar_com(fonte_mista(), &mut p, &mut kvs).unwrap();
+    let antes = p.ler("manifest.json").unwrap();
+    let marca = p.gravacoes().len();
+    let mut linhas = fonte_mista();
+    linhas.push(linha(1600));
+    let mut kvs = RedirectsMemoria::com(kvs.listar().unwrap()).falhando();
+    assert!(matches!(
+        rodar_com(linhas, &mut p, &mut kvs),
+        Err(ErroGeracao::Redirects(_))
+    ));
+    assert_eq!(p.ler("manifest.json").unwrap(), antes);
+    let depois = &p.gravacoes()[marca..];
+    assert!(!depois.is_empty());
+    assert!(
+        depois.iter().all(|c| c.starts_with("data/chunks/")),
+        "{depois:?}"
+    );
 }

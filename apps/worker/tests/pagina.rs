@@ -28,6 +28,7 @@ fn linha() -> LinhaOferta {
         publico: Some("Unissex".into()),
         ativo: true,
         dt_desativacao: None,
+        url_afiliado: "https://amzn.to/xyz".into(),
     }
 }
 
@@ -117,6 +118,22 @@ fn id_produto_ausente_rejeita_a_pagina() {
         ..linha()
     };
     assert_eq!(para_pagina(&l, None, &m()), Err(Rejeicao::IdProdutoAusente));
+}
+
+/// URL-02: sem DS_URL_AFILIADO a oferta não existe (CONTRATO §10.1).
+#[test]
+fn url_afiliado_vazia_rejeita_a_pagina() {
+    for url in ["", "   "] {
+        let l = LinhaOferta {
+            url_afiliado: url.into(),
+            ..linha()
+        };
+        assert_eq!(
+            para_pagina(&l, None, &m()),
+            Err(Rejeicao::UrlAfiliadoAusente),
+            "{url:?}"
+        );
+    }
 }
 
 #[test]

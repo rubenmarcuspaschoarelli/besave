@@ -141,3 +141,64 @@ fn gerar_sem_saida_sai_com_erro() {
     assert_ne!(out.status.code(), Some(101), "panic");
     assert!(String::from_utf8_lossy(&out.stderr).contains("--saida"));
 }
+
+// AWS-03, AWS-04 (BSV-12): `--publicar` valida a config antes de qualquer acesso à rede.
+
+fn publicar(args: &[&str], env: &[(&str, &str)]) -> Output {
+    let mut c = Command::new(env!("CARGO_BIN_EXE_besave-worker"));
+    c.args(args)
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("BESAVE_FONTE", "fake")
+        .env("RUST_LOG", "warn");
+    for v in [
+        "BESAVE_BUCKET",
+        "BESAVE_KVS_ARN",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_PROFILE",
+        "AWS_REGION",
+    ] {
+        c.env_remove(v);
+    }
+    c.envs(env.iter().copied()).output().unwrap()
+}
+
+fn falha_sem_panic(out: &Output) -> String {
+    assert!(!out.status.success(), "{:?}", out.status);
+    assert_ne!(out.status.code(), Some(101), "panic");
+    String::from_utf8_lossy(&out.stderr).into_owned()
+}
+
+#[test]
+fn publicar_sem_bucket_nomeia_a_variavel() {
+    let stderr = falha_sem_panic(&publicar(&["--publicar"], &[]));
+    assert!(stderr.contains("BESAVE_BUCKET"), "{stderr}");
+}
+
+#[test]
+fn publicar_sem_arn_da_kvs_nomeia_a_variavel() {
+    let stderr = falha_sem_panic(&publicar(
+        &["--publicar", "--sim"],
+        &[("BESAVE_BUCKET", "besave-site")],
+    ));
+    assert!(stderr.contains("BESAVE_KVS_ARN"), "{stderr}");
+    assert!(!stderr.contains("BESAVE_BUCKET"), "{stderr}");
+}
+
+#[test]
+fn sim_sem_publicar_sai_com_erro() {
+    let stderr = falha_sem_panic(&publicar(&["--sim"], &[]));
+    assert!(stderr.contains("--publicar"), "{stderr}");
+    let stderr = falha_sem_panic(&publicar(&["--dry-run", "--sim"], &[]));
+    assert!(stderr.contains("--publicar"), "{stderr}");
+}
+
+#[test]
+fn publicar_e_gerar_juntos_saem_com_erro() {
+    let dir = saida("publicar-gerar");
+    falha_sem_panic(&publicar(
+        &["--publicar", "--gerar", "--saida", dir.to_str().unwrap()],
+        &[],
+    ));
+    assert!(!dir.join("manifest.json").exists());
+}

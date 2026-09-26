@@ -14,6 +14,12 @@ pub enum ErroPublicador {
         chave: String,
         fonte: std::io::Error,
     },
+    #[error("S3 {operacao} {chave}: {fonte}")]
+    Aws {
+        operacao: &'static str,
+        chave: String,
+        fonte: String,
+    },
     #[error("serializando headers de {chave}: {fonte}")]
     Meta {
         chave: String,
@@ -34,7 +40,7 @@ pub struct Meta {
 pub const META_CHUNK: Meta = Meta {
     content_type: "application/json",
     content_encoding: Some("br"),
-    cache_control: "public, max-age=31536000, immutable",
+    cache_control: IMUTAVEL,
 };
 
 pub const META_MANIFEST: Meta = Meta {
@@ -42,6 +48,63 @@ pub const META_MANIFEST: Meta = Meta {
     content_encoding: None,
     cache_control: "public, max-age=300, stale-while-revalidate=60",
 };
+
+const IMUTAVEL: &str = "public, max-age=31536000, immutable";
+const HTML: &str = "text/html; charset=utf-8";
+
+const fn meta(content_type: &'static str, cache_control: &'static str) -> Meta {
+    Meta {
+        content_type,
+        content_encoding: None,
+        cache_control,
+    }
+}
+
+/// Headers de cada chave pela tabela de MANIFEST §4; `None` fora dela.
+/// `manifest.prev.json` segue o `manifest.json`; `_app/**` tem `Content-Type` pela extensão.
+pub fn meta_para(chave: &str) -> Option<Meta> {
+    const CURTO: &str = "public, max-age=300";
+    let ext = chave.rsplit_once('.').map(|(_, e)| e);
+    let raiz = !chave.contains('/');
+    match chave {
+        "manifest.json" | "manifest.prev.json" => Some(META_MANIFEST),
+        "index.html" => Some(meta(HTML, CURTO)),
+        "robots.txt" => Some(meta("text/plain; charset=utf-8", CURTO)),
+        _ if raiz && chave.starts_with("sitemap") && ext == Some("xml") => {
+            Some(meta("application/xml", CURTO))
+        }
+        _ if chave.starts_with("data/chunks/") || chave.starts_with("data/busca/") => {
+            Some(META_CHUNK)
+        }
+        _ if chave.starts_with("oferta/") => chave.ends_with("/index.html").then_some(meta(
+            HTML,
+            "public, max-age=600, stale-while-revalidate=300",
+        )),
+        _ if chave.starts_with("img/") => {
+            (ext == Some("webp")).then_some(meta("image/webp", IMUTAVEL))
+        }
+        _ if chave.starts_with("_app/") => tipo_por_extensao(ext?).map(|ct| meta(ct, IMUTAVEL)),
+        _ if !raiz && !chave.starts_with("data/") && chave.ends_with("/index.html") => {
+            Some(meta(HTML, CURTO))
+        }
+        _ => None,
+    }
+}
+
+/// `Content-Type` "conforme" dos arquivos do build do SvelteKit.
+fn tipo_por_extensao(ext: &str) -> Option<&'static str> {
+    Some(match ext {
+        "js" => "text/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "json" => "application/json",
+        "html" => HTML,
+        "svg" => "image/svg+xml",
+        "webp" => "image/webp",
+        "png" => "image/png",
+        "woff2" => "font/woff2",
+        _ => return None,
+    })
+}
 
 /// Chaves usam `/` e são relativas à raiz do bucket (`data/chunks/5-….json.br`).
 pub trait Publicador {
@@ -157,6 +220,7 @@ fn coletar(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<()> {
 pub struct PublicadorMemoria {
     objetos: BTreeMap<String, (Vec<u8>, Meta)>,
     gravacoes: Vec<String>,
+    remocoes: Vec<String>,
 }
 
 impl PublicadorMemoria {
@@ -171,6 +235,11 @@ impl PublicadorMemoria {
     /// Chaves passadas a `gravar`, na ordem, desde a criação.
     pub fn gravacoes(&self) -> &[String] {
         &self.gravacoes
+    }
+
+    /// Chaves passadas a `remover`, na ordem, desde a criação.
+    pub fn remocoes(&self) -> &[String] {
+        &self.remocoes
     }
 }
 
@@ -192,6 +261,7 @@ impl Publicador for PublicadorMemoria {
 
     fn remover(&mut self, chave: &str) -> Result<()> {
         self.objetos.remove(chave);
+        self.remocoes.push(chave.to_owned());
         Ok(())
     }
 

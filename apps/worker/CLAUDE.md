@@ -6,7 +6,7 @@ Roda local (cron 5–10 min). Lê OFERTA/PRODUTO/CUPOM, gera os artefatos de MAN
 - Todo acesso ao Oracle passa por um trait (`FonteOfertas`) com implementação real (`oracle` crate) e fake em memória. Testes nunca tocam Oracle.
 - Todo acesso ao S3 passa por trait (`Publicador`) com fake em memória. Testes nunca tocam AWS.
 - Serialização de `OfertaCard`/`OfertaPagina`/`Manifest` com `serde`; structs derivam dos JSON Schema de `packages/contract` e as fixtures de lá são casos de teste (round-trip + validação).
-- Idempotência é requisito: rodar duas vezes sem mudança no banco não sobe nenhum objeto (hash antes do upload).
+- Idempotência é requisito: rodar duas vezes sem mudança não sobe nenhum objeto além de manifest.json e manifest.prev.json (hash antes do upload).
 - Registros inválidos (CONTRATO.md §9) são rejeitados e logados com motivo; nunca derrubam o ciclo.
 - Falha em imagem não bloqueia a oferta (placeholder por área).
 - `tracing` para log; `anyhow` no binário, `thiserror` na lib; sem `unwrap` fora de teste.
