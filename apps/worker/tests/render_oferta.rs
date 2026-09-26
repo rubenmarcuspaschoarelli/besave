@@ -54,3 +54,24 @@ fn entrada_invalida_sai_com_erro() {
     assert!(!sem_argumento.status.success());
     assert!(String::from_utf8_lossy(&sem_argumento.stderr).contains("uso: render-oferta"));
 }
+
+// PAG-16: o fuso do sistema não muda a saída.
+#[test]
+fn saida_nao_depende_do_fuso_do_sistema() {
+    let caminho = caminho_fixture();
+    let saidas: Vec<Vec<u8>> = ["UTC", "America/New_York", "Asia/Tokyo", "America/Sao_Paulo"]
+        .iter()
+        .map(|tz| {
+            let out = Command::new(env!("CARGO_BIN_EXE_render-oferta"))
+                .arg(&caminho)
+                .env("TZ", tz)
+                .output()
+                .unwrap();
+            assert!(out.status.success());
+            out.stdout
+        })
+        .collect();
+    assert!(saidas.windows(2).all(|par| par[0] == par[1]));
+    let html = String::from_utf8(saidas[0].clone()).unwrap();
+    assert!(html.contains(">24/09/2026 às 09:40</time>"));
+}

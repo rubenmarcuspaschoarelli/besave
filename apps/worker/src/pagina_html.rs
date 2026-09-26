@@ -17,8 +17,9 @@ pub const TABELA: &str = include_str!("../templates/areas.json");
 pub const URL_BASE: &str = "https://besave.com.br";
 /// Tamanho da `<meta name="description">` (caracteres).
 const DESCRICAO_MAX: usize = 155;
-/// Brasília não tem horário de verão desde 2019.
-const FUSO_BRASILIA_MIN: i64 = -180;
+/// Offset fixo −03:00 (Brasília sem horário de verão desde 2019). Nunca o fuso do sistema:
+/// a página é gerada numa máquina qualquer e precisa sair igual.
+const OFFSET_BRASILIA_MIN: i64 = -180;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroTemplate {
@@ -161,7 +162,7 @@ fn nota(n: f64) -> String {
     format!("{n:.1}").replace('.', ",")
 }
 
-/// `"2026-09-24T12:40:00Z"` → `"24/09/2026 às 09:40"` (horário de Brasília).
+/// `"2026-09-24T12:40:00Z"` → `"24/09/2026 às 09:40"` (offset fixo −03:00).
 fn data_br(iso: &str) -> Result<String, minijinja::Error> {
     let invalida =
         || minijinja::Error::new(ErrorKind::InvalidOperation, format!("data inválida: {iso}"));
@@ -177,7 +178,7 @@ fn data_br(iso: &str) -> Result<String, minijinja::Error> {
     let minutos = dias_de_civil(ano, mes, dia) * 1440
         + campo(11, 13)? * 60
         + campo(14, 16)?
-        + FUSO_BRASILIA_MIN;
+        + OFFSET_BRASILIA_MIN;
     let (a, m, d) = civil_de_dias(minutos.div_euclid(1440));
     let min_dia = minutos.rem_euclid(1440);
     Ok(format!(

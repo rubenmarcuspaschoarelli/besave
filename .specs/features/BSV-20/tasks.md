@@ -42,7 +42,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ### Phase 1: Template
 
 ```
-T1 → T2 → T3 → T4 → T5
+T1 → T2 → T3 → T4 → T5 → T6
 ```
 
 ---
@@ -172,3 +172,29 @@ T1 → T2 → T3 → T4 → T5
 **Gate**: build
 
 **Commit**: `fix(worker): keep offer page grid within narrow viewports`
+
+---
+
+### T6: Offset fixo −03:00 fixado em teste (revisão do dono)
+
+**What**: Constante `OFFSET_BRASILIA_MIN` documentada como offset fixo, nunca o fuso do sistema; teste com datas de anos com horário de verão e teste do binário com `TZ` variado.
+**Where**: `apps/worker/src/pagina_html.rs`, `apps/worker/tests/{template_oferta,render_oferta}.rs`
+**Depends on**: T5
+**Reuses**: `data_br`
+**Requirement**: PAG-16
+
+**Tools**:
+
+- MCP: NONE
+- Skill: NONE
+
+**Done when**:
+
+- [x] `2018-01-15T12:00:00Z` → `15/01/2018 às 09:00` (tzdata daria 10:00); viradas de dia e bissexto
+- [x] `render-oferta` com `TZ` = UTC, America/New_York, Asia/Tokyo, America/Sao_Paulo → saídas idênticas
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**Tests**: unit
+**Gate**: build
+
+**Commit**: `test(worker): pin offer page time to fixed -03:00 offset`

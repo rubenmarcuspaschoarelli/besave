@@ -33,7 +33,7 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 | --------------------- | -------------- | --------- | ---------- |
 | Motor de template | `minijinja` 2.x, sem features padrão (`builtins`, `serde`, `json`); template embutido com `include_str!`, `UndefinedBehavior::Strict` | Spec pede minijinja; `json` habilita `tojson` (escape seguro em `<script>`); embutido evita I/O por página em BSV-21 | n |
 | Entrada do render | `&OfertaPagina` (tipo do worker), não JSON solto | BSV-21 já produz `OfertaPagina`; fixtures desserializam com `deny_unknown_fields` | n |
-| Hora exibida | Horário de Brasília (UTC−3 fixo; sem horário de verão desde 2019): `12:40Z` → "publicada em 24/09/2026 às 09:40"; `<time datetime>` guarda o ISO UTC | O exemplo da spec repete o horário UTC da fixture; mostrar UTC ao público brasileiro erra em 3 h | n |
+| Hora exibida | Offset fixo −03:00, nunca o fuso do sistema nem tzdata (Brasília sem horário de verão desde 2019): `12:40Z` → "publicada em 24/09/2026 às 09:40"; `<time datetime>` guarda o ISO UTC | O exemplo da spec repete o horário UTC da fixture; mostrar UTC ao público brasileiro erra em 3 h | n |
 | Placeholder | `/img/placeholder/{slug}.webp` (slug da área, ex. `tech`, `meu-lar`) | MANIFEST §1 usa `{area}` como slug nos paths de área; BSV-13 deve gravar com o mesmo nome — alinhar no PR | n |
 | Tabela única | `apps/worker/templates/areas.json` (áreas: valor, rótulo, slug; públicos: valor, slug; lojas: rótulo). Teste compara com a tabela markdown de CONTRATO §2.3 e com `enums.schema.json` | "Gerado a partir de §2.3" sem duplicar à mão: o teste falha se divergir | n |
 | Rótulo da loja | Amazon, Shopee, Mercado Livre (na mesma tabela) | Contrato não define rótulo de loja | n |
@@ -71,6 +71,7 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 13. WHEN `preco_min < preco_max` (ambos não nulos) THEN the page SHALL mostrar a faixa de preço com a posição em percentual; senão, nenhuma faixa.  <!-- PAG-13 -->
 14. WHEN o título contém `<script>` THEN the page SHALL exibi-lo como texto escapado (inclusive dentro do JSON-LD).  <!-- PAG-14 -->
 15. The page SHALL ter exatamente um `<h1>`.  <!-- PAG-15 -->
+16. The hora exibida SHALL usar offset fixo −03:00 para qualquer data (inclusive anos com horário de verão) e SHALL não depender do fuso do sistema (`TZ`).  <!-- PAG-16 -->
 
 **Independent Test**: `cargo test --test template_oferta`.
 
@@ -126,13 +127,14 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 | PAG-13 | P1: Página | T2 | Implemented |
 | PAG-14 | P1: Página | T2 | Implemented |
 | PAG-15 | P1: Página | T2 | Implemented |
+| PAG-16 | P1: Página | T6 | Implemented |
 | TAB-01 | P1: Tabela e CSS | T1 | Implemented |
 | TAB-02 | P1: Tabela e CSS | T3 | Implemented |
 | TAB-03 | P1: Tabela e CSS | T4 | Implemented |
 | BIN-01 | P2: Binário | T4 | Implemented |
 | BIN-02 | P2: Binário | T4 | Implemented |
 
-**Coverage:** 20 total, 20 mapped to tasks, 0 unmapped
+**Coverage:** 21 total, 21 mapped to tasks, 0 unmapped
 
 ---
 

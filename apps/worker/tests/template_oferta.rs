@@ -538,3 +538,22 @@ fn classes_do_template_existem_no_css() {
         }
     }
 }
+
+// PAG-16: offset fixo −03:00, inclusive em datas que tiveram horário de verão (UTC−2).
+#[test]
+fn hora_com_offset_fixo_menos_tres() {
+    let mut o = oferta_ok();
+    for (iso, esperado) in [
+        ("2026-09-24T12:40:00Z", "24/09/2026 às 09:40"),
+        ("2018-01-15T12:00:00Z", "15/01/2018 às 09:00"),
+        ("2018-12-31T02:30:00Z", "30/12/2018 às 23:30"),
+        ("2024-02-29T00:00:00Z", "28/02/2024 às 21:00"),
+    ] {
+        o.dt_oferta = iso.into();
+        let html = render(&o);
+        assert!(
+            html.contains(&format!(r#"<time datetime="{iso}">{esperado}</time>"#)),
+            "{iso}"
+        );
+    }
+}

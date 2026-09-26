@@ -1,6 +1,6 @@
 # BSV-20 Validation
 
-**Verdict**: PASS ✅ (20/20 ACs com evidência; 21 testes do ticket verdes; sensor 22/22 mutantes mortos; Lighthouse mobile da página ativa 100/100/100 em Performance/Acessibilidade/SEO)
+**Verdict**: PASS ✅ (21/21 ACs com evidência; 23 testes do ticket verdes; sensor 22/22 mutantes mortos; Lighthouse mobile da página ativa 100/100/100 em Performance/Acessibilidade/SEO)
 
 **Date**: 2026-09-26
 **Spec**: `.specs/features/BSV-20/spec.md` + `docs/specs/BSV-20.md`
@@ -18,6 +18,7 @@
 | T3 `besave.css` + orçamentos | ✅ Done | `5c3ecbe` |
 | T4 `render-oferta`, goldens, README | ✅ Done | `6dbc8f9` |
 | T5 grade sem overflow a 360 px | ✅ Done | `f45940b` (achado da inspeção visual) |
+| T6 offset fixo −03:00 (revisão do dono) | ✅ Done | commit `test(worker): pin offer page time…` |
 
 ---
 
@@ -40,6 +41,7 @@
 | PAG-13 faixa | só com `min < max`; posição % limitada a 0..100 | `apps/worker/tests/template_oferta.rs:450` - `left:11%`, `0%`, `50%`, `100%`; ausente com igual, invertido e nulos | ✅ PASS |
 | PAG-14 escape | `<script>` no título vira texto, inclusive no JSON-LD | `apps/worker/tests/template_oferta.rs:478` - 1 `</script>`; `h1` escapado literal; JSON-LD reparseado igual ao original | ✅ PASS |
 | PAG-15 um h1 | exatamente um `<h1>` | `apps/worker/tests/template_oferta.rs:496` | ✅ PASS |
+| PAG-16 offset fixo | −03:00 sempre; independente de `TZ` | `apps/worker/tests/template_oferta.rs:544` - 2018 (ano com horário de verão) → 09:00; `apps/worker/tests/render_oferta.rs:60` - 4 `TZ`, saídas idênticas; M08 (offset 0) morto | ✅ PASS |
 | TAB-01 tabela | 10 áreas iguais a §2.3 na ordem do enum; públicos minúsculos; lojas = enum | `apps/worker/tests/template_oferta.rs:75` | ✅ PASS |
 | TAB-02 orçamentos | HTML ≤ 30 720 B; CSS br ≤ 20 480 B | `apps/worker/tests/template_oferta.rs:504` (HTML 3 688 B); `:520` classes do template têm regra no CSS | ✅ PASS |
 | TAB-03 README | classes e variáveis para BSV-30 | `apps/worker/templates/README.md:27` (variáveis), `:48` (classes) | ✅ PASS (revisão) |
@@ -84,7 +86,7 @@ Worktree temporário em `HEAD` (`git worktree add --detach`), `CARGO_TARGET_DIR`
 ## Gate
 
 - `cargo fmt --check` e `cargo clippy --all-targets -- -D warnings`: verdes.
-- `cargo test --test template_oferta --test render_oferta`: 21/21.
+- `cargo test --test template_oferta --test render_oferta`: 23/23.
 - `cargo test --no-fail-fast` (suíte inteira): 62 falhas **pré-existentes em `develop`**, todas por `unknown variant OUTROS` ao carregar `packages/contract/mapeamento.json` (contrato 1.3 adicionou `OUTROS`; `Area::Outros` no worker é escopo de BSV-13). Nenhum arquivo do contrato foi alterado nesta branch. O job `rust` do CI fica vermelho até BSV-13 entrar.
 - `npx html-validate tests/fixtures/paginas/*.html` (`.htmlvalidate.json`): sem erros.
 
