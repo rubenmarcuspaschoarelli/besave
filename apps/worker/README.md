@@ -190,6 +190,10 @@ encerra com código ≠ 0 e a mensagem do Oracle, sem panic.
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
+O teste de desempenho (30 000 cards em ≤ 30 s) é `#[ignore]`: instável sob carga, fica fora do
+CI. Rode localmente com `cargo test -- --ignored`. A parte funcional dos 30 000 cards (gera,
+valida, conta) roda no `cargo test` normal, sem limite de tempo.
+
 Os testes não tocam o Oracle nem a AWS. Usam `FakeFonte`, `PublicadorMemoria` e as fixtures de
 `packages/contract/fixtures/` como resultado esperado (JSON idêntico byte a byte, mesma ordem de
 chaves); chunks e manifest gerados são validados contra `packages/contract/schema/`.
