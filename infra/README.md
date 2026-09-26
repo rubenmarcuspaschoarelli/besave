@@ -73,6 +73,10 @@ terraform test                       # tests/*.tftest.hcl com mock_provider: nad
 cd functions && npm ci && npm test   # Functions com fixtures de evento + 404.html + sem recursos do protótipo
 ```
 
+**Obrigatório** após qualquer mudança em `functions/*.js`: rodar `test-function` no runtime real. O
+cloudfront-js-2.0 é um subconjunto do JS (ex.: `await` como argumento de função é erro de sintaxe) e
+os testes Node acima não o emulam — passam com código que o CloudFront recusa.
+
 Para testar uma Function no runtime real depois do apply:
 `aws cloudfront test-function --name redirect-afiliado --if-match <ETag> --stage LIVE --event-object fileb://evento.json`.
 
