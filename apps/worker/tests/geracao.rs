@@ -135,6 +135,23 @@ fn areas_contam_so_ativas_e_total_conta_todas() {
     assert_eq!(m.total_ofertas, 5);
 }
 
+/// AREA-01, AREA-03: `Area::Outros` conta em `manifest.areas` e o manifest ainda valida contra o schema 1.3.
+#[test]
+fn area_outros_conta_no_manifest_e_valida_contra_schema() {
+    let mut p = PublicadorMemoria::new();
+    let l = LinhaOferta {
+        area: Some("Outros".into()),
+        ..linha(9000)
+    };
+    rodar(vec![l], &mut p).unwrap();
+    let m = manifest(&p);
+    assert_eq!(m.areas, BTreeMap::from([(Area::Outros, 1)]));
+    validar_schema(
+        "manifest.schema.json",
+        &serde_json::from_slice(&p.ler("manifest.json").unwrap().unwrap()).unwrap(),
+    );
+}
+
 #[test]
 fn headers_e_manifest_por_ultimo() {
     let mut p = PublicadorMemoria::new();

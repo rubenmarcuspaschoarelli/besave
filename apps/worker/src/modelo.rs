@@ -34,6 +34,7 @@ pub enum Area {
     Familia,
     Pets,
     EsporteVida,
+    Outros,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
