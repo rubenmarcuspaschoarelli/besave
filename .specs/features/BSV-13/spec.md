@@ -189,8 +189,8 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | AREA-04 | P1: Area::Outros | T1 | Implemented |
 | CHV-01 | P1: Chaves e origem | T2 | Implemented |
 | CHV-02 | P1: Chaves e origem | T2 | Implemented |
-| CPY-01 | P1: Cópia direta | T3 | Pending |
-| CPY-02 | P1: Cópia direta | T3 | Pending |
+| CPY-01 | P1: Cópia direta | T3 | Implemented |
+| CPY-02 | P1: Cópia direta | T3 | Implemented |
 | ORC-01 | P1: Orçamento estourado | T4 | Pending |
 | ORC-02 | P1: Orçamento estourado | T4 | Pending |
 | ORC-03 | P1: Orçamento estourado | T4 | Pending |

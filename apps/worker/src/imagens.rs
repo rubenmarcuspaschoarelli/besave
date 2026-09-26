@@ -3,6 +3,10 @@
 
 use std::path::{Path, PathBuf};
 
+use tracing::warn;
+
+use crate::publicador::{self, META_IMAGEM, Publicador};
+
 /// Orçamento da imagem pequena (MANIFEST §7): acima disso, `ajustar_small` recodifica.
 pub const ORCAMENTO_SMALL: usize = 25_600;
 /// Acima disso a imagem grande só gera aviso; publica do mesmo jeito (regra 3).
@@ -61,4 +65,66 @@ pub fn origem(dir: &Path, id: i64) -> (PathBuf, PathBuf) {
 /// Contêiner RIFF/WebP: `RIFF` em 0..4, `WEBP` em 8..12 (regra 2). Não decodifica a imagem.
 pub fn e_webp(bytes: &[u8]) -> bool {
     bytes.len() >= 12 && &bytes[0..4] == b"RIFF" && &bytes[8..12] == b"WEBP"
+}
+
+// SPEC_DEVIATION: recodificação real (crate `image`, qualidade descendente, redimensionar a
+// 320 px) chega na tarefa T4; por ora devolve os bytes como vieram, só para não travar o
+// restante do pipeline de `publicar_imagens` enquanto a dependência não está no Cargo.toml.
+// Reason: manter `publicar_imagens` (T3) compilável e testável antes de T4 acrescentar `image`.
+fn ajustar_small_provisorio(bytes: &[u8]) -> Vec<u8> {
+    bytes.to_vec()
+}
+
+/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3-provisório, 4, 5).
+/// Reaproveitamento (regra 4) e ausência de origem (regra 5) nunca retornam erro; falha de
+/// assinatura WebP conta em `RelatorioImagens.falhas` e não interrompe o loop (regra 2).
+pub fn publicar_imagens(
+    ids: &[i64],
+    dir: &Path,
+    pub_: &mut dyn Publicador,
+) -> publicador::Result<RelatorioImagens> {
+    let mut rel = RelatorioImagens::default();
+    for &id in ids {
+        let chave_s = chave_small(id);
+        let chave_g = chave_grande(id);
+        if pub_.existe(&chave_s)? && pub_.existe(&chave_g)? {
+            rel.reaproveitadas += 1;
+            continue;
+        }
+        let (origem_s, origem_g) = origem(dir, id);
+        let (Ok(bytes_s), Ok(bytes_g)) = (std::fs::read(&origem_s), std::fs::read(&origem_g))
+        else {
+            rel.sem_origem += 1;
+            continue;
+        };
+        if !e_webp(&bytes_s) || !e_webp(&bytes_g) {
+            rel.falhas.push((id, MotivoFalhaImagem::NaoWebp));
+            continue;
+        }
+        let bytes_s = if bytes_s.len() > ORCAMENTO_SMALL {
+            rel.reprocessadas += 1;
+            warn!(
+                id,
+                bytes = bytes_s.len(),
+                "small acima do orçamento; recodificando"
+            );
+            ajustar_small_provisorio(&bytes_s)
+        } else {
+            bytes_s
+        };
+        if bytes_g.len() > AVISO_GRANDE {
+            warn!(
+                id,
+                bytes = bytes_g.len(),
+                "imagem grande acima de 300 KB; publicando assim mesmo"
+            );
+        }
+        pub_.gravar(&chave_s, &bytes_s, &META_IMAGEM)?;
+        pub_.gravar(&chave_g, &bytes_g, &META_IMAGEM)?;
+        rel.bytes += (bytes_s.len() + bytes_g.len()) as u64;
+        rel.maior_small = rel.maior_small.max(bytes_s.len() as u64);
+        rel.maior_grande = rel.maior_grande.max(bytes_g.len() as u64);
+        rel.publicadas += 1;
+    }
+    Ok(rel)
 }

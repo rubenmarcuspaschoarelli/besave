@@ -137,9 +137,9 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Fixture `{id}/{id}-small.webp` (12 KB) + `{id}/{id}.webp` (90 KB), assinatura válida → bytes idênticos publicados nas duas chaves; `PublicadorMemoria::meta()` bate com `meta_para`; `publicadas` inclui o id
-- [ ] Fixture com `.webp` cujos bytes são um JPEG (assinatura inválida) → `falhas` tem `(id, NaoWebp)`; nenhuma chave gravada para esse id; próximo id do lote ainda processado
-- [ ] Gate check passes: `cargo test`
+- [x] Fixture `{id}/{id}-small.webp` (12 KB) + `{id}/{id}.webp` (90 KB), assinatura válida → bytes idênticos publicados nas duas chaves; `PublicadorMemoria::meta()` bate com `meta_para` (via `META_IMAGEM`); `publicadas` inclui o id
+- [x] Fixture com `.webp` cujos bytes são um JPEG (assinatura inválida) → `falhas` tem `(id, NaoWebp)`; nenhuma chave gravada para esse id; próximo id do lote ainda processado
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick

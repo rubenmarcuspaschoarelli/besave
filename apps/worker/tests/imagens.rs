@@ -1,9 +1,39 @@
-//! CHV-01, CHV-02: chaves e origem das imagens de oferta (BSV-13).
+//! CHV-01, CHV-02, CPY-01, CPY-02: chaves, origem e cópia direta das imagens de oferta (BSV-13).
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use worker::imagens::{chave_grande, chave_small, e_webp, origem};
+use worker::imagens::{
+    MotivoFalhaImagem, chave_grande, chave_small, e_webp, origem, publicar_imagens,
+};
 use worker::modelo::Area;
+use worker::publicador::{META_IMAGEM, Publicador, PublicadorMemoria};
+
+/// Pasta temporária isolada por teste (nunca reaproveitada entre execuções).
+fn dir_temp(nome: &str) -> PathBuf {
+    let d = std::env::temp_dir().join(format!(
+        "besave-worker-teste-imagens-{nome}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+fn escrever_origem(dir: &Path, id: i64, small: &[u8], grande: &[u8]) {
+    let pasta = dir.join(id.to_string());
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(pasta.join(format!("{id}-small.webp")), small).unwrap();
+    std::fs::write(pasta.join(format!("{id}.webp")), grande).unwrap();
+}
+
+/// Bytes com assinatura WebP válida e `tamanho` bytes no total (preenchidos após o cabeçalho).
+fn bytes_webp(tamanho: usize) -> Vec<u8> {
+    let mut b = b"RIFF".to_vec();
+    b.extend_from_slice(&[0, 0, 0, 0]);
+    b.extend_from_slice(b"WEBPVP8 ");
+    b.resize(tamanho.max(b.len()), b'A');
+    b
+}
 
 #[test]
 fn chaves_do_bucket() {
@@ -64,4 +94,42 @@ fn chave_area_cobre_as_10_variantes_do_contrato() {
     ];
     let obtido: Vec<&str> = Area::TODAS.iter().map(Area::chave_area).collect();
     assert_eq!(obtido, esperado);
+}
+
+/// CPY-01: fixture dentro do orçamento sobe com os bytes idênticos e a `Meta` de `img/**`.
+#[test]
+fn copia_direta_dentro_do_orcamento() {
+    let dir = dir_temp("copia-direta");
+    let pequena = bytes_webp(12_000);
+    let grande = bytes_webp(90_000);
+    escrever_origem(&dir, 5412, &pequena, &grande);
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[5412], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.publicadas, 1);
+    assert_eq!(p.ler(&chave_small(5412)).unwrap(), Some(pequena));
+    assert_eq!(p.ler(&chave_grande(5412)).unwrap(), Some(grande));
+    assert_eq!(p.meta(&chave_small(5412)), Some(META_IMAGEM));
+    assert_eq!(p.meta(&chave_grande(5412)), Some(META_IMAGEM));
+}
+
+/// CPY-02: `.webp` com conteúdo que não é WebP vira falha nomeada, sem panic; o loop continua
+/// e publica o próximo id normalmente.
+#[test]
+fn arquivo_nao_webp_vira_falha_e_o_loop_continua() {
+    let dir = dir_temp("nao-webp");
+    let jpeg = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0];
+    escrever_origem(&dir, 5413, &jpeg, &bytes_webp(1_000));
+    escrever_origem(&dir, 5414, &bytes_webp(1_000), &bytes_webp(1_000));
+
+    let mut p = PublicadorMemoria::new();
+    let rel = publicar_imagens(&[5413, 5414], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.falhas, vec![(5413, MotivoFalhaImagem::NaoWebp)]);
+    assert!(!p.existe(&chave_small(5413)).unwrap());
+    assert!(!p.existe(&chave_grande(5413)).unwrap());
+    assert_eq!(rel.publicadas, 1);
+    assert!(p.existe(&chave_small(5414)).unwrap());
+    assert!(p.existe(&chave_grande(5414)).unwrap());
 }

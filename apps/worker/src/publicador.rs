@@ -49,6 +49,11 @@ pub const META_MANIFEST: Meta = Meta {
     cache_control: "public, max-age=300, stale-while-revalidate=60",
 };
 
+/// Headers de `img/**` (MANIFEST §4); mesmo valor que `meta_para` devolve para qualquer chave
+/// `img/*.webp`. Exposto para quem já sabe que está gravando imagem (BSV-13) e não quer lidar
+/// com o `Option` de `meta_para` para um caso que nunca é `None`.
+pub const META_IMAGEM: Meta = meta("image/webp", IMUTAVEL);
+
 const IMUTAVEL: &str = "public, max-age=31536000, immutable";
 const HTML: &str = "text/html; charset=utf-8";
 
