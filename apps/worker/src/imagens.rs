@@ -124,9 +124,10 @@ fn codificar_webp_sem_perdas(img: &DynamicImage) -> Result<Vec<u8>, ErroImagem> 
     Ok(saida)
 }
 
-/// `"img/placeholder/{area}.webp"` (CONTRATO §6), mesma chave de arquivo de `Area::chave_area`.
+/// `"img/placeholder/{slug}.webp"` (CONTRATO §6 e §2.3: slug de URL da área, não o valor do
+/// enum — BSV-20 já referencia esses caminhos).
 pub fn chave_placeholder(area: Area) -> String {
-    format!("img/placeholder/{}.webp", area.chave_area())
+    format!("img/placeholder/{}.webp", area.slug())
 }
 
 /// Os 10 placeholders versionados, embutidos no binário (regra 5): nenhuma dependência de
@@ -135,49 +136,50 @@ fn placeholders() -> [(Area, &'static [u8]); 10] {
     [
         (
             Area::Tech,
-            include_bytes!("../assets/placeholder/TECH.webp"),
+            include_bytes!("../assets/placeholder/tech.webp"),
         ),
         (
             Area::Players,
-            include_bytes!("../assets/placeholder/PLAYERS.webp"),
+            include_bytes!("../assets/placeholder/players.webp"),
         ),
         (
             Area::MeuLar,
-            include_bytes!("../assets/placeholder/MEU_LAR.webp"),
+            include_bytes!("../assets/placeholder/meu-lar.webp"),
         ),
         (
             Area::Elas,
-            include_bytes!("../assets/placeholder/ELAS.webp"),
+            include_bytes!("../assets/placeholder/elas.webp"),
         ),
         (
             Area::Eles,
-            include_bytes!("../assets/placeholder/ELES.webp"),
+            include_bytes!("../assets/placeholder/eles.webp"),
         ),
         (
             Area::Cultura,
-            include_bytes!("../assets/placeholder/CULTURA.webp"),
+            include_bytes!("../assets/placeholder/cultura.webp"),
         ),
         (
             Area::Familia,
-            include_bytes!("../assets/placeholder/FAMILIA.webp"),
+            include_bytes!("../assets/placeholder/familia.webp"),
         ),
         (
             Area::Pets,
-            include_bytes!("../assets/placeholder/PETS.webp"),
+            include_bytes!("../assets/placeholder/pets.webp"),
         ),
         (
             Area::EsporteVida,
-            include_bytes!("../assets/placeholder/ESPORTE_VIDA.webp"),
+            include_bytes!("../assets/placeholder/esporte-vida.webp"),
         ),
         (
             Area::Outros,
-            include_bytes!("../assets/placeholder/OUTROS.webp"),
+            include_bytes!("../assets/placeholder/outros.webp"),
         ),
     ]
 }
 
 /// Publica os 10 placeholders que ainda não existem no destino; reaproveita os demais (regra 5).
-fn publicar_placeholders(pub_: &mut dyn Publicador) -> publicador::Result<()> {
+/// `pub(crate)`: reaproveitado por `aws::PublicadorS3::publicar_imagens_paralelo` (regra 8).
+pub(crate) fn publicar_placeholders(pub_: &mut dyn Publicador) -> publicador::Result<()> {
     for (area, bytes) in placeholders() {
         let chave = chave_placeholder(area);
         if !pub_.existe(&chave)? {

@@ -103,22 +103,23 @@ fn assinatura_webp_rejeita_vazio_riff_sem_webp_e_jpeg() {
     assert!(!e_webp(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 0, 0, 0, 0, 0, 0, 0]));
 }
 
-/// `Area::chave_area` deve cobrir as 10 variantes, na mesma grafia do enum do contrato 1.3.
+/// `Area::slug` deve cobrir as 10 variantes com o slug de URL do CONTRATO §2.3 (não o valor do
+/// enum): usado em `img/placeholder/{slug}.webp`, já referenciado por BSV-20.
 #[test]
-fn chave_area_cobre_as_10_variantes_do_contrato() {
+fn slug_cobre_as_10_variantes_do_contrato() {
     let esperado = [
-        "TECH",
-        "PLAYERS",
-        "MEU_LAR",
-        "ELAS",
-        "ELES",
-        "CULTURA",
-        "FAMILIA",
-        "PETS",
-        "ESPORTE_VIDA",
-        "OUTROS",
+        "tech",
+        "players",
+        "meu-lar",
+        "elas",
+        "eles",
+        "cultura",
+        "familia",
+        "pets",
+        "esporte-vida",
+        "outros",
     ];
-    let obtido: Vec<&str> = Area::TODAS.iter().map(Area::chave_area).collect();
+    let obtido: Vec<&str> = Area::TODAS.iter().map(Area::slug).collect();
     assert_eq!(obtido, esperado);
 }
 

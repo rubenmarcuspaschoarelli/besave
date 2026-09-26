@@ -1,7 +1,9 @@
-//! Gera os 10 placeholders versionados em `assets/placeholder/{AREA}.webp` (BSV-13, regra 5).
-//! Roda uma vez, offline: `cargo run --example gerar_placeholders`. Fundo sólido por área (só
-//! para diferenciar visualmente) + rótulo em fonte de pixels 5×7 embutida (sem crate de fonte
-//! nova, regra 9: só a dependência `image` já usada por `ajustar_small`).
+//! Gera os 10 placeholders versionados em `assets/placeholder/{slug}.webp` (BSV-13, regra 5).
+//! Chave de arquivo = slug de URL da área (CONTRATO §2.3; `Area::slug`), não o valor do enum —
+//! BSV-20 já referencia `img/placeholder/{slug}.webp`. Roda uma vez, offline:
+//! `cargo run --example gerar_placeholders`. Fundo sólido por área (só para diferenciar
+//! visualmente) + rótulo em fonte de pixels 5×7 embutida (sem crate de fonte nova, regra 9: só
+//! a dependência `image` já usada por `ajustar_small`).
 
 use image::{ExtendedColorType, ImageEncoder, Rgba, RgbaImage, codecs::webp::WebPEncoder};
 use worker::modelo::Area;
@@ -11,8 +13,8 @@ const LADO: u32 = 320;
 /// (`ESPORTE_VIDA`, 12 caracteres) dentro dos 320 px.
 const ESCALA: u32 = 4;
 
-/// Fonte de pixels 5×7, só os glifos usados pelas 10 chaves de `Area::chave_area`
-/// (`A C D E F H I L M N O P R S T U V Y _`). Cada linha é 5 bits (bit 4 = coluna 0).
+/// Fonte de pixels 5×7, só os glifos usados pelo rótulo visual (slug em maiúsculas, hífen virando
+/// `_`): `A C D E F H I L M N O P R S T U V Y _`. Cada linha é 5 bits (bit 4 = coluna 0).
 fn glifo(c: char) -> [u8; 7] {
     match c {
         'A' => [14, 17, 17, 31, 17, 17, 17],
@@ -78,7 +80,9 @@ fn main() -> anyhow::Result<()> {
     std::fs::create_dir_all(&saida)?;
     for area in Area::TODAS {
         let mut img = RgbaImage::from_pixel(LADO, LADO, cor_de_fundo(area));
-        desenhar_texto(&mut img, area.chave_area());
+        // Rótulo visual: slug em maiúsculas com `_` no lugar de `-` (a fonte 5×7 não tem hífen).
+        let rotulo = area.slug().to_uppercase().replace('-', "_");
+        desenhar_texto(&mut img, &rotulo);
         let mut bytes = Vec::new();
         WebPEncoder::new_lossless(&mut bytes).write_image(
             img.as_raw(),
@@ -86,7 +90,7 @@ fn main() -> anyhow::Result<()> {
             LADO,
             ExtendedColorType::Rgba8,
         )?;
-        let caminho = saida.join(format!("{}.webp", area.chave_area()));
+        let caminho = saida.join(format!("{}.webp", area.slug()));
         std::fs::write(&caminho, &bytes)?;
         println!("{}: {} bytes", caminho.display(), bytes.len());
     }

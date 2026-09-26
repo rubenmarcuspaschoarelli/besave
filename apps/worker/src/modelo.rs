@@ -52,19 +52,21 @@ impl Area {
         Area::Outros,
     ];
 
-    /// Chave de arquivo do placeholder (BSV-13): mesmo texto do serde (`"TECH"`, `"MEU_LAR"`, …).
-    pub fn chave_area(&self) -> &'static str {
+    /// Slug de URL da área (CONTRATO §2.3): path das páginas do site e, desde BSV-13, chave de
+    /// arquivo do placeholder (`img/placeholder/{slug}.webp`) e do asset versionado
+    /// (`assets/placeholder/{slug}.webp`) — BSV-20 já referencia esses caminhos.
+    pub fn slug(&self) -> &'static str {
         match self {
-            Area::Tech => "TECH",
-            Area::Players => "PLAYERS",
-            Area::MeuLar => "MEU_LAR",
-            Area::Elas => "ELAS",
-            Area::Eles => "ELES",
-            Area::Cultura => "CULTURA",
-            Area::Familia => "FAMILIA",
-            Area::Pets => "PETS",
-            Area::EsporteVida => "ESPORTE_VIDA",
-            Area::Outros => "OUTROS",
+            Area::Tech => "tech",
+            Area::Players => "players",
+            Area::MeuLar => "meu-lar",
+            Area::Elas => "elas",
+            Area::Eles => "eles",
+            Area::Cultura => "cultura",
+            Area::Familia => "familia",
+            Area::Pets => "pets",
+            Area::EsporteVida => "esporte-vida",
+            Area::Outros => "outros",
         }
     }
 }

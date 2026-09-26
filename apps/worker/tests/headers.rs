@@ -51,7 +51,7 @@ fn tabela_do_manifest_md_secao_4() {
         ),
         ("img/produtos/910.webp", meta("image/webp", None, IMUTAVEL)),
         (
-            "img/placeholder/TECH.webp",
+            "img/placeholder/tech.webp",
             meta("image/webp", None, IMUTAVEL),
         ),
         (
