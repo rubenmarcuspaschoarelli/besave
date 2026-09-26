@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; a spec do ticket fixa arquivos, estrutura e regras; decisões em `spec.md` → Assumptions)
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -139,9 +139,9 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Goldens iguais byte a byte; binário imprime o mesmo HTML; erro de entrada → código ≠ 0
-- [ ] `npx html-validate` sem erros nos goldens
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Goldens iguais byte a byte; binário imprime o mesmo HTML; erro de entrada → código ≠ 0
+- [x] `npx html-validate` sem erros nos goldens
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
 **Tests**: integration
 **Gate**: build

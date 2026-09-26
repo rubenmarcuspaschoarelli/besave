@@ -111,8 +111,8 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 
 | Requirement ID | Story | Task | Status |
 | -------------- | ----- | ---- | ------ |
-| PAG-01 | P1: Página | T4 | Pending |
-| PAG-02 | P1: Página | T4 | Pending |
+| PAG-01 | P1: Página | T4 | Implemented |
+| PAG-02 | P1: Página | T4 | Implemented |
 | PAG-03 | P1: Página | T2 | Implemented |
 | PAG-04 | P1: Página | T2 | Implemented |
 | PAG-05 | P1: Página | T2 | Implemented |
@@ -128,9 +128,9 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 | PAG-15 | P1: Página | T2 | Implemented |
 | TAB-01 | P1: Tabela e CSS | T1 | Implemented |
 | TAB-02 | P1: Tabela e CSS | T3 | Implemented |
-| TAB-03 | P1: Tabela e CSS | T4 | Pending |
-| BIN-01 | P2: Binário | T4 | Pending |
-| BIN-02 | P2: Binário | T4 | Pending |
+| TAB-03 | P1: Tabela e CSS | T4 | Implemented |
+| BIN-01 | P2: Binário | T4 | Implemented |
+| BIN-02 | P2: Binário | T4 | Implemented |
 
 **Coverage:** 20 total, 20 mapped to tasks, 0 unmapped
 

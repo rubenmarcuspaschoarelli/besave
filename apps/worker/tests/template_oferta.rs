@@ -130,10 +130,27 @@ fn tabela_de_areas_igual_ao_contrato() {
     assert_eq!(chaves, enum_lojas);
 }
 
+fn golden(nome: &str) -> String {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/paginas")
+        .join(nome);
+    std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))
+}
+
+// PAG-01. Regenerar: ver templates/README.md.
 #[test]
-fn renderiza_fixture_do_contrato() {
+fn golden_oferta_ativa_byte_a_byte() {
     let html = render(&oferta_ok());
-    assert!(html.starts_with("<!doctype html>"));
+    assert!(html.starts_with("<!DOCTYPE html>\n"));
+    assert_eq!(html, golden("oferta-pagina-ok.html"));
+}
+
+// PAG-02
+#[test]
+fn golden_oferta_encerrada_byte_a_byte() {
+    let o: OfertaPagina = serde_json::from_str(&golden("oferta-pagina-encerrada.json")).unwrap();
+    assert_eq!(o.status, Status::Encerrada);
+    assert_eq!(render(&o), golden("oferta-pagina-encerrada.html"));
 }
 
 // PAG-03
