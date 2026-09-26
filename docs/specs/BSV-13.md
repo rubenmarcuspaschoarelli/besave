@@ -1,4 +1,4 @@
-# BSV-13 · Worker: imagens WebP (`{id}_small` e `{id}`), placeholders e `Area::Outros`
+# BSV-13 · Worker: imagens WebP (`{id}-small` e `{id}`), placeholders e `Area::Outros`
 
 **Papel:** Backend Rust · **Pasta:** `apps/worker/` · **Depende de:** BSV-12 (mergeado). CONTRATO.md §2.3, §6, §7; MANIFEST.md §1, §4, §6, §7
 
@@ -21,7 +21,7 @@ existe, e o enum `Area` do worker fica sincronizado com `enums.schema.json`.
 
 ## Saídas (lib)
 ```rust
-pub fn chave_small(id: i64) -> String;   // "img/ofertas/{id}_small.webp"  (S3 usa underscore: contrato §6)
+pub fn chave_small(id: i64) -> String;   // "img/ofertas/{id}-small.webp"  (mesmo nome do robô: contrato §6)
 pub fn chave_grande(id: i64) -> String;  // "img/ofertas/{id}.webp"
 pub fn origem(dir: &Path, id: i64) -> (PathBuf, PathBuf);  // {dir}/{id}/{id}-small.webp, {dir}/{id}/{id}.webp
 pub fn ajustar_small(bytes: &[u8]) -> Result<Vec<u8>, ErroImagem>;  // só quando > 25 KB: recodifica (ver regra 3)
@@ -61,7 +61,7 @@ Imagens de produto (`img/produtos/`), CDN de imagens externa, HTML (BSV-20/21), 
 ## Critério de aceite
 - `Area::Outros` round-trip com as fixtures do contrato 1.3; `mapeamento.json` carrega sem erro.
 - Fixture `{id}/{id}-small.webp` de 12 KB e `{id}.webp` de 90 KB → publicadas com as chaves do
-  contrato (`_small`), bytes idênticos aos de origem, `Meta` de `img/**`.
+  contrato (`-small`), bytes idênticos aos de origem, `Meta` de `img/**`.
 - `-small.webp` de 40 KB (fixture) → `ajustar_small` devolve ≤ 25 600 bytes, WebP válido, lado
   maior ≤ 320 px; contado em `reprocessadas`.
 - Arquivo com extensão `.webp` mas conteúdo JPEG → `falhas: nao_webp`, sem panic, execução continua.
@@ -71,9 +71,9 @@ Imagens de produto (`img/produtos/`), CDN de imagens externa, HTML (BSV-20/21), 
   sem rede; o upload real é medido pelo dono).
 - `cargo clippy -D warnings` limpo; `cargo test` sem rede.
 - Real (dono): `--publicar --sim` com `BESAVE_IMAGENS_DIR` apontando para a pasta do robô;
-  `curl -I https://<cf>/img/ofertas/<id>_small.webp` e `<id>.webp` → 200, `image/webp`, `immutable`;
+  `curl -I https://<cf>/img/ofertas/<id>-small.webp` e `<id>.webp` → 200, `image/webp`, `immutable`;
   relatório com `maior_small` ≤ 25 600 bytes, `reprocessadas` e `sem_origem` anotados no PR.
 
 ## Definition of done
-PR com README (`BESAVE_IMAGENS_DIR`, layout `{id}/{id}[-small].webp` → `img/ofertas/{id}[_small].webp`, política de orçamento), testes verdes,
-relatório real colado (contagens, tempo, maior `_small`), placeholders em `assets/`.
+PR com README (`BESAVE_IMAGENS_DIR`, layout `{id}/{id}[-small].webp` → `img/ofertas/{id}[-small].webp`, política de orçamento), testes verdes,
+relatório real colado (contagens, tempo, maior `-small`), placeholders em `assets/`.

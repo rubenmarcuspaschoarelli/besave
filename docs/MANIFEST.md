@@ -19,7 +19,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /{area}/index.html                  ← página de área, prerender (ex.: /elas/)
 /{area}/{publico}/index.html        ← ex.: /elas/feminino/
 /img/ofertas/{id}.webp
-/img/ofertas/{id}_small.webp
+/img/ofertas/{id}-small.webp
 /img/produtos/{id_produto}.webp
 /img/placeholder/{area}.webp
 /sitemap.xml                        ← sitemap index
@@ -153,5 +153,5 @@ objeto (comparar hash antes do upload).
 | `OfertaCard` bruto | ≤ 220 B (média ≤ 160 B) |
 | índice de busca comprimido | ≤ 2 MB |
 | HTML de oferta (sem imagens) | ≤ 30 KB |
-| imagem `_small` | ≤ 25 KB |
+| imagem `-small` | ≤ 25 KB |
 | geração completa (30k páginas + chunks) no worker | ≤ 2 min |

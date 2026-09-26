@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.3.0** (SemVer; mudança incompatível = major).
-Histórico: 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.3.1** (SemVer; mudança incompatível = major).
+Histórico: 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -163,7 +163,7 @@ Derivadas do id, nunca campo de dado:
 
 | uso | chave S3 | tamanho |
 |---|---|---|
-| card da lista | `img/ofertas/{id}_small.webp` | lado maior 320 px, ≤ 25 KB |
+| card da lista | `img/ofertas/{id}-small.webp` | lado maior 320 px, ≤ 25 KB |
 | página da oferta | `img/ofertas/{id}.webp` | lado maior 1200 px |
 | produto (futuro) | `img/produtos/{id_produto}.webp` | |
 
