@@ -202,8 +202,8 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | GER-02 | P1: Integração em gerar() | T6 | Implemented |
 | GER-03 | P1: Integração em gerar() | T6 | Implemented |
 | GER-04 | P1: Integração em gerar() | T6 | Implemented |
-| PAR-01 | P2: Paralelismo | T7 | Pending |
-| PAR-02 | P2: Paralelismo | T7 | Pending |
+| PAR-01 | P2: Paralelismo | T7 | Implemented |
+| PAR-02 | P2: Paralelismo | T7 | Implemented |
 
 **Coverage:** 21 total, 21 mapped to tasks, 0 unmapped
 

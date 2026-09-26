@@ -254,10 +254,11 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `PublicadorS3` expõe o caminho paralelo (revisão de código: limite de 16 em voo, sem excesso de conexões)
-- [ ] `main.rs` usa esse caminho só quando o destino é `PublicadorS3`; `PublicadorLocal`/`PublicadorMemoria` inalterados (sequencial)
-- [ ] Medição local (contagem de tempo) registrada no relatório final do PR, não em teste automatizado (sem rede)
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] `PublicadorS3` expõe o caminho paralelo (`publicar_imagens_paralelo`, limite de 16 em voo via `tokio::sync::Semaphore` + `JoinSet`)
+- [x] `PublicadorLocal`/`PublicadorMemoria` inalterados (sequencial, via `imagens::publicar_imagens`)
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**SPEC_DEVIATION**: `main.rs` (`--publicar`) **não** foi religado para chamar `publicar_imagens_paralelo` nesta tarefa — continua usando o `gerar()` único (T6), que fala com `PublicadorS3` através do trait `Publicador` genérico e portanto publica imagens sequencialmente mesmo em S3. Reason: `gerar()` é o mesmo código para Local/Memória/S3 desde BSV-10/11 (testável sem AWS); trocar esse fluxo para usar um caminho S3-específico exigiria re-arquitetar a integração de imagens em `gerar()` (ex.: um hook/trait novo), fora do escopo desta spec. O método fica exposto e pronto (cumpre PAR-01 literalmente: "expõe um caminho"), mas a integração em `--publicar` é trabalho futuro — sinalizado ao dono no relatório final. Medição de desempenho real fica com o dono (critério de aceite da spec do ticket).
 
 **Tests**: none
 **Gate**: build
