@@ -113,19 +113,19 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 | -------------- | ----- | ---- | ------ |
 | PAG-01 | P1: Página | T4 | Pending |
 | PAG-02 | P1: Página | T4 | Pending |
-| PAG-03 | P1: Página | T2 | Pending |
-| PAG-04 | P1: Página | T2 | Pending |
-| PAG-05 | P1: Página | T2 | Pending |
-| PAG-06 | P1: Página | T2 | Pending |
-| PAG-07 | P1: Página | T2 | Pending |
-| PAG-08 | P1: Página | T2 | Pending |
-| PAG-09 | P1: Página | T2 | Pending |
-| PAG-10 | P1: Página | T2 | Pending |
-| PAG-11 | P1: Página | T2 | Pending |
-| PAG-12 | P1: Página | T2 | Pending |
-| PAG-13 | P1: Página | T2 | Pending |
-| PAG-14 | P1: Página | T2 | Pending |
-| PAG-15 | P1: Página | T2 | Pending |
+| PAG-03 | P1: Página | T2 | Implemented |
+| PAG-04 | P1: Página | T2 | Implemented |
+| PAG-05 | P1: Página | T2 | Implemented |
+| PAG-06 | P1: Página | T2 | Implemented |
+| PAG-07 | P1: Página | T2 | Implemented |
+| PAG-08 | P1: Página | T2 | Implemented |
+| PAG-09 | P1: Página | T2 | Implemented |
+| PAG-10 | P1: Página | T2 | Implemented |
+| PAG-11 | P1: Página | T2 | Implemented |
+| PAG-12 | P1: Página | T2 | Implemented |
+| PAG-13 | P1: Página | T2 | Implemented |
+| PAG-14 | P1: Página | T2 | Implemented |
+| PAG-15 | P1: Página | T2 | Implemented |
 | TAB-01 | P1: Tabela e CSS | T1 | Implemented |
 | TAB-02 | P1: Tabela e CSS | T3 | Pending |
 | TAB-03 | P1: Tabela e CSS | T4 | Pending |

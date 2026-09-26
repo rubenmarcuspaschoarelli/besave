@@ -1,7 +1,12 @@
 //! Página estática da oferta (BSV-20): template minijinja embutido, tabela de rótulos e filtros
 //! de formatação pt-BR. Ligação à geração em massa é BSV-21.
 
-use minijinja::{Environment, ErrorKind, UndefinedBehavior, Value, context};
+use std::fmt::Write;
+
+use minijinja::{
+    AutoEscape, Environment, ErrorKind, Output, State, UndefinedBehavior, Value, context,
+    escape_formatter,
+};
 use serde_json::json;
 
 use crate::modelo::{OfertaPagina, Status};
@@ -36,6 +41,7 @@ impl TemplateOferta {
         env.set_undefined_behavior(UndefinedBehavior::Strict);
         env.set_trim_blocks(true);
         env.set_lstrip_blocks(true);
+        env.set_formatter(formatar);
         env.add_filter("reais", reais);
         env.add_filter("milhar", milhar);
         env.add_filter("nota", nota);
@@ -85,6 +91,27 @@ impl TemplateOferta {
             descricao,
             jsonld => Value::from_serialize(&jsonld),
         })?)
+    }
+}
+
+/// Escape HTML só de `& < > " '`: o padrão do minijinja também troca `/` por `&#x2f;`, o que
+/// deixaria URLs e datas ilegíveis no HTML sem ganho de segurança.
+fn formatar(out: &mut Output, state: &State, value: &Value) -> Result<(), minijinja::Error> {
+    match (state.auto_escape(), value.as_str()) {
+        (AutoEscape::Html, Some(s)) if !value.is_safe() => {
+            for c in s.chars() {
+                match c {
+                    '&' => out.write_str("&amp;")?,
+                    '<' => out.write_str("&lt;")?,
+                    '>' => out.write_str("&gt;")?,
+                    '"' => out.write_str("&quot;")?,
+                    '\'' => out.write_str("&#x27;")?,
+                    _ => out.write_char(c)?,
+                }
+            }
+            Ok(())
+        }
+        _ => escape_formatter(out, state, value),
     }
 }
 

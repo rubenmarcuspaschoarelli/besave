@@ -89,8 +89,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Um teste por critério PAG-03..15, com ativa, encerrada, nulos e título com `<script>`
-- [ ] Gate check passes: `cargo test`
+- [x] Um teste por critério PAG-03..15, com ativa, encerrada, nulos e título com `<script>`
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick
