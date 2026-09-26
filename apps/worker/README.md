@@ -9,7 +9,55 @@ Lê OFERTA/PRODUTO do Oracle e converte cada linha em `OfertaCard` e `OfertaPagi
 - `--publicar [--sim]` (BSV-12): o mesmo que `--gerar`, mas no bucket S3, e sincroniza a KVS de
   redirects `id → DS_URL_AFILIADO`. Sem `--sim` só imprime o plano.
 
-Um dos três modos é obrigatório; eles são mutuamente exclusivos.
+Um dos três modos é obrigatório; eles são mutuamente exclusivos. `--gerar` e `--publicar` exigem
+`--imagens-dir`/`BESAVE_IMAGENS_DIR` (BSV-13, ver abaixo); `--dry-run` não usa.
+
+## Imagens (`BESAVE_IMAGENS_DIR`, BSV-13)
+
+O robô já grava, por oferta, `{BESAVE_IMAGENS_DIR}/{id}/{id}.webp` (tamanho natural) e
+`{id}/{id}-small.webp` (lista). O worker **não processa imagem por padrão**: copia para o bucket
+com os nomes do contrato, como passo 1 da ordem de publicação (MANIFEST §6), antes de qualquer
+chunk:
+
+| origem (robô) | chave no bucket | orçamento |
+|---|---|---|
+| `{dir}/{id}/{id}-small.webp` | `img/ofertas/{id}-small.webp` | ≤ 25 600 B, lado maior ≤ 320 px |
+| `{dir}/{id}/{id}.webp` | `img/ofertas/{id}.webp` | aviso (`WARN`) acima de 300 000 B; publica assim mesmo |
+
+Política de orçamento:
+
+- **Dentro do orçamento**: copia os bytes como vieram (nunca reprocessa sem necessidade).
+- **`-small.webp` acima de 25 600 B**: `ajustar_small` decodifica, reduz o lado maior
+  progressivamente (320 px → ×¾ a cada volta) e recodifica em WebP sem perdas até caber no
+  orçamento; conta em `imagens_reprocessadas` e emite `WARN`. (O encoder WebP embutido na crate
+  `image` só faz VP8L sem perdas — não existe "qualidade" ajustável sem uma dependência nativa
+  fora da regra de dependências do ticket; reduzir a resolução cumpre o mesmo orçamento.)
+- **Reaproveitamento**: se as duas chaves já existem no destino, pula (nunca compara conteúdo;
+  a imagem de um id não muda depois de publicada).
+- **Sem origem** (pasta ausente ou faltando um dos dois arquivos): não publica nada para o id;
+  card e página usam `img/placeholder/{AREA}.webp`. **Nunca bloqueia a oferta.**
+- **Placeholders**: os 10 (um por `Area`, incluindo `OUTROS`) estão embutidos no binário
+  (`assets/placeholder/*.webp`, gerados por `cargo run --example gerar_placeholders`) e são
+  publicados uma vez, reaproveitados depois pelo mesmo critério de `existe`.
+- **Expurgo**: id que sai do conjunto publicado (CONTRATO §7) tem as duas chaves de imagem
+  removidas, junto com a página e a chave na KVS.
+
+```sh
+cd apps/worker
+BESAVE_FONTE=fake BESAVE_IMAGENS_DIR=/caminho/para/imagens cargo run -- --gerar --saida ./out
+```
+
+Relatório no stdout (além das contagens de `--gerar`/`--publicar`):
+
+```
+imagens_publicadas: 3
+imagens_reaproveitadas: 0
+imagens_sem_origem: 1
+imagens_reprocessadas: 0
+imagens_falhas: 0
+imagens_maior_small: 18420
+imagens_maior_grande: 142031
+```
 
 ## Rodar com a fonte fake (sem banco)
 
@@ -86,6 +134,7 @@ chunk 5. Com a fonte parada (testes, Oracle sem mudança) a segunda execução g
 cd apps/worker
 export BESAVE_BUCKET=besave-site
 export BESAVE_KVS_ARN=arn:aws:cloudfront::<conta>:key-value-store/<id>
+export BESAVE_IMAGENS_DIR=/caminho/para/imagens/do/robo
 export AWS_REGION=sa-east-1          # região do bucket
 export AWS_PROFILE=besave-worker     # ou AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
 cargo run --release -- --publicar          # plano: não escreve nada
@@ -96,6 +145,7 @@ cargo run --release -- --publicar --sim    # executa
 |---|---|---|
 | `BESAVE_BUCKET` | sim | bucket de destino |
 | `BESAVE_KVS_ARN` | sim | ARN da KeyValueStore da Function `/ir/{id}` |
+| `BESAVE_IMAGENS_DIR` | sim | raiz `{id}/{id}[-small].webp` do robô (BSV-13, ver seção Imagens) |
 | `AWS_REGION` | sim (ou região no perfil) | região do bucket |
 | credenciais | sim | só pela cadeia padrão do SDK: `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, SSO |
 

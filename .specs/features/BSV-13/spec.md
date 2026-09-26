@@ -198,10 +198,10 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | REU-02 | P1: Reaproveitamento | T5 | Implemented |
 | REU-03 | P1: Reaproveitamento | T5 | Implemented |
 | REU-04 | P1: Reaproveitamento | T5 | Implemented |
-| GER-01 | P1: Integração em gerar() | T6 | Pending |
-| GER-02 | P1: Integração em gerar() | T6 | Pending |
-| GER-03 | P1: Integração em gerar() | T6 | Pending |
-| GER-04 | P1: Integração em gerar() | T6 | Pending |
+| GER-01 | P1: Integração em gerar() | T6 | Implemented |
+| GER-02 | P1: Integração em gerar() | T6 | Implemented |
+| GER-03 | P1: Integração em gerar() | T6 | Implemented |
+| GER-04 | P1: Integração em gerar() | T6 | Implemented |
 | PAR-01 | P2: Paralelismo | T7 | Pending |
 | PAR-02 | P2: Paralelismo | T7 | Pending |
 

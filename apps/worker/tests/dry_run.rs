@@ -12,6 +12,12 @@ fn rodar(args: &[&str], fonte: &str) -> Output {
         .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("BESAVE_FONTE", fonte)
+        // Só usada por `--gerar`; `--dry-run` ignora, e o valor nunca precisa existir no disco
+        // (regra 5: pasta ausente vira `sem_origem`, nunca bloqueia).
+        .env(
+            "BESAVE_IMAGENS_DIR",
+            std::env::temp_dir().join("besave-worker-cli-testes-sem-imagens"),
+        )
         .env("RUST_LOG", "warn")
         .env_remove("BESAVE_ORACLE_DSN")
         .env_remove("BESAVE_ORACLE_USER")

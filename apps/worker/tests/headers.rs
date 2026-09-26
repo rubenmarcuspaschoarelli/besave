@@ -2,7 +2,7 @@
 
 mod comum;
 
-use comum::{AGORA, linha, mapeamento};
+use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
 use worker::publicador::{Meta, Publicador, PublicadorMemoria, meta_para};
@@ -103,6 +103,7 @@ fn gerar_grava_com_a_meta_da_tabela() {
         &mapeamento(),
         &mut p,
         &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
         AGORA,
     )
     .unwrap();
@@ -111,6 +112,7 @@ fn gerar_grava_com_a_meta_da_tabela() {
         &mapeamento(),
         &mut p,
         &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
         AGORA + 600,
     )
     .unwrap();

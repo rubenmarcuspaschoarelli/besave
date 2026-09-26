@@ -7,12 +7,13 @@ use std::collections::BTreeMap;
 use std::rc::Rc;
 
 use comum::{
-    AGORA, compactar, descomprimir, fixture, linha, linhas_fixture, mapeamento, texto_aleatorio,
-    validar_schema,
+    AGORA, compactar, descomprimir, dir_imagens_vazio, fixture, linha, linhas_fixture, mapeamento,
+    texto_aleatorio, validar_schema,
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
 use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, gerar};
+use worker::imagens::RelatorioImagens;
 use worker::modelo::{Area, Manifest};
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
@@ -33,7 +34,25 @@ fn rodar_com(
         &mapeamento(),
         p,
         kvs,
+        &dir_imagens_vazio(),
         AGORA,
+    )
+}
+
+fn rodar_com_imagens(
+    linhas: Vec<LinhaOferta>,
+    p: &mut dyn Publicador,
+    kvs: &mut dyn Redirects,
+    dir_imagens: &std::path::Path,
+    agora: i64,
+) -> Result<Relatorio, ErroGeracao> {
+    gerar(
+        &FakeFonte::new(linhas, vec![], agora),
+        &mapeamento(),
+        p,
+        kvs,
+        dir_imagens,
+        agora,
     )
 }
 
@@ -167,6 +186,8 @@ fn headers_e_manifest_por_ultimo() {
     }
 }
 
+/// Imagens (passo 1 de MANIFEST §6, incluindo os placeholders) já foram publicadas quando o
+/// orçamento do chunk estoura — o passo seguinte é que aborta; só chunk/manifest ficam de fora.
 #[test]
 fn chunk_acima_do_orcamento_falha_sem_gravar_nada() {
     let linhas: Vec<_> = (1..1000)
@@ -181,7 +202,13 @@ fn chunk_acima_do_orcamento_falha_sem_gravar_nada() {
         matches!(erro, ErroGeracao::ChunkAcimaDoOrcamento { n: 0, bytes } if bytes > 61_440),
         "{erro:?}"
     );
-    assert!(p.gravacoes().is_empty());
+    assert!(
+        p.gravacoes()
+            .iter()
+            .all(|c| !c.starts_with("data/chunks/") && c != "manifest.json"),
+        "{:?}",
+        p.gravacoes()
+    );
     assert!(!p.existe("manifest.json").unwrap());
 }
 
@@ -267,6 +294,16 @@ fn relatorio_com_contagens() {
                 puts: 5,
                 dels: 0,
                 total: 5,
+            },
+            imagens: RelatorioImagens {
+                publicadas: 0,
+                reaproveitadas: 0,
+                sem_origem: 5,
+                reprocessadas: 0,
+                falhas: vec![],
+                bytes: 0,
+                maior_small: 0,
+                maior_grande: 0,
             },
         }
     );
@@ -390,7 +427,13 @@ fn falha_na_kvs_nao_grava_manifest() {
     .unwrap_err();
     assert!(matches!(erro, ErroGeracao::Redirects(_)), "{erro:?}");
     assert!(!p.existe("manifest.json").unwrap());
-    assert!(p.gravacoes().iter().all(|c| c.starts_with("data/chunks/")));
+    assert!(
+        p.gravacoes()
+            .iter()
+            .all(|c| c.starts_with("data/chunks/") || c.starts_with("img/placeholder/")),
+        "{:?}",
+        p.gravacoes()
+    );
 
     let mut p = PublicadorMemoria::new();
     let mut kvs = RedirectsMemoria::new();
@@ -411,4 +454,114 @@ fn falha_na_kvs_nao_grava_manifest() {
         depois.iter().all(|c| c.starts_with("data/chunks/")),
         "{depois:?}"
     );
+}
+
+fn bytes_webp_teste(tamanho: usize) -> Vec<u8> {
+    let mut b = b"RIFF".to_vec();
+    b.extend_from_slice(&[0, 0, 0, 0]);
+    b.extend_from_slice(b"WEBPVP8 ");
+    b.resize(tamanho.max(b.len()), b'A');
+    b
+}
+
+fn escrever_origem_imagem(dir: &std::path::Path, id: i64) {
+    let pasta = dir.join(id.to_string());
+    std::fs::create_dir_all(&pasta).unwrap();
+    std::fs::write(
+        pasta.join(format!("{id}-small.webp")),
+        bytes_webp_teste(1_000),
+    )
+    .unwrap();
+    std::fs::write(pasta.join(format!("{id}.webp")), bytes_webp_teste(1_000)).unwrap();
+}
+
+fn dir_temp_geracao(nome: &str) -> std::path::PathBuf {
+    let d = std::env::temp_dir().join(format!(
+        "besave-worker-geracao-{nome}-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&d);
+    std::fs::create_dir_all(&d).unwrap();
+    d
+}
+
+/// GER-01: `publicar_imagens` roda antes de qualquer gravação de chunk (MANIFEST §6 passo 1).
+#[test]
+fn imagens_publicadas_antes_de_qualquer_chunk() {
+    let dir = dir_temp_geracao("ordem");
+    escrever_origem_imagem(&dir, 5412);
+    let mut p = PublicadorMemoria::new();
+    rodar_com_imagens(
+        vec![linha(5412)],
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        &dir,
+        AGORA,
+    )
+    .unwrap();
+    let primeiro_chunk = p
+        .gravacoes()
+        .iter()
+        .position(|c| c.starts_with("data/chunks/"))
+        .unwrap();
+    let imagem = p
+        .gravacoes()
+        .iter()
+        .position(|c| c == "img/ofertas/5412-small.webp")
+        .unwrap();
+    assert!(imagem < primeiro_chunk, "{:?}", p.gravacoes());
+}
+
+/// GER-02: o `Relatorio` de `gerar` carrega as contagens de `RelatorioImagens`.
+#[test]
+fn relatorio_inclui_contagens_de_imagens() {
+    let dir = dir_temp_geracao("contagens");
+    escrever_origem_imagem(&dir, 5412);
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar_com_imagens(
+        vec![linha(5412)],
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        &dir,
+        AGORA,
+    )
+    .unwrap();
+    assert_eq!(rel.imagens.publicadas, 1);
+    assert_eq!(rel.imagens.sem_origem, 0);
+}
+
+/// GER-03: id que sai do conjunto publicado tem as duas chaves de imagem removidas.
+#[test]
+fn expurgo_remove_as_duas_chaves_de_imagem() {
+    let dir = dir_temp_geracao("expurgo");
+    escrever_origem_imagem(&dir, 5412);
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar_com_imagens(vec![linha(5412)], &mut p, &mut kvs, &dir, AGORA).unwrap();
+    assert!(p.existe("img/ofertas/5412-small.webp").unwrap());
+    assert!(p.existe("img/ofertas/5412.webp").unwrap());
+
+    // 5412 sai do resultado da fonte (expurgo, CONTRATO §7).
+    rodar_com_imagens(vec![linha(9999)], &mut p, &mut kvs, &dir, AGORA + 600).unwrap();
+    assert!(!p.existe("img/ofertas/5412-small.webp").unwrap());
+    assert!(!p.existe("img/ofertas/5412.webp").unwrap());
+}
+
+/// GER-04: ausência de origem de imagem não bloqueia a publicação da oferta.
+#[test]
+fn sem_origem_de_imagem_nao_bloqueia_a_oferta() {
+    let dir = dir_temp_geracao("sem-origem-oferta");
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar_com_imagens(
+        vec![linha(5412)],
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        &dir,
+        AGORA,
+    )
+    .unwrap();
+    assert_eq!(rel.imagens.sem_origem, 1);
+    assert_eq!(rel.validas, 1);
+    let m = manifest(&p);
+    assert_eq!(m.total_ofertas, 1);
 }

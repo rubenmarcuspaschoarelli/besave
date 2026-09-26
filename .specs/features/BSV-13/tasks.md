@@ -222,13 +222,15 @@ T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Teste com espião/ordem: `publicar_imagens` roda antes de qualquer `pub_.gravar` de chunk
-- [ ] `Relatorio` expõe `imagens: RelatorioImagens` (ou campos equivalentes) preenchido
-- [ ] Teste de expurgo: id presente no manifest anterior e ausente na fonte nesta execução → as duas chaves de imagem são removidas do `PublicadorMemoria`
-- [ ] Teste: id com `sem_origem` (sem pasta) ainda aparece no card/manifest publicado (nenhuma rejeição nova por causa de imagem)
-- [ ] `--gerar`/`--publicar` sem `--imagens-dir`/`BESAVE_IMAGENS_DIR` → erro nomeando a variável, sem panic (`dry_run.rs`)
-- [ ] README documenta `BESAVE_IMAGENS_DIR`, o layout `{id}/{id}[-small].webp` → `img/ofertas/{id}[-small].webp` e a política de orçamento
-- [ ] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+- [x] Teste com histórico do `PublicadorMemoria`: `publicar_imagens` roda antes de qualquer `pub_.gravar` de chunk
+- [x] `Relatorio` expõe `imagens: RelatorioImagens` preenchido
+- [x] Teste de expurgo: id presente na KVS do ciclo anterior e ausente na fonte nesta execução → as duas chaves de imagem são removidas do `PublicadorMemoria`
+- [x] Teste: id com `sem_origem` (sem pasta) ainda aparece no card/manifest publicado (nenhuma rejeição nova por causa de imagem)
+- [x] `--gerar`/`--publicar` sem `--imagens-dir`/`BESAVE_IMAGENS_DIR` → erro nomeando a variável, sem panic (`dry_run.rs`)
+- [x] README documenta `BESAVE_IMAGENS_DIR`, o layout `{id}/{id}[-small].webp` → `img/ofertas/{id}[-small].webp` e a política de orçamento
+- [x] Gate check passes: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
+
+**SPEC_DEVIATION**: `ids_anteriores` (conjunto a expurgar) vem de `redirects.listar()` lido no início de `gerar()`, não da lista de ids do `manifest.json` anterior (que só guarda faixas `[min,max]` por chunk, não ids individuais). Reason: a KVS já espelha exatamente o conjunto publicado do ciclo anterior (decisão de BSV-12), então é a fonte mais simples e correta sem reler chunks antigos; custa uma leitura extra de `ListKeys` por ciclo. Ajustes de testes pré-existentes: `chunk_acima_do_orcamento_falha_sem_gravar_nada` e a 1ª metade de `falha_na_kvs_nao_grava_manifest` agora toleram os 10 placeholders (gravados incondicionalmente por `publicar_imagens`, passo 1) e checam só a ausência de gravação de chunk/manifest; `tests/plano.rs` (3 testes) atualizados para as duas remoções de imagem de 5413 (GER-03), que somam às do chunk órfão pré-existente.
 
 **Tests**: unit
 **Gate**: build
