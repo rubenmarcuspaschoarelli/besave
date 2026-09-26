@@ -1,0 +1,118 @@
+/* besave.css — página de oferta (BSV-20). Substituído pelo build do site em BSV-30; a interface
+   são as classes listadas em apps/worker/templates/README.md. Mobile-first, sem fonte externa. */
+:root {
+  --fundo: #fff;
+  --superficie: #f5f6f7;
+  --borda: #dfe2e5;
+  --texto: #1a1a1a;
+  --suave: #525760;
+  --marca: #0b6e4f;
+  --marca-escura: #084c37;
+  --sobre-marca: #fff;
+  --desconto: #b42318;
+  --aviso-fundo: #fff4e5;
+  --aviso-texto: #7a2e0e;
+  --foco: #1d4ed8;
+  --raio: 10px;
+  --largura: 72rem;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--fundo);
+  color: var(--texto);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+img { max-width: 100%; height: auto; }
+a { color: var(--marca); }
+a:focus-visible, .cta:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+h1, h2, p, dl, dd, figure { margin: 0; }
+
+/* Cabeçalho */
+.topo {
+  display: flex; align-items: center; gap: 1rem;
+  padding: .5rem 1rem; border-bottom: 1px solid var(--borda);
+}
+.logo { font-weight: 800; font-size: 1.25rem; color: var(--marca); text-decoration: none; flex: none; }
+.menu { overflow-x: auto; scrollbar-width: none; }
+.menu ul { display: flex; gap: .25rem; list-style: none; margin: 0; padding: 0; white-space: nowrap; }
+.menu a {
+  display: block; padding: .5rem .625rem; border-radius: 999px;
+  color: var(--texto); text-decoration: none; font-size: .9375rem;
+}
+.menu a:hover { background: var(--superficie); }
+
+/* Oferta */
+.oferta { max-width: var(--largura); margin: 0 auto; padding: 1rem; display: grid; gap: 1.25rem; }
+.titulo { font-size: 1.375rem; line-height: 1.3; overflow-wrap: anywhere; }
+.expirada {
+  background: var(--aviso-fundo); color: var(--aviso-texto); font-weight: 700;
+  padding: .625rem 1rem; border-radius: var(--raio); border: 1px solid #f5c89a;
+}
+.compra { display: grid; gap: 1.25rem; }
+.foto {
+  background: var(--superficie); border-radius: var(--raio);
+  aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
+}
+.foto img { width: 100%; height: 100%; object-fit: contain; }
+.painel { display: grid; gap: 1rem; align-content: start; }
+.preco { display: grid; gap: .25rem; }
+.loja { color: var(--suave); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; font-size: .8125rem; }
+.de { color: var(--suave); }
+.por { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
+.por strong { font-size: 2rem; line-height: 1.1; color: var(--texto); }
+.desconto {
+  background: var(--desconto); color: #fff; font-weight: 700;
+  padding: .125rem .5rem; border-radius: 6px; font-size: .9375rem;
+}
+.data { color: var(--suave); font-size: .875rem; }
+.cupom {
+  display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+  border: 2px dashed var(--marca); border-radius: var(--raio); padding: .625rem 1rem; color: var(--suave);
+}
+.codigo { font: 700 1.125rem/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: var(--texto); letter-spacing: .05em; overflow-wrap: anywhere; }
+.cta {
+  display: block; text-align: center; font-weight: 700; font-size: 1.0625rem;
+  background: var(--marca); color: var(--sobre-marca); text-decoration: none;
+  padding: .875rem 1rem; border-radius: var(--raio); min-height: 48px;
+}
+.cta:hover { background: var(--marca-escura); }
+.cta[aria-disabled="true"] { background: #6b7079; cursor: not-allowed; }
+.avaliacao { color: var(--suave); }
+.avaliacao strong { color: var(--texto); }
+
+/* Detalhes e faixa */
+.detalhes, .faixa { display: grid; gap: .75rem; border-top: 1px solid var(--borda); padding-top: 1.25rem; }
+.detalhes h2, .faixa h2 { font-size: 1.125rem; }
+.ficha { display: grid; gap: 0; border: 1px solid var(--borda); border-radius: var(--raio); overflow: hidden; }
+.ficha div { display: grid; grid-template-columns: 9rem 1fr; gap: .75rem; padding: .5rem .75rem; }
+.ficha div:nth-child(odd) { background: var(--superficie); }
+.ficha dt { color: var(--suave); }
+.ficha dd { overflow-wrap: anywhere; }
+.barra {
+  position: relative; height: .5rem; border-radius: 999px;
+  background: linear-gradient(90deg, #1a7f37, #d4a017 50%, #c2410c);
+}
+.marcador {
+  position: absolute; top: 50%; width: 1.125rem; height: 1.125rem; border-radius: 50%;
+  background: var(--fundo); border: 3px solid var(--texto); transform: translate(-50%, -50%);
+}
+.limites { display: flex; justify-content: space-between; flex-wrap: wrap; gap: .5rem; color: var(--suave); font-size: .875rem; }
+
+/* Rodapé */
+.rodape { border-top: 1px solid var(--borda); margin-top: 1rem; padding: 1.25rem 1rem; }
+.rodape nav { max-width: var(--largura); margin: 0 auto; display: flex; flex-wrap: wrap; gap: 1rem 1.5rem; }
+.rodape a { display: inline-block; padding: .25rem 0; }
+
+/* Oferta encerrada (CONTRATO §7.1) */
+.encerrada .foto img { filter: grayscale(1); opacity: .8; }
+.encerrada .por strong { color: var(--suave); }
+
+@media (min-width: 1024px) {
+  .oferta { padding: 1.5rem 1.5rem 2rem; }
+  .titulo { font-size: 1.75rem; }
+  .compra { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 2rem; align-items: start; }
+  .topo { padding: .5rem 1.5rem; }
+}

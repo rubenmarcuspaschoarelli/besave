@@ -127,7 +127,7 @@ BSV-21 liga o template à geração; aqui entram só template, CSS, render e tes
 | PAG-14 | P1: Página | T2 | Implemented |
 | PAG-15 | P1: Página | T2 | Implemented |
 | TAB-01 | P1: Tabela e CSS | T1 | Implemented |
-| TAB-02 | P1: Tabela e CSS | T3 | Pending |
+| TAB-02 | P1: Tabela e CSS | T3 | Implemented |
 | TAB-03 | P1: Tabela e CSS | T4 | Pending |
 | BIN-01 | P2: Binário | T4 | Pending |
 | BIN-02 | P2: Binário | T4 | Pending |

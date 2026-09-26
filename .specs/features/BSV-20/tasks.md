@@ -114,8 +114,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] HTML de `oferta-pagina-ok` ≤ 30 720 B; CSS Brotli ≤ 20 480 B
-- [ ] Gate check passes: `cargo test`
+- [x] HTML de `oferta-pagina-ok` ≤ 30 720 B; CSS Brotli ≤ 20 480 B
+- [x] Gate check passes: `cargo test`
 
 **Tests**: unit
 **Gate**: quick

@@ -481,3 +481,43 @@ fn exatamente_um_h1() {
         assert_eq!(ocorrencias(&render(&o), "<h1"), 1);
     }
 }
+
+// TAB-02
+#[test]
+fn orcamentos_de_html_e_css() {
+    let html = render(&oferta_ok());
+    assert!(html.len() <= 30 * 1024, "HTML {} B", html.len());
+
+    let css =
+        std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/css/besave.css"))
+            .unwrap();
+    let mut br = Vec::new();
+    let params = brotli::enc::BrotliEncoderParams::default();
+    brotli::BrotliCompress(&mut &css[..], &mut br, &params).unwrap();
+    assert!(!css.is_empty());
+    assert!(br.len() <= 20 * 1024, "CSS br {} B", br.len());
+}
+
+// TAB-02: toda classe usada no template existe no CSS.
+#[test]
+fn classes_do_template_existem_no_css() {
+    let css = std::fs::read_to_string(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/css/besave.css"),
+    )
+    .unwrap();
+    for o in [oferta_ok(), oferta_encerrada()] {
+        let html = render(&o);
+        for pedaco in html.split("class=\"").skip(1) {
+            for classe in pedaco[..pedaco.find('"').unwrap()].split_whitespace() {
+                let seletor = format!(".{classe}");
+                let tem_regra = css.match_indices(&seletor).any(|(i, _)| {
+                    css[i + seletor.len()..]
+                        .chars()
+                        .next()
+                        .is_some_and(|c| !c.is_alphanumeric() && c != '-' && c != '_')
+                });
+                assert!(tem_regra, "classe {seletor} sem regra");
+            }
+        }
+    }
+}
