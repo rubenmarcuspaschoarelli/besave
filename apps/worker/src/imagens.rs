@@ -9,7 +9,7 @@ use image::{
 use tracing::warn;
 
 use crate::modelo::Area;
-use crate::publicador::{self, META_IMAGEM, Publicador};
+use crate::publicador::{self, META_IMAGEM, Meta, Publicador};
 
 /// Orçamento da imagem pequena (MANIFEST §7): acima disso, `ajustar_small` recodifica.
 pub const ORCAMENTO_SMALL: usize = 25_600;
@@ -178,21 +178,37 @@ fn placeholders() -> [(Area, &'static [u8]); 10] {
 }
 
 /// Publica os 10 placeholders que ainda não existem no destino; reaproveita os demais (regra 5).
-/// `pub(crate)`: reaproveitado por `aws::PublicadorS3::publicar_imagens_paralelo` (regra 8).
+/// Uma checagem `existem` + uma gravação `gravar_lote` (nunca 10 chamadas unitárias): em
+/// `PublicadorS3` isso já sai em paralelo pelo pool (regra 8).
 pub(crate) fn publicar_placeholders(pub_: &mut dyn Publicador) -> publicador::Result<()> {
-    for (area, bytes) in placeholders() {
-        let chave = chave_placeholder(area);
-        if !pub_.existe(&chave)? {
-            pub_.gravar(&chave, bytes, &META_IMAGEM)?;
+    let itens = placeholders();
+    let chaves: Vec<String> = itens
+        .iter()
+        .map(|(area, _)| chave_placeholder(*area))
+        .collect();
+    let chaves_ref: Vec<&str> = chaves.iter().map(String::as_str).collect();
+    let existentes = pub_.existem(&chaves_ref)?;
+    let mut a_gravar = Vec::new();
+    for (i, (_, bytes)) in itens.iter().enumerate() {
+        if !existentes[i] {
+            a_gravar.push((chaves[i].clone(), bytes.to_vec(), META_IMAGEM));
         }
+    }
+    if !a_gravar.is_empty() {
+        pub_.gravar_lote(&a_gravar)?;
     }
     Ok(())
 }
 
-/// Copia as imagens de `ids` de `dir` para o destino, uma por uma (regras 2, 3, 4, 5), e garante
-/// os 10 placeholders de área (regra 5). Reaproveitamento (regra 4) e ausência de origem
-/// (regra 5) nunca retornam erro; falha de assinatura WebP conta em `RelatorioImagens.falhas` e
-/// não interrompe o loop (regra 2).
+/// Ids processados por chamada de `existem`/`gravar_lote` (2 chaves por id): equilibra o tamanho
+/// da chamada `HeadObject` em lote do S3 contra o custo de refazer o lote inteiro se uma tarefa
+/// falhar. Revisão do dono (BSV-13): 5 000 ids ÷ 64 ≈ 79 chamadas de cada, não 20 000 unitárias.
+const TAMANHO_BLOCO: usize = 64;
+
+/// Copia as imagens de `ids` de `dir` para o destino, em blocos de `TAMANHO_BLOCO` (regras 2, 3,
+/// 4, 5), e garante os 10 placeholders de área (regra 5). Reaproveitamento (regra 4) e ausência
+/// de origem (regra 5) nunca retornam erro; falha de assinatura WebP conta em
+/// `RelatorioImagens.falhas` e não interrompe o processamento (regra 2).
 pub fn publicar_imagens(
     ids: &[i64],
     dir: &Path,
@@ -200,10 +216,34 @@ pub fn publicar_imagens(
 ) -> publicador::Result<RelatorioImagens> {
     publicar_placeholders(pub_)?;
     let mut rel = RelatorioImagens::default();
-    for &id in ids {
-        let chave_s = chave_small(id);
-        let chave_g = chave_grande(id);
-        if pub_.existe(&chave_s)? && pub_.existe(&chave_g)? {
+    for bloco in ids.chunks(TAMANHO_BLOCO) {
+        processar_bloco(bloco, dir, pub_, &mut rel)?;
+    }
+    Ok(rel)
+}
+
+/// Um bloco: 1 chamada `existem` (2 chaves por id) + no máximo 1 `gravar_lote` com tudo que
+/// precisa subir. `dir`/CPU (leitura de disco, assinatura, `ajustar_small`) continuam por id,
+/// síncronos — só a rede é agrupada.
+fn processar_bloco(
+    ids: &[i64],
+    dir: &Path,
+    pub_: &mut dyn Publicador,
+    rel: &mut RelatorioImagens,
+) -> publicador::Result<()> {
+    let chaves_small: Vec<String> = ids.iter().map(|&id| chave_small(id)).collect();
+    let chaves_grande: Vec<String> = ids.iter().map(|&id| chave_grande(id)).collect();
+    let chaves_ref: Vec<&str> = chaves_small
+        .iter()
+        .chain(chaves_grande.iter())
+        .map(String::as_str)
+        .collect();
+    let existentes = pub_.existem(&chaves_ref)?;
+    let (existe_small, existe_grande) = existentes.split_at(ids.len());
+
+    let mut a_gravar: Vec<(String, Vec<u8>, Meta)> = Vec::new();
+    for (i, &id) in ids.iter().enumerate() {
+        if existe_small[i] && existe_grande[i] {
             rel.reaproveitadas += 1;
             continue;
         }
@@ -242,12 +282,15 @@ pub fn publicar_imagens(
                 "imagem grande acima de 300 KB; publicando assim mesmo"
             );
         }
-        pub_.gravar(&chave_s, &bytes_s, &META_IMAGEM)?;
-        pub_.gravar(&chave_g, &bytes_g, &META_IMAGEM)?;
         rel.bytes += (bytes_s.len() + bytes_g.len()) as u64;
         rel.maior_small = rel.maior_small.max(bytes_s.len() as u64);
         rel.maior_grande = rel.maior_grande.max(bytes_g.len() as u64);
         rel.publicadas += 1;
+        a_gravar.push((chaves_small[i].clone(), bytes_s, META_IMAGEM));
+        a_gravar.push((chaves_grande[i].clone(), bytes_g, META_IMAGEM));
     }
-    Ok(rel)
+    if !a_gravar.is_empty() {
+        pub_.gravar_lote(&a_gravar)?;
+    }
+    Ok(())
 }

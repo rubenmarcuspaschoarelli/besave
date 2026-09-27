@@ -39,7 +39,7 @@ não têm imagem nem placeholder. O contrato 1.3 acrescentou a área `OUTROS`
 | Assinatura WebP | 12 primeiros bytes: `RIFF` (bytes 0-3), tamanho (4-7, ignorado), `WEBP` (bytes 8-11) | Formato de contêiner RIFF/WebP documentado; único jeito de detectar ".webp com conteúdo JPEG" sem decodificar a imagem inteira | y |
 | Recodificação (`ajustar_small`) | Crate `image` 0.25.10 (feature `webp`, via `image-webp`) decodifica e recodifica; verificado em docs.rs que o encoder embutido só faz VP8L (sem perdas, sem parâmetro de qualidade) — um encoder lossy real exigiria a crate `webp`/`libwebp-sys` (toolchain C nativa), fora da regra 9. Em vez de "qualidade 80→40", `ajustar_small` reduz o lado maior progressivamente (320 → ×¾ a cada volta, piso 32 px) e recodifica sem perdas a cada tentativa, até caber em 25 600 B | Regra 3 (cumprida via outro mecanismo: mesmo resultado — ≤ 25 600 B, WebP válido, lado ≤ 320 px) e regra 9 (uma única dependência pura-Rust, sem toolchain nativa) | y |
 | `maior_small` / `maior_grande` | `u64`: maior tamanho em bytes, entre os ids publicados nesta execução, de cada uma das duas chaves (após `ajustar_small` quando houver; `0` se nenhuma imagem publicada) | Simetria com `maior_chunk` (`geracao.rs`) e com o critério de aceite "relatório com `maior_small` ≤ 25 600 bytes" — é um tamanho, não uma contagem | y |
-| Paralelismo (regra 8) | Pool de até 16 tarefas `tokio` em voo dentro de `PublicadorS3::publicar_imagens_paralelo` (um `join_set` limitado), usado só pelo caminho de imagens; `PublicadorLocal`/`PublicadorMemoria` continuam sequenciais (a lib `publicar_imagens` genérica sobre `&mut dyn Publicador` é sequencial; o S3 ganha um método extra usado só por `main.rs` quando o destino é `PublicadorS3`) | `dyn Publicador` é `&mut` e síncrono (BSV-11/12); paralelizar atrás do trait exigiria mudar a assinatura de todo `Publicador`. Regra 8 pede o pool "no `PublicadorS3`", não no trait — isolar ali evita reabrir BSV-11/12 | n |
+| Paralelismo (regra 8) | **Revisado pelo dono.** `Publicador` ganha `existem(&[&str]) -> Result<Vec<bool>>` e `gravar_lote(&[(String, Vec<u8>, Meta)]) -> Result<()>`, ambos com default sequencial (via `existe`/`gravar`); `PublicadorLocal`/`PublicadorMemoria` herdam o default sem mudar. `PublicadorS3` sobrescreve os dois com um pool `tokio` de até 16 tarefas em voo (`Semaphore` + `JoinSet`, `current_thread` runtime já existente). `imagens::publicar_imagens` chama `existem`/`gravar_lote` em blocos de 64 ids em vez de `existe`/`gravar` id a id — `gerar()` não muda | Design original isolava o pool num método extra de `PublicadorS3` nunca chamado por `gerar()` (PAR-01/02 ficavam "expostos, não religados"). Adicionar os 2 métodos ao trait com default sequencial resolve isso sem quebrar `PublicadorLocal`/`PublicadorMemoria`/`PublicadorPlano` (nenhum precisa mudar) e sem tocar `gerar()`: o paralelismo passa a valer de verdade em `--publicar`, não só existir como capacidade solta | y |
 | Extensão de `RelatorioImagens.falhas` | `Vec<(i64, MotivoFalhaImagem)>` com `MotivoFalhaImagem::NaoWebp` (única variante hoje, `Display` = `"nao_webp"`) | Regra 2: "falhas com motivo `nao_webp`"; enum aberto para futuros motivos sem quebrar o tipo | y |
 | Tamanho e geração dos placeholders | 10 arquivos WebP reais, ≤ 8 KB cada, 320×320, fundo neutro (cor sólida por área) + rótulo textual com uma fonte de pixels 5×7 embutida (sem crate de fonte nova); gerados por `apps/worker/examples/gerar_placeholders.rs` (usa só a dependência `image` já justificada por `ajustar_small`), rodado uma vez e os 10 `.webp` resultantes commitados em `assets/placeholder/` | Regra explícita da spec ("o agente cria 10 imagens simples... com o rótulo da área"); um `example` committed é reproduzível e revisável, ao contrário de um script descartável fora do repo; evita 2ª dependência (crate de fonte) para texto | y |
 
@@ -164,8 +164,9 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 
 **Acceptance Criteria**:
 
-1. The `PublicadorS3` SHALL expor um caminho de publicação de imagens que dispara até 16 pares `HeadObject`/`PutObject` em voo simultaneamente.  <!-- PAR-01 -->
-2. The `PublicadorLocal` e `PublicadorMemoria` SHALL continuar processando `publicar_imagens` sequencialmente (sem pool).  <!-- PAR-02 -->
+1. The `Publicador::existem`/`Publicador::gravar_lote` SHALL ter default sequencial no trait; `PublicadorS3` SHALL sobrescrever os dois disparando até 16 pares `HeadObject`/`PutObject` em voo simultaneamente, e `imagens::publicar_imagens` SHALL usá-los em blocos de 64 ids (não mais `existe`/`gravar` um a um) — sem alterar a assinatura nem o corpo de `gerar()`.  <!-- PAR-01 -->
+2. The `PublicadorLocal` e `PublicadorMemoria` SHALL continuar processando `publicar_imagens` sequencialmente, herdando o default do trait sem overrides.  <!-- PAR-02 -->
+3. WHEN `publicar_imagens` processa 5000 ids contra um espião de `PublicadorMemoria` THEN o número de chamadas a `existem` SHALL ser ≤ 80 e a `gravar_lote` SHALL ser ≤ 80 (blocos de 64; não 20 000 chamadas unitárias).  <!-- PAR-03 -->
 
 **Independent Test**: revisão de `src/aws.rs` (sem teste de rede); `cargo clippy` limpo.
 
@@ -202,10 +203,11 @@ bloqueia a corretude funcional coberta pelas histórias P1.
 | GER-02 | P1: Integração em gerar() | T6 | Implemented |
 | GER-03 | P1: Integração em gerar() | T6 | Implemented |
 | GER-04 | P1: Integração em gerar() | T6 | Implemented |
-| PAR-01 | P2: Paralelismo | T7 | Implemented |
+| PAR-01 | P2: Paralelismo | T7 | Implemented (redesenhado, revisão do dono) |
 | PAR-02 | P2: Paralelismo | T7 | Implemented |
+| PAR-03 | P2: Paralelismo | T7 | Implemented (revisão do dono) |
 
-**Coverage:** 21 total, 21 mapped to tasks, 0 unmapped
+**Coverage:** 22 total, 22 mapped to tasks, 0 unmapped
 
 ---
 

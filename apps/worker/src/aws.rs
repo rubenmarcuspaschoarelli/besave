@@ -3,7 +3,6 @@
 //! `gerar()` é síncrono: cada método faz `block_on` num runtime `current_thread` compartilhado.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 use std::sync::Arc;
 
 use aws_config::SdkConfig;
@@ -15,8 +14,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 use tracing::warn;
 
-use crate::imagens::{self, RelatorioImagens};
-use crate::publicador::{self, ErroPublicador, META_IMAGEM, Meta, Publicador};
+use crate::publicador::{self, ErroPublicador, Meta, Publicador};
 use crate::redirects::{self, ErroRedirects, Redirects, id_da_chave, lotes_kvs};
 
 #[derive(Debug, thiserror::Error)]
@@ -205,88 +203,88 @@ impl Publicador for PublicadorS3 {
         chaves.sort();
         Ok(chaves)
     }
-}
 
-/// Pares `HeadObject`/`PutObject` em voo simultaneamente (regra 8): o gargalo de ~50 mil objetos
-/// na primeira carga é rede, não CPU.
-const MAX_EM_VOO: usize = 16;
-
-/// Resultado de uma imagem processada pelo pool paralelo (espelha os ramos de
-/// `imagens::publicar_imagens`, mas sem `&mut dyn Publicador` — cada tarefa fala com o S3 direto).
-enum ResultadoImagem {
-    Publicada {
-        bytes_small: usize,
-        bytes_grande: usize,
-    },
-    Reaproveitada,
-    SemOrigem,
-    Falha(imagens::MotivoFalhaImagem),
-}
-
-impl PublicadorS3 {
-    /// Publica as imagens de `ids` com até `MAX_EM_VOO` pares `HeadObject`/`PutObject` em voo
-    /// (regra 8), mesma política de `imagens::publicar_imagens` (regras 2-5). Os 10 placeholders
-    /// são publicados antes, sequencialmente (10 objetos: paralelismo não compensa).
-    ///
-    /// `PublicadorLocal` e `PublicadorMemoria` continuam sequenciais via
-    /// `imagens::publicar_imagens` — o pool é específico do S3 porque só ali HeadObject/PutObject
-    /// são round-trips de rede caros o bastante para valer a pena sobrepor.
-    pub fn publicar_imagens_paralelo(
-        &mut self,
-        ids: &[i64],
-        dir: &Path,
-    ) -> publicador::Result<RelatorioImagens> {
-        imagens::publicar_placeholders(self)?;
+    /// Sobrescreve o default sequencial do trait: até `MAX_EM_VOO` `HeadObject` em voo (regra 8
+    /// da BSV-13 — o gargalo de ~50 mil objetos na primeira carga é rede, não CPU). A ordem dos
+    /// resultados bate com `chaves`; erro de uma tarefa aborta o lote (mesma semântica de
+    /// `existe` unitário, que também propaga erro).
+    fn existem(&self, chaves: &[&str]) -> publicador::Result<Vec<bool>> {
         let rt = self.rt.clone();
         let cliente = self.cliente.clone();
         let bucket = self.bucket.clone();
-        let dir = dir.to_path_buf();
-        let ids = ids.to_vec();
+        let chaves: Vec<String> = chaves.iter().map(|c| (*c).to_owned()).collect();
+        rt.block_on(async move {
+            let n = chaves.len();
+            let semaforo = Arc::new(Semaphore::new(MAX_EM_VOO));
+            let mut tarefas = JoinSet::new();
+            for (i, chave) in chaves.into_iter().enumerate() {
+                let permissao = permissao(&semaforo).await?;
+                let cliente = cliente.clone();
+                let bucket = bucket.clone();
+                tarefas.spawn(async move {
+                    let _permissao = permissao;
+                    (i, existe_async(&cliente, &bucket, &chave).await)
+                });
+            }
+            let mut resultados = vec![false; n];
+            while let Some(saida) = tarefas.join_next().await {
+                let (i, r) = saida.map_err(erro_tarefa_perdida)?;
+                resultados[i] = r?;
+            }
+            Ok(resultados)
+        })
+    }
+
+    /// Sobrescreve o default sequencial do trait: até `MAX_EM_VOO` `PutObject` em voo (regra 8).
+    fn gravar_lote(&mut self, itens: &[(String, Vec<u8>, Meta)]) -> publicador::Result<()> {
+        let rt = self.rt.clone();
+        let cliente = self.cliente.clone();
+        let bucket = self.bucket.clone();
+        let itens = itens.to_vec();
         rt.block_on(async move {
             let semaforo = Arc::new(Semaphore::new(MAX_EM_VOO));
             let mut tarefas = JoinSet::new();
-            for id in ids {
-                let permissao = Arc::clone(&semaforo).acquire_owned().await.map_err(|e| {
-                    ErroPublicador::Aws {
-                        operacao: "semáforo do pool de imagens",
-                        chave: String::new(),
-                        fonte: texto_erro(e),
-                    }
-                })?;
+            for (chave, bytes, meta) in itens {
+                let permissao = permissao(&semaforo).await?;
                 let cliente = cliente.clone();
                 let bucket = bucket.clone();
-                let dir = dir.clone();
                 tarefas.spawn(async move {
                     let _permissao = permissao;
-                    let resultado = publicar_imagem_paralela(&cliente, &bucket, &dir, id).await;
-                    (id, resultado)
+                    gravar_async(&cliente, &bucket, &chave, bytes, meta).await
                 });
             }
-            let mut rel = RelatorioImagens::default();
             while let Some(saida) = tarefas.join_next().await {
-                // `JoinError` só ocorre em pânico da tarefa; o `id` já se perdeu nesse caso.
-                let (id, resultado) = saida.map_err(|e| ErroPublicador::Aws {
-                    operacao: "tarefa de imagem em paralelo",
-                    chave: "<tarefa perdida>".to_owned(),
-                    fonte: texto_erro(e),
-                })?;
-                match resultado? {
-                    ResultadoImagem::Publicada {
-                        bytes_small,
-                        bytes_grande,
-                    } => {
-                        rel.publicadas += 1;
-                        rel.bytes += (bytes_small + bytes_grande) as u64;
-                        rel.maior_small = rel.maior_small.max(bytes_small as u64);
-                        rel.maior_grande = rel.maior_grande.max(bytes_grande as u64);
-                    }
-                    ResultadoImagem::Reaproveitada => rel.reaproveitadas += 1,
-                    ResultadoImagem::SemOrigem => rel.sem_origem += 1,
-                    ResultadoImagem::Falha(motivo) => rel.falhas.push((id, motivo)),
-                }
+                saida.map_err(erro_tarefa_perdida)??;
             }
-            Ok(rel)
+            Ok(())
         })
+    }
+}
+
+/// Pares `HeadObject`/`PutObject` em voo simultaneamente (regra 8, BSV-13): o gargalo de ~50 mil
+/// objetos na primeira carga é rede, não CPU. `PublicadorLocal`/`PublicadorMemoria` continuam
+/// sequenciais (default do trait) — só aqui, no S3, o round-trip de rede compensa sobrepor.
+const MAX_EM_VOO: usize = 16;
+
+async fn permissao(
+    semaforo: &Arc<Semaphore>,
+) -> publicador::Result<tokio::sync::OwnedSemaphorePermit> {
+    Arc::clone(semaforo)
+        .acquire_owned()
+        .await
+        .map_err(|e| ErroPublicador::Aws {
+            operacao: "semáforo do pool de imagens",
+            chave: String::new(),
+            fonte: texto_erro(e),
+        })
+}
+
+/// `JoinError` só ocorre em pânico da tarefa; o índice/chave já se perderam nesse caso.
+fn erro_tarefa_perdida(e: tokio::task::JoinError) -> ErroPublicador {
+    ErroPublicador::Aws {
+        operacao: "tarefa em paralelo",
+        chave: "<tarefa perdida>".to_owned(),
+        fonte: texto_erro(e),
     }
 }
 
@@ -308,63 +306,20 @@ async fn gravar_async(
     bucket: &str,
     chave: &str,
     bytes: Vec<u8>,
+    meta: Meta,
 ) -> publicador::Result<()> {
     cliente
         .put_object()
         .bucket(bucket)
         .key(chave)
         .body(ByteStream::from(bytes))
-        .content_type(META_IMAGEM.content_type)
-        .cache_control(META_IMAGEM.cache_control)
+        .content_type(meta.content_type)
+        .set_content_encoding(meta.content_encoding.map(str::to_owned))
+        .cache_control(meta.cache_control)
         .send()
         .await
         .map(|_| ())
         .map_err(|e| erro_s3("PutObject", chave, e))
-}
-
-/// Corpo de uma imagem dentro do pool: mesmas regras 2-5 de `imagens::publicar_imagens`, só que
-/// fala com o S3 direto (sem `&mut dyn Publicador`, para poder rodar concorrente).
-async fn publicar_imagem_paralela(
-    cliente: &aws_sdk_s3::Client,
-    bucket: &str,
-    dir: &Path,
-    id: i64,
-) -> publicador::Result<ResultadoImagem> {
-    let chave_small = imagens::chave_small(id);
-    let chave_grande = imagens::chave_grande(id);
-    if existe_async(cliente, bucket, &chave_small).await?
-        && existe_async(cliente, bucket, &chave_grande).await?
-    {
-        return Ok(ResultadoImagem::Reaproveitada);
-    }
-    let (origem_small, origem_grande) = imagens::origem(dir, id);
-    let (Ok(bytes_small), Ok(bytes_grande)) =
-        (std::fs::read(&origem_small), std::fs::read(&origem_grande))
-    else {
-        return Ok(ResultadoImagem::SemOrigem);
-    };
-    if !imagens::e_webp(&bytes_small) || !imagens::e_webp(&bytes_grande) {
-        return Ok(ResultadoImagem::Falha(imagens::MotivoFalhaImagem::NaoWebp));
-    }
-    let bytes_small = if bytes_small.len() > imagens::ORCAMENTO_SMALL {
-        match imagens::ajustar_small(&bytes_small) {
-            Ok(b) => b,
-            Err(_) => {
-                return Ok(ResultadoImagem::Falha(
-                    imagens::MotivoFalhaImagem::FalhaRecodificacao,
-                ));
-            }
-        }
-    } else {
-        bytes_small
-    };
-    let (tamanho_small, tamanho_grande) = (bytes_small.len(), bytes_grande.len());
-    gravar_async(cliente, bucket, &chave_small, bytes_small).await?;
-    gravar_async(cliente, bucket, &chave_grande, bytes_grande).await?;
-    Ok(ResultadoImagem::Publicada {
-        bytes_small: tamanho_small,
-        bytes_grande: tamanho_grande,
-    })
 }
 
 pub struct RedirectsKvs {

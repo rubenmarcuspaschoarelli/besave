@@ -280,7 +280,21 @@ agora tem teste (`dry_run.rs`); (5) `maior_small` agora é asserido num valor n�
 também corrigida: a AC citava round-trip com fixtures compartilhadas que não usam `OUTROS`;
 trocada por round-trip serde direto (`tests/modelo.rs`).
 
-**SPEC_DEVIATION**: `main.rs` (`--publicar`) **não** foi religado para chamar `publicar_imagens_paralelo` nesta tarefa — continua usando o `gerar()` único (T6), que fala com `PublicadorS3` através do trait `Publicador` genérico e portanto publica imagens sequencialmente mesmo em S3. Reason: `gerar()` é o mesmo código para Local/Memória/S3 desde BSV-10/11 (testável sem AWS); trocar esse fluxo para usar um caminho S3-específico exigiria re-arquitetar a integração de imagens em `gerar()` (ex.: um hook/trait novo), fora do escopo desta spec. O método fica exposto e pronto (cumpre PAR-01 literalmente: "expõe um caminho"), mas a integração em `--publicar` é trabalho futuro — sinalizado ao dono no relatório final. Medição de desempenho real fica com o dono (critério de aceite da spec do ticket).
+**Revisão do dono (pós-3ª rodada do Verifier):** o desenho inicial (`publicar_imagens_paralelo`
+como método avulso em `PublicadorS3`, nunca chamado por `gerar()`) foi substituído por dois novos
+métodos no trait `Publicador` — `existem(&[&str]) -> Result<Vec<bool>>` e
+`gravar_lote(&[(String, Vec<u8>, Meta)]) -> Result<()>` — com implementação padrão sequencial
+(via `existe`/`gravar`, um por vez). `PublicadorLocal` e `PublicadorMemoria` não mudam (herdam o
+default). `PublicadorS3` sobrescreve os dois com o pool de 16. `imagens::publicar_imagens` passa
+a chamar `existem`/`gravar_lote` em blocos de `TAMANHO_BLOCO = 64` ids, em vez de `existe`/
+`gravar` um id por vez. **`gerar()` não mudou uma linha** — o paralelismo aparece automaticamente
+quando o destino passado a `gerar()` é um `PublicadorS3`, porque a função genérica agora usa os
+métodos em lote do trait. `publicar_imagens_paralelo` e toda a máquina de `aws.rs` que só existia
+para ele (`ResultadoImagem`, `publicar_imagem_paralela`, etc.) foram removidos — o código ficou
+mais simples, não maior. Teste: 5000 ids geram ≤ 80 chamadas de `existem` e ≤ 80 de `gravar_lote`
+contra um espião de `PublicadorMemoria` (não 20 000 unitárias); o teste `#[ignore]` de 5000 ids
+≤ 5 s continua verde. PAR-01/02 e a nota de "trabalho futuro" da revisão anterior estão
+superadas por este redesenho.
 
 **Tests**: none
 **Gate**: build

@@ -29,16 +29,22 @@ Política de orçamento:
 - **Dentro do orçamento**: copia os bytes como vieram (nunca reprocessa sem necessidade).
 - **`-small.webp` acima de 25 600 B**: `ajustar_small` decodifica, reduz o lado maior
   progressivamente (320 px → ×¾ a cada volta) e recodifica em WebP sem perdas até caber no
-  orçamento; conta em `imagens_reprocessadas` e emite `WARN`. (O encoder WebP embutido na crate
-  `image` só faz VP8L sem perdas — não existe "qualidade" ajustável sem uma dependência nativa
-  fora da regra de dependências do ticket; reduzir a resolução cumpre o mesmo orçamento.)
+  orçamento; conta em `imagens_reprocessadas` e emite `WARN`.
+  **Decisão aceita pelo dono (vira AD em `docs/DECISOES.md`):** o encoder WebP embutido na crate
+  `image` (via `image-webp`) só faz VP8L sem perdas — não existe "qualidade" ajustável sem trocar
+  para uma crate com libwebp nativo (`webp`/`libwebp-sys`, exige toolchain C, fora da regra de
+  dependências do ticket). Reduzir a resolução progressivamente e recodificar sem perdas é o
+  fallback aceito: cumpre o mesmo orçamento (≤ 25 600 B, WebP válido, lado ≤ 320 px) com uma
+  única dependência pura-Rust.
 - **Reaproveitamento**: se as duas chaves já existem no destino, pula (nunca compara conteúdo;
   a imagem de um id não muda depois de publicada).
 - **Sem origem** (pasta ausente ou faltando um dos dois arquivos): não publica nada para o id;
-  card e página usam `img/placeholder/{AREA}.webp`. **Nunca bloqueia a oferta.**
-- **Placeholders**: os 10 (um por `Area`, incluindo `OUTROS`) estão embutidos no binário
-  (`assets/placeholder/*.webp`, gerados por `cargo run --example gerar_placeholders`) e são
-  publicados uma vez, reaproveitados depois pelo mesmo critério de `existe`.
+  card e página usam `img/placeholder/{slug}.webp`. **Nunca bloqueia a oferta.**
+- **Placeholders**: os 10 (um por `Area`, incluindo `OUTROS`) usam o **slug de URL** do
+  CONTRATO §2.3 como chave de arquivo (`tech`, `meu-lar`, `esporte-vida`, …), não o valor do enum
+  — BSV-20 já referencia esses caminhos. Estão embutidos no binário (`assets/placeholder/*.webp`,
+  gerados por `cargo run --example gerar_placeholders`) e são publicados uma vez, reaproveitados
+  depois pelo mesmo critério de `existe`.
 - **Expurgo**: id que sai do conjunto publicado (CONTRATO §7) tem as duas chaves de imagem
   removidas, junto com a página e a chave na KVS.
 
@@ -189,6 +195,12 @@ continua valendo.
   `ST_ATIVO`: oferta expirada mantém o redirect até o expurgo e some junto com a página.
 - Segunda execução sem mudança: 0 chunks e 0 put/del na KVS; `manifest.json` e
   `manifest.prev.json` são regravados (`versao` nova).
+- **Imagens em paralelo (BSV-13):** o trait `Publicador` tem `existem`/`gravar_lote` (checagem e
+  gravação em lote); o default é sequencial (`PublicadorLocal`/`PublicadorMemoria` não mudam).
+  `PublicadorS3` sobrescreve os dois com um pool de até 16 pares `HeadObject`/`PutObject` em voo
+  — `gerar()` não muda: `imagens::publicar_imagens` só troca `existe`/`gravar` por
+  `existem`/`gravar_lote` em blocos de 64 ids, e o paralelismo aparece automaticamente quando o
+  destino é o S3.
 - Retentativas: as do SDK.
 
 Permissões IAM mínimas: `s3:GetObject`, `s3:PutObject`, `s3:DeleteObject`, `s3:ListBucket` no

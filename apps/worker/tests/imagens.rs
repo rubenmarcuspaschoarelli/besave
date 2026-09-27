@@ -1,5 +1,6 @@
 //! CHV-01, CHV-02, CPY-01, CPY-02, ORC-01..03, REU-01..04: imagens de oferta (BSV-13).
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 
 use image::ImageEncoder;
@@ -8,7 +9,7 @@ use worker::imagens::{
     chave_placeholder, chave_small, e_webp, origem, publicar_imagens,
 };
 use worker::modelo::Area;
-use worker::publicador::{META_IMAGEM, Publicador, PublicadorMemoria};
+use worker::publicador::{META_IMAGEM, Meta, Publicador, PublicadorMemoria};
 
 /// Imagem WebP sem perdas com pixels pseudoaleatórios (comprime mal, fica bem maior que o
 /// orçamento de 25 600 B mesmo em resoluções pequenas), para exercitar a recodificação.
@@ -405,4 +406,90 @@ fn segunda_execucao_completa_nao_publica_nada_de_novo() {
     let segunda = publicar_imagens(&ids, &dir, &mut p).unwrap();
     assert_eq!(segunda.publicadas, 0);
     assert_eq!(segunda.reaproveitadas, ids.len() as u64);
+}
+
+/// Espiona `PublicadorMemoria` contando chamadas a `existem`/`gravar_lote` (não a `existe`/
+/// `gravar` unitários, que o default do trait chama por dentro). `existem` é `&self` no trait,
+/// daí o `Cell`; `gravar_lote` é `&mut self`, um `u32` simples basta.
+#[derive(Default)]
+struct ContadorDeLotes {
+    dentro: PublicadorMemoria,
+    existem_chamadas: Cell<u32>,
+    gravar_lote_chamadas: u32,
+}
+
+impl Publicador for ContadorDeLotes {
+    fn existe(&self, chave: &str) -> worker::publicador::Result<bool> {
+        self.dentro.existe(chave)
+    }
+    fn ler(&self, chave: &str) -> worker::publicador::Result<Option<Vec<u8>>> {
+        self.dentro.ler(chave)
+    }
+    fn gravar(&mut self, chave: &str, bytes: &[u8], meta: &Meta) -> worker::publicador::Result<()> {
+        self.dentro.gravar(chave, bytes, meta)
+    }
+    fn remover(&mut self, chave: &str) -> worker::publicador::Result<()> {
+        self.dentro.remover(chave)
+    }
+    fn listar(&self, prefixo: &str) -> worker::publicador::Result<Vec<String>> {
+        self.dentro.listar(prefixo)
+    }
+    fn existem(&self, chaves: &[&str]) -> worker::publicador::Result<Vec<bool>> {
+        self.existem_chamadas.set(self.existem_chamadas.get() + 1);
+        chaves.iter().map(|c| self.dentro.existe(c)).collect()
+    }
+    fn gravar_lote(&mut self, itens: &[(String, Vec<u8>, Meta)]) -> worker::publicador::Result<()> {
+        self.gravar_lote_chamadas += 1;
+        for (chave, bytes, meta) in itens {
+            self.dentro.gravar(chave, bytes, meta)?;
+        }
+        Ok(())
+    }
+}
+
+/// Revisão do dono (BSV-13): 5000 ids devem gerar poucas dezenas de chamadas de
+/// `existem`/`gravar_lote` (blocos de 64 ids), não 20 000 chamadas unitárias de `existe`/
+/// `gravar` (2 chaves × 2 operações × 5000).
+#[test]
+fn cinco_mil_ids_usam_no_maximo_80_chamadas_em_lote() {
+    let dir = dir_temp("cinco-mil-lote");
+    let ids: Vec<i64> = (1..=5000).collect();
+    for &id in &ids {
+        escrever_origem(&dir, id, &bytes_webp(1_000), &bytes_webp(1_000));
+    }
+
+    let mut p = ContadorDeLotes::default();
+    let rel = publicar_imagens(&ids, &dir, &mut p).unwrap();
+
+    assert_eq!(rel.publicadas, 5000);
+    assert!(
+        p.existem_chamadas.get() <= 80,
+        "esperava <= 80 chamadas de existem (blocos de 64), teve {}",
+        p.existem_chamadas.get()
+    );
+    assert!(
+        p.gravar_lote_chamadas <= 80,
+        "esperava <= 80 chamadas de gravar_lote, teve {}",
+        p.gravar_lote_chamadas
+    );
+}
+
+/// Desempenho: 5000 ids contra `PublicadorMemoria` (sem rede) em até 5 s — critério de aceite do
+/// ticket. `#[ignore]`: instável sob carga no CI, roda localmente com `cargo test -- --ignored`.
+#[test]
+#[ignore = "desempenho; rodar localmente com cargo test -- --ignored"]
+fn cinco_mil_ids_em_ate_5_segundos() {
+    let dir = dir_temp("cinco-mil-desempenho");
+    let ids: Vec<i64> = (1..=5000).collect();
+    for &id in &ids {
+        escrever_origem(&dir, id, &bytes_webp(1_000), &bytes_webp(1_000));
+    }
+
+    let mut p = PublicadorMemoria::new();
+    let inicio = std::time::Instant::now();
+    let rel = publicar_imagens(&ids, &dir, &mut p).unwrap();
+    let tempo = inicio.elapsed();
+
+    assert_eq!(rel.publicadas, 5000);
+    assert!(tempo <= std::time::Duration::from_secs(5), "{tempo:?}");
 }
