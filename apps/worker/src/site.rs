@@ -101,9 +101,27 @@ impl EstadoSite {
     }
 }
 
+/// Estado sem índice: só as páginas `oferta/{id}/index.html` que já estão no bucket, com hash vazio
+/// (nunca igual a um hash16, então todas sobem de novo; as de ids fora do conjunto atual são
+/// expurgadas por `publicar_paginas`).
+fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador> {
+    let mut e = EstadoSite::default();
+    for chave in pub_.listar("oferta/")? {
+        let id = chave
+            .strip_prefix("oferta/")
+            .and_then(|r| r.strip_suffix("/index.html"))
+            .and_then(|id| id.parse::<i64>().ok());
+        if let Some(id) = id {
+            e.paginas.0.insert(id, String::new());
+        }
+    }
+    Ok(e)
+}
+
 /// MANIFEST §6 passo 3, na ordem: CSS, páginas (com expurgo), sitemaps (só ATIVAS com página no
 /// bucket), robots e, por último, o índice. Cada objeto só sobe se o hash difere do índice
-/// anterior; índice ilegível conta como ausente (tudo sobe; páginas são idempotentes).
+/// anterior. Índice ausente ou ilegível: tudo sobe (páginas são idempotentes) e o conjunto anterior
+/// de páginas é reconstruído do bucket, para que as órfãs sejam expurgadas mesmo sem índice.
 pub fn publicar_site(
     paginas: &[OfertaPagina],
     cfg: &ConfigSite,
@@ -112,11 +130,12 @@ pub fn publicar_site(
     let lido = pub_.ler(CHAVE_ESTADO)?;
     let anterior = match lido.as_deref().map(EstadoSite::de_json) {
         Some(Some(e)) => e,
-        Some(None) => {
-            warn!("{CHAVE_ESTADO} ilegível; tratando como ausente e reenviando tudo");
-            EstadoSite::default()
+        sem_indice => {
+            if sem_indice.is_some() {
+                warn!("{CHAVE_ESTADO} ilegível; tratando como ausente e reenviando tudo");
+            }
+            paginas_no_bucket(pub_)?
         }
-        None => EstadoSite::default(),
     };
     let mut rel = RelatorioSite::default();
     let mut novo = EstadoSite::default();

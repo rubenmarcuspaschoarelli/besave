@@ -89,11 +89,10 @@ seja `BESAVE_BASE_URL`.
 **Só sobe o que mudou.** `_estado/paginas.json` é um objeto plano com o hash16 (SHA-256, 16 hex)
 de cada objeto publicado: chave numérica = id da página, `_css`, `_robots` e cada `sitemap*.xml`.
 É lido uma vez por execução; objeto com o mesmo hash não é enviado. Sem índice (primeira vez) ou
-com índice ilegível, tudo sobe (páginas são idempotentes) e o ciclo segue. O índice só é regravado
-quando muda: execução sem mudança sobe só `manifest.prev.json` e `manifest.json`.
-Limitação: com o índice ilegível, o worker não sabe o que estava publicado, então páginas de
-ofertas expurgadas **naquele** ciclo ficam órfãs no bucket (as imagens e a chave na KVS saem
-normalmente). Apagar `oferta/` inteiro e deixar a próxima execução republicar resolve.
+com índice ilegível, tudo sobe (páginas são idempotentes) e o ciclo segue; nesse caminho (e só
+nele) o conjunto anterior de páginas é reconstruído com `listar("oferta/")`, então páginas de ids
+que saíram do conjunto são removidas mesmo sem índice, e o índice é regravado. O índice só é
+regravado quando muda: execução sem mudança sobe só `manifest.prev.json` e `manifest.json`.
 
 - Produtos vêm do Oracle em lote (`FonteOfertas::produtos`, `IN` com até 1 000 ids por query),
   nunca uma query por oferta; `--dry-run` usa o mesmo caminho.

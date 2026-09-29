@@ -442,6 +442,61 @@ fn indice_ilegivel_reenvia_tudo_sem_abortar() {
     assert!(p.existe("manifest.json").unwrap());
 }
 
+/// SIT-11 + expurgo sem índice: com `_estado/paginas.json` corrompido, o conjunto anterior vem do
+/// bucket (`listar("oferta/")`); a página órfã sai e o índice é reconstruído e regravado.
+#[test]
+fn indice_corrompido_reconstroi_do_bucket_e_remove_orfa() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    p.gravar(
+        "oferta/9999/index.html",
+        b"<html>orfa</html>",
+        &worker::publicador::META_PAGINA,
+    )
+    .unwrap();
+    p.gravar(
+        "_estado/paginas.json",
+        b"{nao e json",
+        &worker::publicador::META_ESTADO,
+    )
+    .unwrap();
+    let marca = p.gravacoes().len();
+
+    let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r.site.paginas.removidas, 1);
+    assert_eq!(p.remocoes(), ["oferta/9999/index.html"]);
+    assert!(!p.existe("oferta/9999/index.html").unwrap());
+    assert_eq!(r.site.paginas.publicadas, 3);
+    assert!(r.site.indice_gravado);
+    assert!(gravadas(&p, marca).contains(&"_estado/paginas.json".to_owned()));
+    let estado: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert!(estado.get("9999").is_none(), "{estado}");
+    for id in ["5412", "5413", "5420"] {
+        assert_eq!(estado[id].as_str().unwrap().len(), 16, "{estado}");
+    }
+}
+
+/// O caminho de reconstrução é só para índice ausente/ilegível: com índice válido, uma página no
+/// bucket que não está no índice não é tocada (nenhuma listagem de `oferta/` por execução).
+#[test]
+fn indice_valido_nao_lista_nem_remove_pagina_fora_dele() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    p.gravar(
+        "oferta/9999/index.html",
+        b"<html>fora do indice</html>",
+        &worker::publicador::META_PAGINA,
+    )
+    .unwrap();
+    let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r.site.paginas.removidas, 0);
+    assert!(p.remocoes().is_empty());
+    assert!(p.existe("oferta/9999/index.html").unwrap());
+}
+
 fn rodar_site(
     linhas: &[LinhaOferta],
     p: &mut PublicadorMemoria,

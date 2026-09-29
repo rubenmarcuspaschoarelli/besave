@@ -1,16 +1,28 @@
-# BSV-21 Validation (Iteração 2)
+# BSV-21 Validation (Iteração 3 — ajustes da revisão do dono)
 
 **Date**: 2026-09-29
 **Spec**: `.specs/features/BSV-21/spec.md` (EARS) + `docs/specs/BSV-21.md` (critério de aceite do dono)
-**Diff range**: `0c8b5b9..HEAD` (`1fa2744`) — 8 commits `a9c2f45..1fa2744`; a iteração 2 re-verifica o commit de correção `1fa2744`
+**Diff range**: `0c8b5b9..HEAD` — commits `a9c2f45..1fa2744` mais o commit dos ajustes do dono (reconstrução do índice, remoção de `tempo_render_ms > 0`)
 **Verifier**: sub-agente independente (autor ≠ verificador). Toda a evidência foi recoletada do código e de execuções frescas; a iteração 1 não foi usada como prova
 
-## Veredito: ✅ PASS (com 1 resíduo aceito, M21)
+## Veredito: ✅ PASS (com 2 resíduos aceitos pelo dono: M21 e M13)
 
 **Result**: PASS
 
+**Revisão do dono (2026-09-29)**: aprovado com 2 ajustes, aplicados na iteração 3:
+1. Índice `_estado/paginas.json` ausente ou ilegível → além de reenviar tudo, o conjunto anterior de páginas é
+   reconstruído com `listar("oferta/")` (`src/site.rs:107`, chamado só nesse caminho em `src/site.rs:137`), e as páginas de
+   ids fora do conjunto atual são removidas. Teste `tests/ciclo.rs:448` `indice_corrompido_reconstroi_do_bucket_e_remove_orfa`:
+   `:468` `p.remocoes() == ["oferta/9999/index.html"]`, `removidas == 1`, `publicadas == 3`, `indice_gravado`, índice
+   sem `9999` e com hash16 para 5412/5413/5420. A restrição "só nesse caminho" é garantida por `tests/ciclo.rs:484`
+   `indice_valido_nao_lista_nem_remove_pagina_fora_dele` (página fora do índice válido não é tocada).
+2. A asserção `tempo_render_ms > 0` foi removida (instável em release). Fica só `tempo_render_ms <= elapsed`
+   (`tests/paginas.rs:262`), então **M13 volta a sobreviver, e isso foi aceito pelo dono** (campo informativo).
+
+O dono aceitou explicitamente: PAG-07 por composição, M21 como resíduo, e o índice regravado só quando muda.
+
 Os dois gaps Major da iteração 1 (M11 CSS, M12 robots na virada de DNS) foram fechados por testes que matam os mutantes. Também foram mortos
-M13, M19 e M20, e as 4 mutações novas nos trechos alterados. O gate está verde, com 205 testes.
+M13, M19 e M20, e as 4 mutações novas nos trechos alterados. O gate está verde (205 testes na iteração 2; 207 na 3).
 
 Sobram dois pontos, os dois avaliados e aceitos com justificativa (ver "Decisões da iteração 2"):
 - **PAG-07 no nível do `gerar`:** está coberto por composição, não por um teste de ponta a ponta.
@@ -24,6 +36,7 @@ Sobram dois pontos, os dois avaliados e aceitos com justificativa (ver "Decisõe
 | -------- | ------ | --------- | ------ |
 | 1 | `ad3c91d` | ❌ FAIL | Gate: 200 passaram. Sensor: 17/23 mortos. Vivos: **M11** (CSS alterado não sobe), **M12** (robots não sobe quando `BESAVE_INDEXAVEL` muda), M13 (`tempo_render_ms=0`), M19 (fatiamento `IN` do Oracle), M20 (ATIVA sem página entra no sitemap), M21 (`--dry-run` do binário). Precisão: PAG-07 sem "manifest não gravado"; `para_pagina(..).ok()` sem log |
 | 2 | `1fa2744` | ✅ PASS | Gate: 205 passaram. Sensor: 9/10 mortos (6 re-rodadas + 4 novas). M21 aceito como resíduo |
+| 3 | ajustes do dono | ✅ PASS | Gate: 207 passaram, 0 falharam, 3 ignorados. Sensor do trecho novo: 2/2 mortos (R1, R2). M13 volta a viver por decisão do dono |
 
 ### O que o `1fa2744` mudou (conferido no `git show`)
 
@@ -58,7 +71,7 @@ Sobram dois pontos, os dois avaliados e aceitos com justificativa (ver "Decisõe
 | PAG-07 | `PaginaAcimaDoOrcamento{id,bytes}`; índice e manifest não gravados | `tests/paginas.rs:163`, borda `:174-181`; sem índice `tests/site.rs:250`; o `?` do `gerar` antes da KVS/manifest (`src/geracao.rs:192`) é o mesmo caminho provado por SIT-14 `tests/geracao.rs:686-688` | ✅ por composição (ver Decisões) |
 | PAG-08 | loga, conta, não sobe, segue | `tests/paginas.rs:201-206` | ✅ (M15 morto) |
 | PAG-09 | lotes ≤ 64; headers | `tests/paginas.rs:247` `lotes == [64, 64, 2]`; `:80-87` | ✅ (M8 morto) |
-| PAG-10 | 7 campos no relatório | `tests/paginas.rs:90-95`; `tempo_render_ms` `:262` `<= elapsed` e `:264` `> 0` | ✅ (M13 morto) |
+| PAG-10 | 7 campos no relatório | `tests/paginas.rs:90-95`; `tempo_render_ms` só `:262` `<= elapsed` | ✅ presença; ⚠️ M13 vivo, aceito pelo dono (instável em release) |
 | PAG-11 | 30k ≤ 60 s release | `tests/paginas.rs:270-281` `#[ignore]` | ✅ existe (fora do gate; não rodado por este Verifier) |
 
 ### P1: Produtos em lote
@@ -84,7 +97,7 @@ Sobram dois pontos, os dois avaliados e aceitos com justificativa (ver "Decisõe
 | SIT-08 | `User-agent: *\nDisallow: /\n` | `tests/site.rs:139`; `tests/dry_run.rs:278-281` | ✅ (M6 morto) |
 | SIT-09 | `Allow: /` + `Sitemap: {base}/sitemap.xml` | `tests/site.rs:146-151`; virada no ciclo `tests/ciclo.rs:466` (robots exato, regravado) | ✅ (M12, N3, N4 mortos) |
 | SIT-10 | CSS com headers; reenviado quando o hash muda | `tests/headers.rs:86`; `tests/ciclo.rs:515`, `:519` | ✅ (M11, N2 mortos) |
-| SIT-11 | índice ilegível → sobe tudo, segue | `tests/ciclo.rs:424-437` | ✅ (M16 morto) |
+| SIT-11 | índice ilegível → sobe tudo, segue; (dono) reconstrói do bucket e expurga órfãs | `tests/ciclo.rs:424-437`; `tests/ciclo.rs:448-479`; só nesse caminho `tests/ciclo.rs:484-498` | ✅ (M16, R1, R2 mortos) |
 | SIT-12 | `application/json`, `no-store` | `tests/headers.rs:88` | ✅ |
 | SIT-13 | ordem MANIFEST §6 | `tests/geracao.rs:640` `ordem.windows(2).all(w0 < w1)` | ✅ (M10 morto) |
 | SIT-14 | falha de upload de página → sem manifest | `tests/geracao.rs:686-688` | ✅ |
@@ -139,7 +152,7 @@ Cada mutação: aplicar → `cargo test -q --test <alvos>` → reverter. Depois:
 | - | ----- | ------- | ------ | --------- |
 | M11 | `src/site.rs` (comparação `_css`) | CSS sobe só se `anterior.css.is_none()` | ciclo, site, geracao, headers | ✅ Morto (`css_com_hash_diferente_e_reenviado`) |
 | M12 | `src/site.rs` (comparação `_robots`) | robots sobe só se `anterior.robots.is_none()` | ciclo, site, geracao, dry_run | ✅ Morto (`virada_para_indexavel_regrava_robots_e_sitemaps`) |
-| M13 | `src/paginas.rs:115` | `tempo_render_ms = 0` | paginas, geracao, dry_run | ✅ Morto (`tempo_de_render_cabe_no_tempo_da_chamada`) |
+| M13 | `src/paginas.rs:115` | `tempo_render_ms = 0` | paginas, geracao, dry_run | ✅ Morto na iteração 2; ⚠️ vivo na iteração 3 porque o dono pediu para remover a asserção `> 0` (aceito) |
 | M19 | `src/oracle.rs` `blocos_in` | blocos de 2 000 | oracle, fonte | ✅ Morto (`ids_de_produto_em_blocos_de_mil_sem_repetir`) |
 | M20 | `src/site.rs:254` | sitemap sem o filtro "tem página no índice" | ciclo, paginas, site, geracao | ✅ Morto (`ativa_sem_pagina_fica_fora_do_sitemap`) |
 | M21 | `src/main.rs:213` | `--dry-run` volta a chamar `produto` por linha | dry_run | ⚠️ Sobreviveu (resíduo aceito, ver acima) |
@@ -147,6 +160,16 @@ Cada mutação: aplicar → `cargo test -q --test <alvos>` → reverter. Depois:
 | N2 | `src/site.rs` | índice mantém o `_css` antigo (`novo.css = anterior.css`) | ciclo, site | ✅ Morto (4 testes) |
 | N3 | `src/site.rs` | sitemap ignora `cfg.base` (base fixa) | ciclo, site, dry_run | ✅ Morto (`virada_para_indexavel…`) |
 | N4 | `src/site.rs` | índice mantém o `_robots` antigo | ciclo, site | ✅ Morto (4 testes) |
+
+### Iteração 3: trecho novo (reconstrução do índice)
+
+Scratch: `git worktree add --detach %TEMP%sv21-sensor3 HEAD`, com os 3 arquivos alterados copiados. Rodei `cargo test -q --test ciclo indice_`, depois
+`git worktree remove --force` + `prune`. O `git status --porcelain` do tree real ficou igual antes e depois → isolamento OK.
+
+| # | Local | Mutação | Resultado |
+| - | ----- | ------- | --------- |
+| R1 | `src/site.rs:137` | sem reconstrução (`EstadoSite::default()` quando não há índice) | ✅ Morto (`indice_corrompido_reconstroi_do_bucket_e_remove_orfa`) |
+| R2 | `src/site.rs` (braço `Some(Some(e))`) | reconstrói também com índice válido (lista `oferta/` em toda execução) | ✅ Morto (`indice_valido_nao_lista_nem_remove_pagina_fora_dele`) |
 
 **Iteração 2**: 9/10 mortos. **Acumulado**: 17 mortos na iteração 1 + 9 aqui; o único vivo é M21, aceito.
 O `warn!` novo em `src/geracao.rs:140` é só log e não foi mutado (a spec não exige asserção de log).
@@ -156,8 +179,8 @@ O `warn!` novo em `src/geracao.rs:140` é só log e não foi mutado (a spec não
 ## Gate Check
 
 - **Comando** (em `apps/worker/`): `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` → **exit 0**
-- **Resultado**: 205 passaram, 0 falharam, 3 ignorados (`#[ignore]` de desempenho: ciclo 30k, imagens, PAG-11)
-- **Contagem**: 160 `#[test]` em `0c8b5b9` → 208 em HEAD (205 rodados + 3 ignorados); +5 desde a iteração 1
+- **Resultado (iteração 3)**: 207 passaram, 0 falharam, 3 ignorados. Na iteração 2 foram 205; +2 testes do ajuste 1 do dono. Os ignorados são (`#[ignore]` de desempenho: ciclo 30k, imagens, PAG-11)
+- **Contagem**: 160 `#[test]` em `0c8b5b9` → 210 (207 rodados + 3 ignorados)
 - **Integridade**: no ticket todo, a única asserção pré-existente trocada foi `tests/plano.rs:278` (`3 → 4`, por causa da página
   expurgada, com lista exata). A allowlist de `falha_na_kvs_nao_grava_manifest` foi ampliada (`tests/geracao.rs:459-466`), mas a
   perda é compensada por `:487` (chunk `1-` obrigatório) e `:491-495` (resto restrito à página, ao `sitemap-1.xml` e ao índice)
@@ -169,7 +192,7 @@ O `warn!` novo em `src/geracao.rs:140` é só log e não foi mutado (a spec não
 | Decisão | Avaliação |
 | ------- | --------- |
 | Índice regravado só quando muda | Correto. A AC do dono permite, e o `apps/worker/CLAUDE.md` (idempotência) exige. O teste pré-existente `tests/ciclo.rs:76-79` continua exigindo só os manifests. Registrar no PR que a regra 2 ("regravado ao fim") foi lida como "quando muda" |
-| Expurgo de página antes da KVS/manifest | Aceitável e coberto (`tests/plano.rs:283-287`). Risco não registrado: um índice ilegível (SIT-11) deixa órfãs para sempre as páginas de ids expurgados naquele ciclo. Baixo; sugiro uma nota no README |
+| Expurgo de página antes da KVS/manifest | Aceitável e coberto (`tests/plano.rs:283-287`). O risco de órfãs após índice ilegível foi **resolvido** pelo ajuste 1 do dono (reconstrução por `listar("oferta/")`); o README foi atualizado |
 | Falha de render mantém o hash anterior | Correto (M15 morto). ATIVA nova com render falho fica fora do sitemap (M20 morto) |
 | Gate de 30 KB durante os uploads | Aceitável; índice não gravado (`tests/site.rs:250`) |
 | `para_pagina(..).ok()` | Resolvido: agora loga `card sem página` com o id (`src/geracao.rs:140`) |
@@ -204,6 +227,6 @@ O `warn!` novo em `src/geracao.rs:140` é só log e não foi mutado (a spec não
 **Overall**: ✅ Ready para PR. O merge continua bloqueado pela execução real do dono: `--publicar --sim`, `curl -I /oferta/<id>/`,
 `robots.txt`, `sitemap.xml`, segunda execução com 0 páginas, Lighthouse ≥ 95 e relatório real no PR.
 
-**Spec-anchored**: 30/31 exatos, 1 resíduo aceito. **Sensor**: iteração 2 com 9/10 mortos (acumulado 26/27 no total). **Gate**: 205 passaram, 0 falharam.
+**Spec-anchored**: 30/31 exatos; PRD-04 (M21) e PAG-10 (M13) com resíduo aceito pelo dono. **Sensor**: iteração 3 com 2/2 mortos no trecho novo; vivos no total: M13 e M21, os dois aceitos. **Gate**: 207 passaram, 0 falharam.
 
-**Pendências não bloqueantes**: nota no PR sobre PRD-04/M21, sobre a leitura da regra 2 ("quando muda") e sobre as órfãs após índice ilegível.
+**Registrado no corpo da PR** (pedido do dono): PAG-07 por composição, M21 como resíduo, índice regravado só quando muda.
