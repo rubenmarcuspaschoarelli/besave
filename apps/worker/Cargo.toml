@@ -35,6 +35,7 @@ unicode-normalization = "0.1.25"
 
 [dev-dependencies]
 jsonschema = { version = "0.58.0", default-features = false }
+roxmltree = "0.21.1"
 
 # Brotli 9 e SHA-256 sem otimização dobram o tempo do teste de 30k cards (≤ 30 s, `--ignored`).
 [profile.dev.package.brotli]

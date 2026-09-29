@@ -107,9 +107,9 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] 46 000 ativas → 2 arquivos + index, parse ok, ≤ 50 MB; 45 000 → 1 arquivo; 0 → `urlset` vazio
-- [ ] robots nos dois modos; env inválida nomeada
-- [ ] Gate quick passa
+- [x] 46 000 ativas → 2 arquivos + index, parse ok, ≤ 50 MB; 45 000 → 1 arquivo; 0 → `urlset` vazio
+- [x] robots nos dois modos; env inválida nomeada
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

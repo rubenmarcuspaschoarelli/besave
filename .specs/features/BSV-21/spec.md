@@ -155,19 +155,19 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 | PAG-11 | P1: Páginas | T4 | Pending |
 | SIT-01 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-02 | P1: CSS, sitemap, robots | T5 | Pending |
-| SIT-03 | P1: CSS, sitemap, robots | T3 | Pending |
+| SIT-03 | P1: CSS, sitemap, robots | T3 | Implementing |
 | SIT-04 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-05 | P1: CSS, sitemap, robots | T5 | Pending |
-| SIT-06 | P1: CSS, sitemap, robots | T3 | Pending |
+| SIT-06 | P1: CSS, sitemap, robots | T3 | Implementing |
 | SIT-07 | P1: CSS, sitemap, robots | T5 | Pending |
-| SIT-08 | P1: CSS, sitemap, robots | T3 | Pending |
-| SIT-09 | P1: CSS, sitemap, robots | T3 | Pending |
+| SIT-08 | P1: CSS, sitemap, robots | T3 | Implementing |
+| SIT-09 | P1: CSS, sitemap, robots | T3 | Implementing |
 | SIT-10 | P1: CSS, sitemap, robots | T2 | Implementing |
 | SIT-11 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-12 | P1: CSS, sitemap, robots | T2 | Implementing |
 | SIT-13 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-14 | P1: CSS, sitemap, robots | T5 | Pending |
-| SIT-15 | P1: CSS, sitemap, robots | T3 | Pending |
+| SIT-15 | P1: CSS, sitemap, robots | T3 | Implementing |
 | PLN-01 | P2: Plano enxuto | T6 | Pending |
 
 **Coverage:** 31 total, 31 mapped to tasks, 0 unmapped.

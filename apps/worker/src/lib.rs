@@ -14,3 +14,4 @@ pub mod pagina_html;
 pub mod plano;
 pub mod publicador;
 pub mod redirects;
+pub mod site;
