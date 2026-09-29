@@ -10,6 +10,7 @@ use crate::geracao::{Relatorio, Result, gerar};
 use crate::mapeamento::Mapeamento;
 use crate::publicador::{self, Meta, Publicador};
 use crate::redirects::{self, Redirects};
+use crate::site::ConfigSite;
 
 /// Uma escrita que o `--sim` faria.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -151,17 +152,20 @@ pub struct Publicacao {
 }
 
 /// `gerar` no destino. Sem `sim`, nenhuma escrita chega a `pub_` nem a `kvs`.
+// Os argumentos de `gerar` mais `sim`; agrupar só para o lint esconderia a paridade.
+#[allow(clippy::too_many_arguments)]
 pub fn publicar(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
     pub_: &mut dyn Publicador,
     kvs: &mut dyn Redirects,
     dir_imagens: &Path,
+    site: &ConfigSite,
     agora: i64,
     sim: bool,
 ) -> Result<Publicacao> {
     if sim {
-        let relatorio = gerar(fonte, m, pub_, kvs, dir_imagens, agora)?;
+        let relatorio = gerar(fonte, m, pub_, kvs, dir_imagens, site, agora)?;
         return Ok(Publicacao {
             relatorio,
             plano: Plano::default(),
@@ -169,7 +173,7 @@ pub fn publicar(
     }
     let mut p = PublicadorPlano::new(pub_);
     let mut r = RedirectsPlano::new(kvs);
-    let relatorio = gerar(fonte, m, &mut p, &mut r, dir_imagens, agora)?;
+    let relatorio = gerar(fonte, m, &mut p, &mut r, dir_imagens, site, agora)?;
     Ok(Publicacao {
         relatorio,
         plano: Plano {

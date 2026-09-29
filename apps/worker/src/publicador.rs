@@ -54,6 +54,12 @@ pub const META_MANIFEST: Meta = Meta {
 /// com o `Option` de `meta_para` para um caso que nunca é `None`.
 pub const META_IMAGEM: Meta = meta("image/webp", IMUTAVEL);
 
+/// `sitemap*.xml` na raiz (MANIFEST §4).
+pub const META_SITEMAP: Meta = meta("application/xml", CURTO);
+
+/// `robots.txt` (MANIFEST §4).
+pub const META_ROBOTS: Meta = meta("text/plain; charset=utf-8", CURTO);
+
 /// `oferta/*/index.html` (MANIFEST §4).
 pub const META_PAGINA: Meta = meta(HTML, "public, max-age=600, stale-while-revalidate=300");
 
@@ -68,6 +74,7 @@ pub const META_ESTADO: Meta = meta("application/json", "no-store");
 
 const IMUTAVEL: &str = "public, max-age=31536000, immutable";
 const HTML: &str = "text/html; charset=utf-8";
+const CURTO: &str = "public, max-age=300";
 
 const fn meta(content_type: &'static str, cache_control: &'static str) -> Meta {
     Meta {
@@ -80,16 +87,13 @@ const fn meta(content_type: &'static str, cache_control: &'static str) -> Meta {
 /// Headers de cada chave pela tabela de MANIFEST §4; `None` fora dela.
 /// `manifest.prev.json` segue o `manifest.json`; `_app/**` tem `Content-Type` pela extensão.
 pub fn meta_para(chave: &str) -> Option<Meta> {
-    const CURTO: &str = "public, max-age=300";
     let ext = chave.rsplit_once('.').map(|(_, e)| e);
     let raiz = !chave.contains('/');
     match chave {
         "manifest.json" | "manifest.prev.json" => Some(META_MANIFEST),
         "index.html" => Some(meta(HTML, CURTO)),
-        "robots.txt" => Some(meta("text/plain; charset=utf-8", CURTO)),
-        _ if raiz && chave.starts_with("sitemap") && ext == Some("xml") => {
-            Some(meta("application/xml", CURTO))
-        }
+        "robots.txt" => Some(META_ROBOTS),
+        _ if raiz && chave.starts_with("sitemap") && ext == Some("xml") => Some(META_SITEMAP),
         _ if chave.starts_with("data/chunks/") || chave.starts_with("data/busca/") => {
             Some(META_CHUNK)
         }

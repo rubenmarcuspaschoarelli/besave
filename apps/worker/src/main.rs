@@ -16,6 +16,7 @@ use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::plano::publicar;
 use worker::publicador::PublicadorLocal;
 use worker::redirects::RedirectsMemoria;
+use worker::site::ConfigSite;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
@@ -110,8 +111,17 @@ fn publicar_aws(
     let ctx = ContextoAws::carregar()?;
     let mut pub_ = PublicadorS3::new(&ctx, &cfg.bucket);
     let mut kvs = RedirectsKvs::new(&ctx, &cfg.kvs_arn);
-    let pb = publicar(fonte, m, &mut pub_, &mut kvs, dir_imagens, agora, sim)
-        .with_context(|| format!("publicando em s3://{}", cfg.bucket))?;
+    let pb = publicar(
+        fonte,
+        m,
+        &mut pub_,
+        &mut kvs,
+        dir_imagens,
+        &ConfigSite::default(),
+        agora,
+        sim,
+    )
+    .with_context(|| format!("publicando em s3://{}", cfg.bucket))?;
     if !sim {
         println!("PLANO: nada foi escrito. Rode com --sim para executar.");
         println!("bucket: {}", cfg.bucket);
@@ -144,6 +154,7 @@ fn gerar_em(
         &mut pub_,
         &mut RedirectsMemoria::new(),
         dir_imagens,
+        &ConfigSite::default(),
         agora,
     )
     .with_context(|| format!("gerando em {}", saida.display()))?;

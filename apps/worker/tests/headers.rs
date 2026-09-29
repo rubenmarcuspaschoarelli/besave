@@ -7,6 +7,7 @@ use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
 use worker::publicador::{META_CSS, META_ESTADO, Meta, Publicador, PublicadorMemoria, meta_para};
 use worker::redirects::RedirectsMemoria;
+use worker::site::ConfigSite;
 
 const JSON: &str = "application/json";
 const HTML: &str = "text/html; charset=utf-8";
@@ -127,6 +128,7 @@ fn gerar_grava_com_a_meta_da_tabela() {
         &mut p,
         &mut RedirectsMemoria::new(),
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         AGORA,
     )
     .unwrap();
@@ -136,6 +138,7 @@ fn gerar_grava_com_a_meta_da_tabela() {
         &mut p,
         &mut RedirectsMemoria::new(),
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         AGORA + 600,
     )
     .unwrap();

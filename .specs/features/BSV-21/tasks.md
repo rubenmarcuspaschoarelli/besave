@@ -144,8 +144,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Testes de ciclo das ACs listadas passam; 10 000 ofertas → ≤ 10 chamadas a `produtos`
-- [ ] Gate quick passa
+- [x] Testes de ciclo das ACs listadas passam; 10 000 ofertas → ≤ 10 chamadas a `produtos`
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

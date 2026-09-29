@@ -1,13 +1,177 @@
-//! Sitemap, robots.txt e config do site (BSV-21, MANIFEST §1, CONTRATO §7.1).
+//! Sitemap, robots.txt, CSS e índice `_estado/` do site (BSV-21, MANIFEST §1, CONTRATO §7.1).
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
+
+use tracing::{debug, warn};
+
+use crate::modelo::{OfertaPagina, Status};
+use crate::pagina_html::{ErroTemplate, TemplateOferta};
+use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
+use crate::publicador::{
+    ErroPublicador, META_CSS, META_ESTADO, META_ROBOTS, META_SITEMAP, Publicador,
+};
 
 /// URLs por `sitemap-{n}.xml`: margem sob o limite de 50 000 do protocolo.
 pub const MAX_URLS_SITEMAP: usize = 45_000;
 pub const CHAVE_SITEMAP_INDEX: &str = "sitemap.xml";
 pub const CHAVE_ROBOTS: &str = "robots.txt";
+/// Índice do que já está no bucket: id → hash16 da página, mais `_css`, `_robots` e cada
+/// `sitemap*.xml`. Lido uma vez por execução; regravado só quando muda.
+pub const CHAVE_ESTADO: &str = "_estado/paginas.json";
+/// Servido como `/assets/besave.css` (o template referencia esse caminho).
+pub const CHAVE_CSS: &str = "assets/besave.css";
+const CSS: &[u8] = include_bytes!("../assets/css/besave.css");
+const CHAVE_ESTADO_CSS: &str = "_css";
+const CHAVE_ESTADO_ROBOTS: &str = "_robots";
 const BASE_PADRAO: &str = "https://besave.com.br";
 const XMLNS: &str = "http://www.sitemaps.org/schemas/sitemap/0.9";
+
+#[derive(Debug, thiserror::Error)]
+pub enum ErroSite {
+    #[error(transparent)]
+    Publicador(#[from] ErroPublicador),
+    #[error(transparent)]
+    Paginas(#[from] ErroPaginas),
+    #[error(transparent)]
+    Template(#[from] ErroTemplate),
+    #[error("serializando {CHAVE_ESTADO}: {0}")]
+    Estado(serde_json::Error),
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RelatorioSite {
+    pub paginas: RelatorioPaginas,
+    pub css_publicado: bool,
+    pub sitemaps_publicados: u64,
+    pub sitemaps_removidos: u64,
+    pub robots_publicado: bool,
+    pub indice_gravado: bool,
+}
+
+/// Conteúdo de `_estado/paginas.json`.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EstadoSite {
+    pub paginas: IndicePaginas,
+    pub css: Option<String>,
+    pub robots: Option<String>,
+    pub sitemaps: BTreeMap<String, String>,
+}
+
+impl EstadoSite {
+    /// `None` se não for um objeto JSON de strings. Chaves desconhecidas são ignoradas.
+    pub fn de_json(bytes: &[u8]) -> Option<Self> {
+        let mapa: BTreeMap<String, String> = serde_json::from_slice(bytes).ok()?;
+        let mut e = Self::default();
+        for (k, v) in mapa {
+            match k.as_str() {
+                CHAVE_ESTADO_CSS => e.css = Some(v),
+                CHAVE_ESTADO_ROBOTS => e.robots = Some(v),
+                _ if k.starts_with("sitemap") => {
+                    e.sitemaps.insert(k, v);
+                }
+                _ => {
+                    if let Ok(id) = k.parse::<i64>() {
+                        e.paginas.0.insert(id, v);
+                    }
+                }
+            }
+        }
+        Some(e)
+    }
+
+    /// Objeto plano: `{"5412": "…", "_css": "…", "_robots": "…", "sitemap-1.xml": "…"}`.
+    pub fn para_json(&self) -> Result<Vec<u8>, serde_json::Error> {
+        let mut mapa: BTreeMap<String, &str> = self
+            .paginas
+            .0
+            .iter()
+            .map(|(id, h)| (id.to_string(), h.as_str()))
+            .collect();
+        if let Some(h) = &self.css {
+            mapa.insert(CHAVE_ESTADO_CSS.to_owned(), h);
+        }
+        if let Some(h) = &self.robots {
+            mapa.insert(CHAVE_ESTADO_ROBOTS.to_owned(), h);
+        }
+        for (k, h) in &self.sitemaps {
+            mapa.insert(k.clone(), h);
+        }
+        serde_json::to_vec(&mapa)
+    }
+}
+
+/// MANIFEST §6 passo 3, na ordem: CSS, páginas (com expurgo), sitemaps (só ATIVAS com página no
+/// bucket), robots e, por último, o índice. Cada objeto só sobe se o hash difere do índice
+/// anterior; índice ilegível conta como ausente (tudo sobe; páginas são idempotentes).
+pub fn publicar_site(
+    paginas: &[OfertaPagina],
+    cfg: &ConfigSite,
+    pub_: &mut dyn Publicador,
+) -> Result<RelatorioSite, ErroSite> {
+    let lido = pub_.ler(CHAVE_ESTADO)?;
+    let anterior = match lido.as_deref().map(EstadoSite::de_json) {
+        Some(Some(e)) => e,
+        Some(None) => {
+            warn!("{CHAVE_ESTADO} ilegível; tratando como ausente e reenviando tudo");
+            EstadoSite::default()
+        }
+        None => EstadoSite::default(),
+    };
+    let mut rel = RelatorioSite::default();
+    let mut novo = EstadoSite::default();
+
+    let css = hash16(CSS);
+    if anterior.css.as_ref() != Some(&css) {
+        pub_.gravar(CHAVE_CSS, CSS, &META_CSS)?;
+        rel.css_publicado = true;
+    }
+    novo.css = Some(css);
+
+    let t = TemplateOferta::novo()?;
+    let (indice, rel_paginas) = publicar_paginas(paginas, &t, pub_, &anterior.paginas)?;
+    rel.paginas = rel_paginas;
+
+    let ativas: Vec<(i64, &str)> = paginas
+        .iter()
+        .filter(|o| o.status == Status::Ativa && indice.0.contains_key(&o.id))
+        .map(|o| (o.id, o.dt_oferta.as_str()))
+        .collect();
+    novo.paginas = indice;
+    let arquivos = sitemaps(&ativas, &cfg.base);
+    let atuais: BTreeSet<&str> = arquivos.iter().map(|(c, _)| c.as_str()).collect();
+    // Filhos antes do index (o index nunca aponta para arquivo que ainda não subiu).
+    for (chave, bytes) in &arquivos {
+        let h = hash16(bytes);
+        if anterior.sitemaps.get(chave) != Some(&h) {
+            pub_.gravar(chave, bytes, &META_SITEMAP)?;
+            rel.sitemaps_publicados += 1;
+        }
+        novo.sitemaps.insert(chave.clone(), h);
+    }
+    for chave in pub_.listar("sitemap-")? {
+        if !atuais.contains(chave.as_str()) {
+            pub_.remover(&chave)?;
+            rel.sitemaps_removidos += 1;
+            debug!(chave, "sitemap que não é mais gerado removido");
+        }
+    }
+
+    let texto = robots(cfg.indexavel, &cfg.base);
+    let h = hash16(texto.as_bytes());
+    if anterior.robots.as_ref() != Some(&h) {
+        pub_.gravar(CHAVE_ROBOTS, texto.as_bytes(), &META_ROBOTS)?;
+        rel.robots_publicado = true;
+    }
+    novo.robots = Some(h);
+
+    let json = novo.para_json().map_err(ErroSite::Estado)?;
+    if lido.as_deref() != Some(json.as_slice()) {
+        pub_.gravar(CHAVE_ESTADO, &json, &META_ESTADO)?;
+        rel.indice_gravado = true;
+    }
+    Ok(rel)
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroConfigSite {
