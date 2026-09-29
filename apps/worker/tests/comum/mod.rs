@@ -82,6 +82,12 @@ pub fn mapeamento() -> worker::mapeamento::Mapeamento {
     worker::mapeamento::Mapeamento::carregar(caminho_mapeamento()).unwrap()
 }
 
+/// Raiz de imagens para testes que não exercitam BSV-13 diretamente: nunca existe no disco, então
+/// todo id vira `sem_origem` (regra 5) sem afetar o resto do ciclo.
+pub fn dir_imagens_vazio() -> PathBuf {
+    std::env::temp_dir().join("besave-worker-testes-sem-imagens")
+}
+
 /// Linha válida e ativa em TECH, faixa `id / 1000`.
 pub fn linha(id: i64) -> worker::conversao::LinhaOferta {
     worker::conversao::LinhaOferta {

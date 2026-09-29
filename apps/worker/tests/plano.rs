@@ -4,7 +4,7 @@ mod comum;
 
 use std::collections::BTreeMap;
 
-use comum::{AGORA, linha, mapeamento};
+use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
@@ -74,14 +74,14 @@ fn destino() -> (PubEspiao, KvsEspiao, String) {
     let mut p = PublicadorMemoria::new();
     let mut kvs = RedirectsMemoria::new();
     let f1 = FakeFonte::new(vec![linha(1001), linha(5412), linha(5413)], vec![], AGORA);
-    gerar(&f1, &m, &mut p, &mut kvs, AGORA).unwrap();
+    gerar(&f1, &m, &mut p, &mut kvs, &dir_imagens_vazio(), AGORA).unwrap();
     let orfao = p.listar("data/chunks/1-").unwrap().remove(0);
     let f2 = FakeFonte::new(
         vec![titulo(1001, "Nova"), linha(5412), linha(5413)],
         vec![],
         AGORA,
     );
-    gerar(&f2, &m, &mut p, &mut kvs, AGORA + 600).unwrap();
+    gerar(&f2, &m, &mut p, &mut kvs, &dir_imagens_vazio(), AGORA + 600).unwrap();
     (
         PubEspiao {
             dentro: p,
@@ -102,7 +102,16 @@ fn terceiro(p: &mut PubEspiao, kvs: &mut KvsEspiao, sim: bool) -> Publicacao {
         vec![],
         AGORA,
     );
-    publicar(&f3, &mapeamento(), p, kvs, AGORA + 1200, sim).unwrap()
+    publicar(
+        &f3,
+        &mapeamento(),
+        p,
+        kvs,
+        &dir_imagens_vazio(),
+        AGORA + 1200,
+        sim,
+    )
+    .unwrap()
 }
 
 #[test]
@@ -165,17 +174,27 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         ultimas,
         [("manifest.prev.json", curto), ("manifest.json", curto)]
     );
+    // GER-03: 5413 sai do conjunto no 3º ciclo, então as duas chaves de imagem dela também
+    // entram no plano de remoção, junto com o chunk órfão.
     assert!(
         ops.contains(&Operacao::Remover {
             chave: orfao.clone()
         }),
         "{ops:?}"
     );
+    for chave in ["img/ofertas/5413-small.webp", "img/ofertas/5413.webp"] {
+        assert!(
+            ops.contains(&Operacao::Remover {
+                chave: chave.to_owned()
+            }),
+            "{ops:?}"
+        );
+    }
     assert_eq!(
         ops.iter()
             .filter(|o| matches!(o, Operacao::Remover { .. }))
             .count(),
-        1,
+        3,
         "{ops:?}"
     );
 
@@ -229,8 +248,16 @@ fn sim_escreve_no_destino_e_plano_vem_vazio() {
     assert!(pb.plano.objetos.is_empty());
     assert!(pb.plano.redirects.is_empty());
     assert!(p.gravar >= 4, "chunks 2 e 5 + manifests: {}", p.gravar);
-    assert_eq!(p.remover, 1);
-    assert_eq!(p.dentro.remocoes(), std::slice::from_ref(&orfao));
+    // GER-03: remove o chunk órfão e as duas chaves de imagem de 5413 (saiu do conjunto).
+    assert_eq!(p.remover, 3);
+    assert_eq!(
+        p.dentro.remocoes(),
+        &[
+            orfao.clone(),
+            "img/ofertas/5413-small.webp".to_owned(),
+            "img/ofertas/5413.webp".to_owned(),
+        ][..]
+    );
     assert_eq!(kvs.aplicar, 1);
     assert!(!p.dentro.existe(&orfao).unwrap());
     assert_eq!(
@@ -258,7 +285,16 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
         vec![],
         AGORA,
     );
-    let pb = publicar(&f3, &mapeamento(), &mut p, &mut kvs, AGORA + 1200, false).unwrap();
+    let pb = publicar(
+        &f3,
+        &mapeamento(),
+        &mut p,
+        &mut kvs,
+        &dir_imagens_vazio(),
+        AGORA + 1200,
+        false,
+    )
+    .unwrap();
 
     assert_eq!(p.gravacoes().len(), gravacoes);
     assert_eq!(p.remocoes().len(), remocoes);
@@ -277,15 +313,18 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
     assert!(tem("gravar data/chunks/2-"), "{linhas:?}");
     assert!(tem("gravar data/chunks/5-"), "{linhas:?}");
     let n = objetos.len();
+    // GER-03: remover chunk órfão + as duas chaves de imagem de 5413, nessa ordem, no final.
     assert!(
-        objetos[n - 3].starts_with("gravar manifest.prev.json ("),
+        objetos[n - 5].starts_with("gravar manifest.prev.json ("),
         "{linhas:?}"
     );
     assert!(
-        objetos[n - 2].starts_with("gravar manifest.json ("),
+        objetos[n - 4].starts_with("gravar manifest.json ("),
         "{linhas:?}"
     );
-    assert_eq!(objetos[n - 1], format!("remover {orfao}"));
+    assert_eq!(objetos[n - 3], format!("remover {orfao}"));
+    assert_eq!(objetos[n - 2], "remover img/ofertas/5413-small.webp");
+    assert_eq!(objetos[n - 1], "remover img/ofertas/5413.webp");
     assert_eq!(
         chaves,
         [

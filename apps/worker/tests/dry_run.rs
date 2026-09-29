@@ -12,6 +12,12 @@ fn rodar(args: &[&str], fonte: &str) -> Output {
         .args(args)
         .current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("BESAVE_FONTE", fonte)
+        // Só usada por `--gerar`; `--dry-run` ignora, e o valor nunca precisa existir no disco
+        // (regra 5: pasta ausente vira `sem_origem`, nunca bloqueia).
+        .env(
+            "BESAVE_IMAGENS_DIR",
+            std::env::temp_dir().join("besave-worker-cli-testes-sem-imagens"),
+        )
         .env("RUST_LOG", "warn")
         .env_remove("BESAVE_ORACLE_DSN")
         .env_remove("BESAVE_ORACLE_USER")
@@ -140,6 +146,32 @@ fn gerar_sem_saida_sai_com_erro() {
     assert!(!out.status.success());
     assert_ne!(out.status.code(), Some(101), "panic");
     assert!(String::from_utf8_lossy(&out.stderr).contains("--saida"));
+}
+
+/// Fix 4 (validation.md): `--gerar` sem `BESAVE_IMAGENS_DIR` sai com erro nomeando a variável,
+/// sem panic (mesmo padrão de `publicar_sem_bucket_nomeia_a_variavel`).
+#[test]
+fn gerar_sem_imagens_dir_nomeia_a_variavel() {
+    let dir = saida("sem-imagens-dir");
+    let out = Command::new(env!("CARGO_BIN_EXE_besave-worker"))
+        .args(["--gerar", "--saida", dir.to_str().unwrap()])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("BESAVE_FONTE", "fake")
+        .env("RUST_LOG", "warn")
+        .env_remove("BESAVE_IMAGENS_DIR")
+        .env_remove("BESAVE_ORACLE_DSN")
+        .env_remove("BESAVE_ORACLE_USER")
+        .env_remove("BESAVE_ORACLE_PASS")
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    assert_ne!(out.status.code(), Some(101), "panic");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("BESAVE_IMAGENS_DIR"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(!dir.join("manifest.json").exists());
 }
 
 // AWS-03, AWS-04 (BSV-12): `--publicar` valida a config antes de qualquer acesso à rede.
