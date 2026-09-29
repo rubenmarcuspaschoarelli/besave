@@ -1,0 +1,12 @@
+{
+  "id": 5413, "id_produto": 911,
+  "loja": "SHOPEE", "titulo": "Jogo de panelas antiaderente 5 peças",
+  "preco_de": null, "preco_por": 15990, "desconto_pct": null, "cupom": null,
+  "nota": null, "qt_avaliacoes": null, "dt_oferta": "2026-09-20T02:15:00Z",
+  "area": "MEU_LAR", "publico": "UNISSEX", "status": "ENCERRADA",
+  "produto": {
+    "descricao": "Conjunto com 5 panelas de alumínio com revestimento antiaderente e tampas de vidro.",
+    "marca": "Casa & Cia", "fabricante": null, "modelo": null, "pais_origem": "Brasil",
+    "genero": null, "faixa_etaria": null, "preco_min": 15990, "preco_max": 15990
+  }
+}
