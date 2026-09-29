@@ -162,8 +162,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Plano com 30 páginas → 1 linha com contagem e 5 exemplos
-- [ ] Gate quick passa
+- [x] Plano com 30 páginas → 1 linha com contagem e 5 exemplos
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

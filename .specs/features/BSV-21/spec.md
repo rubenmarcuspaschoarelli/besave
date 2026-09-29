@@ -168,7 +168,7 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 | SIT-13 | P1: CSS, sitemap, robots | T5 | Implementing |
 | SIT-14 | P1: CSS, sitemap, robots | T5 | Implementing |
 | SIT-15 | P1: CSS, sitemap, robots | T3 | Implementing |
-| PLN-01 | P2: Plano enxuto | T6 | Pending |
+| PLN-01 | P2: Plano enxuto | T6 | Implementing |
 
 **Coverage:** 31 total, 31 mapped to tasks, 0 unmapped.
 

@@ -8,7 +8,7 @@ use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
-use worker::plano::{Operacao, Publicacao, publicar};
+use worker::plano::{Operacao, Plano, Publicacao, publicar};
 use worker::publicador::{Meta, Publicador, PublicadorMemoria};
 use worker::redirects::{Redirects, RedirectsMemoria};
 use worker::site::ConfigSite;
@@ -360,4 +360,53 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
             "deleteKey 5413".to_owned()
         ]
     );
+}
+
+fn gravar(chave: String) -> Operacao {
+    Operacao::Gravar {
+        chave,
+        bytes: 3000,
+        cache_control: "public, max-age=600, stale-while-revalidate=300",
+    }
+}
+
+/// PLN-01 (BSV-21 regra 11): páginas viram uma linha por tipo, com contagem e até 5 exemplos,
+/// na posição da primeira operação daquele tipo; o resto continua uma linha por operação.
+#[test]
+fn plano_resume_paginas_em_contagem_e_cinco_exemplos() {
+    let mut objetos = vec![gravar("data/chunks/1-abc.json.br".into())];
+    objetos.extend((1..=30).map(|id| gravar(format!("oferta/{id}/index.html"))));
+    objetos.push(Operacao::Remover {
+        chave: "oferta/77/index.html".into(),
+    });
+    objetos.push(Operacao::Remover {
+        chave: "oferta/78/index.html".into(),
+    });
+    objetos.push(gravar("sitemap.xml".into()));
+    let plano = Plano {
+        objetos,
+        redirects: vec![],
+    };
+    let linhas = plano.linhas();
+    assert_eq!(
+        linhas,
+        [
+            "S3:",
+            "  gravar data/chunks/1-abc.json.br (3000 B, public, max-age=600, stale-while-revalidate=300)",
+            "  páginas a gravar: 30 (ex.: oferta/1/index.html, oferta/2/index.html, oferta/3/index.html, oferta/4/index.html, oferta/5/index.html)",
+            "  páginas a remover: 2 (ex.: oferta/77/index.html, oferta/78/index.html)",
+            "  gravar sitemap.xml (3000 B, public, max-age=600, stale-while-revalidate=300)",
+            "KVS (aplicada antes do manifest.json):",
+        ]
+    );
+}
+
+/// PLN-01: sem página no plano, nenhuma linha de resumo.
+#[test]
+fn plano_sem_paginas_nao_tem_resumo() {
+    let plano = Plano {
+        objetos: vec![gravar("robots.txt".into())],
+        redirects: vec![],
+    };
+    assert!(plano.linhas().iter().all(|l| !l.contains("páginas")));
 }

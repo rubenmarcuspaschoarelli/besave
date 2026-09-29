@@ -124,6 +124,13 @@ impl Redirects for RedirectsPlano<'_> {
     }
 }
 
+/// Chaves de exemplo por linha de resumo de páginas.
+const EXEMPLOS_PAGINA: usize = 5;
+
+fn e_pagina(chave: &str) -> bool {
+    chave.starts_with("oferta/") && chave.ends_with("/index.html")
+}
+
 /// Escritas planejadas, na ordem em que o `--sim` as faria em cada destino.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Plano {
@@ -134,10 +141,40 @@ pub struct Plano {
 impl Plano {
     /// Texto que o `--publicar` imprime: uma seção por destino, uma operação por linha.
     /// A KVS é sincronizada depois dos chunks e antes de `manifest.prev.json`/`manifest.json`.
+    /// Páginas de oferta (até ~30 mil) viram uma linha por tipo, com contagem e até
+    /// `EXEMPLOS_PAGINA` chaves, na posição da primeira operação daquele tipo.
     pub fn linhas(&self) -> Vec<String> {
         let op = |o: &Operacao| format!("  {o}");
         let mut v = vec!["S3:".to_owned()];
-        v.extend(self.objetos.iter().map(op));
+        // Por tipo ("gravar", "remover"): linha reservada em `v` e chaves das páginas.
+        let mut paginas: [(&str, Option<usize>, Vec<&str>); 2] =
+            [("gravar", None, Vec::new()), ("remover", None, Vec::new())];
+        for o in &self.objetos {
+            let (tipo, chave) = match o {
+                Operacao::Gravar { chave, .. } if e_pagina(chave) => (0, chave),
+                Operacao::Remover { chave } if e_pagina(chave) => (1, chave),
+                _ => {
+                    v.push(op(o));
+                    continue;
+                }
+            };
+            let (_, linha, chaves) = &mut paginas[tipo];
+            if linha.is_none() {
+                *linha = Some(v.len());
+                v.push(String::new());
+            }
+            chaves.push(chave.as_str());
+        }
+        for (tipo, linha, chaves) in paginas {
+            if let Some(i) = linha {
+                let ex: Vec<&str> = chaves.iter().take(EXEMPLOS_PAGINA).copied().collect();
+                v[i] = format!(
+                    "  páginas a {tipo}: {} (ex.: {})",
+                    chaves.len(),
+                    ex.join(", ")
+                );
+            }
+        }
         v.push("KVS (aplicada antes do manifest.json):".to_owned());
         v.extend(self.redirects.iter().map(op));
         v
