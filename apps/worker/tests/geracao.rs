@@ -12,7 +12,7 @@ use comum::{
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
-use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, gerar};
+use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, contar_paginas, gerar};
 use worker::imagens::RelatorioImagens;
 use worker::modelo::{Area, Manifest};
 use worker::paginas::RelatorioPaginas;
@@ -720,4 +720,23 @@ fn produtos_em_lote_sem_n_mais_1() {
     assert_eq!(rel.site.paginas.publicadas, 10_000);
     let html = String::from_utf8(p.ler("oferta/42/index.html").unwrap().unwrap()).unwrap();
     assert!(html.contains("Descrição carregada em lote."));
+}
+
+/// PRD-04: o `--dry-run` converte para página com os produtos em lote (1 chamada, nenhuma unitária).
+#[test]
+fn dry_run_usa_produtos_em_lote() {
+    let mut linhas = comum::linhas_fixture();
+    linhas.push(LinhaOferta {
+        id_produto: None,
+        ..linha(7001)
+    });
+    let fonte = FakeFonte::new(linhas, vec![], AGORA);
+    let (lidas, validas, rejeitadas) = contar_paginas(&fonte, &mapeamento()).unwrap();
+    assert_eq!((lidas, validas), (4, 3));
+    assert_eq!(
+        rejeitadas,
+        BTreeMap::from([(Rejeicao::IdProdutoAusente, 1)])
+    );
+    assert_eq!(fonte.chamadas_produtos(), 1);
+    assert_eq!(fonte.chamadas_produto(), 0);
 }

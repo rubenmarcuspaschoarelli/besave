@@ -141,7 +141,7 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 | PRD-01 | P1: Produtos em lote | T1 | Implementing |
 | PRD-02 | P1: Produtos em lote | T1 | Implementing |
 | PRD-03 | P1: Produtos em lote | T1 | Implementing |
-| PRD-04 | P1: Produtos em lote | T7 | Pending |
+| PRD-04 | P1: Produtos em lote | T7 | Implementing |
 | PAG-01 | P1: Páginas | T4 | Implementing |
 | PAG-02 | P1: Páginas | T4 | Implementing |
 | PAG-03 | P1: Páginas | T4 | Implementing |

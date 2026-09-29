@@ -247,6 +247,30 @@ pub fn gerar(
     Ok(rel)
 }
 
+/// `--dry-run`: converte cada linha em página com os produtos carregados em lote, sem escrever
+/// nada. Devolve `(lidas, válidas, rejeitadas por motivo)`; rejeições são logadas com o id.
+pub fn contar_paginas(
+    fonte: &dyn FonteOfertas,
+    m: &Mapeamento,
+) -> Result<(u64, u64, BTreeMap<Rejeicao, u64>)> {
+    let linhas = fonte.ofertas()?;
+    let ids: Vec<i64> = linhas.iter().filter_map(|l| l.id_produto).collect();
+    let produtos = fonte.produtos(&ids)?;
+    let mut validas = 0;
+    let mut rejeitadas = BTreeMap::new();
+    for l in &linhas {
+        let p = l.id_produto.and_then(|id| produtos.get(&id));
+        match para_pagina(l, p, m) {
+            Ok(_) => validas += 1,
+            Err(r) => {
+                warn!(id = l.id, motivo = %r, "oferta rejeitada");
+                *rejeitadas.entry(r).or_default() += 1;
+            }
+        }
+    }
+    Ok((linhas.len() as u64, validas, rejeitadas))
+}
+
 /// Chunk comprimido de até `ORCAMENTO_CHUNK` bytes passa; acima disso, erro.
 pub fn checar_orcamento(n: u64, bytes: u64) -> Result<()> {
     if bytes > ORCAMENTO_CHUNK {

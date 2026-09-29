@@ -180,9 +180,9 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `--gerar` fake imprime `paginas_publicadas: 3` e cria `oferta/5412/index.html`, `robots.txt`
-- [ ] `BESAVE_INDEXAVEL=talvez` falha nomeando a variável
-- [ ] Gate build passa
+- [x] `--gerar` fake imprime `paginas_publicadas: 3` e cria `oferta/5412/index.html`, `robots.txt`
+- [x] `BESAVE_INDEXAVEL=talvez` falha nomeando a variável
+- [x] Gate build passa
 
 **Tests**: integration
 **Gate**: build
