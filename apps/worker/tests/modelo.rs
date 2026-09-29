@@ -3,7 +3,7 @@
 mod comum;
 
 use comum::{compactar, fixture};
-use worker::modelo::{Manifest, OfertaCard, OfertaPagina};
+use worker::modelo::{Area, Manifest, OfertaCard, OfertaPagina};
 
 #[test]
 fn chunk_ok_round_trip_identico() {
@@ -25,4 +25,14 @@ fn manifest_ok_round_trip_identico() {
     let txt = fixture("manifest-ok.json");
     let m: Manifest = serde_json::from_str(&txt).unwrap();
     assert_eq!(serde_json::to_string(&m).unwrap(), compactar(&txt));
+}
+
+/// AREA-01: `Area::Outros` serializa como `"OUTROS"` e desserializa de volta — round-trip serde
+/// direto (nenhuma fixture compartilhada usa `OUTROS` hoje; ver nota da AC em `spec.md`).
+#[test]
+fn area_outros_round_trip_serde() {
+    let json = serde_json::to_string(&Area::Outros).unwrap();
+    assert_eq!(json, "\"OUTROS\"");
+    let de: Area = serde_json::from_str(&json).unwrap();
+    assert_eq!(de, Area::Outros);
 }

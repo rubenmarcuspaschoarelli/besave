@@ -49,6 +49,11 @@ pub const META_MANIFEST: Meta = Meta {
     cache_control: "public, max-age=300, stale-while-revalidate=60",
 };
 
+/// Headers de `img/**` (MANIFEST §4); mesmo valor que `meta_para` devolve para qualquer chave
+/// `img/*.webp`. Exposto para quem já sabe que está gravando imagem (BSV-13) e não quer lidar
+/// com o `Option` de `meta_para` para um caso que nunca é `None`.
+pub const META_IMAGEM: Meta = meta("image/webp", IMUTAVEL);
+
 const IMUTAVEL: &str = "public, max-age=31536000, immutable";
 const HTML: &str = "text/html; charset=utf-8";
 
@@ -115,6 +120,23 @@ pub trait Publicador {
     fn remover(&mut self, chave: &str) -> Result<()>;
     /// Chaves que começam com `prefixo`, ordenadas.
     fn listar(&self, prefixo: &str) -> Result<Vec<String>>;
+
+    /// Checa várias chaves de uma vez, na mesma ordem de `chaves`. Default sequencial via
+    /// `existe` (usado por `PublicadorLocal`/`PublicadorMemoria`, sem mudança de comportamento).
+    /// `PublicadorS3` sobrescreve com um pool paralelo (BSV-13, regra 8): o gargalo de ~50 mil
+    /// objetos na primeira carga é rede, não CPU.
+    fn existem(&self, chaves: &[&str]) -> Result<Vec<bool>> {
+        chaves.iter().map(|c| self.existe(c)).collect()
+    }
+
+    /// Grava várias chaves de uma vez. Default sequencial via `gravar` (mesma observação de
+    /// `existem`); `PublicadorS3` sobrescreve com o mesmo pool paralelo.
+    fn gravar_lote(&mut self, itens: &[(String, Vec<u8>, Meta)]) -> Result<()> {
+        for (chave, bytes, meta) in itens {
+            self.gravar(chave, bytes, meta)?;
+        }
+        Ok(())
+    }
 }
 
 /// Sufixo do arquivo de headers gravado ao lado de cada objeto pelo `PublicadorLocal`.

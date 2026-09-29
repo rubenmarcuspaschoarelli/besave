@@ -45,6 +45,10 @@ struct Args {
         default_value = "../../packages/contract/mapeamento.json"
     )]
     mapeamento: PathBuf,
+    /// Raiz das imagens do robô: `{dir}/{id}/{id}[-small].webp`. Obrigatória com `--gerar` e
+    /// `--publicar` (BSV-13); `--dry-run` não publica nada e não precisa dela.
+    #[arg(long, env = "BESAVE_IMAGENS_DIR")]
+    imagens_dir: Option<PathBuf>,
 }
 
 fn main() -> Result<()> {
@@ -67,6 +71,9 @@ fn main() -> Result<()> {
     } else {
         None
     };
+    if (args.gerar || args.publicar) && args.imagens_dir.is_none() {
+        bail!("BESAVE_IMAGENS_DIR (ou --imagens-dir) é obrigatória com --gerar ou --publicar");
+    }
     let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
         Ok("fake") => Box::new(fake_demo(agora)),
         Ok("oracle") | Err(_) => Box::new(
@@ -75,8 +82,18 @@ fn main() -> Result<()> {
         Ok(outra) => bail!("BESAVE_FONTE inválida: {outra} (use oracle ou fake)"),
     };
     match (args.saida, aws) {
-        (Some(saida), _) if args.gerar => gerar_em(fonte.as_ref(), &m, saida, agora),
-        (_, Some(cfg)) => publicar_aws(fonte.as_ref(), &m, &cfg, agora, args.sim),
+        (Some(saida), _) if args.gerar => {
+            let dir_imagens = args
+                .imagens_dir
+                .ok_or_else(|| anyhow::anyhow!("BESAVE_IMAGENS_DIR ausente"))?;
+            gerar_em(fonte.as_ref(), &m, saida, &dir_imagens, agora)
+        }
+        (_, Some(cfg)) => {
+            let dir_imagens = args
+                .imagens_dir
+                .ok_or_else(|| anyhow::anyhow!("BESAVE_IMAGENS_DIR ausente"))?;
+            publicar_aws(fonte.as_ref(), &m, &cfg, &dir_imagens, agora, args.sim)
+        }
         _ => dry_run(fonte.as_ref(), &m),
     }
 }
@@ -85,6 +102,7 @@ fn publicar_aws(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
     cfg: &ConfigAws,
+    dir_imagens: &std::path::Path,
     agora: i64,
     sim: bool,
 ) -> Result<()> {
@@ -92,7 +110,7 @@ fn publicar_aws(
     let ctx = ContextoAws::carregar()?;
     let mut pub_ = PublicadorS3::new(&ctx, &cfg.bucket);
     let mut kvs = RedirectsKvs::new(&ctx, &cfg.kvs_arn);
-    let pb = publicar(fonte, m, &mut pub_, &mut kvs, agora, sim)
+    let pb = publicar(fonte, m, &mut pub_, &mut kvs, dir_imagens, agora, sim)
         .with_context(|| format!("publicando em s3://{}", cfg.bucket))?;
     if !sim {
         println!("PLANO: nada foi escrito. Rode com --sim para executar.");
@@ -110,12 +128,25 @@ fn publicar_aws(
     Ok(())
 }
 
-fn gerar_em(fonte: &dyn FonteOfertas, m: &Mapeamento, saida: PathBuf, agora: i64) -> Result<()> {
+fn gerar_em(
+    fonte: &dyn FonteOfertas,
+    m: &Mapeamento,
+    saida: PathBuf,
+    dir_imagens: &std::path::Path,
+    agora: i64,
+) -> Result<()> {
     let inicio = Instant::now();
     let mut pub_ = PublicadorLocal::new(&saida);
     // Espelho local não tem KVS: os redirects só existem no `--publicar`.
-    let rel = gerar(fonte, m, &mut pub_, &mut RedirectsMemoria::new(), agora)
-        .with_context(|| format!("gerando em {}", saida.display()))?;
+    let rel = gerar(
+        fonte,
+        m,
+        &mut pub_,
+        &mut RedirectsMemoria::new(),
+        dir_imagens,
+        agora,
+    )
+    .with_context(|| format!("gerando em {}", saida.display()))?;
     imprimir_relatorio(&rel);
     println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
     Ok(())
@@ -132,6 +163,17 @@ fn imprimir_relatorio(rel: &Relatorio) {
         None => println!("maior_chunk: -"),
     }
     println!("versao: {}", rel.versao);
+    let img = &rel.imagens;
+    println!("imagens_publicadas: {}", img.publicadas);
+    println!("imagens_reaproveitadas: {}", img.reaproveitadas);
+    println!("imagens_sem_origem: {}", img.sem_origem);
+    println!("imagens_reprocessadas: {}", img.reprocessadas);
+    println!("imagens_falhas: {}", img.falhas.len());
+    for (id, motivo) in &img.falhas {
+        println!("  {id}: {motivo}");
+    }
+    println!("imagens_maior_small: {}", img.maior_small);
+    println!("imagens_maior_grande: {}", img.maior_grande);
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {

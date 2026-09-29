@@ -4,7 +4,7 @@ mod comum;
 
 use std::time::{Duration, Instant};
 
-use comum::{AGORA, DIA, linha, linhas_fixture, mapeamento};
+use comum::{AGORA, DIA, dir_imagens_vazio, linha, linhas_fixture, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::fonte::FakeFonte;
 use worker::geracao::{ErroGeracao, Relatorio, gerar};
@@ -34,6 +34,7 @@ fn rodar_com(
         m,
         p,
         kvs,
+        &dir_imagens_vazio(),
         agora,
     )
 }

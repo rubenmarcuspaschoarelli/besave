@@ -34,6 +34,41 @@ pub enum Area {
     Familia,
     Pets,
     EsporteVida,
+    Outros,
+}
+
+impl Area {
+    /// Todas as variantes, na ordem de declaração (mesma de `manifest.areas` e do enum do schema).
+    pub const TODAS: [Area; 10] = [
+        Area::Tech,
+        Area::Players,
+        Area::MeuLar,
+        Area::Elas,
+        Area::Eles,
+        Area::Cultura,
+        Area::Familia,
+        Area::Pets,
+        Area::EsporteVida,
+        Area::Outros,
+    ];
+
+    /// Slug de URL da área (CONTRATO §2.3): path das páginas do site e, desde BSV-13, chave de
+    /// arquivo do placeholder (`img/placeholder/{slug}.webp`) e do asset versionado
+    /// (`assets/placeholder/{slug}.webp`) — BSV-20 já referencia esses caminhos.
+    pub fn slug(&self) -> &'static str {
+        match self {
+            Area::Tech => "tech",
+            Area::Players => "players",
+            Area::MeuLar => "meu-lar",
+            Area::Elas => "elas",
+            Area::Eles => "eles",
+            Area::Cultura => "cultura",
+            Area::Familia => "familia",
+            Area::Pets => "pets",
+            Area::EsporteVida => "esporte-vida",
+            Area::Outros => "outros",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

@@ -148,6 +148,16 @@ fn rejeita_loja_sem_mapeamento() {
     assert_eq!(para_card(&l, &m()), Err(Rejeicao::LojaSemMapeamento));
 }
 
+/// AREA-02: contrato 1.3 acrescentou a área OUTROS; não é mais rejeição.
+#[test]
+fn area_outros_nao_e_rejeitada() {
+    let l = LinhaOferta {
+        area: Some("Outros".into()),
+        ..valida()
+    };
+    assert_eq!(para_card(&l, &m()).unwrap().area, Area::Outros);
+}
+
 #[test]
 fn rejeita_area_sem_mapeamento() {
     let l = LinhaOferta {

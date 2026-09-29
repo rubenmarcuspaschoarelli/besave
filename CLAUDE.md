@@ -27,15 +27,18 @@ Uma tarefa = uma pasta principal. Não editar fora dela sem que a spec autorize.
 - site: `pnpm install --frozen-lockfile && pnpm lint && pnpm check && pnpm test && pnpm build`
 
 ## Regras não negociáveis
+## Regras não negociáveis
 1. Testes derivam do critério de aceite da spec; nunca espelham a implementação. O runner decide, não a autoavaliação.
 2. Nunca enfraquecer, pular ou apagar teste para passar.
 3. Um commit por tarefa, Conventional Commits (`feat(worker): …`, `fix(site): …`).
 4. Sem `git push`, deploy, alteração de banco ou operação destrutiva sem ordem explícita.
-5. Dinheiro é inteiro em centavos; datas ISO 8601 UTC; enums fechados (CONTRATO.md §1–2).
+5. Dinheiro é inteiro em centavos; datas ISO 8601 UTC no dado (exibição em Brasília, offset fixo -03:00); enums fechados (CONTRATO.md §1–2).
 6. Nenhuma URL de afiliado em HTML ou chunk. CTA = `/ir/{id}`.
 7. Nenhuma dependência nova sem justificar no PR (nome, por quê, alternativa descartada).
 8. Não sabe uma API? Verifique (código existente → docs do repo → Context7 → web). Nunca invente. Se ficar em dúvida, diga.
-9. Orçamentos do MANIFEST.md §7 são gates: chunk ≤ 60 KB, HTML de oferta ≤ 30 KB, `_small` ≤ 25 KB.
+9. Orçamentos do MANIFEST.md §7 são gates: chunk ≤ 60 KB, HTML de oferta ≤ 30 KB, `-small` ≤ 25 KB.
+10. Mudança de contrato que adiciona ou renomeia valor de enum, campo ou chave de S3 entra na mesma PR que a adaptação do worker (e do site, quando existir). Nunca em PRs separadas.
+11. Arquivos de evidência (relatórios, logs, screenshots, saídas de comando) são inspecionados antes do commit: tokens, IDs de instalação, caminhos com nome de usuário, credenciais e hostnames internos viram `REDACTED`, e o PR avisa o que foi trocado.
 
 ## Fluxo de trabalho (skill tlc-spec-driven)
 Use a skill `tlc-spec-driven` para toda tarefa: specify → (design) → (tasks) → execute.

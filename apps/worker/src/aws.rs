@@ -10,6 +10,8 @@ use aws_sdk_cloudfrontkeyvaluestore::types::{DeleteKeyRequestListItem, PutKeyReq
 use aws_sdk_s3::error::DisplayErrorContext;
 use aws_sdk_s3::primitives::ByteStream;
 use tokio::runtime::Runtime;
+use tokio::sync::Semaphore;
+use tokio::task::JoinSet;
 use tracing::warn;
 
 use crate::publicador::{self, ErroPublicador, Meta, Publicador};
@@ -201,6 +203,123 @@ impl Publicador for PublicadorS3 {
         chaves.sort();
         Ok(chaves)
     }
+
+    /// Sobrescreve o default sequencial do trait: até `MAX_EM_VOO` `HeadObject` em voo (regra 8
+    /// da BSV-13 — o gargalo de ~50 mil objetos na primeira carga é rede, não CPU). A ordem dos
+    /// resultados bate com `chaves`; erro de uma tarefa aborta o lote (mesma semântica de
+    /// `existe` unitário, que também propaga erro).
+    fn existem(&self, chaves: &[&str]) -> publicador::Result<Vec<bool>> {
+        let rt = self.rt.clone();
+        let cliente = self.cliente.clone();
+        let bucket = self.bucket.clone();
+        let chaves: Vec<String> = chaves.iter().map(|c| (*c).to_owned()).collect();
+        rt.block_on(async move {
+            let n = chaves.len();
+            let semaforo = Arc::new(Semaphore::new(MAX_EM_VOO));
+            let mut tarefas = JoinSet::new();
+            for (i, chave) in chaves.into_iter().enumerate() {
+                let permissao = permissao(&semaforo).await?;
+                let cliente = cliente.clone();
+                let bucket = bucket.clone();
+                tarefas.spawn(async move {
+                    let _permissao = permissao;
+                    (i, existe_async(&cliente, &bucket, &chave).await)
+                });
+            }
+            let mut resultados = vec![false; n];
+            while let Some(saida) = tarefas.join_next().await {
+                let (i, r) = saida.map_err(erro_tarefa_perdida)?;
+                resultados[i] = r?;
+            }
+            Ok(resultados)
+        })
+    }
+
+    /// Sobrescreve o default sequencial do trait: até `MAX_EM_VOO` `PutObject` em voo (regra 8).
+    fn gravar_lote(&mut self, itens: &[(String, Vec<u8>, Meta)]) -> publicador::Result<()> {
+        let rt = self.rt.clone();
+        let cliente = self.cliente.clone();
+        let bucket = self.bucket.clone();
+        let itens = itens.to_vec();
+        rt.block_on(async move {
+            let semaforo = Arc::new(Semaphore::new(MAX_EM_VOO));
+            let mut tarefas = JoinSet::new();
+            for (chave, bytes, meta) in itens {
+                let permissao = permissao(&semaforo).await?;
+                let cliente = cliente.clone();
+                let bucket = bucket.clone();
+                tarefas.spawn(async move {
+                    let _permissao = permissao;
+                    gravar_async(&cliente, &bucket, &chave, bytes, meta).await
+                });
+            }
+            while let Some(saida) = tarefas.join_next().await {
+                saida.map_err(erro_tarefa_perdida)??;
+            }
+            Ok(())
+        })
+    }
+}
+
+/// Pares `HeadObject`/`PutObject` em voo simultaneamente (regra 8, BSV-13): o gargalo de ~50 mil
+/// objetos na primeira carga é rede, não CPU. `PublicadorLocal`/`PublicadorMemoria` continuam
+/// sequenciais (default do trait) — só aqui, no S3, o round-trip de rede compensa sobrepor.
+const MAX_EM_VOO: usize = 16;
+
+async fn permissao(
+    semaforo: &Arc<Semaphore>,
+) -> publicador::Result<tokio::sync::OwnedSemaphorePermit> {
+    Arc::clone(semaforo)
+        .acquire_owned()
+        .await
+        .map_err(|e| ErroPublicador::Aws {
+            operacao: "semáforo do pool de imagens",
+            chave: String::new(),
+            fonte: texto_erro(e),
+        })
+}
+
+/// `JoinError` só ocorre em pânico da tarefa; o índice/chave já se perderam nesse caso.
+fn erro_tarefa_perdida(e: tokio::task::JoinError) -> ErroPublicador {
+    ErroPublicador::Aws {
+        operacao: "tarefa em paralelo",
+        chave: "<tarefa perdida>".to_owned(),
+        fonte: texto_erro(e),
+    }
+}
+
+async fn existe_async(
+    cliente: &aws_sdk_s3::Client,
+    bucket: &str,
+    chave: &str,
+) -> publicador::Result<bool> {
+    let r = cliente.head_object().bucket(bucket).key(chave).send().await;
+    match r {
+        Ok(_) => Ok(true),
+        Err(e) if e.as_service_error().is_some_and(|s| s.is_not_found()) => Ok(false),
+        Err(e) => Err(erro_s3("HeadObject", chave, e)),
+    }
+}
+
+async fn gravar_async(
+    cliente: &aws_sdk_s3::Client,
+    bucket: &str,
+    chave: &str,
+    bytes: Vec<u8>,
+    meta: Meta,
+) -> publicador::Result<()> {
+    cliente
+        .put_object()
+        .bucket(bucket)
+        .key(chave)
+        .body(ByteStream::from(bytes))
+        .content_type(meta.content_type)
+        .set_content_encoding(meta.content_encoding.map(str::to_owned))
+        .cache_control(meta.cache_control)
+        .send()
+        .await
+        .map(|_| ())
+        .map_err(|e| erro_s3("PutObject", chave, e))
 }
 
 pub struct RedirectsKvs {

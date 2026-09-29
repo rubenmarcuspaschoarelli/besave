@@ -1,12 +1,14 @@
 //! Fonte → chunks + manifest publicados (MANIFEST §2, §3, §6).
 
 use std::collections::{BTreeMap, HashSet};
+use std::path::Path;
 
 use tracing::{debug, info, warn};
 
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
 use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card};
 use crate::fonte::{ErroFonte, FonteOfertas};
+use crate::imagens::{self, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
@@ -57,6 +59,7 @@ pub struct Relatorio {
     pub maior_chunk: Option<(u64, u64)>,
     pub versao: u64,
     pub redirects: RelatorioRedirects,
+    pub imagens: RelatorioImagens,
 }
 
 /// `version` de `packages/contract/package.json`, embutido no build.
@@ -69,14 +72,16 @@ pub fn versao_contrato() -> Result<String> {
         .ok_or(ErroGeracao::VersaoContrato)
 }
 
-/// Lê a fonte, grava os chunks novos, sincroniza a KVS de redirects e, por último, o manifest;
-/// depois remove os chunks que não estão nem no manifest novo nem no anterior. Falha na KVS
-/// mantém o manifest antigo (MANIFEST §6). `agora` em segundos Unix UTC.
+/// Lê a fonte, publica as imagens (MANIFEST §6 passo 1), grava os chunks novos, sincroniza a KVS
+/// de redirects e, por último, o manifest; depois remove os chunks que não estão nem no manifest
+/// novo nem no anterior e as imagens de ids que saíram do conjunto publicado (CONTRATO §7). Falha
+/// na KVS mantém o manifest antigo (MANIFEST §6). `agora` em segundos Unix UTC.
 pub fn gerar(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
     pub_: &mut dyn Publicador,
     redirects: &mut dyn Redirects,
+    dir_imagens: &Path,
     agora: i64,
 ) -> Result<Relatorio> {
     let contrato = versao_contrato()?;
@@ -88,6 +93,9 @@ pub fn gerar(
         .map(serde_json::from_slice)
         .transpose()
         .map_err(ErroGeracao::ManifestAnteriorInvalido)?;
+    // Conjunto publicado no ciclo anterior (a KVS espelha exatamente isso, decisão de BSV-12):
+    // referência para saber quais imagens expurgar quando um id sai do conjunto.
+    let ids_anteriores: HashSet<i64> = redirects.listar()?.into_keys().collect();
 
     let linhas = fonte.ofertas()?;
     let mut rel = Relatorio {
@@ -110,6 +118,11 @@ pub fn gerar(
         }
     }
     rel.validas = cards.len() as u64;
+
+    // MANIFEST §6 passo 1: imagens antes de qualquer chunk.
+    let ids_publicaveis: Vec<i64> = cards.iter().map(|c| c.id).collect();
+    rel.imagens = imagens::publicar_imagens(&ids_publicaveis, dir_imagens, pub_)?;
+
     let mut areas = BTreeMap::new();
     for c in cards.iter().filter(|c| c.x.is_none()) {
         *areas.entry(c.area).or_default() += 1;
@@ -181,6 +194,14 @@ pub fn gerar(
             rel.chunks_removidos += 1;
             debug!(arquivo = %chave, "chunk órfão removido");
         }
+    }
+
+    // Expurgo de imagens (CONTRATO §7): id publicado no ciclo anterior e ausente neste.
+    let ids_publicaveis: HashSet<i64> = ids_publicaveis.into_iter().collect();
+    for id in ids_anteriores.difference(&ids_publicaveis) {
+        pub_.remover(&imagens::chave_small(*id))?;
+        pub_.remover(&imagens::chave_grande(*id))?;
+        debug!(id, "imagens expurgadas");
     }
 
     info!(

@@ -6,6 +6,7 @@ pub mod chunks;
 pub mod conversao;
 pub mod fonte;
 pub mod geracao;
+pub mod imagens;
 pub mod mapeamento;
 pub mod modelo;
 pub mod oracle;

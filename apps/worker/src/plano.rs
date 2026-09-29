@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::path::Path;
 
 use crate::fonte::FonteOfertas;
 use crate::geracao::{Relatorio, Result, gerar};
@@ -155,11 +156,12 @@ pub fn publicar(
     m: &Mapeamento,
     pub_: &mut dyn Publicador,
     kvs: &mut dyn Redirects,
+    dir_imagens: &Path,
     agora: i64,
     sim: bool,
 ) -> Result<Publicacao> {
     if sim {
-        let relatorio = gerar(fonte, m, pub_, kvs, agora)?;
+        let relatorio = gerar(fonte, m, pub_, kvs, dir_imagens, agora)?;
         return Ok(Publicacao {
             relatorio,
             plano: Plano::default(),
@@ -167,7 +169,7 @@ pub fn publicar(
     }
     let mut p = PublicadorPlano::new(pub_);
     let mut r = RedirectsPlano::new(kvs);
-    let relatorio = gerar(fonte, m, &mut p, &mut r, agora)?;
+    let relatorio = gerar(fonte, m, &mut p, &mut r, dir_imagens, agora)?;
     Ok(Publicacao {
         relatorio,
         plano: Plano {
