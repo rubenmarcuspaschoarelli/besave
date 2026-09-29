@@ -142,17 +142,17 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 | PRD-02 | P1: Produtos em lote | T1 | Implementing |
 | PRD-03 | P1: Produtos em lote | T1 | Implementing |
 | PRD-04 | P1: Produtos em lote | T7 | Pending |
-| PAG-01 | P1: Páginas | T4 | Pending |
-| PAG-02 | P1: Páginas | T4 | Pending |
-| PAG-03 | P1: Páginas | T4 | Pending |
-| PAG-04 | P1: Páginas | T4 | Pending |
-| PAG-05 | P1: Páginas | T4 | Pending |
-| PAG-06 | P1: Páginas | T4 | Pending |
-| PAG-07 | P1: Páginas | T4 | Pending |
-| PAG-08 | P1: Páginas | T4 | Pending |
-| PAG-09 | P1: Páginas | T4 | Pending |
-| PAG-10 | P1: Páginas | T4 | Pending |
-| PAG-11 | P1: Páginas | T4 | Pending |
+| PAG-01 | P1: Páginas | T4 | Implementing |
+| PAG-02 | P1: Páginas | T4 | Implementing |
+| PAG-03 | P1: Páginas | T4 | Implementing |
+| PAG-04 | P1: Páginas | T4 | Implementing |
+| PAG-05 | P1: Páginas | T4 | Implementing |
+| PAG-06 | P1: Páginas | T4 | Implementing |
+| PAG-07 | P1: Páginas | T4 | Implementing |
+| PAG-08 | P1: Páginas | T4 | Implementing |
+| PAG-09 | P1: Páginas | T4 | Implementing |
+| PAG-10 | P1: Páginas | T4 | Implementing |
+| PAG-11 | P1: Páginas | T4 | Implementing |
 | SIT-01 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-02 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-03 | P1: CSS, sitemap, robots | T3 | Implementing |

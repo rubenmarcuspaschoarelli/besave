@@ -126,8 +126,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Cobertura 1:1 de PAG-01..10 e teste `#[ignore]` de PAG-11
-- [ ] Gate build passa (fim da fase 1)
+- [x] Cobertura 1:1 de PAG-01..10 e teste `#[ignore]` de PAG-11
+- [x] Gate build passa (fim da fase 1)
 
 **Tests**: unit
 **Gate**: build

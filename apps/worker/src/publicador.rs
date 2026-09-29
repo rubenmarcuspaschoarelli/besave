@@ -54,6 +54,9 @@ pub const META_MANIFEST: Meta = Meta {
 /// com o `Option` de `meta_para` para um caso que nunca é `None`.
 pub const META_IMAGEM: Meta = meta("image/webp", IMUTAVEL);
 
+/// `oferta/*/index.html` (MANIFEST §4).
+pub const META_PAGINA: Meta = meta(HTML, "public, max-age=600, stale-while-revalidate=300");
+
 /// `assets/*.css` (BSV-21): nome sem hash, então cache curto; BSV-30 pode versionar.
 pub const META_CSS: Meta = meta(
     "text/css; charset=utf-8",
@@ -90,10 +93,7 @@ pub fn meta_para(chave: &str) -> Option<Meta> {
         _ if chave.starts_with("data/chunks/") || chave.starts_with("data/busca/") => {
             Some(META_CHUNK)
         }
-        _ if chave.starts_with("oferta/") => chave.ends_with("/index.html").then_some(meta(
-            HTML,
-            "public, max-age=600, stale-while-revalidate=300",
-        )),
+        _ if chave.starts_with("oferta/") => chave.ends_with("/index.html").then_some(META_PAGINA),
         _ if chave.starts_with("img/") => {
             (ext == Some("webp")).then_some(meta("image/webp", IMUTAVEL))
         }
