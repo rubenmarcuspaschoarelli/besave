@@ -138,37 +138,37 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| PRD-01 | P1: Produtos em lote | T1 | Implementing |
-| PRD-02 | P1: Produtos em lote | T1 | Implementing |
-| PRD-03 | P1: Produtos em lote | T1 | Implementing |
-| PRD-04 | P1: Produtos em lote | T7 | Implementing |
-| PAG-01 | P1: Páginas | T4 | Implementing |
-| PAG-02 | P1: Páginas | T4 | Implementing |
-| PAG-03 | P1: Páginas | T4 | Implementing |
-| PAG-04 | P1: Páginas | T4 | Implementing |
-| PAG-05 | P1: Páginas | T4 | Implementing |
-| PAG-06 | P1: Páginas | T4 | Implementing |
-| PAG-07 | P1: Páginas | T4 | Implementing |
-| PAG-08 | P1: Páginas | T4 | Implementing |
-| PAG-09 | P1: Páginas | T4 | Implementing |
-| PAG-10 | P1: Páginas | T4 | Implementing |
-| PAG-11 | P1: Páginas | T4 | Implementing |
-| SIT-01 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-02 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-03 | P1: CSS, sitemap, robots | T3 | Implementing |
-| SIT-04 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-05 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-06 | P1: CSS, sitemap, robots | T3 | Implementing |
-| SIT-07 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-08 | P1: CSS, sitemap, robots | T3 | Implementing |
-| SIT-09 | P1: CSS, sitemap, robots | T3 | Implementing |
-| SIT-10 | P1: CSS, sitemap, robots | T2 | Implementing |
-| SIT-11 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-12 | P1: CSS, sitemap, robots | T2 | Implementing |
-| SIT-13 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-14 | P1: CSS, sitemap, robots | T5 | Implementing |
-| SIT-15 | P1: CSS, sitemap, robots | T3 | Implementing |
-| PLN-01 | P2: Plano enxuto | T6 | Implementing |
+| PRD-01 | P1: Produtos em lote | T1 | Verified |
+| PRD-02 | P1: Produtos em lote | T1 | Verified |
+| PRD-03 | P1: Produtos em lote | T1 | Verified |
+| PRD-04 | P1: Produtos em lote | T7 | Verified |
+| PAG-01 | P1: Páginas | T4 | Verified |
+| PAG-02 | P1: Páginas | T4 | Verified |
+| PAG-03 | P1: Páginas | T4 | Verified |
+| PAG-04 | P1: Páginas | T4 | Verified |
+| PAG-05 | P1: Páginas | T4 | Verified |
+| PAG-06 | P1: Páginas | T4 | Verified |
+| PAG-07 | P1: Páginas | T4 | Verified |
+| PAG-08 | P1: Páginas | T4 | Verified |
+| PAG-09 | P1: Páginas | T4 | Verified |
+| PAG-10 | P1: Páginas | T4 | Verified |
+| PAG-11 | P1: Páginas | T4 | Verified |
+| SIT-01 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-02 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-03 | P1: CSS, sitemap, robots | T3 | Verified |
+| SIT-04 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-05 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-06 | P1: CSS, sitemap, robots | T3 | Verified |
+| SIT-07 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-08 | P1: CSS, sitemap, robots | T3 | Verified |
+| SIT-09 | P1: CSS, sitemap, robots | T3 | Verified |
+| SIT-10 | P1: CSS, sitemap, robots | T2 | Verified |
+| SIT-11 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-12 | P1: CSS, sitemap, robots | T2 | Verified |
+| SIT-13 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-14 | P1: CSS, sitemap, robots | T5 | Verified |
+| SIT-15 | P1: CSS, sitemap, robots | T3 | Verified |
+| PLN-01 | P2: Plano enxuto | T6 | Verified |
 
 **Coverage:** 31 total, 31 mapped to tasks, 0 unmapped.
 
