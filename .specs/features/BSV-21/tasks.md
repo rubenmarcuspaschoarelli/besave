@@ -89,8 +89,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `meta_para("assets/besave.css")` = CSS; `meta_para("_estado/paginas.json")` = no-store
-- [ ] Gate quick passa
+- [x] `meta_para("assets/besave.css")` = CSS; `meta_para("_estado/paginas.json")` = no-store
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

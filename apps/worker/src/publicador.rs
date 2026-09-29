@@ -54,6 +54,15 @@ pub const META_MANIFEST: Meta = Meta {
 /// com o `Option` de `meta_para` para um caso que nunca é `None`.
 pub const META_IMAGEM: Meta = meta("image/webp", IMUTAVEL);
 
+/// `assets/*.css` (BSV-21): nome sem hash, então cache curto; BSV-30 pode versionar.
+pub const META_CSS: Meta = meta(
+    "text/css; charset=utf-8",
+    "public, max-age=3600, stale-while-revalidate=86400",
+);
+
+/// `_estado/*.json`: índice interno do worker, nunca em cache.
+pub const META_ESTADO: Meta = meta("application/json", "no-store");
+
 const IMUTAVEL: &str = "public, max-age=31536000, immutable";
 const HTML: &str = "text/html; charset=utf-8";
 
@@ -88,6 +97,8 @@ pub fn meta_para(chave: &str) -> Option<Meta> {
         _ if chave.starts_with("img/") => {
             (ext == Some("webp")).then_some(meta("image/webp", IMUTAVEL))
         }
+        _ if chave.starts_with("assets/") => (ext == Some("css")).then_some(META_CSS),
+        _ if chave.starts_with("_estado/") => (ext == Some("json")).then_some(META_ESTADO),
         _ if chave.starts_with("_app/") => tipo_por_extensao(ext?).map(|ct| meta(ct, IMUTAVEL)),
         _ if !raiz && !chave.starts_with("data/") && chave.ends_with("/index.html") => {
             Some(meta(HTML, CURTO))

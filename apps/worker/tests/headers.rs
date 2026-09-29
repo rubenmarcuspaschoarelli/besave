@@ -5,7 +5,7 @@ mod comum;
 use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
-use worker::publicador::{Meta, Publicador, PublicadorMemoria, meta_para};
+use worker::publicador::{META_CSS, META_ESTADO, Meta, Publicador, PublicadorMemoria, meta_para};
 use worker::redirects::RedirectsMemoria;
 
 const JSON: &str = "application/json";
@@ -70,6 +70,29 @@ fn tabela_do_manifest_md_secao_4() {
     ];
     for (chave, esperado) in casos {
         assert_eq!(meta_para(chave), esperado, "{chave}");
+    }
+}
+
+/// SIT-10, SIT-12: CSS da página (BSV-21 regra 6) e índice `_estado/` (regra 2).
+#[test]
+fn css_e_indice_de_estado() {
+    let css = meta(
+        "text/css; charset=utf-8",
+        None,
+        "public, max-age=3600, stale-while-revalidate=86400",
+    );
+    let estado = meta(JSON, None, "no-store");
+    assert_eq!(meta_para("assets/besave.css"), css);
+    assert_eq!(Some(META_CSS), css);
+    assert_eq!(meta_para("_estado/paginas.json"), estado);
+    assert_eq!(Some(META_ESTADO), estado);
+    for chave in [
+        "assets/besave.js",
+        "assets/",
+        "_estado/paginas.txt",
+        "x/assets/a.css",
+    ] {
+        assert_eq!(meta_para(chave), None, "{chave}");
     }
 }
 

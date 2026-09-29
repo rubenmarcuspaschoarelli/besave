@@ -162,9 +162,9 @@ Dimensions: idempotência (SIT-02, PAG-03); falha parcial (PAG-07, PAG-08, SIT-1
 | SIT-07 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-08 | P1: CSS, sitemap, robots | T3 | Pending |
 | SIT-09 | P1: CSS, sitemap, robots | T3 | Pending |
-| SIT-10 | P1: CSS, sitemap, robots | T2 | Pending |
+| SIT-10 | P1: CSS, sitemap, robots | T2 | Implementing |
 | SIT-11 | P1: CSS, sitemap, robots | T5 | Pending |
-| SIT-12 | P1: CSS, sitemap, robots | T2 | Pending |
+| SIT-12 | P1: CSS, sitemap, robots | T2 | Implementing |
 | SIT-13 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-14 | P1: CSS, sitemap, robots | T5 | Pending |
 | SIT-15 | P1: CSS, sitemap, robots | T3 | Pending |
