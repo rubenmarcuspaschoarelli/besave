@@ -136,7 +136,9 @@ pub fn gerar(
         .iter()
         .filter_map(|l| {
             let p = l.id_produto.and_then(|id| produtos.get(&id));
-            para_pagina(l, p, m).ok()
+            para_pagina(l, p, m)
+                .inspect_err(|r| warn!(id = l.id, motivo = %r, "card sem página"))
+                .ok()
         })
         .collect();
 

@@ -213,3 +213,56 @@ fn base_com_barra_final_nao_duplica_a_barra() {
     let (_, locs, _) = ler_xml(arquivo(&arquivos, "sitemap-1.xml"));
     assert_eq!(locs, ["https://besave.com.br/oferta/1/"]);
 }
+
+// ---- publicar_site ----
+
+use worker::modelo::OfertaPagina;
+use worker::publicador::{Publicador, PublicadorMemoria};
+use worker::site::{ErroSite, publicar_site};
+
+fn pagina(id: i64) -> OfertaPagina {
+    let p = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../packages/contract/fixtures/oferta-pagina-ok.json");
+    OfertaPagina {
+        id,
+        ..serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap()
+    }
+}
+
+/// PAG-07 no passo do site: página acima de 30 KB aborta com o erro nomeado antes do índice
+/// (em `gerar`, o `?` seguinte impede KVS e manifest, como em SIT-14).
+#[test]
+fn pagina_acima_do_orcamento_aborta_sem_indice() {
+    let mut grande = pagina(7001);
+    grande.titulo = "x".repeat(40_000);
+    let mut p = PublicadorMemoria::new();
+    let erro = publicar_site(&[pagina(5412), grande], &ConfigSite::default(), &mut p).unwrap_err();
+    assert!(
+        matches!(
+            erro,
+            ErroSite::Paginas(worker::paginas::ErroPaginas::PaginaAcimaDoOrcamento {
+                id: 7001,
+                ..
+            })
+        ),
+        "{erro:?}"
+    );
+    assert!(!p.existe("_estado/paginas.json").unwrap());
+    assert!(!p.existe("sitemap.xml").unwrap());
+    assert!(!p.existe("oferta/7001/index.html").unwrap());
+}
+
+/// SIT-03: ATIVA cujo render falhou (sem página no bucket) não entra no sitemap.
+#[test]
+fn ativa_sem_pagina_fica_fora_do_sitemap() {
+    let quebrada = OfertaPagina {
+        dt_oferta: "invalida".into(),
+        ..pagina(5413)
+    };
+    let mut p = PublicadorMemoria::new();
+    let r = publicar_site(&[pagina(5412), quebrada], &ConfigSite::default(), &mut p).unwrap();
+    assert_eq!(r.paginas.falhas, [5413]);
+    let sitemap = String::from_utf8(p.ler("sitemap-1.xml").unwrap().unwrap()).unwrap();
+    assert!(sitemap.contains("/oferta/5412/"), "{sitemap}");
+    assert!(!sitemap.contains("/oferta/5413/"), "{sitemap}");
+}

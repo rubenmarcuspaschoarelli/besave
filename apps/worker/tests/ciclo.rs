@@ -441,3 +441,81 @@ fn indice_ilegivel_reenvia_tudo_sem_abortar() {
     assert!(estado.get("5412").is_some(), "{estado}");
     assert!(p.existe("manifest.json").unwrap());
 }
+
+fn rodar_site(
+    linhas: &[LinhaOferta],
+    p: &mut PublicadorMemoria,
+    site: &ConfigSite,
+    agora: i64,
+) -> Relatorio {
+    gerar(
+        &FakeFonte::new(linhas.to_vec(), vec![], agora),
+        &mapeamento(),
+        p,
+        &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
+        site,
+        agora,
+    )
+    .unwrap()
+}
+
+/// SIT-08/SIT-09 na virada de DNS: `BESAVE_INDEXAVEL` e a base mudam → robots, sitemaps e índice
+/// sobem de novo com o conteúdo novo; páginas não mudam.
+#[test]
+fn virada_para_indexavel_regrava_robots_e_sitemaps() {
+    let mut p = PublicadorMemoria::new();
+    rodar_site(&linhas_fixture(), &mut p, &ConfigSite::default(), AGORA);
+    assert_eq!(texto(&p, "robots.txt"), "User-agent: *\nDisallow: /\n");
+    let marca = p.gravacoes().len();
+    let novo = ConfigSite {
+        base: "https://www.besave.com.br".into(),
+        indexavel: true,
+    };
+    let r = rodar_site(&linhas_fixture(), &mut p, &novo, AGORA + 600);
+    assert_eq!(
+        do_site(&gravadas(&p, marca)),
+        [
+            "sitemap-1.xml",
+            "sitemap.xml",
+            "robots.txt",
+            "_estado/paginas.json"
+        ]
+    );
+    assert!(r.site.robots_publicado);
+    assert_eq!(
+        texto(&p, "robots.txt"),
+        "User-agent: *\nAllow: /\n\nSitemap: https://www.besave.com.br/sitemap.xml\n"
+    );
+    assert!(
+        texto(&p, "sitemap-1.xml").contains("<loc>https://www.besave.com.br/oferta/5412/</loc>")
+    );
+}
+
+/// Regra 6 do dono: CSS com hash diferente do índice é reenviado e o índice passa a ter o novo.
+#[test]
+fn css_com_hash_diferente_e_reenviado() {
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
+    let mut estado: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    let atual = estado["_css"].clone();
+    estado.insert("_css".into(), "0000000000000000".into());
+    p.gravar(
+        "_estado/paginas.json",
+        &serde_json::to_vec(&estado).unwrap(),
+        &worker::publicador::META_ESTADO,
+    )
+    .unwrap();
+    let marca = p.gravacoes().len();
+    let r = rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA + 600).unwrap();
+    assert!(r.site.css_publicado);
+    assert_eq!(
+        do_site(&gravadas(&p, marca)),
+        ["assets/besave.css", "_estado/paginas.json"]
+    );
+    let novo: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert_eq!(novo["_css"], atual);
+    assert_eq!(atual.as_str().unwrap().len(), 16);
+}

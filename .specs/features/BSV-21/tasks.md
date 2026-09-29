@@ -42,7 +42,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-7 tarefas, um lote: execução inline, sem sub-agentes.
+8 tarefas, um lote: execução inline, sem sub-agentes.
 
 ### Phase 1: Blocos independentes
 
@@ -53,7 +53,7 @@ T1 → T2 → T3 → T4
 ### Phase 2: Integração
 
 ```
-T4 → T5 → T6 → T7
+T4 → T5 → T6 → T7 → T8
 ```
 
 ---
@@ -185,4 +185,22 @@ T4 → T5 → T6 → T7
 - [x] Gate build passa
 
 **Tests**: integration
+**Gate**: build
+
+---
+
+### T8: Fechar gaps do Verifier (iteração 1)
+
+**What**: testes que matam M11 (CSS alterado), M12 (robots na virada de DNS), M13 (`tempo_render_ms`), M19 (`blocos_in` puro), M20 (ATIVA sem página fora do sitemap) e PAG-07 no passo do site; `warn!` quando um card não vira página.
+**Where**: `apps/worker/tests/ciclo.rs`
+**Depends on**: T7
+**Reuses**: helpers de `ciclo.rs`/`site.rs`
+**Requirement**: SIT-08, SIT-09, SIT-10, PAG-07, PAG-10, PRD-03, SIT-03
+
+**Done when**:
+
+- [x] Cada gap do `validation.md` (iteração 1) tem teste com valor da spec
+- [x] Gate build passa
+
+**Tests**: unit
 **Gate**: build

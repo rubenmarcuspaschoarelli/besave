@@ -260,6 +260,8 @@ fn tempo_de_render_cabe_no_tempo_da_chamada() {
         &IndicePaginas::default(),
     );
     assert!(u128::from(rel.tempo_render_ms) <= inicio.elapsed().as_millis());
+    // 300 renders não cabem em menos de 1 ms: o campo mede de verdade.
+    assert!(rel.tempo_render_ms > 0);
 }
 
 /// PAG-11: 30 000 páginas renderizadas em ≤ 60 s (release). Instável sob carga no CI.
