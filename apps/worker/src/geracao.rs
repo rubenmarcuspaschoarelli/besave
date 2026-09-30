@@ -1,18 +1,20 @@
 //! Fonte → chunks + manifest publicados (MANIFEST §2, §3, §6).
 
+use std::cell::Cell;
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
 
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
 use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, para_pagina};
 use crate::fonte::{ErroFonte, FonteOfertas};
-use crate::imagens::{self, ErroImagens, RelatorioImagens};
+use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
-use crate::redirects::{ErroRedirects, Redirects, RelatorioRedirects, sincronizar_redirects};
+use crate::redirects::{self, ErroRedirects, Redirects, RelatorioRedirects, sincronizar_redirects};
 use crate::site::{ConfigSite, ErroSite, RelatorioSite, publicar_site};
 
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
@@ -67,6 +69,50 @@ pub struct Relatorio {
     pub imagens: RelatorioImagens,
     /// CSS, páginas, sitemaps, robots e índice `_estado/` (BSV-21).
     pub site: RelatorioSite,
+    pub tempos: Tempos,
+}
+
+/// Tempo de cada fase de `gerar()`, em ms (BSV-13b). `*_listagem` é parte da fase acima dela.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Tempos {
+    /// Ofertas, conversão, produtos em lote e páginas em memória.
+    pub leitura_fonte: u64,
+    pub imagens: u64,
+    pub imagens_listagem: u64,
+    pub chunks: u64,
+    /// CSS, páginas, sitemaps, robots e índice (`publicar_site`).
+    pub paginas: u64,
+    /// Listagem inicial da KVS (base do expurgo) + `sincronizar_redirects`.
+    pub redirects: u64,
+    /// Soma de todos os `Redirects::listar` do ciclo.
+    pub redirects_listagem: u64,
+    /// Leitura do manifest anterior + gravação de `manifest.prev.json` e `manifest.json`.
+    pub manifest: u64,
+    /// Chunks órfãos + expurgo de imagens.
+    pub orfaos: u64,
+}
+
+fn ms(d: Duration) -> u64 {
+    u64::try_from(d.as_millis()).unwrap_or(u64::MAX)
+}
+
+/// Repassa tudo a `dentro` e soma o tempo gasto em `listar` (`Tempos::redirects_listagem`).
+struct ListagemCronometrada<'a> {
+    dentro: &'a mut dyn Redirects,
+    gasto: Cell<Duration>,
+}
+
+impl Redirects for ListagemCronometrada<'_> {
+    fn listar(&self) -> redirects::Result<BTreeMap<i64, String>> {
+        let inicio = Instant::now();
+        let r = self.dentro.listar();
+        self.gasto.set(self.gasto.get() + inicio.elapsed());
+        r
+    }
+
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<()> {
+        self.dentro.aplicar(put, del)
+    }
 }
 
 /// `version` de `packages/contract/package.json`, embutido no build.
@@ -93,19 +139,28 @@ pub fn gerar(
     site: &ConfigSite,
     agora: i64,
 ) -> Result<Relatorio> {
+    let mut redirects = ListagemCronometrada {
+        dentro: redirects,
+        gasto: Cell::new(Duration::ZERO),
+    };
     let contrato = versao_contrato()?;
     let gerado_em = iso_utc(agora);
     let versao = versao_de(&gerado_em);
+    let t = Instant::now();
     let anterior_bytes = pub_.ler(CHAVE_MANIFEST)?;
     let anterior: Option<Manifest> = anterior_bytes
         .as_deref()
         .map(serde_json::from_slice)
         .transpose()
         .map_err(ErroGeracao::ManifestAnteriorInvalido)?;
+    let mut d_manifest = t.elapsed();
     // Conjunto publicado no ciclo anterior (a KVS espelha exatamente isso, decisão de BSV-12):
     // referência para saber quais imagens expurgar quando um id sai do conjunto.
+    let t = Instant::now();
     let ids_anteriores: HashSet<i64> = redirects.listar()?.into_keys().collect();
+    let mut d_redirects = t.elapsed();
 
+    let t = Instant::now();
     let linhas = fonte.ofertas()?;
     let mut rel = Relatorio {
         lidas: linhas.len() as u64,
@@ -143,10 +198,17 @@ pub fn gerar(
                 .ok()
         })
         .collect();
+    let d_leitura_fonte = t.elapsed();
 
     // MANIFEST §6 passo 1: imagens antes de qualquer chunk.
+    let t = Instant::now();
     let ids_publicaveis: Vec<i64> = cards.iter().map(|c| c.id).collect();
-    rel.imagens = imagens::publicar_imagens(&ids_publicaveis, dir_imagens, pub_)?;
+    let existentes = ImagensExistentes::listar(pub_)?;
+    let d_imagens_listagem = t.elapsed();
+    rel.imagens = imagens::publicar_imagens_com(&existentes, &ids_publicaveis, dir_imagens, pub_)?;
+    let d_imagens = t.elapsed();
+
+    let t = Instant::now();
 
     let mut areas = BTreeMap::new();
     for c in cards.iter().filter(|c| c.x.is_none()) {
@@ -189,11 +251,18 @@ pub fn gerar(
         .iter()
         .max_by_key(|r| r.bytes)
         .map(|r| (r.n, r.bytes));
+    let d_chunks = t.elapsed();
 
     // MANIFEST §6 passo 3: CSS, páginas, sitemaps, robots e índice, antes da KVS e do manifest.
+    let t = Instant::now();
     rel.site = publicar_site(&paginas, site, pub_)?;
+    let d_paginas = t.elapsed();
 
-    rel.redirects = sincronizar_redirects(&urls, redirects)?;
+    let t = Instant::now();
+    rel.redirects = sincronizar_redirects(&urls, &mut redirects)?;
+    d_redirects += t.elapsed();
+
+    let t = Instant::now();
 
     let manifest = Manifest {
         contrato,
@@ -209,6 +278,9 @@ pub fn gerar(
         pub_.gravar(CHAVE_MANIFEST_ANTERIOR, b, &META_MANIFEST)?;
     }
     pub_.gravar(CHAVE_MANIFEST, &json, &META_MANIFEST)?;
+    d_manifest += t.elapsed();
+
+    let t = Instant::now();
 
     let vivos: HashSet<&str> = manifest
         .chunks
@@ -231,6 +303,17 @@ pub fn gerar(
         pub_.remover(&imagens::chave_grande(*id))?;
         debug!(id, "imagens expurgadas");
     }
+    rel.tempos = Tempos {
+        leitura_fonte: ms(d_leitura_fonte),
+        imagens: ms(d_imagens),
+        imagens_listagem: ms(d_imagens_listagem),
+        chunks: ms(d_chunks),
+        paginas: ms(d_paginas),
+        redirects: ms(d_redirects),
+        redirects_listagem: ms(redirects.gasto.get()),
+        manifest: ms(d_manifest),
+        orfaos: ms(t.elapsed()),
+    };
 
     info!(
         lidas = rel.lidas,

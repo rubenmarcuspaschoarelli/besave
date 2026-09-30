@@ -12,7 +12,7 @@ use comum::{
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
-use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, contar_paginas, gerar};
+use worker::geracao::{ErroGeracao, Relatorio, Tempos, checar_orcamento, contar_paginas, gerar};
 use worker::imagens::{ErroImagens, RelatorioImagens};
 use worker::modelo::{Area, Manifest};
 use worker::paginas::RelatorioPaginas;
@@ -317,6 +317,8 @@ fn relatorio_com_contagens() {
                 maior_grande: 0,
                 chaves_estranhas: 0,
             },
+            // Tempos (BSV-13b) variam por execução: conferidos em `relatorio_traz_tempo_por_fase`.
+            tempos: rel.tempos,
             site: RelatorioSite {
                 paginas: RelatorioPaginas {
                     renderizadas: 5,
@@ -798,4 +800,25 @@ fn listagem_de_imagens_falhando_aborta_sem_manifest() {
             p.dentro.gravacoes()
         );
     }
+}
+
+/// TMP-01 (BSV-13b): o relatório traz as 9 medidas (desestruturação exaustiva: campo a mais ou a
+/// menos não compila) e cada sub-medida cabe na fase que a contém. Não confere valores.
+#[test]
+fn relatorio_traz_tempo_por_fase() {
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar(fonte_mista(), &mut p).unwrap();
+    let Tempos {
+        leitura_fonte: _,
+        imagens,
+        imagens_listagem,
+        chunks: _,
+        paginas: _,
+        redirects,
+        redirects_listagem,
+        manifest: _,
+        orfaos: _,
+    } = rel.tempos;
+    assert!(imagens_listagem <= imagens, "{:?}", rel.tempos);
+    assert!(redirects_listagem <= redirects, "{:?}", rel.tempos);
 }

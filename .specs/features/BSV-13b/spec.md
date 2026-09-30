@@ -97,8 +97,8 @@ Dimensions: dependência externa com falha (LST-05); idempotência (LST-01, LST-
 | LST-04 | P1: Listagem | Step 2 | Done |
 | LST-05 | P1: Listagem | Step 2 | Done |
 | LST-06 | P1: Listagem | Step 2 | Done |
-| TMP-01 | P1: Tempo por fase | Step 3 | Pending |
-| TMP-02 | P1: Tempo por fase | Step 3 | Pending |
+| TMP-01 | P1: Tempo por fase | Step 3 | Done |
+| TMP-02 | P1: Tempo por fase | Step 3 | Done |
 
 **Coverage:** 9 total, 9 mapped to steps, 0 unmapped.
 

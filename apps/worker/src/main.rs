@@ -191,6 +191,7 @@ fn imprimir_relatorio(rel: &Relatorio) {
     }
     println!("imagens_maior_small: {}", img.maior_small);
     println!("imagens_maior_grande: {}", img.maior_grande);
+    println!("imagens_chaves_estranhas: {}", img.chaves_estranhas);
     let site = &rel.site;
     let pag = &site.paginas;
     println!("paginas_renderizadas: {}", pag.renderizadas);
@@ -207,6 +208,20 @@ fn imprimir_relatorio(rel: &Relatorio) {
     println!("sitemaps_publicados: {}", site.sitemaps_publicados);
     println!("sitemaps_removidos: {}", site.sitemaps_removidos);
     println!("robots_publicado: {}", site.robots_publicado);
+    let t = &rel.tempos;
+    for (nome, v) in [
+        ("t_leitura_fonte", t.leitura_fonte),
+        ("t_imagens", t.imagens),
+        ("t_imagens_listagem", t.imagens_listagem),
+        ("t_chunks", t.chunks),
+        ("t_paginas", t.paginas),
+        ("t_redirects", t.redirects),
+        ("t_redirects_listagem", t.redirects_listagem),
+        ("t_manifest", t.manifest),
+        ("t_orfaos", t.orfaos),
+    ] {
+        println!("{nome}: {v} ms");
+    }
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {
