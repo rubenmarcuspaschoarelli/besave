@@ -3,8 +3,6 @@
 mod comum;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Write;
-use std::sync::{Arc, Mutex};
 
 use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use sha2::{Digest, Sha256};
@@ -309,60 +307,6 @@ fn indice_corrompido_reconstroi_sem_abortar() {
     }
 }
 
-#[derive(Clone, Default)]
-struct Buffer(Arc<Mutex<Vec<u8>>>);
-
-impl Write for Buffer {
-    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(b);
-        Ok(b.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-fn warns_de(f: impl FnOnce()) -> Vec<String> {
-    let buf = Buffer::default();
-    let saida = buf.clone();
-    let sub = tracing_subscriber::fmt()
-        .with_writer(move || saida.clone())
-        .with_ansi(false)
-        .with_max_level(tracing::Level::WARN)
-        .finish();
-    tracing::subscriber::with_default(sub, f);
-    String::from_utf8(buf.0.lock().unwrap().clone())
-        .unwrap()
-        .lines()
-        .filter(|l| l.contains("WARN") && l.contains("redirects"))
-        .map(str::to_owned)
-        .collect()
-}
-
-/// REC-05: reconstrução loga `WARN` com o motivo; modo indice não loga.
-#[test]
-fn reconstrucao_loga_warn_com_o_motivo() {
-    let mut p = PublicadorMemoria::new();
-    let mut kvs = RedirectsMemoria::new();
-    let w = warns_de(|| {
-        rodar(&linhas([1001]), &mut p, &mut kvs).unwrap();
-    });
-    assert_eq!(w.len(), 1, "{w:?}");
-    assert!(w[0].contains("indice_ausente"), "{w:?}");
-
-    let w = warns_de(|| {
-        rodar(&linhas([1001]), &mut p, &mut kvs).unwrap();
-    });
-    assert!(w.is_empty(), "{w:?}");
-
-    kvs.inserir_bruto("7", "x");
-    let w = warns_de(|| {
-        rodar(&linhas([1001]), &mut p, &mut kvs).unwrap();
-    });
-    assert_eq!(w.len(), 1, "{w:?}");
-    assert!(w[0].contains("etag_divergente"), "{w:?}");
-}
-
 /// Publicador cuja gravação do índice falha.
 struct IndiceQuebrado(PublicadorMemoria);
 
@@ -456,4 +400,61 @@ fn modo_e_motivo_tem_os_textos_da_spec() {
             .map(String::from)
         )
     );
+}
+
+/// Publicador cuja leitura do índice falha (erro de S3, não de conteúdo).
+struct LeituraQuebrada(PublicadorMemoria);
+
+impl Publicador for LeituraQuebrada {
+    fn existe(&self, chave: &str) -> publicador::Result<bool> {
+        self.0.existe(chave)
+    }
+    fn ler(&self, chave: &str) -> publicador::Result<Option<Vec<u8>>> {
+        if chave == INDICE {
+            return Err(publicador::ErroPublicador::Aws {
+                operacao: "GetObject",
+                chave: chave.to_owned(),
+                fonte: "falha injetada".into(),
+            });
+        }
+        self.0.ler(chave)
+    }
+    fn gravar(&mut self, chave: &str, bytes: &[u8], meta: &Meta) -> publicador::Result<()> {
+        self.0.gravar(chave, bytes, meta)
+    }
+    fn remover(&mut self, chave: &str) -> publicador::Result<()> {
+        self.0.remover(chave)
+    }
+    fn listar(&self, prefixo: &str) -> publicador::Result<Vec<String>> {
+        self.0.listar(prefixo)
+    }
+}
+
+/// Assunção da spec ("falha de leitura do índice"): erro de S3 ao ler o índice não é "índice
+/// ausente" — aborta antes de qualquer escrita, sem listar nem aplicar na KVS.
+#[test]
+fn erro_ao_ler_o_indice_aborta_sem_escrever() {
+    let mut p = LeituraQuebrada(PublicadorMemoria::new());
+    let mut kvs = RedirectsMemoria::new();
+    let erro = rodar(&linhas(1001..=1003), &mut p, &mut kvs).unwrap_err();
+    assert!(
+        matches!(erro, ErroGeracao::Redirects(ErroRedirects::Indice(_))),
+        "{erro:?}"
+    );
+    assert_eq!(kvs.listar_chamadas(), 0);
+    assert!(kvs.aplicados().is_empty());
+    assert!(p.0.gravacoes().is_empty(), "{:?}", p.0.gravacoes());
+}
+
+/// REL-02: texto de `redirects_motivo_reconstrucao` — `-` no modo indice, o motivo na
+/// reconstrução.
+#[test]
+fn motivo_texto_e_traco_no_modo_indice() {
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    let r = rodar(&linhas([1001]), &mut p, &mut kvs).unwrap();
+    assert_eq!(r.redirects.motivo_texto(), "indice_ausente");
+    let r = rodar(&linhas([1001]), &mut p, &mut kvs).unwrap();
+    assert_eq!(r.redirects.modo, ModoRedirects::Indice);
+    assert_eq!(r.redirects.motivo_texto(), "-");
 }

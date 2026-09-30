@@ -417,3 +417,30 @@ fn plano_sem_paginas_nao_tem_resumo() {
     };
     assert!(plano.linhas().iter().all(|l| !l.contains("páginas")));
 }
+
+/// BSV-12c: sem `--sim`, a gravação do índice da KVS aparece no plano (`no-store`, antes dos
+/// manifests), nada é escrito, e com índice válido o plano não lista a KVS.
+#[test]
+fn plano_mostra_o_indice_da_kvs_sem_listar() {
+    let (mut p, mut kvs, _) = destino();
+    let listar = kvs.dentro.listar_chamadas();
+    let pb = terceiro(&mut p, &mut kvs, false);
+    assert_eq!((p.gravar, p.remover, kvs.aplicar), (0, 0, 0));
+    assert_eq!(kvs.dentro.listar_chamadas(), listar);
+    let pos = |alvo: &str| {
+        pb.plano
+            .objetos
+            .iter()
+            .position(|o| matches!(o, Operacao::Gravar { chave, .. } if chave == alvo))
+    };
+    let i = pos("_estado/redirects.json").expect("índice fora do plano");
+    assert!(matches!(
+        &pb.plano.objetos[i],
+        Operacao::Gravar { cache_control, .. } if *cache_control == "no-store"
+    ));
+    assert!(
+        i < pos("manifest.prev.json").unwrap(),
+        "{:?}",
+        pb.plano.objetos
+    );
+}

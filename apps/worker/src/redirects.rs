@@ -108,6 +108,14 @@ pub struct RelatorioRedirects {
     pub motivo: Option<MotivoReconstrucao>,
 }
 
+impl RelatorioRedirects {
+    /// Valor de `redirects_motivo_reconstrucao` na saída: o motivo, ou `-` sem reconstrução.
+    pub fn motivo_texto(&self) -> String {
+        self.motivo
+            .map_or_else(|| "-".to_owned(), |m| m.to_string())
+    }
+}
+
 /// Índice da KVS no bucket (BSV-12c): hash da URL, nunca a URL (link de afiliado).
 pub const CHAVE_INDICE: &str = "_estado/redirects.json";
 

@@ -181,10 +181,10 @@ fn imprimir_relatorio(rel: &Relatorio) {
     }
     println!("versao: {}", rel.versao);
     println!("redirects_modo: {}", rel.redirects.modo);
-    match rel.redirects.motivo {
-        Some(m) => println!("redirects_motivo_reconstrucao: {m}"),
-        None => println!("redirects_motivo_reconstrucao: -"),
-    }
+    println!(
+        "redirects_motivo_reconstrucao: {}",
+        rel.redirects.motivo_texto()
+    );
     let img = &rel.imagens;
     println!("imagens_publicadas: {}", img.publicadas);
     println!("imagens_reaproveitadas: {}", img.reaproveitadas);
