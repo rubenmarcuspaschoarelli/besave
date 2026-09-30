@@ -26,8 +26,7 @@ resource "aws_iam_user_policy" "worker" {
         Effect = "Allow"
         Action = [
           "cloudfront-keyvaluestore:DescribeKeyValueStore",
-          "cloudfront-keyvaluestore:PutKey",
-          "cloudfront-keyvaluestore:DeleteKey",
+          "cloudfront-keyvaluestore:UpdateKeys",
           "cloudfront-keyvaluestore:ListKeys",
         ]
         Resource = aws_cloudfront_key_value_store.redirects.arn
