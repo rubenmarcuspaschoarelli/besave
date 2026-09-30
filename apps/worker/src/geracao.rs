@@ -8,7 +8,7 @@ use tracing::{debug, info, warn};
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
 use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, para_pagina};
 use crate::fonte::{ErroFonte, FonteOfertas};
-use crate::imagens::{self, RelatorioImagens};
+use crate::imagens::{self, ErroImagens, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
@@ -32,6 +32,8 @@ pub enum ErroGeracao {
     Chunk(#[from] ErroChunk),
     #[error(transparent)]
     Publicador(#[from] ErroPublicador),
+    #[error(transparent)]
+    Imagens(#[from] ErroImagens),
     #[error(transparent)]
     Redirects(#[from] ErroRedirects),
     #[error(transparent)]

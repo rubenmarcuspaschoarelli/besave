@@ -493,3 +493,129 @@ fn cinco_mil_ids_em_ate_5_segundos() {
     assert_eq!(rel.publicadas, 5000);
     assert!(tempo <= std::time::Duration::from_secs(5), "{tempo:?}");
 }
+
+/// Grava as duas chaves de cada id e os 10 placeholders direto no destino (sem `publicar_imagens`):
+/// o destino "já tem tudo", como no 2º ciclo real.
+fn destino_com_tudo(ids: &[i64]) -> PublicadorMemoria {
+    let mut p = PublicadorMemoria::new();
+    for &id in ids {
+        p.gravar(&chave_small(id), b"s", &META_IMAGEM).unwrap();
+        p.gravar(&chave_grande(id), b"g", &META_IMAGEM).unwrap();
+    }
+    for area in Area::TODAS {
+        p.gravar(&chave_placeholder(area), b"p", &META_IMAGEM)
+            .unwrap();
+    }
+    p
+}
+
+/// LST-01 (BSV-13b): 5000 ids já publicados → nenhuma checagem por chave, poucas listagens,
+/// nada publicado e tudo reaproveitado.
+#[test]
+fn cinco_mil_ids_existentes_decididos_so_por_listagem() {
+    let dir = dir_temp("lst-cinco-mil");
+    let ids: Vec<i64> = (1..=5000).collect();
+    let mut p = destino_com_tudo(&ids);
+    let gravacoes_antes = p.gravacoes().len();
+
+    let rel = publicar_imagens(&ids, &dir, &mut p).unwrap();
+
+    assert_eq!(p.existe_chamadas(), 0, "existe chamado por imagens");
+    assert_eq!(p.existem_chamadas(), 0, "existem chamado por imagens");
+    assert!(
+        p.listar_chamadas() <= 10,
+        "esperava <= 10 listagens, teve {}",
+        p.listar_chamadas()
+    );
+    assert_eq!(rel.publicadas, 0);
+    assert_eq!(rel.reaproveitadas, 5000);
+    assert_eq!(
+        p.gravacoes().len(),
+        gravacoes_antes,
+        "nada deveria ser gravado"
+    );
+}
+
+/// LST-02 + LST-03 (BSV-13b): id sem chave nenhuma e id com só uma das duas chaves (cada uma das
+/// duas possibilidades) → publicados, com as duas chaves gravadas nesta execução.
+#[test]
+fn id_novo_e_id_com_uma_so_chave_gravam_as_duas() {
+    let dir = dir_temp("lst-novo-e-parcial");
+    for id in [7001, 7002, 7003] {
+        escrever_origem(&dir, id, &bytes_webp(1_000), &bytes_webp(2_000));
+    }
+    let mut p = destino_com_tudo(&[]);
+    p.gravar(&chave_small(7002), b"s", &META_IMAGEM).unwrap();
+    p.gravar(&chave_grande(7003), b"g", &META_IMAGEM).unwrap();
+    let antes = p.gravacoes().len();
+
+    let rel = publicar_imagens(&[7001, 7002, 7003], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.publicadas, 3);
+    assert_eq!(rel.reaproveitadas, 0);
+    let novas: Vec<&str> = p.gravacoes()[antes..].iter().map(String::as_str).collect();
+    for id in [7001, 7002, 7003] {
+        assert!(
+            novas.contains(&chave_small(id).as_str()),
+            "{id} small: {novas:?}"
+        );
+        assert!(
+            novas.contains(&chave_grande(id).as_str()),
+            "{id} grande: {novas:?}"
+        );
+        assert_eq!(p.ler(&chave_small(id)).unwrap().unwrap().len(), 1_000);
+        assert_eq!(p.ler(&chave_grande(id)).unwrap().unwrap().len(), 2_000);
+    }
+}
+
+/// LST-04 (BSV-13b): placeholder listado não é regravado; o ausente é gravado.
+#[test]
+fn placeholder_existente_nao_e_reenviado_e_ausente_e_enviado() {
+    let dir = dir_temp("lst-placeholder");
+    let mut p = PublicadorMemoria::new();
+    let ausente = Area::Pets;
+    for area in Area::TODAS.into_iter().filter(|a| *a != ausente) {
+        p.gravar(&chave_placeholder(area), b"p", &META_IMAGEM)
+            .unwrap();
+    }
+    let antes = p.gravacoes().len();
+
+    publicar_imagens(&[], &dir, &mut p).unwrap();
+
+    assert_eq!(
+        &p.gravacoes()[antes..],
+        [chave_placeholder(ausente)],
+        "só o placeholder ausente deveria subir"
+    );
+    assert_eq!(p.existe_chamadas() + p.existem_chamadas(), 0);
+}
+
+/// LST-06 (BSV-13b): chaves fora de `{id}.webp`/`{id}-small.webp` são contadas, não valem como
+/// imagem de nenhum id e não são removidas.
+#[test]
+fn chaves_estranhas_contadas_ignoradas_e_mantidas() {
+    let dir = dir_temp("lst-estranhas");
+    escrever_origem(&dir, 5412, &bytes_webp(1_000), &bytes_webp(1_000));
+    let estranhas = [
+        "img/ofertas/5412_small.webp",
+        "img/ofertas/5412.jpg",
+        "img/ofertas/abc.webp",
+        "img/ofertas/5412/5412.webp",
+    ];
+    let mut p = destino_com_tudo(&[]);
+    for c in estranhas {
+        p.gravar(c, b"x", &META_IMAGEM).unwrap();
+    }
+    // Só a grande "de verdade": a `_small` estranha não pode completar o par.
+    p.gravar(&chave_grande(5412), b"g", &META_IMAGEM).unwrap();
+
+    let rel = publicar_imagens(&[5412], &dir, &mut p).unwrap();
+
+    assert_eq!(rel.chaves_estranhas, estranhas.len() as u64);
+    assert_eq!(rel.publicadas, 1);
+    assert_eq!(rel.reaproveitadas, 0);
+    assert!(p.remocoes().is_empty());
+    for c in estranhas {
+        assert!(p.existe(c).unwrap(), "{c} foi removida");
+    }
+}

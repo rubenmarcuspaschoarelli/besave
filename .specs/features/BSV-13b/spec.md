@@ -91,12 +91,12 @@ Dimensions: dependência externa com falha (LST-05); idempotência (LST-01, LST-
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
 | LST-07 | P1: Listagem | Step 1 | Done |
-| LST-01 | P1: Listagem | Step 2 | Pending |
-| LST-02 | P1: Listagem | Step 2 | Pending |
-| LST-03 | P1: Listagem | Step 2 | Pending |
-| LST-04 | P1: Listagem | Step 2 | Pending |
-| LST-05 | P1: Listagem | Step 2 | Pending |
-| LST-06 | P1: Listagem | Step 2 | Pending |
+| LST-01 | P1: Listagem | Step 2 | Done |
+| LST-02 | P1: Listagem | Step 2 | Done |
+| LST-03 | P1: Listagem | Step 2 | Done |
+| LST-04 | P1: Listagem | Step 2 | Done |
+| LST-05 | P1: Listagem | Step 2 | Done |
+| LST-06 | P1: Listagem | Step 2 | Done |
 | TMP-01 | P1: Tempo por fase | Step 3 | Pending |
 | TMP-02 | P1: Tempo por fase | Step 3 | Pending |
 
