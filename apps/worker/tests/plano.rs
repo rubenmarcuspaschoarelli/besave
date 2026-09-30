@@ -10,7 +10,7 @@ use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
 use worker::plano::{Operacao, Plano, Publicacao, publicar};
 use worker::publicador::{Meta, Publicador, PublicadorMemoria};
-use worker::redirects::{Redirects, RedirectsMemoria};
+use worker::redirects::{EstadoKvs, Redirects, RedirectsMemoria};
 use worker::site::ConfigSite;
 
 /// Destino que conta cada chamada de escrita.
@@ -51,7 +51,14 @@ impl Redirects for KvsEspiao {
     fn listar(&self) -> worker::redirects::Result<BTreeMap<i64, String>> {
         self.dentro.listar()
     }
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> worker::redirects::Result<()> {
+    fn descrever(&self) -> worker::redirects::Result<EstadoKvs> {
+        self.dentro.descrever()
+    }
+    fn aplicar(
+        &mut self,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> worker::redirects::Result<EstadoKvs> {
         self.aplicar += 1;
         self.dentro.aplicar(put, del)
     }

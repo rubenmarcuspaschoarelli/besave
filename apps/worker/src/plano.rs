@@ -9,7 +9,7 @@ use crate::fonte::FonteOfertas;
 use crate::geracao::{Relatorio, Result, gerar};
 use crate::mapeamento::Mapeamento;
 use crate::publicador::{self, Meta, Publicador};
-use crate::redirects::{self, Redirects};
+use crate::redirects::{self, EstadoKvs, Redirects};
 use crate::site::ConfigSite;
 
 /// Uma escrita que o `--sim` faria.
@@ -92,7 +92,8 @@ impl Publicador for PublicadorPlano<'_> {
     }
 }
 
-/// Lê a KVS de destino; `aplicar` vira `PutKey`/`DeleteKey`.
+/// Lê a KVS de destino; `aplicar` vira `PutKey`/`DeleteKey` e devolve o estado do destino
+/// (inalterado, já que nada foi escrito).
 pub struct RedirectsPlano<'a> {
     destino: &'a dyn Redirects,
     pub ops: Vec<Operacao>,
@@ -112,7 +113,11 @@ impl Redirects for RedirectsPlano<'_> {
         self.destino.listar()
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<()> {
+    fn descrever(&self) -> redirects::Result<EstadoKvs> {
+        self.destino.descrever()
+    }
+
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<EstadoKvs> {
         self.ops
             .extend(put.iter().map(|(id, url)| Operacao::PutKey {
                 id: *id,
@@ -120,7 +125,7 @@ impl Redirects for RedirectsPlano<'_> {
             }));
         self.ops
             .extend(del.iter().map(|&id| Operacao::DeleteKey { id }));
-        Ok(())
+        self.destino.descrever()
     }
 }
 

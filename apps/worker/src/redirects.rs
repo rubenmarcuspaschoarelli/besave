@@ -1,5 +1,6 @@
 //! KeyValueStore de redirects `id → DS_URL_AFILIADO` da Function `/ir/{id}` (MANIFEST §5, §6).
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 
 use tracing::{info, warn};
@@ -30,11 +31,22 @@ pub enum ErroRedirects {
 
 pub type Result<T, E = ErroRedirects> = std::result::Result<T, E>;
 
+/// `ItemCount` e `ETag` da KVS (`DescribeKeyValueStore`, `UpdateKeys`). O `ETag` muda a cada
+/// escrita; `item_count` conta todas as chaves, inclusive as não numéricas.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct EstadoKvs {
+    pub item_count: u64,
+    pub etag: String,
+}
+
 /// Chave = `id` em decimal; valor = URL.
 pub trait Redirects {
     /// Entradas de chave numérica; as demais são ignoradas.
     fn listar(&self) -> Result<BTreeMap<i64, String>>;
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<()>;
+    /// Estado atual, sem listar.
+    fn descrever(&self) -> Result<EstadoKvs>;
+    /// Aplica o diff e devolve o estado depois da última escrita.
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs>;
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -149,12 +161,17 @@ pub fn id_da_chave(chave: &str) -> Option<i64> {
 /// `(put, del)` de uma chamada a `aplicar`.
 pub type Aplicacao = (Vec<(i64, String)>, Vec<i64>);
 
-/// KVS em memória para testes: registra cada `aplicar` e pode falhar sob demanda.
+/// KVS em memória para testes: registra cada `aplicar`, conta `listar`/`descrever` e pode falhar
+/// sob demanda. `ETag` = `m{n}`, com `n` = escritas desde a criação (`aplicar` e `inserir_bruto`).
 #[derive(Debug, Clone, Default)]
 pub struct RedirectsMemoria {
     chaves: BTreeMap<String, String>,
     aplicados: Vec<Aplicacao>,
     falhar: bool,
+    escritas: u64,
+    etag_forcado: Option<String>,
+    listar_chamadas: Cell<u64>,
+    descrever_chamadas: Cell<u64>,
 }
 
 impl RedirectsMemoria {
@@ -178,8 +195,35 @@ impl RedirectsMemoria {
         self
     }
 
+    /// Escrita "por fora" do worker: muda o `ETag`.
     pub fn inserir_bruto(&mut self, chave: &str, valor: &str) {
         self.chaves.insert(chave.to_owned(), valor.to_owned());
+        self.escritas += 1;
+    }
+
+    /// Fixa o `ETag` devolvido daqui em diante, independente das escritas.
+    pub fn definir_etag(&mut self, etag: &str) {
+        self.etag_forcado = Some(etag.to_owned());
+    }
+
+    /// Chamadas a `listar` desde a criação.
+    pub fn listar_chamadas(&self) -> u64 {
+        self.listar_chamadas.get()
+    }
+
+    /// Chamadas a `descrever` desde a criação.
+    pub fn descrever_chamadas(&self) -> u64 {
+        self.descrever_chamadas.get()
+    }
+
+    fn estado(&self) -> EstadoKvs {
+        EstadoKvs {
+            item_count: self.chaves.len() as u64,
+            etag: self
+                .etag_forcado
+                .clone()
+                .unwrap_or_else(|| format!("m{}", self.escritas)),
+        }
     }
 
     /// Estado bruto, como a KVS guarda.
@@ -195,6 +239,7 @@ impl RedirectsMemoria {
 
 impl Redirects for RedirectsMemoria {
     fn listar(&self) -> Result<BTreeMap<i64, String>> {
+        self.listar_chamadas.set(self.listar_chamadas.get() + 1);
         Ok(self
             .chaves
             .iter()
@@ -202,7 +247,13 @@ impl Redirects for RedirectsMemoria {
             .collect())
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<()> {
+    fn descrever(&self) -> Result<EstadoKvs> {
+        self.descrever_chamadas
+            .set(self.descrever_chamadas.get() + 1);
+        Ok(self.estado())
+    }
+
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs> {
         if self.falhar {
             return Err(ErroRedirects::Kvs {
                 operacao: "aplicar",
@@ -216,6 +267,7 @@ impl Redirects for RedirectsMemoria {
             self.chaves.remove(&id.to_string());
         }
         self.aplicados.push((put.to_vec(), del.to_vec()));
-        Ok(())
+        self.escritas += 1;
+        Ok(self.estado())
     }
 }

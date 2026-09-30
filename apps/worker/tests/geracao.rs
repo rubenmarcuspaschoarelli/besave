@@ -19,7 +19,7 @@ use worker::paginas::RelatorioPaginas;
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
 };
-use worker::redirects::{Redirects, RedirectsMemoria, RelatorioRedirects};
+use worker::redirects::{EstadoKvs, Redirects, RedirectsMemoria, RelatorioRedirects};
 use worker::site::{ConfigSite, RelatorioSite};
 
 fn rodar(linhas: Vec<LinhaOferta>, p: &mut dyn Publicador) -> Result<Relatorio, ErroGeracao> {
@@ -418,7 +418,14 @@ impl Redirects for KvsComTempo {
     fn listar(&self) -> worker::redirects::Result<BTreeMap<i64, String>> {
         self.0.listar()
     }
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> worker::redirects::Result<()> {
+    fn descrever(&self) -> worker::redirects::Result<EstadoKvs> {
+        self.0.descrever()
+    }
+    fn aplicar(
+        &mut self,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> worker::redirects::Result<EstadoKvs> {
         self.1.borrow_mut().push("KVS".into());
         self.0.aplicar(put, del)
     }

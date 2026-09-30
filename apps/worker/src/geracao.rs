@@ -14,7 +14,9 @@ use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
-use crate::redirects::{self, ErroRedirects, Redirects, RelatorioRedirects, sincronizar_redirects};
+use crate::redirects::{
+    self, ErroRedirects, EstadoKvs, Redirects, RelatorioRedirects, sincronizar_redirects,
+};
 use crate::site::{ConfigSite, ErroSite, RelatorioSite, publicar_site};
 
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
@@ -110,7 +112,11 @@ impl Redirects for ListagemCronometrada<'_> {
         r
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<()> {
+    fn descrever(&self) -> redirects::Result<EstadoKvs> {
+        self.dentro.descrever()
+    }
+
+    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<EstadoKvs> {
         self.dentro.aplicar(put, del)
     }
 }
