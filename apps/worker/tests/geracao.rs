@@ -19,7 +19,9 @@ use worker::paginas::RelatorioPaginas;
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
 };
-use worker::redirects::{EstadoKvs, Redirects, RedirectsMemoria, RelatorioRedirects};
+use worker::redirects::{
+    EstadoKvs, ModoRedirects, MotivoReconstrucao, Redirects, RedirectsMemoria, RelatorioRedirects,
+};
 use worker::site::{ConfigSite, RelatorioSite};
 
 fn rodar(linhas: Vec<LinhaOferta>, p: &mut dyn Publicador) -> Result<Relatorio, ErroGeracao> {
@@ -305,6 +307,9 @@ fn relatorio_com_contagens() {
                 puts: 5,
                 dels: 0,
                 total: 5,
+                // BSV-12c: bucket vazio → sem índice.
+                modo: ModoRedirects::Reconstrucao,
+                motivo: Some(MotivoReconstrucao::IndiceAusente),
             },
             imagens: RelatorioImagens {
                 publicadas: 0,
@@ -431,7 +436,7 @@ impl Redirects for KvsComTempo {
     }
 }
 
-/// ORD-02: chunks → KVS → manifest.prev.json → manifest.json.
+/// ORD-02: chunks → KVS → índice da KVS (BSV-12c) → manifest.prev.json → manifest.json.
 #[test]
 fn kvs_entre_chunks_e_manifest() {
     let tempo: Tempo = Rc::default();
@@ -450,7 +455,15 @@ fn kvs_entre_chunks_e_manifest() {
         .rposition(|x| x.starts_with("data/chunks/"))
         .unwrap();
     assert!(ultimo_chunk < kvs_em, "{t:?}");
-    assert_eq!(&t[kvs_em..], ["KVS", "manifest.prev.json", "manifest.json"]);
+    assert_eq!(
+        &t[kvs_em..],
+        [
+            "KVS",
+            "_estado/redirects.json",
+            "manifest.prev.json",
+            "manifest.json"
+        ]
+    );
 }
 
 /// ORD-03: falha na KVS → erro e manifest não gravado (o anterior continua).

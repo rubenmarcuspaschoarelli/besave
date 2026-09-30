@@ -15,7 +15,8 @@ use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
 use crate::redirects::{
-    self, ErroRedirects, EstadoKvs, Redirects, RelatorioRedirects, sincronizar_redirects,
+    self, ErroRedirects, EstadoKvs, Redirects, RelatorioRedirects, carregar_base,
+    sincronizar_com_indice,
 };
 use crate::site::{ConfigSite, ErroSite, RelatorioSite, publicar_site};
 
@@ -84,7 +85,7 @@ pub struct Tempos {
     pub chunks: u64,
     /// CSS, páginas, sitemaps, robots e índice (`publicar_site`).
     pub paginas: u64,
-    /// Listagem inicial da KVS (base do expurgo) + `sincronizar_redirects`.
+    /// `carregar_base` (índice ou listagem da KVS) + `sincronizar_com_indice`.
     pub redirects: u64,
     /// Soma de todos os `Redirects::listar` do ciclo.
     pub redirects_listagem: u64,
@@ -161,9 +162,11 @@ pub fn gerar(
         .map_err(ErroGeracao::ManifestAnteriorInvalido)?;
     let mut d_manifest = t.elapsed();
     // Conjunto publicado no ciclo anterior (a KVS espelha exatamente isso, decisão de BSV-12):
-    // referência para saber quais imagens expurgar quando um id sai do conjunto.
+    // referência para saber quais imagens expurgar quando um id sai do conjunto. Vem do índice
+    // `_estado/redirects.json` quando confiável; só a reconstrução lista a KVS (BSV-12c).
     let t = Instant::now();
-    let ids_anteriores: HashSet<i64> = redirects.listar()?.into_keys().collect();
+    let base_redirects = carregar_base(&redirects, &*pub_)?;
+    let ids_anteriores: HashSet<i64> = base_redirects.urls.keys().copied().collect();
     let mut d_redirects = t.elapsed();
 
     let t = Instant::now();
@@ -265,7 +268,7 @@ pub fn gerar(
     let d_paginas = t.elapsed();
 
     let t = Instant::now();
-    rel.redirects = sincronizar_redirects(&urls, &mut redirects)?;
+    rel.redirects = sincronizar_com_indice(&urls, base_redirects, &mut redirects, pub_)?;
     d_redirects += t.elapsed();
 
     let t = Instant::now();

@@ -106,20 +106,20 @@ Dimensions: estado persistido (IDX-03..05, REC-04); falha de dependência extern
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| IDX-01 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-02 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-03 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-04 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-05 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-06 | P1: Ciclo sem listar | Step 2 | Pending |
-| IDX-07 | P1: Ciclo sem listar | Step 2 | Pending |
-| REC-01 | P1: Reconstrução | Step 2 | Pending |
-| REC-02 | P1: Reconstrução | Step 2 | Pending |
-| REC-03 | P1: Reconstrução | Step 2 | Pending |
-| REC-04 | P1: Reconstrução | Step 2 | Pending |
-| REC-05 | P1: Reconstrução | Step 2 | Pending |
-| REC-06 | P1: Reconstrução | Step 2 | Pending |
-| REL-01 | P1: Relatório | Step 2 | Pending |
+| IDX-01 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-02 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-03 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-04 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-05 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-06 | P1: Ciclo sem listar | Step 2 | Done |
+| IDX-07 | P1: Ciclo sem listar | Step 2 | Done |
+| REC-01 | P1: Reconstrução | Step 2 | Done |
+| REC-02 | P1: Reconstrução | Step 2 | Done |
+| REC-03 | P1: Reconstrução | Step 2 | Done |
+| REC-04 | P1: Reconstrução | Step 2 | Done |
+| REC-05 | P1: Reconstrução | Step 2 | Done |
+| REC-06 | P1: Reconstrução | Step 2 | Done |
+| REL-01 | P1: Relatório | Step 2 | Done |
 | REL-02 | P1: Relatório | Step 3 | Pending |
 
 **Coverage:** 15 total, 15 mapped to steps, 0 unmapped.
