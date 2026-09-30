@@ -47,3 +47,24 @@ fn produto_por_id() {
     assert_eq!(f.produto(910).unwrap(), Some(p));
     assert_eq!(f.produto(911).unwrap(), None);
 }
+
+/// PRD-01: lote devolve só os ids achados; cada chamada é contada, e `produto` fica em zero.
+#[test]
+fn produtos_em_lote_devolve_so_os_achados_e_conta_chamadas() {
+    let p = |id| LinhaProduto {
+        id_produto: id,
+        marca: Some(format!("M{id}")),
+        ..Default::default()
+    };
+    let f = FakeFonte::new(vec![], vec![p(910), p(911), p(912)], AGORA);
+    let achados = f.produtos(&[910, 912, 999]).unwrap();
+    assert_eq!(achados.len(), 2);
+    assert_eq!(achados[&910], p(910));
+    assert_eq!(achados[&912], p(912));
+    assert!(!achados.contains_key(&999));
+    assert!(f.produtos(&[]).unwrap().is_empty());
+    assert_eq!(f.chamadas_produtos(), 2);
+    assert_eq!(f.chamadas_produto(), 0);
+    f.produto(910).unwrap();
+    assert_eq!(f.chamadas_produto(), 1);
+}

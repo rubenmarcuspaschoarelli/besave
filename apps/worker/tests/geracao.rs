@@ -12,13 +12,15 @@ use comum::{
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
-use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, gerar};
+use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, contar_paginas, gerar};
 use worker::imagens::RelatorioImagens;
 use worker::modelo::{Area, Manifest};
+use worker::paginas::RelatorioPaginas;
 use worker::publicador::{
     ErroPublicador, META_CHUNK, META_MANIFEST, Meta, Publicador, PublicadorMemoria,
 };
 use worker::redirects::{Redirects, RedirectsMemoria, RelatorioRedirects};
+use worker::site::{ConfigSite, RelatorioSite};
 
 fn rodar(linhas: Vec<LinhaOferta>, p: &mut dyn Publicador) -> Result<Relatorio, ErroGeracao> {
     rodar_com(linhas, p, &mut RedirectsMemoria::new())
@@ -35,6 +37,7 @@ fn rodar_com(
         p,
         kvs,
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         AGORA,
     )
 }
@@ -52,6 +55,7 @@ fn rodar_com_imagens(
         p,
         kvs,
         dir_imagens,
+        &ConfigSite::default(),
         agora,
     )
 }
@@ -275,6 +279,13 @@ fn relatorio_com_contagens() {
     let rel = rodar(fonte_mista(), &mut p).unwrap();
     let m = manifest(&p);
     let maior = m.chunks.iter().max_by_key(|c| c.bytes).unwrap();
+    let maior_html = p
+        .listar("oferta/")
+        .unwrap()
+        .iter()
+        .map(|c| p.ler(c).unwrap().unwrap().len() as u64)
+        .max()
+        .unwrap();
     assert_eq!(
         rel,
         Relatorio {
@@ -304,6 +315,23 @@ fn relatorio_com_contagens() {
                 bytes: 0,
                 maior_small: 0,
                 maior_grande: 0,
+            },
+            site: RelatorioSite {
+                paginas: RelatorioPaginas {
+                    renderizadas: 5,
+                    publicadas: 5,
+                    inalteradas: 0,
+                    removidas: 0,
+                    falhas: vec![],
+                    maior_html,
+                    // Tempo de relógio: o único campo sem valor fixo.
+                    tempo_render_ms: rel.site.paginas.tempo_render_ms,
+                },
+                css_publicado: true,
+                sitemaps_publicados: 2,
+                sitemaps_removidos: 0,
+                robots_publicado: true,
+                indice_gravado: true,
             },
         }
     );
@@ -427,10 +455,15 @@ fn falha_na_kvs_nao_grava_manifest() {
     .unwrap_err();
     assert!(matches!(erro, ErroGeracao::Redirects(_)), "{erro:?}");
     assert!(!p.existe("manifest.json").unwrap());
+    // Tudo que vem antes da KVS (MANIFEST §6 passos 1–3) pode ter subido; manifest nunca.
     assert!(
-        p.gravacoes()
-            .iter()
-            .all(|c| c.starts_with("data/chunks/") || c.starts_with("img/placeholder/")),
+        p.gravacoes().iter().all(|c| c.starts_with("data/chunks/")
+            || c.starts_with("img/placeholder/")
+            || c.starts_with("oferta/")
+            || c.starts_with("sitemap")
+            || c == "assets/besave.css"
+            || c == "robots.txt"
+            || c == "_estado/paginas.json"),
         "{:?}",
         p.gravacoes()
     );
@@ -450,8 +483,16 @@ fn falha_na_kvs_nao_grava_manifest() {
     assert_eq!(p.ler("manifest.json").unwrap(), antes);
     let depois = &p.gravacoes()[marca..];
     assert!(!depois.is_empty());
+    // Chunk 1, página nova e sitemap/índice que a citam; nada de manifest.
     assert!(
-        depois.iter().all(|c| c.starts_with("data/chunks/")),
+        depois.iter().any(|c| c.starts_with("data/chunks/1-")),
+        "{depois:?}"
+    );
+    assert!(
+        depois.iter().all(|c| c.starts_with("data/chunks/")
+            || c == "oferta/1600/index.html"
+            || c == "sitemap-1.xml"
+            || c == "_estado/paginas.json"),
         "{depois:?}"
     );
 }
@@ -540,11 +581,15 @@ fn expurgo_remove_as_duas_chaves_de_imagem() {
     rodar_com_imagens(vec![linha(5412)], &mut p, &mut kvs, &dir, AGORA).unwrap();
     assert!(p.existe("img/ofertas/5412-small.webp").unwrap());
     assert!(p.existe("img/ofertas/5412.webp").unwrap());
+    assert!(p.existe("oferta/5412/index.html").unwrap());
 
     // 5412 sai do resultado da fonte (expurgo, CONTRATO §7).
     rodar_com_imagens(vec![linha(9999)], &mut p, &mut kvs, &dir, AGORA + 600).unwrap();
     assert!(!p.existe("img/ofertas/5412-small.webp").unwrap());
     assert!(!p.existe("img/ofertas/5412.webp").unwrap());
+    // BSV-21 regra 5 (PAG-06): a página sai junto com as imagens.
+    assert!(!p.existe("oferta/5412/index.html").unwrap());
+    assert!(p.remocoes().contains(&"oferta/5412/index.html".to_owned()));
 }
 
 /// GER-04: ausência de origem de imagem não bloqueia a publicação da oferta.
@@ -564,4 +609,134 @@ fn sem_origem_de_imagem_nao_bloqueia_a_oferta() {
     assert_eq!(rel.validas, 1);
     let m = manifest(&p);
     assert_eq!(m.total_ofertas, 1);
+}
+
+// ---- BSV-21 ----
+
+/// SIT-13: imagens → chunks → CSS → páginas → sitemaps → robots → índice → KVS → manifest.
+#[test]
+fn ordem_de_publicacao_do_site() {
+    let tempo: Tempo = Rc::default();
+    let mut p = PubComTempo(PublicadorMemoria::new(), tempo.clone());
+    let mut kvs = KvsComTempo(RedirectsMemoria::new(), tempo.clone());
+    rodar_com(fonte_mista(), &mut p, &mut kvs).unwrap();
+    let t = tempo.borrow().clone();
+    let pos = |pred: &dyn Fn(&str) -> bool| t.iter().position(|c| pred(c)).unwrap();
+    let ultima = |pred: &dyn Fn(&str) -> bool| t.iter().rposition(|c| pred(c)).unwrap();
+    let ordem = [
+        ultima(&|c| c.starts_with("img/")),
+        pos(&|c| c.starts_with("data/chunks/")),
+        ultima(&|c| c.starts_with("data/chunks/")),
+        pos(&|c| c == "assets/besave.css"),
+        pos(&|c| c.starts_with("oferta/")),
+        ultima(&|c| c.starts_with("oferta/")),
+        pos(&|c| c == "sitemap-1.xml"),
+        pos(&|c| c == "sitemap.xml"),
+        pos(&|c| c == "robots.txt"),
+        pos(&|c| c == "_estado/paginas.json"),
+        pos(&|c| c == "KVS"),
+        pos(&|c| c == "manifest.json"),
+    ];
+    assert!(ordem.windows(2).all(|w| w[0] < w[1]), "{ordem:?} {t:?}");
+}
+
+/// Falha só nas páginas de oferta.
+struct PaginaFalha(PublicadorMemoria);
+
+impl Publicador for PaginaFalha {
+    fn existe(&self, chave: &str) -> worker::publicador::Result<bool> {
+        self.0.existe(chave)
+    }
+    fn ler(&self, chave: &str) -> worker::publicador::Result<Option<Vec<u8>>> {
+        self.0.ler(chave)
+    }
+    fn gravar(&mut self, chave: &str, bytes: &[u8], meta: &Meta) -> worker::publicador::Result<()> {
+        if chave.starts_with("oferta/") {
+            return Err(ErroPublicador::Aws {
+                operacao: "PutObject",
+                chave: chave.into(),
+                fonte: "timeout".into(),
+            });
+        }
+        self.0.gravar(chave, bytes, meta)
+    }
+    fn remover(&mut self, chave: &str) -> worker::publicador::Result<()> {
+        self.0.remover(chave)
+    }
+    fn listar(&self, prefixo: &str) -> worker::publicador::Result<Vec<String>> {
+        self.0.listar(prefixo)
+    }
+}
+
+/// SIT-14: falha de upload de página aborta antes do índice, da KVS e do manifest.
+#[test]
+fn falha_no_upload_de_pagina_nao_grava_manifest() {
+    let mut p = PaginaFalha(PublicadorMemoria::new());
+    let mut kvs = RedirectsMemoria::new();
+    let erro = rodar_com(fonte_mista(), &mut p, &mut kvs).unwrap_err();
+    assert!(
+        matches!(
+            &erro,
+            ErroGeracao::Site(worker::site::ErroSite::Paginas(
+                worker::paginas::ErroPaginas::Publicador(ErroPublicador::Aws { .. })
+            ))
+        ),
+        "{erro:?}"
+    );
+    assert!(!p.0.existe("manifest.json").unwrap());
+    assert!(!p.0.existe("_estado/paginas.json").unwrap());
+    assert!(kvs.aplicados().is_empty());
+}
+
+/// PRD-02: 10 000 ofertas → ≤ 10 chamadas de `produtos` e nenhuma de `produto`; o produto
+/// carregado em lote chega à página.
+#[test]
+fn produtos_em_lote_sem_n_mais_1() {
+    let linhas: Vec<LinhaOferta> = (1..=10_000).map(linha).collect();
+    let produtos = vec![worker::conversao::LinhaProduto {
+        id_produto: 42,
+        descricao: Some("Descrição carregada em lote.".into()),
+        ..Default::default()
+    }];
+    let fonte = FakeFonte::new(linhas, produtos, AGORA);
+    let mut p = PublicadorMemoria::new();
+    let rel = gerar(
+        &fonte,
+        &mapeamento(),
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
+        &ConfigSite::default(),
+        AGORA,
+    )
+    .unwrap();
+    assert!(
+        fonte.chamadas_produtos() <= 10,
+        "{}",
+        fonte.chamadas_produtos()
+    );
+    assert!(fonte.chamadas_produtos() >= 1);
+    assert_eq!(fonte.chamadas_produto(), 0);
+    assert_eq!(rel.site.paginas.publicadas, 10_000);
+    let html = String::from_utf8(p.ler("oferta/42/index.html").unwrap().unwrap()).unwrap();
+    assert!(html.contains("Descrição carregada em lote."));
+}
+
+/// PRD-04: o `--dry-run` converte para página com os produtos em lote (1 chamada, nenhuma unitária).
+#[test]
+fn dry_run_usa_produtos_em_lote() {
+    let mut linhas = comum::linhas_fixture();
+    linhas.push(LinhaOferta {
+        id_produto: None,
+        ..linha(7001)
+    });
+    let fonte = FakeFonte::new(linhas, vec![], AGORA);
+    let (lidas, validas, rejeitadas) = contar_paginas(&fonte, &mapeamento()).unwrap();
+    assert_eq!((lidas, validas), (4, 3));
+    assert_eq!(
+        rejeitadas,
+        BTreeMap::from([(Rejeicao::IdProdutoAusente, 1)])
+    );
+    assert_eq!(fonte.chamadas_produtos(), 1);
+    assert_eq!(fonte.chamadas_produto(), 0);
 }

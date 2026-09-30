@@ -8,9 +8,10 @@ use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
-use worker::plano::{Operacao, Publicacao, publicar};
+use worker::plano::{Operacao, Plano, Publicacao, publicar};
 use worker::publicador::{Meta, Publicador, PublicadorMemoria};
 use worker::redirects::{Redirects, RedirectsMemoria};
+use worker::site::ConfigSite;
 
 /// Destino que conta cada chamada de escrita.
 #[derive(Default)]
@@ -74,14 +75,32 @@ fn destino() -> (PubEspiao, KvsEspiao, String) {
     let mut p = PublicadorMemoria::new();
     let mut kvs = RedirectsMemoria::new();
     let f1 = FakeFonte::new(vec![linha(1001), linha(5412), linha(5413)], vec![], AGORA);
-    gerar(&f1, &m, &mut p, &mut kvs, &dir_imagens_vazio(), AGORA).unwrap();
+    gerar(
+        &f1,
+        &m,
+        &mut p,
+        &mut kvs,
+        &dir_imagens_vazio(),
+        &ConfigSite::default(),
+        AGORA,
+    )
+    .unwrap();
     let orfao = p.listar("data/chunks/1-").unwrap().remove(0);
     let f2 = FakeFonte::new(
         vec![titulo(1001, "Nova"), linha(5412), linha(5413)],
         vec![],
         AGORA,
     );
-    gerar(&f2, &m, &mut p, &mut kvs, &dir_imagens_vazio(), AGORA + 600).unwrap();
+    gerar(
+        &f2,
+        &m,
+        &mut p,
+        &mut kvs,
+        &dir_imagens_vazio(),
+        &ConfigSite::default(),
+        AGORA + 600,
+    )
+    .unwrap();
     (
         PubEspiao {
             dentro: p,
@@ -108,6 +127,7 @@ fn terceiro(p: &mut PubEspiao, kvs: &mut KvsEspiao, sim: bool) -> Publicacao {
         p,
         kvs,
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         AGORA + 1200,
         sim,
     )
@@ -182,7 +202,12 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         }),
         "{ops:?}"
     );
-    for chave in ["img/ofertas/5413-small.webp", "img/ofertas/5413.webp"] {
+    // BSV-21 regra 5: a página de 5413 também sai.
+    for chave in [
+        "oferta/5413/index.html",
+        "img/ofertas/5413-small.webp",
+        "img/ofertas/5413.webp",
+    ] {
         assert!(
             ops.contains(&Operacao::Remover {
                 chave: chave.to_owned()
@@ -194,7 +219,7 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         ops.iter()
             .filter(|o| matches!(o, Operacao::Remover { .. }))
             .count(),
-        3,
+        4,
         "{ops:?}"
     );
 
@@ -248,11 +273,13 @@ fn sim_escreve_no_destino_e_plano_vem_vazio() {
     assert!(pb.plano.objetos.is_empty());
     assert!(pb.plano.redirects.is_empty());
     assert!(p.gravar >= 4, "chunks 2 e 5 + manifests: {}", p.gravar);
-    // GER-03: remove o chunk órfão e as duas chaves de imagem de 5413 (saiu do conjunto).
-    assert_eq!(p.remover, 3);
+    // GER-03 + BSV-21: a página de 5413 sai antes do manifest (com as páginas), depois o chunk
+    // órfão e as duas chaves de imagem de 5413 (saiu do conjunto).
+    assert_eq!(p.remover, 4);
     assert_eq!(
         p.dentro.remocoes(),
         &[
+            "oferta/5413/index.html".to_owned(),
             orfao.clone(),
             "img/ofertas/5413-small.webp".to_owned(),
             "img/ofertas/5413.webp".to_owned(),
@@ -291,6 +318,7 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
         &mut p,
         &mut kvs,
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         AGORA + 1200,
         false,
     )
@@ -332,4 +360,53 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
             "deleteKey 5413".to_owned()
         ]
     );
+}
+
+fn gravar(chave: String) -> Operacao {
+    Operacao::Gravar {
+        chave,
+        bytes: 3000,
+        cache_control: "public, max-age=600, stale-while-revalidate=300",
+    }
+}
+
+/// PLN-01 (BSV-21 regra 11): páginas viram uma linha por tipo, com contagem e até 5 exemplos,
+/// na posição da primeira operação daquele tipo; o resto continua uma linha por operação.
+#[test]
+fn plano_resume_paginas_em_contagem_e_cinco_exemplos() {
+    let mut objetos = vec![gravar("data/chunks/1-abc.json.br".into())];
+    objetos.extend((1..=30).map(|id| gravar(format!("oferta/{id}/index.html"))));
+    objetos.push(Operacao::Remover {
+        chave: "oferta/77/index.html".into(),
+    });
+    objetos.push(Operacao::Remover {
+        chave: "oferta/78/index.html".into(),
+    });
+    objetos.push(gravar("sitemap.xml".into()));
+    let plano = Plano {
+        objetos,
+        redirects: vec![],
+    };
+    let linhas = plano.linhas();
+    assert_eq!(
+        linhas,
+        [
+            "S3:",
+            "  gravar data/chunks/1-abc.json.br (3000 B, public, max-age=600, stale-while-revalidate=300)",
+            "  páginas a gravar: 30 (ex.: oferta/1/index.html, oferta/2/index.html, oferta/3/index.html, oferta/4/index.html, oferta/5/index.html)",
+            "  páginas a remover: 2 (ex.: oferta/77/index.html, oferta/78/index.html)",
+            "  gravar sitemap.xml (3000 B, public, max-age=600, stale-while-revalidate=300)",
+            "KVS (aplicada antes do manifest.json):",
+        ]
+    );
+}
+
+/// PLN-01: sem página no plano, nenhuma linha de resumo.
+#[test]
+fn plano_sem_paginas_nao_tem_resumo() {
+    let plano = Plano {
+        objetos: vec![gravar("robots.txt".into())],
+        redirects: vec![],
+    };
+    assert!(plano.linhas().iter().all(|l| !l.contains("páginas")));
 }

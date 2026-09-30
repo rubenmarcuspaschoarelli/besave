@@ -6,13 +6,14 @@ use std::path::Path;
 use tracing::{debug, info, warn};
 
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
-use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card};
+use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, para_pagina};
 use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::imagens::{self, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
 use crate::redirects::{ErroRedirects, Redirects, RelatorioRedirects, sincronizar_redirects};
+use crate::site::{ConfigSite, ErroSite, RelatorioSite, publicar_site};
 
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
 pub const ORCAMENTO_CHUNK: u64 = 61_440;
@@ -33,6 +34,8 @@ pub enum ErroGeracao {
     Publicador(#[from] ErroPublicador),
     #[error(transparent)]
     Redirects(#[from] ErroRedirects),
+    #[error(transparent)]
+    Site(#[from] ErroSite),
     #[error("chunk {n} tem {bytes} bytes comprimido; orçamento é {ORCAMENTO_CHUNK}")]
     ChunkAcimaDoOrcamento { n: u64, bytes: u64 },
     #[error("manifest.json anterior inválido: {0}")]
@@ -60,6 +63,8 @@ pub struct Relatorio {
     pub versao: u64,
     pub redirects: RelatorioRedirects,
     pub imagens: RelatorioImagens,
+    /// CSS, páginas, sitemaps, robots e índice `_estado/` (BSV-21).
+    pub site: RelatorioSite,
 }
 
 /// `version` de `packages/contract/package.json`, embutido no build.
@@ -72,8 +77,9 @@ pub fn versao_contrato() -> Result<String> {
         .ok_or(ErroGeracao::VersaoContrato)
 }
 
-/// Lê a fonte, publica as imagens (MANIFEST §6 passo 1), grava os chunks novos, sincroniza a KVS
-/// de redirects e, por último, o manifest; depois remove os chunks que não estão nem no manifest
+/// Lê a fonte (ofertas e, em lote, os produtos), publica as imagens (MANIFEST §6 passo 1), grava
+/// os chunks novos, publica CSS, páginas, sitemaps, robots e o índice `_estado/` (passo 3),
+/// sincroniza a KVS de redirects e, por último, o manifest; depois remove os chunks que não estão nem no manifest
 /// novo nem no anterior e as imagens de ids que saíram do conjunto publicado (CONTRATO §7). Falha
 /// na KVS mantém o manifest antigo (MANIFEST §6). `agora` em segundos Unix UTC.
 pub fn gerar(
@@ -82,6 +88,7 @@ pub fn gerar(
     pub_: &mut dyn Publicador,
     redirects: &mut dyn Redirects,
     dir_imagens: &Path,
+    site: &ConfigSite,
     agora: i64,
 ) -> Result<Relatorio> {
     let contrato = versao_contrato()?;
@@ -105,11 +112,13 @@ pub fn gerar(
     };
     let mut cards = Vec::with_capacity(linhas.len());
     let mut urls = Vec::with_capacity(linhas.len());
+    let mut validas: Vec<&LinhaOferta> = Vec::with_capacity(linhas.len());
     for l in &linhas {
         match publicavel(l, m) {
             Ok(c) => {
                 urls.push((c.id, l.url_afiliado.trim().to_owned()));
                 cards.push(c);
+                validas.push(l);
             }
             Err(r) => {
                 warn!(id = l.id, motivo = %r, "oferta rejeitada");
@@ -118,6 +127,20 @@ pub fn gerar(
         }
     }
     rel.validas = cards.len() as u64;
+
+    // Produtos em lote, antes de qualquer escrita (sem N+1 no Oracle). `para_pagina` valida o
+    // mesmo que `publicavel`, então toda linha válida vira página.
+    let ids_produto: Vec<i64> = validas.iter().filter_map(|l| l.id_produto).collect();
+    let produtos = fonte.produtos(&ids_produto)?;
+    let paginas: Vec<_> = validas
+        .iter()
+        .filter_map(|l| {
+            let p = l.id_produto.and_then(|id| produtos.get(&id));
+            para_pagina(l, p, m)
+                .inspect_err(|r| warn!(id = l.id, motivo = %r, "card sem página"))
+                .ok()
+        })
+        .collect();
 
     // MANIFEST §6 passo 1: imagens antes de qualquer chunk.
     let ids_publicaveis: Vec<i64> = cards.iter().map(|c| c.id).collect();
@@ -164,6 +187,9 @@ pub fn gerar(
         .iter()
         .max_by_key(|r| r.bytes)
         .map(|r| (r.n, r.bytes));
+
+    // MANIFEST §6 passo 3: CSS, páginas, sitemaps, robots e índice, antes da KVS e do manifest.
+    rel.site = publicar_site(&paginas, site, pub_)?;
 
     rel.redirects = sincronizar_redirects(&urls, redirects)?;
 
@@ -215,10 +241,36 @@ pub fn gerar(
         bytes = rel.bytes_totais,
         redirects_put = rel.redirects.puts,
         redirects_del = rel.redirects.dels,
+        paginas_publicadas = rel.site.paginas.publicadas,
+        paginas_removidas = rel.site.paginas.removidas,
         versao,
         "manifest publicado"
     );
     Ok(rel)
+}
+
+/// `--dry-run`: converte cada linha em página com os produtos carregados em lote, sem escrever
+/// nada. Devolve `(lidas, válidas, rejeitadas por motivo)`; rejeições são logadas com o id.
+pub fn contar_paginas(
+    fonte: &dyn FonteOfertas,
+    m: &Mapeamento,
+) -> Result<(u64, u64, BTreeMap<Rejeicao, u64>)> {
+    let linhas = fonte.ofertas()?;
+    let ids: Vec<i64> = linhas.iter().filter_map(|l| l.id_produto).collect();
+    let produtos = fonte.produtos(&ids)?;
+    let mut validas = 0;
+    let mut rejeitadas = BTreeMap::new();
+    for l in &linhas {
+        let p = l.id_produto.and_then(|id| produtos.get(&id));
+        match para_pagina(l, p, m) {
+            Ok(_) => validas += 1,
+            Err(r) => {
+                warn!(id = l.id, motivo = %r, "oferta rejeitada");
+                *rejeitadas.entry(r).or_default() += 1;
+            }
+        }
+    }
+    Ok((linhas.len() as u64, validas, rejeitadas))
 }
 
 /// Chunk comprimido de até `ORCAMENTO_CHUNK` bytes passa; acima disso, erro.

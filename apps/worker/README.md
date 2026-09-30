@@ -5,7 +5,7 @@ Lê OFERTA/PRODUTO do Oracle e converte cada linha em `OfertaCard` e `OfertaPagi
 
 - `--dry-run` (BSV-10): lê, converte e imprime contagens.
 - `--gerar --saida <dir>` (BSV-11): gera os chunks e o `manifest.json` numa pasta com o layout
-  do bucket (`docs/MANIFEST.md`). Páginas HTML em BSV-21.
+  do bucket (`docs/MANIFEST.md`), mais páginas, CSS, sitemap e robots (BSV-21, ver abaixo).
 - `--publicar [--sim]` (BSV-12): o mesmo que `--gerar`, mas no bucket S3, e sincroniza a KVS de
   redirects `id → DS_URL_AFILIADO`. Sem `--sim` só imprime o plano.
 
@@ -64,6 +64,66 @@ imagens_falhas: 0
 imagens_maior_small: 18420
 imagens_maior_grande: 142031
 ```
+
+## Páginas, CSS, sitemap e robots (BSV-21)
+
+Depois dos chunks e antes da KVS (MANIFEST §6 passo 3), `gerar()` publica, nesta ordem:
+
+| chave | conteúdo | headers |
+|---|---|---|
+| `assets/besave.css` | `assets/css/besave.css`, embutido no binário; o template referencia `/assets/besave.css` | `text/css; charset=utf-8`, `public, max-age=3600, stale-while-revalidate=86400` |
+| `oferta/{id}/index.html` | uma página por oferta publicada (ativa ou expirada ≤ 7 dias), `TemplateOferta` (BSV-20) | `text/html; charset=utf-8`, `public, max-age=600, stale-while-revalidate=300` |
+| `sitemap-{n}.xml` | só ofertas **ATIVAS**, até 45 000 URLs cada, `<loc>{base}/oferta/{id}/</loc>`, `<lastmod>` = data de `dt_oferta` | `application/xml`, `public, max-age=300` |
+| `sitemap.xml` | sitemap index apontando para os `sitemap-{n}.xml` | idem |
+| `robots.txt` | `BESAVE_INDEXAVEL` falso: `Disallow: /`; verdadeiro: `Allow: /` + `Sitemap: {base}/sitemap.xml` | `text/plain; charset=utf-8`, `public, max-age=300` |
+| `_estado/paginas.json` | índice do que já está no bucket (ver abaixo) | `application/json`, `no-store` |
+
+| variável | obrigatória | uso |
+|---|---|---|
+| `BESAVE_BASE_URL` | não | base das URLs do sitemap e do `robots.txt`; padrão `https://besave.com.br` (`/` final é removida; precisa começar com `http://` ou `https://`) |
+| `BESAVE_INDEXAVEL` | não | `true`/`1` libera a indexação; `false`/`0`/ausente bloqueia (padrão). Outro valor: erro nomeando a variável. Enquanto o site está em `*.cloudfront.net`, fica falso; a virada de DNS liga |
+
+O `<link rel="canonical">` da página continua `https://besave.com.br/oferta/{id}/`, qualquer que
+seja `BESAVE_BASE_URL`.
+
+**Só sobe o que mudou.** `_estado/paginas.json` é um objeto plano com o hash16 (SHA-256, 16 hex)
+de cada objeto publicado: chave numérica = id da página, `_css`, `_robots` e cada `sitemap*.xml`.
+É lido uma vez por execução; objeto com o mesmo hash não é enviado. Sem índice (primeira vez) ou
+com índice ilegível, tudo sobe (páginas são idempotentes) e o ciclo segue; nesse caminho (e só
+nele) o conjunto anterior de páginas é reconstruído com `listar("oferta/")`, então páginas de ids
+que saíram do conjunto são removidas mesmo sem índice, e o índice é regravado. O índice só é
+regravado quando muda: execução sem mudança sobe só `manifest.prev.json` e `manifest.json`.
+
+- Produtos vêm do Oracle em lote (`FonteOfertas::produtos`, `IN` com até 1 000 ids por query),
+  nunca uma query por oferta; `--dry-run` usa o mesmo caminho.
+- Páginas sobem via `gravar_lote` em blocos de 64 (paralelo no S3, BSV-13).
+- **Expurgo:** id do índice anterior que saiu do conjunto → `oferta/{id}/index.html` é removida e
+  sai do índice e do sitemap. `sitemap-{n}.xml` que deixou de ser gerado é removido.
+- Oferta que vira ENCERRADA: a página muda (hash novo, `noindex`) e é reenviada; sai do sitemap
+  no mesmo ciclo.
+- Orçamento: página acima de 30 720 bytes → erro `PaginaAcimaDoOrcamento { id, bytes }`, o índice,
+  a KVS e o manifest não são gravados. Erro de render numa página: loga o id, conta em
+  `paginas_falhas`, não publica aquela página e segue. Falha de upload aborta antes do manifest.
+
+Relatório no stdout (além das contagens de chunks e imagens):
+
+```
+paginas_renderizadas: 3
+paginas_publicadas: 3
+paginas_inalteradas: 0
+paginas_removidas: 0
+paginas_falhas: 0
+maior_html: 3284
+tempo_render_ms: 3
+css_publicado: true
+sitemaps_publicados: 2
+sitemaps_removidos: 0
+robots_publicado: true
+```
+
+No plano do `--publicar` (sem `--sim`), as páginas aparecem resumidas:
+`páginas a gravar: 25095 (ex.: oferta/1/index.html, …)` e `páginas a remover: N (ex.: …)`, com
+até 5 exemplos, em vez de uma linha por página.
 
 ## Rodar com a fonte fake (sem banco)
 
@@ -180,7 +240,8 @@ redirects_del: 1
 redirects_total: 3
 ```
 
-**Execução (`--sim`).** Ordem de MANIFEST §6: chunks novos → KVS → `manifest.prev.json` →
+**Execução (`--sim`).** Ordem de MANIFEST §6: imagens → chunks novos → CSS, páginas, sitemaps,
+robots e `_estado/paginas.json` (BSV-21) → KVS → `manifest.prev.json` →
 `manifest.json` → remoção de chunks órfãos. Se a KVS falhar, o manifest não é gravado e o anterior
 continua valendo.
 

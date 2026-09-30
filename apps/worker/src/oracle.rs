@@ -1,5 +1,8 @@
 //! `FonteOfertas` sobre Oracle XE 11.2 (crate `oracle`, OCI via Instant Client ≥ 19).
 
+use std::collections::{BTreeSet, HashMap};
+
+use oracle::sql_type::ToSql;
 use oracle::{Connection, InitParams, Row};
 
 use crate::conversao::{LinhaOferta, LinhaProduto};
@@ -98,9 +101,29 @@ pub const SQL_OFERTAS: &str = concat!(
     " FROM OFERTA WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7 ORDER BY ID_OFERTA"
 );
 
-const SQL_PRODUTO: &str = "SELECT ID_PRODUTO, DS_DESCRICAO_PRODUTO, DS_MARCA, DS_FABRICANTE, \
+const COLUNAS_PRODUTO: &str = "SELECT ID_PRODUTO, DS_DESCRICAO_PRODUTO, DS_MARCA, DS_FABRICANTE, \
      DS_MODELO, DS_PAIS_ORIGEM, DS_GENERO, DS_FAIXA_ETARIA, VR_PRECO_MINIMO, VR_PRECO_MAXIMO \
-     FROM PRODUTO WHERE ID_PRODUTO = :id";
+     FROM PRODUTO WHERE ID_PRODUTO";
+
+/// Máximo de expressões numa lista `IN` do Oracle (ORA-01795).
+pub const BLOCO_IN: usize = 1000;
+
+/// Ids distintos, ordenados, em blocos de até `BLOCO_IN` (um statement por bloco).
+pub fn blocos_in(ids: &[i64]) -> Vec<Vec<i64>> {
+    let distintos: Vec<i64> = ids
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    distintos.chunks(BLOCO_IN).map(<[i64]>::to_vec).collect()
+}
+
+/// Query de produtos com `n` binds posicionais: `... IN (:1, :2, …, :n)`.
+pub fn sql_produtos(n: usize) -> String {
+    let binds: Vec<String> = (1..=n).map(|i| format!(":{i}")).collect();
+    format!("{COLUNAS_PRODUTO} IN ({})", binds.join(", "))
+}
 
 impl FonteOfertas for OracleFonte {
     fn ofertas(&self) -> Result<Vec<LinhaOferta>> {
@@ -111,12 +134,26 @@ impl FonteOfertas for OracleFonte {
     }
 
     fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>> {
-        let mut linhas = self.conn.query_named(SQL_PRODUTO, &[("id", &id_produto)])?;
+        let sql = format!("{COLUNAS_PRODUTO} = :id");
+        let mut linhas = self.conn.query_named(&sql, &[("id", &id_produto)])?;
         linhas
             .next()
             .transpose()?
             .map(|r| linha_produto(&r))
             .transpose()
+    }
+
+    /// Uma query por bloco de `BLOCO_IN` ids distintos.
+    fn produtos(&self, ids: &[i64]) -> Result<HashMap<i64, LinhaProduto>> {
+        let mut out = HashMap::with_capacity(ids.len());
+        for bloco in blocos_in(ids) {
+            let params: Vec<&dyn ToSql> = bloco.iter().map(|id| id as &dyn ToSql).collect();
+            for r in self.conn.query(&sql_produtos(bloco.len()), &params)? {
+                let p = linha_produto(&r?)?;
+                out.insert(p.id_produto, p);
+            }
+        }
+        Ok(out)
     }
 }
 

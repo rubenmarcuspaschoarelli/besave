@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 
 use worker::fonte::ErroFonte;
-use worker::oracle::{ConfigOracle, SQL_OFERTAS};
+use worker::oracle::{BLOCO_IN, ConfigOracle, SQL_OFERTAS, blocos_in, sql_produtos};
 
 fn env(pares: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
     let m: HashMap<String, String> = pares
@@ -132,4 +132,37 @@ fn sql_de_ofertas_nao_usa_funcoes_de_fuso() {
 #[test]
 fn sql_de_ofertas_le_url_de_afiliado() {
     assert!(SQL_OFERTAS.contains("DS_URL_AFILIADO"));
+}
+
+/// PRD-03: `IN` com um bind posicional por id, e bloco no limite de 1 000 do Oracle (ORA-01795).
+#[test]
+fn sql_de_produtos_usa_in_com_um_bind_por_id() {
+    assert_eq!(BLOCO_IN, 1000);
+    let sql = sql_produtos(3);
+    assert!(
+        sql.ends_with("FROM PRODUTO WHERE ID_PRODUTO IN (:1, :2, :3)"),
+        "{sql}"
+    );
+    assert!(
+        sql.starts_with("SELECT ID_PRODUTO, DS_DESCRICAO_PRODUTO,"),
+        "{sql}"
+    );
+    let grande = sql_produtos(BLOCO_IN);
+    assert!(grande.ends_with(", :1000)"), "{grande}");
+    assert_eq!(grande.matches(':').count(), BLOCO_IN);
+}
+
+/// PRD-03: 2 500 ids (com repetidos) → blocos de 1 000, 1 000 e 500 ids distintos.
+#[test]
+fn ids_de_produto_em_blocos_de_mil_sem_repetir() {
+    let mut ids: Vec<i64> = (1..=2_500).rev().collect();
+    ids.extend([1, 2, 2_500]);
+    let blocos = blocos_in(&ids);
+    assert_eq!(
+        blocos.iter().map(Vec::len).collect::<Vec<_>>(),
+        [1000, 1000, 500]
+    );
+    assert_eq!(blocos[0][0], 1);
+    assert_eq!(blocos[2][499], 2_500);
+    assert!(blocos_in(&[]).is_empty());
 }

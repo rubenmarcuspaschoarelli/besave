@@ -11,6 +11,8 @@ pub mod mapeamento;
 pub mod modelo;
 pub mod oracle;
 pub mod pagina_html;
+pub mod paginas;
 pub mod plano;
 pub mod publicador;
 pub mod redirects;
+pub mod site;

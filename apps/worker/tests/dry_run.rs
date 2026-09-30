@@ -234,3 +234,102 @@ fn publicar_e_gerar_juntos_saem_com_erro() {
     ));
     assert!(!dir.join("manifest.json").exists());
 }
+
+// BSV-21: páginas, CSS, sitemap e robots no `--gerar`; config do site por env.
+
+fn gerar_com(nome: &str, env: &[(&str, &str)]) -> (std::path::PathBuf, Output) {
+    let dir = saida(nome);
+    let mut c = Command::new(env!("CARGO_BIN_EXE_besave-worker"));
+    c.args(["--gerar", "--saida", dir.to_str().unwrap()])
+        .current_dir(env!("CARGO_MANIFEST_DIR"))
+        .env("BESAVE_FONTE", "fake")
+        .env(
+            "BESAVE_IMAGENS_DIR",
+            std::env::temp_dir().join("besave-worker-cli-testes-sem-imagens"),
+        )
+        .env("RUST_LOG", "warn")
+        .env_remove("BESAVE_BASE_URL")
+        .env_remove("BESAVE_INDEXAVEL");
+    for (k, v) in env {
+        c.env(k, v);
+    }
+    (dir, c.output().unwrap())
+}
+
+/// SIT-01 no binário + relatório de páginas.
+#[test]
+fn gerar_fake_publica_paginas_e_imprime_relatorio_do_site() {
+    let (dir, out) = gerar_com("site", &[]);
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    for id in [5412, 5413, 5420] {
+        assert!(
+            dir.join(format!("oferta/{id}/index.html")).is_file(),
+            "{id}"
+        );
+    }
+    assert!(dir.join("assets/besave.css").is_file());
+    assert!(dir.join("sitemap.xml").is_file());
+    assert!(dir.join("_estado/paginas.json").is_file());
+    assert_eq!(
+        std::fs::read_to_string(dir.join("robots.txt")).unwrap(),
+        "User-agent: *\nDisallow: /\n"
+    );
+    for linha in [
+        "paginas_renderizadas: 3\n",
+        "paginas_publicadas: 3\n",
+        "paginas_inalteradas: 0\n",
+        "paginas_removidas: 0\n",
+        "paginas_falhas: 0\n",
+        "css_publicado: true\n",
+        "sitemaps_publicados: 2\n",
+        "robots_publicado: true\n",
+    ] {
+        assert!(stdout.contains(linha), "falta {linha:?}: {stdout}");
+    }
+    for chave in ["maior_html: ", "tempo_render_ms: "] {
+        assert!(stdout.contains(chave), "falta {chave:?}: {stdout}");
+    }
+}
+
+/// SIT-09/SIT-15 no binário: `BESAVE_INDEXAVEL=true` + `BESAVE_BASE_URL` chegam ao robots e ao sitemap.
+#[test]
+fn gerar_indexavel_usa_a_base_do_env() {
+    let (dir, out) = gerar_com(
+        "indexavel",
+        &[
+            ("BESAVE_INDEXAVEL", "true"),
+            ("BESAVE_BASE_URL", "https://d1.cloudfront.net"),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let robots = std::fs::read_to_string(dir.join("robots.txt")).unwrap();
+    assert!(
+        robots.contains("Sitemap: https://d1.cloudfront.net/sitemap.xml"),
+        "{robots}"
+    );
+    let sitemap = std::fs::read_to_string(dir.join("sitemap-1.xml")).unwrap();
+    assert!(
+        sitemap.contains("<loc>https://d1.cloudfront.net/oferta/5412/</loc>"),
+        "{sitemap}"
+    );
+}
+
+/// SIT-15 no binário: valor inválido falha nomeando a variável, sem panic e sem gerar nada.
+#[test]
+fn gerar_com_indexavel_invalida_nomeia_a_variavel() {
+    let (dir, out) = gerar_com("indexavel-invalida", &[("BESAVE_INDEXAVEL", "talvez")]);
+    assert!(!out.status.success());
+    assert_ne!(out.status.code(), Some(101), "panic");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("BESAVE_INDEXAVEL"), "{stderr}");
+    assert!(!dir.join("manifest.json").exists());
+}

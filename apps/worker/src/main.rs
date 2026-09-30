@@ -5,17 +5,17 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
-use tracing::warn;
 use tracing_subscriber::EnvFilter;
 use worker::aws::{ConfigAws, ContextoAws, PublicadorS3, RedirectsKvs};
-use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao, para_pagina};
+use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao};
 use worker::fonte::{FakeFonte, FonteOfertas};
-use worker::geracao::{Relatorio, gerar};
+use worker::geracao::{Relatorio, contar_paginas, gerar};
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::plano::publicar;
 use worker::publicador::PublicadorLocal;
 use worker::redirects::RedirectsMemoria;
+use worker::site::ConfigSite;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
@@ -74,6 +74,12 @@ fn main() -> Result<()> {
     if (args.gerar || args.publicar) && args.imagens_dir.is_none() {
         bail!("BESAVE_IMAGENS_DIR (ou --imagens-dir) é obrigatória com --gerar ou --publicar");
     }
+    // `BESAVE_BASE_URL`/`BESAVE_INDEXAVEL`: também antes do Oracle.
+    let site = if args.gerar || args.publicar {
+        ConfigSite::do_env()?
+    } else {
+        ConfigSite::default()
+    };
     let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
         Ok("fake") => Box::new(fake_demo(agora)),
         Ok("oracle") | Err(_) => Box::new(
@@ -86,13 +92,21 @@ fn main() -> Result<()> {
             let dir_imagens = args
                 .imagens_dir
                 .ok_or_else(|| anyhow::anyhow!("BESAVE_IMAGENS_DIR ausente"))?;
-            gerar_em(fonte.as_ref(), &m, saida, &dir_imagens, agora)
+            gerar_em(fonte.as_ref(), &m, saida, &dir_imagens, &site, agora)
         }
         (_, Some(cfg)) => {
             let dir_imagens = args
                 .imagens_dir
                 .ok_or_else(|| anyhow::anyhow!("BESAVE_IMAGENS_DIR ausente"))?;
-            publicar_aws(fonte.as_ref(), &m, &cfg, &dir_imagens, agora, args.sim)
+            publicar_aws(
+                fonte.as_ref(),
+                &m,
+                &cfg,
+                &dir_imagens,
+                &site,
+                agora,
+                args.sim,
+            )
         }
         _ => dry_run(fonte.as_ref(), &m),
     }
@@ -103,6 +117,7 @@ fn publicar_aws(
     m: &Mapeamento,
     cfg: &ConfigAws,
     dir_imagens: &std::path::Path,
+    site: &ConfigSite,
     agora: i64,
     sim: bool,
 ) -> Result<()> {
@@ -110,7 +125,7 @@ fn publicar_aws(
     let ctx = ContextoAws::carregar()?;
     let mut pub_ = PublicadorS3::new(&ctx, &cfg.bucket);
     let mut kvs = RedirectsKvs::new(&ctx, &cfg.kvs_arn);
-    let pb = publicar(fonte, m, &mut pub_, &mut kvs, dir_imagens, agora, sim)
+    let pb = publicar(fonte, m, &mut pub_, &mut kvs, dir_imagens, site, agora, sim)
         .with_context(|| format!("publicando em s3://{}", cfg.bucket))?;
     if !sim {
         println!("PLANO: nada foi escrito. Rode com --sim para executar.");
@@ -133,6 +148,7 @@ fn gerar_em(
     m: &Mapeamento,
     saida: PathBuf,
     dir_imagens: &std::path::Path,
+    site: &ConfigSite,
     agora: i64,
 ) -> Result<()> {
     let inicio = Instant::now();
@@ -144,6 +160,7 @@ fn gerar_em(
         &mut pub_,
         &mut RedirectsMemoria::new(),
         dir_imagens,
+        site,
         agora,
     )
     .with_context(|| format!("gerando em {}", saida.display()))?;
@@ -174,26 +191,27 @@ fn imprimir_relatorio(rel: &Relatorio) {
     }
     println!("imagens_maior_small: {}", img.maior_small);
     println!("imagens_maior_grande: {}", img.maior_grande);
+    let site = &rel.site;
+    let pag = &site.paginas;
+    println!("paginas_renderizadas: {}", pag.renderizadas);
+    println!("paginas_publicadas: {}", pag.publicadas);
+    println!("paginas_inalteradas: {}", pag.inalteradas);
+    println!("paginas_removidas: {}", pag.removidas);
+    println!("paginas_falhas: {}", pag.falhas.len());
+    for id in &pag.falhas {
+        println!("  {id}");
+    }
+    println!("maior_html: {}", pag.maior_html);
+    println!("tempo_render_ms: {}", pag.tempo_render_ms);
+    println!("css_publicado: {}", site.css_publicado);
+    println!("sitemaps_publicados: {}", site.sitemaps_publicados);
+    println!("sitemaps_removidos: {}", site.sitemaps_removidos);
+    println!("robots_publicado: {}", site.robots_publicado);
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {
-    let linhas = fonte.ofertas()?;
-    let mut validas = 0u64;
-    let mut rejeitadas: BTreeMap<Rejeicao, u64> = BTreeMap::new();
-    for l in &linhas {
-        let produto = match l.id_produto {
-            Some(id) => fonte.produto(id)?,
-            None => None,
-        };
-        match para_pagina(l, produto.as_ref(), m) {
-            Ok(_) => validas += 1,
-            Err(r) => {
-                warn!(id = l.id, motivo = %r, "oferta rejeitada");
-                *rejeitadas.entry(r).or_default() += 1;
-            }
-        }
-    }
-    imprimir_contagens(linhas.len() as u64, validas, &rejeitadas);
+    let (lidas, validas, rejeitadas) = contar_paginas(fonte, m)?;
+    imprimir_contagens(lidas, validas, &rejeitadas);
     Ok(())
 }
 

@@ -12,6 +12,7 @@ use worker::mapeamento::Mapeamento;
 use worker::modelo::Manifest;
 use worker::publicador::{Publicador, PublicadorMemoria};
 use worker::redirects::{Redirects, RedirectsMemoria};
+use worker::site::ConfigSite;
 
 fn rodar(
     linhas: &[LinhaOferta],
@@ -35,6 +36,7 @@ fn rodar_com(
         p,
         kvs,
         &dir_imagens_vazio(),
+        &ConfigSite::default(),
         agora,
     )
 }
@@ -95,10 +97,13 @@ fn mudanca_no_chunk_5_regrava_so_ele_e_antigo_sai_na_terceira() {
 
     assert_ne!(novo_5, antigo_5);
     assert_eq!(r2.chunks_escritos, 1);
+    // BSV-21: o preço aparece na página, então só a página de 5413 e o índice acompanham o chunk.
     assert_eq!(
         gravadas(&p, marca),
         vec![
             novo_5.clone(),
+            "oferta/5413/index.html".into(),
+            "_estado/paginas.json".into(),
             "manifest.prev.json".into(),
             "manifest.json".into()
         ]
@@ -260,4 +265,312 @@ fn expurgo_apaga_a_chave_na_kvs() {
         kvs.listar().unwrap().into_keys().collect::<Vec<_>>(),
         [1001, 5412, 5413, 7001]
     );
+}
+
+// ---- BSV-21: páginas, CSS, sitemap, robots e índice no ciclo ----
+
+fn texto(p: &PublicadorMemoria, chave: &str) -> String {
+    String::from_utf8(
+        p.ler(chave)
+            .unwrap()
+            .unwrap_or_else(|| panic!("sem {chave}")),
+    )
+    .unwrap()
+}
+
+/// Chaves do site (tudo que não é chunk, imagem nem manifest), na ordem gravada.
+fn do_site(chaves: &[String]) -> Vec<String> {
+    chaves
+        .iter()
+        .filter(|c| !c.starts_with("data/") && !c.starts_with("img/") && !c.starts_with("manifest"))
+        .cloned()
+        .collect()
+}
+
+/// SIT-01: primeira execução com as 3 ofertas das fixtures.
+#[test]
+fn primeira_execucao_publica_paginas_css_sitemap_robots_e_indice() {
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
+    assert_eq!(
+        do_site(p.gravacoes()),
+        [
+            "assets/besave.css",
+            "oferta/5412/index.html",
+            "oferta/5413/index.html",
+            "oferta/5420/index.html",
+            "sitemap-1.xml",
+            "sitemap.xml",
+            "robots.txt",
+            "_estado/paginas.json",
+        ]
+    );
+    let css = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/assets/css/besave.css"
+    ))
+    .unwrap();
+    assert_eq!(p.ler("assets/besave.css").unwrap().unwrap(), css);
+    assert_eq!(texto(&p, "robots.txt"), "User-agent: *\nDisallow: /\n");
+    let estado: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    for id in ["5412", "5413", "5420"] {
+        assert_eq!(estado[id].as_str().unwrap().len(), 16, "{estado}");
+    }
+}
+
+/// SIT-02: segunda execução sem mudança → só os manifests.
+#[test]
+fn segunda_execucao_sem_mudanca_nao_sobe_nada_do_site() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    let marca = p.gravacoes().len();
+    let r2 = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(gravadas(&p, marca), ["manifest.prev.json", "manifest.json"]);
+    assert_eq!(r2.site.paginas.publicadas, 0);
+    assert_eq!(r2.site.paginas.inalteradas, 3);
+    assert!(!r2.site.css_publicado && !r2.site.robots_publicado && !r2.site.indice_gravado);
+    assert_eq!(r2.site.sitemaps_publicados, 0);
+}
+
+/// SIT-03/SIT-04: ativa → encerrada sai do sitemap no mesmo ciclo e só a página dela sobe.
+#[test]
+fn oferta_encerrada_sai_do_sitemap_e_so_a_pagina_dela_sobe() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    let sitemap = texto(&p, "sitemap-1.xml");
+    assert!(
+        sitemap
+            .contains("<loc>https://besave.com.br/oferta/5412/</loc><lastmod>2026-09-24</lastmod>")
+    );
+    assert!(sitemap.contains("<loc>https://besave.com.br/oferta/5413/</loc>"));
+    assert!(!sitemap.contains("/oferta/5420/"), "encerrada no sitemap");
+
+    let mut linhas = linhas_fixture();
+    linhas[1].ativo = false; // 5413
+    linhas[1].dt_desativacao = Some(AGORA);
+    let marca = p.gravacoes().len();
+    rodar(&linhas, &mut p, &m, AGORA + 600).unwrap();
+    let novas = gravadas(&p, marca);
+    let paginas: Vec<&String> = novas.iter().filter(|c| c.starts_with("oferta/")).collect();
+    assert_eq!(paginas, ["oferta/5413/index.html"]);
+    assert!(novas.contains(&"sitemap-1.xml".to_owned()), "{novas:?}");
+    let sitemap = texto(&p, "sitemap-1.xml");
+    assert!(!sitemap.contains("/oferta/5413/"), "{sitemap}");
+    assert!(sitemap.contains("/oferta/5412/"), "{sitemap}");
+    assert!(texto(&p, "oferta/5413/index.html").contains("noindex"));
+}
+
+/// SIT-05: oferta expurgada → página removida, fora do índice e do sitemap.
+#[test]
+fn oferta_expurgada_sai_da_pagina_do_indice_e_do_sitemap() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    assert!(p.existe("oferta/5412/index.html").unwrap());
+
+    let linhas: Vec<LinhaOferta> = linhas_fixture()
+        .into_iter()
+        .filter(|l| l.id != 5412)
+        .collect();
+    let r2 = rodar(&linhas, &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r2.site.paginas.removidas, 1);
+    assert!(p.remocoes().contains(&"oferta/5412/index.html".to_owned()));
+    assert!(!p.existe("oferta/5412/index.html").unwrap());
+    let estado: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert!(estado.get("5412").is_none(), "{estado}");
+    assert!(estado.get("5413").is_some(), "{estado}");
+    assert!(!texto(&p, "sitemap-1.xml").contains("/oferta/5412/"));
+}
+
+/// SIT-07: `sitemap-{n}.xml` que não é mais gerado sai do bucket.
+#[test]
+fn sitemap_que_nao_e_mais_gerado_e_removido() {
+    let mut p = PublicadorMemoria::new();
+    // Resto de uma execução anterior com mais de 45 000 ativas.
+    p.gravar(
+        "sitemap-2.xml",
+        b"<urlset/>",
+        &worker::publicador::META_SITEMAP,
+    )
+    .unwrap();
+    let r = rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
+    assert_eq!(r.site.sitemaps_removidos, 1);
+    assert_eq!(p.remocoes(), ["sitemap-2.xml"]);
+    assert_eq!(
+        p.listar("sitemap").unwrap(),
+        ["sitemap-1.xml", "sitemap.xml"]
+    );
+    assert!(!texto(&p, "sitemap.xml").contains("sitemap-2.xml"));
+}
+
+/// SIT-11: índice ilegível conta como ausente: tudo sobe de novo e o ciclo termina.
+#[test]
+fn indice_ilegivel_reenvia_tudo_sem_abortar() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    p.gravar(
+        "_estado/paginas.json",
+        b"{nao e json",
+        &worker::publicador::META_ESTADO,
+    )
+    .unwrap();
+    let marca = p.gravacoes().len();
+    let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r.site.paginas.publicadas, 3);
+    assert!(r.site.css_publicado && r.site.robots_publicado);
+    assert_eq!(
+        do_site(&gravadas(&p, marca)),
+        [
+            "assets/besave.css",
+            "oferta/5412/index.html",
+            "oferta/5413/index.html",
+            "oferta/5420/index.html",
+            "sitemap-1.xml",
+            "sitemap.xml",
+            "robots.txt",
+            "_estado/paginas.json",
+        ]
+    );
+    let estado: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert!(estado.get("5412").is_some(), "{estado}");
+    assert!(p.existe("manifest.json").unwrap());
+}
+
+/// SIT-11 + expurgo sem índice: com `_estado/paginas.json` corrompido, o conjunto anterior vem do
+/// bucket (`listar("oferta/")`); a página órfã sai e o índice é reconstruído e regravado.
+#[test]
+fn indice_corrompido_reconstroi_do_bucket_e_remove_orfa() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    p.gravar(
+        "oferta/9999/index.html",
+        b"<html>orfa</html>",
+        &worker::publicador::META_PAGINA,
+    )
+    .unwrap();
+    p.gravar(
+        "_estado/paginas.json",
+        b"{nao e json",
+        &worker::publicador::META_ESTADO,
+    )
+    .unwrap();
+    let marca = p.gravacoes().len();
+
+    let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r.site.paginas.removidas, 1);
+    assert_eq!(p.remocoes(), ["oferta/9999/index.html"]);
+    assert!(!p.existe("oferta/9999/index.html").unwrap());
+    assert_eq!(r.site.paginas.publicadas, 3);
+    assert!(r.site.indice_gravado);
+    assert!(gravadas(&p, marca).contains(&"_estado/paginas.json".to_owned()));
+    let estado: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert!(estado.get("9999").is_none(), "{estado}");
+    for id in ["5412", "5413", "5420"] {
+        assert_eq!(estado[id].as_str().unwrap().len(), 16, "{estado}");
+    }
+}
+
+/// O caminho de reconstrução é só para índice ausente/ilegível: com índice válido, uma página no
+/// bucket que não está no índice não é tocada (nenhuma listagem de `oferta/` por execução).
+#[test]
+fn indice_valido_nao_lista_nem_remove_pagina_fora_dele() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    p.gravar(
+        "oferta/9999/index.html",
+        b"<html>fora do indice</html>",
+        &worker::publicador::META_PAGINA,
+    )
+    .unwrap();
+    let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r.site.paginas.removidas, 0);
+    assert!(p.remocoes().is_empty());
+    assert!(p.existe("oferta/9999/index.html").unwrap());
+}
+
+fn rodar_site(
+    linhas: &[LinhaOferta],
+    p: &mut PublicadorMemoria,
+    site: &ConfigSite,
+    agora: i64,
+) -> Relatorio {
+    gerar(
+        &FakeFonte::new(linhas.to_vec(), vec![], agora),
+        &mapeamento(),
+        p,
+        &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
+        site,
+        agora,
+    )
+    .unwrap()
+}
+
+/// SIT-08/SIT-09 na virada de DNS: `BESAVE_INDEXAVEL` e a base mudam → robots, sitemaps e índice
+/// sobem de novo com o conteúdo novo; páginas não mudam.
+#[test]
+fn virada_para_indexavel_regrava_robots_e_sitemaps() {
+    let mut p = PublicadorMemoria::new();
+    rodar_site(&linhas_fixture(), &mut p, &ConfigSite::default(), AGORA);
+    assert_eq!(texto(&p, "robots.txt"), "User-agent: *\nDisallow: /\n");
+    let marca = p.gravacoes().len();
+    let novo = ConfigSite {
+        base: "https://www.besave.com.br".into(),
+        indexavel: true,
+    };
+    let r = rodar_site(&linhas_fixture(), &mut p, &novo, AGORA + 600);
+    assert_eq!(
+        do_site(&gravadas(&p, marca)),
+        [
+            "sitemap-1.xml",
+            "sitemap.xml",
+            "robots.txt",
+            "_estado/paginas.json"
+        ]
+    );
+    assert!(r.site.robots_publicado);
+    assert_eq!(
+        texto(&p, "robots.txt"),
+        "User-agent: *\nAllow: /\n\nSitemap: https://www.besave.com.br/sitemap.xml\n"
+    );
+    assert!(
+        texto(&p, "sitemap-1.xml").contains("<loc>https://www.besave.com.br/oferta/5412/</loc>")
+    );
+}
+
+/// Regra 6 do dono: CSS com hash diferente do índice é reenviado e o índice passa a ter o novo.
+#[test]
+fn css_com_hash_diferente_e_reenviado() {
+    let mut p = PublicadorMemoria::new();
+    rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
+    let mut estado: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    let atual = estado["_css"].clone();
+    estado.insert("_css".into(), "0000000000000000".into());
+    p.gravar(
+        "_estado/paginas.json",
+        &serde_json::to_vec(&estado).unwrap(),
+        &worker::publicador::META_ESTADO,
+    )
+    .unwrap();
+    let marca = p.gravacoes().len();
+    let r = rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA + 600).unwrap();
+    assert!(r.site.css_publicado);
+    assert_eq!(
+        do_site(&gravadas(&p, marca)),
+        ["assets/besave.css", "_estado/paginas.json"]
+    );
+    let novo: serde_json::Value =
+        serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
+    assert_eq!(novo["_css"], atual);
+    assert_eq!(atual.as_str().unwrap().len(), 16);
 }
