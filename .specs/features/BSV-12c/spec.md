@@ -120,7 +120,7 @@ Dimensions: estado persistido (IDX-03..05, REC-04); falha de dependência extern
 | REC-05 | P1: Reconstrução | Step 2 | Done |
 | REC-06 | P1: Reconstrução | Step 2 | Done |
 | REL-01 | P1: Relatório | Step 2 | Done |
-| REL-02 | P1: Relatório | Step 3 | Pending |
+| REL-02 | P1: Relatório | Step 3 | Done |
 
 **Coverage:** 15 total, 15 mapped to steps, 0 unmapped.
 

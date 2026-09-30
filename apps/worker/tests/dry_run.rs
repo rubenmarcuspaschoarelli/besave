@@ -334,6 +334,37 @@ fn gerar_com_indexavel_invalida_nomeia_a_variavel() {
     assert!(!dir.join("manifest.json").exists());
 }
 
+/// REL-02 (BSV-12c): o relatório impresso traz o modo da sincronização da KVS e o motivo da
+/// reconstrução. No `--gerar` a KVS é sempre uma `RedirectsMemoria` nova e a saída não tem índice.
+#[test]
+fn gerar_fake_imprime_modo_e_motivo_dos_redirects() {
+    let dir = saida("redirects-modo");
+    let out = rodar(&["--gerar", "--saida", dir.to_str().unwrap()], "fake");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout.contains(
+            "
+redirects_modo: reconstrucao
+"
+        ),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains(
+            "
+redirects_motivo_reconstrucao: indice_ausente
+"
+        ),
+        "{stdout}"
+    );
+    assert!(dir.join("_estado/redirects.json").exists());
+}
+
 /// TMP-02 (BSV-13b): `--gerar` imprime uma linha `t_<fase>: <n> ms` por medida e a contagem de
 /// chaves estranhas de imagem. Confere presença e formato, não valores.
 #[test]
