@@ -121,3 +121,34 @@ fn memoria_expoe_headers_por_chave() {
         ["data/chunks/5-abc.json.br", "manifest.json"]
     );
 }
+
+/// LST-07 (BSV-13b): `PublicadorMemoria` conta `listar`, `existe` e `existem` separadamente;
+/// `existem` não infla o contador de `existe`.
+#[test]
+fn memoria_conta_listar_existe_e_existem_separadamente() {
+    let mut p = PublicadorMemoria::new();
+    p.gravar("img/ofertas/1.webp", b"x", &META_CHUNK).unwrap();
+    assert_eq!(
+        (
+            p.listar_chamadas(),
+            p.existe_chamadas(),
+            p.existem_chamadas()
+        ),
+        (0, 0, 0)
+    );
+
+    assert!(p.existe("img/ofertas/1.webp").unwrap());
+    assert_eq!(
+        p.existem(&["img/ofertas/1.webp", "img/ofertas/2.webp"])
+            .unwrap(),
+        vec![true, false]
+    );
+    p.existem(&["img/ofertas/1.webp"]).unwrap();
+    p.listar("img/").unwrap();
+    p.listar("data/").unwrap();
+    p.listar("oferta/").unwrap();
+
+    assert_eq!(p.existe_chamadas(), 1);
+    assert_eq!(p.existem_chamadas(), 2);
+    assert_eq!(p.listar_chamadas(), 3);
+}
