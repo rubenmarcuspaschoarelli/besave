@@ -138,7 +138,7 @@ pub trait Publicador {
     fn listar(&self, prefixo: &str) -> Result<Vec<String>>;
 
     /// Checa várias chaves de uma vez, na mesma ordem de `chaves`. Default sequencial via
-    /// `existe` (usado por `PublicadorLocal`/`PublicadorMemoria`, sem mudança de comportamento).
+    /// `existe` (usado por `PublicadorLocal`; `PublicadorMemoria` sobrescreve só para contar chamadas).
     /// `PublicadorS3` sobrescreve com um pool paralelo (BSV-13, regra 8): o gargalo de ~50 mil
     /// objetos na primeira carga é rede, não CPU.
     fn existem(&self, chaves: &[&str]) -> Result<Vec<bool>> {
