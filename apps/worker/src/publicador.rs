@@ -1,5 +1,6 @@
 //! Fronteira de escrita: tudo que o worker publica passa por `Publicador` (MANIFEST §1, §4).
 
+use std::cell::Cell;
 use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -137,7 +138,7 @@ pub trait Publicador {
     fn listar(&self, prefixo: &str) -> Result<Vec<String>>;
 
     /// Checa várias chaves de uma vez, na mesma ordem de `chaves`. Default sequencial via
-    /// `existe` (usado por `PublicadorLocal`/`PublicadorMemoria`, sem mudança de comportamento).
+    /// `existe` (usado por `PublicadorLocal`; `PublicadorMemoria` sobrescreve só para contar chamadas).
     /// `PublicadorS3` sobrescreve com um pool paralelo (BSV-13, regra 8): o gargalo de ~50 mil
     /// objetos na primeira carga é rede, não CPU.
     fn existem(&self, chaves: &[&str]) -> Result<Vec<bool>> {
@@ -252,12 +253,16 @@ fn coletar(dir: &Path, rel: &str, out: &mut Vec<String>) -> Result<()> {
     Ok(())
 }
 
-/// Publicador em memória para testes. Guarda o histórico de gravações em ordem.
+/// Publicador em memória para testes. Guarda o histórico de gravações em ordem e conta as
+/// chamadas de leitura (`listar`, `existe`, `existem`) separadamente (BSV-13b).
 #[derive(Debug, Clone, Default)]
 pub struct PublicadorMemoria {
     objetos: BTreeMap<String, (Vec<u8>, Meta)>,
     gravacoes: Vec<String>,
     remocoes: Vec<String>,
+    listar_chamadas: Cell<u64>,
+    existe_chamadas: Cell<u64>,
+    existem_chamadas: Cell<u64>,
 }
 
 impl PublicadorMemoria {
@@ -278,11 +283,39 @@ impl PublicadorMemoria {
     pub fn remocoes(&self) -> &[String] {
         &self.remocoes
     }
+
+    /// Chamadas a `listar` desde a criação.
+    pub fn listar_chamadas(&self) -> u64 {
+        self.listar_chamadas.get()
+    }
+
+    /// Chamadas a `existe` desde a criação (as de dentro de `existem` não contam).
+    pub fn existe_chamadas(&self) -> u64 {
+        self.existe_chamadas.get()
+    }
+
+    /// Chamadas a `existem` desde a criação.
+    pub fn existem_chamadas(&self) -> u64 {
+        self.existem_chamadas.get()
+    }
+}
+
+fn incrementar(c: &Cell<u64>) {
+    c.set(c.get() + 1);
 }
 
 impl Publicador for PublicadorMemoria {
     fn existe(&self, chave: &str) -> Result<bool> {
+        incrementar(&self.existe_chamadas);
         Ok(self.objetos.contains_key(chave))
+    }
+
+    fn existem(&self, chaves: &[&str]) -> Result<Vec<bool>> {
+        incrementar(&self.existem_chamadas);
+        Ok(chaves
+            .iter()
+            .map(|c| self.objetos.contains_key(*c))
+            .collect())
     }
 
     fn ler(&self, chave: &str) -> Result<Option<Vec<u8>>> {
@@ -303,6 +336,7 @@ impl Publicador for PublicadorMemoria {
     }
 
     fn listar(&self, prefixo: &str) -> Result<Vec<String>> {
+        incrementar(&self.listar_chamadas);
         Ok(self
             .objetos
             .keys()

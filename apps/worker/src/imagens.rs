@@ -1,6 +1,7 @@
 //! Imagens WebP do robô → S3 (BSV-13). O robô já entrega `{dir}/{id}/{id}[-small].webp`;
 //! o worker copia com verificação de orçamento (MANIFEST §1, §6, §7).
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use image::{
@@ -9,7 +10,7 @@ use image::{
 use tracing::warn;
 
 use crate::modelo::Area;
-use crate::publicador::{self, META_IMAGEM, Meta, Publicador};
+use crate::publicador::{ErroPublicador, META_IMAGEM, Meta, Publicador};
 
 /// Orçamento da imagem pequena (MANIFEST §7): acima disso, `ajustar_small` recodifica.
 pub const ORCAMENTO_SMALL: usize = 25_600;
@@ -27,6 +28,24 @@ pub enum ErroImagem {
     #[error("codificando WebP: {0}")]
     Encode(String),
 }
+
+/// Erro de `publicar_imagens`. Listagem que falha aborta o ciclo: cair para "tudo novo"
+/// reenviaria ~21 mil objetos em silêncio (BSV-13b).
+#[derive(Debug, thiserror::Error)]
+pub enum ErroImagens {
+    #[error("listando {prefixo} para decidir o reaproveitamento de imagens: {fonte}")]
+    Listagem {
+        prefixo: &'static str,
+        fonte: ErroPublicador,
+    },
+    #[error(transparent)]
+    Publicador(#[from] ErroPublicador),
+}
+
+/// Prefixo das imagens de oferta (CONTRATO §6).
+pub const PREFIXO_OFERTAS: &str = "img/ofertas/";
+/// Prefixo dos placeholders de área (CONTRATO §6).
+pub const PREFIXO_PLACEHOLDER: &str = "img/placeholder/";
 
 /// Motivo de falha ao publicar a imagem de um id (regra 2, regra 3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -51,6 +70,8 @@ pub struct RelatorioImagens {
     pub maior_small: u64,
     /// Maior `{id}.webp` publicado nesta execução, em bytes (0 se nenhum).
     pub maior_grande: u64,
+    /// Chaves em `img/ofertas/` fora de `{id}.webp`/`{id}-small.webp`: ignoradas, nunca removidas.
+    pub chaves_estranhas: u64,
 }
 
 /// `"img/ofertas/{id}-small.webp"` (CONTRATO §6).
@@ -177,73 +198,120 @@ fn placeholders() -> [(Area, &'static [u8]); 10] {
     ]
 }
 
-/// Publica os 10 placeholders que ainda não existem no destino; reaproveita os demais (regra 5).
-/// Uma checagem `existem` + uma gravação `gravar_lote` (nunca 10 chamadas unitárias): em
-/// `PublicadorS3` isso já sai em paralelo pelo pool (regra 8).
-pub(crate) fn publicar_placeholders(pub_: &mut dyn Publicador) -> publicador::Result<()> {
-    let itens = placeholders();
-    let chaves: Vec<String> = itens
-        .iter()
-        .map(|(area, _)| chave_placeholder(*area))
+/// Publica os 10 placeholders ausentes de `existentes`; reaproveita os demais (regra 5).
+/// Uma gravação `gravar_lote` (nunca 10 chamadas unitárias).
+fn publicar_placeholders(
+    existentes: &ImagensExistentes,
+    pub_: &mut dyn Publicador,
+) -> Result<(), ErroPublicador> {
+    let a_gravar: Vec<(String, Vec<u8>, Meta)> = placeholders()
+        .into_iter()
+        .map(|(area, bytes)| (chave_placeholder(area), bytes))
+        .filter(|(chave, _)| !existentes.placeholders.contains(chave))
+        .map(|(chave, bytes)| (chave, bytes.to_vec(), META_IMAGEM))
         .collect();
-    let chaves_ref: Vec<&str> = chaves.iter().map(String::as_str).collect();
-    let existentes = pub_.existem(&chaves_ref)?;
-    let mut a_gravar = Vec::new();
-    for (i, (_, bytes)) in itens.iter().enumerate() {
-        if !existentes[i] {
-            a_gravar.push((chaves[i].clone(), bytes.to_vec(), META_IMAGEM));
-        }
-    }
     if !a_gravar.is_empty() {
         pub_.gravar_lote(&a_gravar)?;
     }
     Ok(())
 }
 
-/// Ids processados por chamada de `existem`/`gravar_lote` (2 chaves por id): equilibra o tamanho
-/// da chamada `HeadObject` em lote do S3 contra o custo de refazer o lote inteiro se uma tarefa
-/// falhar. Revisão do dono (BSV-13): 5 000 ids ÷ 64 ≈ 79 chamadas de cada, não 20 000 unitárias.
+/// Chaves de imagem que já estão no destino, obtidas por listagem (BSV-13b): ~22 `ListObjectsV2`
+/// para 21 mil objetos no S3, em vez de um `HeadObject` por chave. Só memória; nada é persistido.
+#[derive(Debug, Clone, Default)]
+pub struct ImagensExistentes {
+    ofertas: HashSet<String>,
+    placeholders: HashSet<String>,
+    estranhas: u64,
+}
+
+impl ImagensExistentes {
+    /// Lista `img/ofertas/` e `img/placeholder/`, cada um uma vez. Chave de oferta com nome
+    /// inesperado fica fora do conjunto e é só contada.
+    pub fn listar(pub_: &dyn Publicador) -> Result<Self, ErroImagens> {
+        let listar = |prefixo: &'static str| {
+            pub_.listar(prefixo)
+                .map_err(|fonte| ErroImagens::Listagem { prefixo, fonte })
+        };
+        let mut ofertas = HashSet::new();
+        let mut estranhas = 0;
+        for chave in listar(PREFIXO_OFERTAS)? {
+            if chave_de_oferta_valida(&chave) {
+                ofertas.insert(chave);
+            } else {
+                estranhas += 1;
+            }
+        }
+        let placeholders = listar(PREFIXO_PLACEHOLDER)?.into_iter().collect();
+        Ok(Self {
+            ofertas,
+            placeholders,
+            estranhas,
+        })
+    }
+}
+
+/// `img/ofertas/{id}.webp` ou `img/ofertas/{id}-small.webp`, com `id` só de dígitos.
+fn chave_de_oferta_valida(chave: &str) -> bool {
+    let Some(nome) = chave
+        .strip_prefix(PREFIXO_OFERTAS)
+        .and_then(|n| n.strip_suffix(".webp"))
+    else {
+        return false;
+    };
+    let id = nome.strip_suffix("-small").unwrap_or(nome);
+    !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Ids por chamada de `gravar_lote` (2 chaves por id): equilibra o tamanho do lote paralelo no S3
+/// contra o custo de refazer o lote inteiro se uma tarefa falhar. Revisão do dono (BSV-13).
 const TAMANHO_BLOCO: usize = 64;
 
 /// Copia as imagens de `ids` de `dir` para o destino, em blocos de `TAMANHO_BLOCO` (regras 2, 3,
-/// 4, 5), e garante os 10 placeholders de área (regra 5). Reaproveitamento (regra 4) e ausência
-/// de origem (regra 5) nunca retornam erro; falha de assinatura WebP conta em
-/// `RelatorioImagens.falhas` e não interrompe o processamento (regra 2).
+/// 4, 5), e garante os 10 placeholders de área (regra 5). Existência vem de uma listagem
+/// (`ImagensExistentes::listar`), nunca de `existe`/`existem` (BSV-13b). Reaproveitamento
+/// (regra 4) e ausência de origem (regra 5) nunca retornam erro; falha de assinatura WebP conta
+/// em `RelatorioImagens.falhas` e não interrompe o processamento (regra 2).
 pub fn publicar_imagens(
     ids: &[i64],
     dir: &Path,
     pub_: &mut dyn Publicador,
-) -> publicador::Result<RelatorioImagens> {
-    publicar_placeholders(pub_)?;
-    let mut rel = RelatorioImagens::default();
+) -> Result<RelatorioImagens, ErroImagens> {
+    let existentes = ImagensExistentes::listar(pub_)?;
+    publicar_imagens_com(&existentes, ids, dir, pub_)
+}
+
+/// `publicar_imagens` com o conjunto já listado (o `gerar` mede a listagem à parte).
+pub fn publicar_imagens_com(
+    existentes: &ImagensExistentes,
+    ids: &[i64],
+    dir: &Path,
+    pub_: &mut dyn Publicador,
+) -> Result<RelatorioImagens, ErroImagens> {
+    publicar_placeholders(existentes, pub_)?;
+    let mut rel = RelatorioImagens {
+        chaves_estranhas: existentes.estranhas,
+        ..Default::default()
+    };
     for bloco in ids.chunks(TAMANHO_BLOCO) {
-        processar_bloco(bloco, dir, pub_, &mut rel)?;
+        processar_bloco(bloco, existentes, dir, pub_, &mut rel)?;
     }
     Ok(rel)
 }
 
-/// Um bloco: 1 chamada `existem` (2 chaves por id) + no máximo 1 `gravar_lote` com tudo que
-/// precisa subir. `dir`/CPU (leitura de disco, assinatura, `ajustar_small`) continuam por id,
-/// síncronos — só a rede é agrupada.
+/// Um bloco: no máximo 1 `gravar_lote` com tudo que precisa subir. `dir`/CPU (leitura de disco,
+/// assinatura, `ajustar_small`) continuam por id, síncronos — só a rede é agrupada.
 fn processar_bloco(
     ids: &[i64],
+    existentes: &ImagensExistentes,
     dir: &Path,
     pub_: &mut dyn Publicador,
     rel: &mut RelatorioImagens,
-) -> publicador::Result<()> {
-    let chaves_small: Vec<String> = ids.iter().map(|&id| chave_small(id)).collect();
-    let chaves_grande: Vec<String> = ids.iter().map(|&id| chave_grande(id)).collect();
-    let chaves_ref: Vec<&str> = chaves_small
-        .iter()
-        .chain(chaves_grande.iter())
-        .map(String::as_str)
-        .collect();
-    let existentes = pub_.existem(&chaves_ref)?;
-    let (existe_small, existe_grande) = existentes.split_at(ids.len());
-
+) -> Result<(), ErroPublicador> {
     let mut a_gravar: Vec<(String, Vec<u8>, Meta)> = Vec::new();
-    for (i, &id) in ids.iter().enumerate() {
-        if existe_small[i] && existe_grande[i] {
+    for &id in ids {
+        let (chave_s, chave_g) = (chave_small(id), chave_grande(id));
+        if existentes.ofertas.contains(&chave_s) && existentes.ofertas.contains(&chave_g) {
             rel.reaproveitadas += 1;
             continue;
         }
@@ -286,8 +354,8 @@ fn processar_bloco(
         rel.maior_small = rel.maior_small.max(bytes_s.len() as u64);
         rel.maior_grande = rel.maior_grande.max(bytes_g.len() as u64);
         rel.publicadas += 1;
-        a_gravar.push((chaves_small[i].clone(), bytes_s, META_IMAGEM));
-        a_gravar.push((chaves_grande[i].clone(), bytes_g, META_IMAGEM));
+        a_gravar.push((chave_s, bytes_s, META_IMAGEM));
+        a_gravar.push((chave_g, bytes_g, META_IMAGEM));
     }
     if !a_gravar.is_empty() {
         pub_.gravar_lote(&a_gravar)?;

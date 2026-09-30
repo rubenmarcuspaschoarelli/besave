@@ -333,3 +333,39 @@ fn gerar_com_indexavel_invalida_nomeia_a_variavel() {
     assert!(stderr.contains("BESAVE_INDEXAVEL"), "{stderr}");
     assert!(!dir.join("manifest.json").exists());
 }
+
+/// TMP-02 (BSV-13b): `--gerar` imprime uma linha `t_<fase>: <n> ms` por medida e a contagem de
+/// chaves estranhas de imagem. Confere presença e formato, não valores.
+#[test]
+fn gerar_fake_imprime_tempo_por_fase() {
+    let dir = saida("tempos");
+    let out = rodar(&["--gerar", "--saida", dir.to_str().unwrap()], "fake");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    for medida in [
+        "t_leitura_fonte",
+        "t_imagens",
+        "t_imagens_listagem",
+        "t_chunks",
+        "t_paginas",
+        "t_redirects",
+        "t_redirects_listagem",
+        "t_manifest",
+        "t_orfaos",
+    ] {
+        let prefixo = format!("{medida}: ");
+        let linha = stdout
+            .lines()
+            .find(|l| l.starts_with(&prefixo))
+            .unwrap_or_else(|| panic!("falta {medida}: {stdout}"));
+        let valor = linha[prefixo.len()..]
+            .strip_suffix(" ms")
+            .unwrap_or_else(|| panic!("{linha:?} sem unidade ms"));
+        assert!(valor.parse::<u64>().is_ok(), "{linha:?}");
+    }
+    assert!(stdout.contains("imagens_chaves_estranhas: 0\n"), "{stdout}");
+}

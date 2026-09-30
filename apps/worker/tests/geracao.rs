@@ -12,8 +12,8 @@ use comum::{
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
 use worker::fonte::FakeFonte;
-use worker::geracao::{ErroGeracao, Relatorio, checar_orcamento, contar_paginas, gerar};
-use worker::imagens::RelatorioImagens;
+use worker::geracao::{ErroGeracao, Relatorio, Tempos, checar_orcamento, contar_paginas, gerar};
+use worker::imagens::{ErroImagens, RelatorioImagens};
 use worker::modelo::{Area, Manifest};
 use worker::paginas::RelatorioPaginas;
 use worker::publicador::{
@@ -315,7 +315,10 @@ fn relatorio_com_contagens() {
                 bytes: 0,
                 maior_small: 0,
                 maior_grande: 0,
+                chaves_estranhas: 0,
             },
+            // Tempos (BSV-13b) variam por execução: conferidos em `relatorio_traz_tempo_por_fase`.
+            tempos: rel.tempos,
             site: RelatorioSite {
                 paginas: RelatorioPaginas {
                     renderizadas: 5,
@@ -739,4 +742,83 @@ fn dry_run_usa_produtos_em_lote() {
     );
     assert_eq!(fonte.chamadas_produtos(), 1);
     assert_eq!(fonte.chamadas_produto(), 0);
+}
+
+/// Destino cuja listagem de um prefixo falha; o resto delega ao `PublicadorMemoria`.
+struct ListagemQuebrada {
+    dentro: PublicadorMemoria,
+    prefixo: &'static str,
+}
+
+impl Publicador for ListagemQuebrada {
+    fn existe(&self, chave: &str) -> worker::publicador::Result<bool> {
+        self.dentro.existe(chave)
+    }
+    fn ler(&self, chave: &str) -> worker::publicador::Result<Option<Vec<u8>>> {
+        self.dentro.ler(chave)
+    }
+    fn gravar(&mut self, chave: &str, bytes: &[u8], meta: &Meta) -> worker::publicador::Result<()> {
+        self.dentro.gravar(chave, bytes, meta)
+    }
+    fn remover(&mut self, chave: &str) -> worker::publicador::Result<()> {
+        self.dentro.remover(chave)
+    }
+    fn listar(&self, prefixo: &str) -> worker::publicador::Result<Vec<String>> {
+        if prefixo == self.prefixo {
+            return Err(ErroPublicador::Aws {
+                operacao: "ListObjectsV2",
+                chave: prefixo.to_owned(),
+                fonte: "falha injetada".into(),
+            });
+        }
+        self.dentro.listar(prefixo)
+    }
+}
+
+/// LST-05 (BSV-13b): listagem de imagens que falha → erro nomeado com o prefixo e nenhum
+/// manifest gravado (nunca cai para "tudo novo").
+#[test]
+fn listagem_de_imagens_falhando_aborta_sem_manifest() {
+    for prefixo in ["img/ofertas/", "img/placeholder/"] {
+        let mut p = ListagemQuebrada {
+            dentro: PublicadorMemoria::new(),
+            prefixo,
+        };
+        let erro = rodar(fonte_mista(), &mut p).unwrap_err();
+        assert!(
+            matches!(
+                &erro,
+                ErroGeracao::Imagens(ErroImagens::Listagem { prefixo: pr, .. }) if *pr == prefixo
+            ),
+            "{prefixo}: {erro:?}"
+        );
+        assert!(erro.to_string().contains(prefixo), "{erro}");
+        assert!(!p.dentro.existe("manifest.json").unwrap(), "{prefixo}");
+        assert!(
+            p.dentro.gravacoes().iter().all(|c| !c.starts_with("img/")),
+            "{prefixo}: nada de imagem deveria subir: {:?}",
+            p.dentro.gravacoes()
+        );
+    }
+}
+
+/// TMP-01 (BSV-13b): o relatório traz as 9 medidas (desestruturação exaustiva: campo a mais ou a
+/// menos não compila) e cada sub-medida cabe na fase que a contém. Não confere valores.
+#[test]
+fn relatorio_traz_tempo_por_fase() {
+    let mut p = PublicadorMemoria::new();
+    let rel = rodar(fonte_mista(), &mut p).unwrap();
+    let Tempos {
+        leitura_fonte: _,
+        imagens,
+        imagens_listagem,
+        chunks: _,
+        paginas: _,
+        redirects,
+        redirects_listagem,
+        manifest: _,
+        orfaos: _,
+    } = rel.tempos;
+    assert!(imagens_listagem <= imagens, "{:?}", rel.tempos);
+    assert!(redirects_listagem <= redirects, "{:?}", rel.tempos);
 }
