@@ -141,8 +141,8 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | TRV-02 | P1: Trava | T1 | Done |
 | TRV-03 | P1: Trava | T1 | Done |
 | TRV-04 | P1: Trava | T1 | Done |
-| LOG-01 | P1: Logs | T2 | Pending |
-| LOG-02 | P1: Logs | T2 | Pending |
+| LOG-01 | P1: Logs | T2 | Done |
+| LOG-02 | P1: Logs | T2 | Done |
 | LOG-03 | P1: Logs | T5 | Pending |
 | LOG-04 | P1: Logs | T5 | Pending |
 | ALR-01 | P1: Alerta | T3, T5 | Pending |

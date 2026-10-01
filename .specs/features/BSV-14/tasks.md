@@ -88,9 +88,9 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Nome `besave-worker.AAAA-MM-DD.log` com a data de Brasília (virada às 03:00 UTC)
-- [ ] Remove só logs com mais de 14 dias; outros arquivos ficam
-- [ ] Gate quick passa
+- [x] Nome `besave-worker.AAAA-MM-DD.log` com a data de Brasília (virada às 03:00 UTC)
+- [x] Remove só logs com mais de 14 dias; outros arquivos ficam
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

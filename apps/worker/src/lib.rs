@@ -7,6 +7,7 @@ pub mod conversao;
 pub mod fonte;
 pub mod geracao;
 pub mod imagens;
+pub mod logs;
 pub mod mapeamento;
 pub mod modelo;
 pub mod oracle;
