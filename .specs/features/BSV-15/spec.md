@@ -146,8 +146,8 @@ Dimensions: estado persistido e transições (AVI-01..05); falha de dependência
 | INF-05 | P1: Infra | T2 | Done |
 | INF-06 | P1: Infra | T2 | Done |
 | INF-07 | P1: Infra | T2 | Done |
-| OPS-03 | P2: Operação | T3 | Pending |
-| OPS-04 | P2: Operação | T3 | Pending |
+| OPS-03 | P2: Operação | T3 | Done |
+| OPS-04 | P2: Operação | T3 | Done |
 
 **Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
 

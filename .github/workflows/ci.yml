@@ -105,6 +105,9 @@ jobs:
       - run: terraform init -backend=false
       - run: terraform validate
       - run: terraform test
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: python -m unittest discover -s lambdas/vigia -v
       - id: node
         run: test -f functions/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
       - if: steps.node.outputs.ok == 'true'

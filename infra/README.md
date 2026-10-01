@@ -10,12 +10,13 @@ Terraform que cria, ao lado do protótipo (AD-016), a infra do site novo:
 | distribuição CloudFront com OAC, 6 behaviors de `docs/MANIFEST.md` §5, 403/404 → 404 `/404.html` | — | `cloudfront.tf` |
 | KeyValueStore de redirects + Functions `rewrite-index` e `redirect-afiliado` | `besave-redirects` | `cloudfront.tf`, `functions/*.js` |
 | usuário IAM do worker, sem console e sem access key | `besave-worker` | `iam.tf` |
+| vigia externo: Lambda Python a cada 10 min (Scheduler), avisa no Telegram (BSV-15) | `besave-vigia` | `vigia.tf`, `lambdas/vigia/` |
 
 Não gerencia o bucket `besave.com.br` nem a distribuição atual do protótipo: o `plan` não mostra nenhum dos dois.
 
 ## Pré-requisitos
 
-- Terraform ≥ 1.7 e Node 22 (testes das Functions).
+- Terraform ≥ 1.7, Node 22 (testes das Functions) e Python ≥ 3.12 (testes do vigia).
 - Credenciais AWS de administrador no shell (`AWS_PROFILE` ou variáveis de ambiente), nunca em arquivo do repo.
 - Zona Route53 `besave.com.br` existente na mesma conta.
 
@@ -70,6 +71,7 @@ git: sem ele o Terraform perde o controle dos recursos. Backend S3 é ticket fut
 terraform fmt -check -recursive
 terraform init -backend=false && terraform validate
 terraform test                       # tests/*.tftest.hcl com mock_provider: nada é criado
+python -m unittest discover -s lambdas/vigia   # vigia: dublês de S3/HTTP/SSM/Telegram, sem rede
 cd functions && npm ci && npm test   # Functions com fixtures de evento + 404.html + sem recursos do protótipo
 ```
 
@@ -79,6 +81,72 @@ os testes Node acima não o emulam — passam com código que o CloudFront recus
 
 Para testar uma Function no runtime real depois do apply:
 `aws cloudfront test-function --name redirect-afiliado --if-match <ETag> --stage LIVE --event-object fileb://evento.json`.
+
+## Vigia externo (BSV-15)
+
+A Lambda `besave-vigia` roda a cada 10 min (EventBridge Scheduler) e faz duas checagens:
+- **frescor**: `LastModified` de `s3://besave-site/manifest.json` com mais de 30 min (`LIMIAR_MIN`) é problema;
+- **disponibilidade**: `GET https://<dominio_distribuicao>/manifest.json`, com timeout de 10 s, precisa devolver 200 e um JSON com `versao`.
+
+Os avisos vão para o Telegram:
+- ⚠️ na passagem de ok para problema;
+- ⏰ a cada 3 h enquanto o problema durar;
+- ✅ na volta ("site atualizado de novo (parado por 1h40)").
+
+O estado do vigia fica em `s3://besave-site/_estado/vigia.json` e só é gravado quando algum aviso sai.
+Se o Telegram falhar, o estado não avança e a próxima execução tenta de novo. Por isso o Scheduler e a
+invocação assíncrona têm 0 retentativas: repetir um aviso já enviado duplicaria a mensagem.
+
+O código é um arquivo só (`lambdas/vigia/handler.py`). Usa a stdlib e o `boto3` que já vem no runtime
+`python3.12`, e o `archive_file` zipa esse arquivo em `.build/` (ignorado pelo git).
+
+### 1. Parâmetros do Telegram (antes do `plan`)
+
+O dono cria os parâmetros. O Terraform só monta o ARN a partir do nome e nunca lê o valor, então o
+segredo não entra no state. Use o mesmo bot e chat da BSV-14.
+
+```sh
+read -rs TOKEN && aws ssm put-parameter --name /besave/telegram/token   --type SecureString --value "$TOKEN"
+read -rs CHAT  && aws ssm put-parameter --name /besave/telegram/chat_id --type SecureString --value "$CHAT"
+unset TOKEN CHAT
+```
+
+O `read -s` não deixa o valor no histórico do shell. O primeiro SecureString cria a chave KMS gerenciada
+`alias/aws/ssm`, que o `plan` lê (`data.aws_kms_alias`). Sem os parâmetros, o `plan` falha nesse data source.
+
+### 2. Aplicar
+
+O `plan` mostra 8 recursos a adicionar (`0 to change, 0 to destroy`):
+- Lambda e grupo de log com retenção de 14 dias;
+- 2 roles e 2 policies;
+- invoke config;
+- agenda.
+
+### 3. Testar
+
+```sh
+aws lambda invoke --function-name besave-vigia --cli-binary-format raw-in-base64-out --payload '{}' saida.json
+cat saida.json                                    # {"resultado": "sem_aviso"} com o worker rodando
+aws logs tail /aws/lambda/besave-vigia --since 1h
+```
+
+Valores possíveis de `resultado`:
+- `sem_aviso`: nada a avisar;
+- `avisado`: mensagem enviada e estado gravado;
+- `falha_envio`: o Telegram ou o SSM falhou, o estado ficou como estava e a próxima execução tenta de novo.
+
+Teste real: desative a tarefa do worker (BSV-14) por 40 min e um ⚠️ chega em até 10 min depois dos 30 min
+sem atualização. Reative e o ✅ chega no ciclo seguinte à próxima publicação.
+
+### Custo
+
+Cerca de US$ 0,01/mês, dentro do free tier:
+- 4.320 invocações/mês de ~1 s com 128 MB (≈ 540 GB-s), contra 1 M de requisições e 400 mil GB-s grátis
+  na Lambda;
+- Scheduler e SSM standard sem custo nesse volume;
+- 8.640 GET/HEAD no S3 (≈ US$ 0,004);
+- 4.320 requisições no CloudFront;
+- poucos KB de log.
 
 ## Virada de DNS (fora deste ticket)
 
