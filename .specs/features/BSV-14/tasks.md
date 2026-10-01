@@ -128,10 +128,10 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Corpo do pedido tem `chat_id` e `text`; caminho `/bot{token}/sendMessage`
-- [ ] `Display` do erro não contém o token
-- [ ] `Cargo.lock` sem `[[package]]` novo
-- [ ] Gate build passa
+- [x] Corpo do pedido tem `chat_id` e `text`; caminho `/bot{token}/sendMessage`
+- [x] `Display` do erro não contém o token
+- [x] `Cargo.lock` sem `[[package]]` novo
+- [x] Gate build passa
 
 **Tests**: unit
 **Gate**: build
