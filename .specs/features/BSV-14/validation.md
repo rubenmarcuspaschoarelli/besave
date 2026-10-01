@@ -1,11 +1,132 @@
 # BSV-14 Validation
 
-**Date**: 2026-10-01 (rodada 2)
-**Spec**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md`)
-**Diff range**: `e24a757..6a5f3a8` (commits `cce0f85..6a5f3a8`, branch `rubenmarcus/rub-14-bsv-14-telegram`)
+**Date**: 2026-10-01 (rodada 4: fix→re-verify 1 de 3)
+**Spec**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md` + ajuste de 01/10)
+**Diff range**: rodada 4 `c7ef61c..7322698`; feature inteira `e24a757..7322698`
 **Verifier**: sub-agente independente (autor ≠ verificador)
 
 ## Validation: BSV-14 - PASS ✅
+
+O gap G1 da rodada 3 está fechado e a observação 2 foi acatada. Os 25 ACs têm evidência
+`arquivo:linha`. A execução real do dono (Agendador + Telegram) continua bloqueando o merge.
+
+## Rodada 4
+
+| Item | Evidência | Result |
+| ---- | --------- | ------ |
+| G1 / CIC-06: argumento desconhecido → 2 também com `--env-file=` | `apps/worker/src/bin/besave-ciclo.rs:15-24` aceita só `[]`, `["--env-file", arq]` ou `[a]` com `--env-file=`; o resto → `Argumento`. `apps/worker/tests/cli_ciclo.rs` `besave_ciclo_argumento_invalido_sai_com_2`: o loop inclui `["--env-file=x.env", "--sim"]` e `["--sim", "--env-file=x.env"]` → `Some(2)` + `variante=Argumento` | ✅ PASS |
+| Obs. 2: destino local avisa no log | `apps/worker/src/ciclo.rs:312` `warn!(… "BESAVE_DESTINO_LOCAL definida: publicando na pasta, não no S3")`; asserção em `apps/worker/tests/cli_ciclo.rs:285` | ✅ PASS |
+
+**Gate**: 276 passed, 0 failed, 3 ignored no gate completo, informado pelo coordenador em `7322698`. O Verifier rodou `cargo test --test cli_ciclo` na árvore real depois do sensor: 10/10.
+
+**Sensor (rodada 4)**: worktree temporária a partir de `7322698`, `CARGO_BUILD_JOBS=2`, só `--test cli_ciclo`, sem AWS nem `TELEGRAM_*`.
+
+| # | Mutação | Killed? |
+| - | ------- | ------- |
+| R9 | `src/bin/besave-ciclo.rs` volta à versão de `c7ef61c` (parsing antigo) | ✅ morto (`besave_ciclo_argumento_invalido_sai_com_2`, `tests/cli_ciclo.rs:329`) |
+| R10 | remove o `warn!` do destino local (`src/ciclo.rs:312`) | ✅ morto (`besave_ciclo_e_ciclo_dao_o_mesmo_relatorio`, `tests/cli_ciclo.rs:285`) |
+
+**Resultado (rodada 4)**: 2/2 mortos. Acumulado do ticket: 19 (rodada 2) + 11 (rodada 3) + 2 = 32 mutantes, todos mortos.
+**Isolamento**: worktree removida e podada; binários de `debug/` restaurados do backup; o `git status --porcelain` da árvore real ficou idêntico antes e depois (só ` M .specs/features/BSV-14/validation.md`, este relatório).
+
+**Gaps**: nenhum.
+
+---
+
+# Histórico: rodada 3 (texto original)
+
+**Date (r3)**: 2026-10-01
+**Spec (r3)**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md` + ajuste de 01/10: sem janela de console)
+**Diff range (r3)**: rodada 3 `f5774fa..c7ef61c` (`5e2d1bb`, `a5eea29`, `c7ef61c`); feature inteira `e24a757..c7ef61c`
+**Verifier (r3)**: sub-agente independente (autor ≠ verificador)
+
+## Veredito da rodada 3: FAIL ❌
+
+Um gap pequeno, com correção de uma linha: o **CIC-06** ("argumento desconhecido SHALL sair com
+código 2") ainda falha na forma `--env-file=<arq> <extra>`. Todo o resto está verificado:
+- os 25 ACs, menos esse caso, têm evidência `arquivo:linha`;
+- gate verde: 276 passados, 0 falhos;
+- sensor da rodada 3: 11/11 mortos, com R5–R7 mortos depois de `c7ef61c`;
+- refatoração do `--ciclo` sem mudança de comportamento.
+
+A execução real do dono continua bloqueando o merge.
+
+---
+
+## Rodada 3: ajuste do dono (`besave-ciclo` sem console)
+
+### Tarefas
+
+| Task | Status | Notes |
+| ---- | ------ | ----- |
+| T9 `besave-ciclo` sem console | ⚠️ Partial | `5e2d1bb` + `c7ef61c`; gap G1 (argumento extra com `--env-file=`) |
+| T10 Agendador → `besave-ciclo.exe`; README | ✅ Done | `a5eea29` |
+
+### Spec-Anchored Acceptance Criteria (alterados/novos)
+
+Caminhos relativos a `apps/worker/`.
+
+| Criterion | Spec-defined outcome | `file:line` + assertion | Result |
+| --------- | -------------------- | ----------------------- | ------ |
+| CIC-06a binário fino, mesmo caminho da lib, sem lógica duplicada | `besave-ciclo` só lê args/`.env` e chama `ciclo::executar` | `src/bin/besave-ciclo.rs:10-21` (26 linhas; chama `ciclo::executar(&Opcoes::do_env(), previa)`); `src/main.rs` (`--ciclo`) chama o mesmo `ciclo::executar` com `stderr: true` e `ao_publicar`; o `fake_demo` foi movido para `src/fonte.rs` sem mudança (diff do corpo vazio contra `f5774fa:src/main.rs`) | ✅ PASS |
+| CIC-06b sem stdout/stderr | as duas saídas vazias | `tests/cli_ciclo.rs:275-276` `out_c.stdout.is_empty()`, `out_c.stderr.is_empty()` (sucesso); mesmas asserções no loop de `besave_ciclo_argumento_invalido_sai_com_2` (erro). Cabeçalho PE conferido pelo Verifier: `besave-ciclo.exe` subsistema 2 (GUI), `besave-worker.exe` 3 (console) | ✅ PASS |
+| CIC-06c mesma linha `relatorio` para a mesma fonte fake | igualdade sem os campos de tempo | `tests/cli_ciclo.rs:279` `assert_eq!(relatorio_estavel(&local_c), rel_w)`; `:278` `rel_w.contains("lidas=10 validas=3 rejeitadas=7")` (ancora o valor, não só a igualdade) | ✅ PASS |
+| CIC-06d argumento desconhecido → 2 | código 2, `variante=Argumento` | `tests/cli_ciclo.rs` `besave_ciclo_argumento_invalido_sai_com_2`: `--publicar` e `--env-file x.env --sim` → `Some(2)` + `variante=Argumento` | ❌ GAP G1: `besave-ciclo --env-file=<arq> --sim` (e `--sim --env-file=<arq>`) é aceito; reproduzido em `c7ef61c`: o log mostra `variante=EnvFile` (seguiu para o `.env`), não `Argumento`. Causa: `src/bin/besave-ciclo.rs:15` aceita `[_, _]` sempre que `env_file_dos_args` acha um `--env-file=` em qualquer posição |
+| CIC-07a destino local publica em pasta + KVS em memória, sem `BESAVE_BUCKET`/`BESAVE_KVS_ARN` | código 0, `manifest.json` na pasta | `tests/cli_ciclo.rs:273-274` `Some(0)` para os dois binários; `:280` `saida/manifest.json` existe; código `src/ciclo.rs:285-288`, `:311-315` | ✅ PASS (R8 morto) |
+| CIC-07b `BESAVE_AGORA` só com destino local | sem destino, relógio do sistema | `tests/cli_ciclo.rs:318-319` `nomes.len() == 1` e `!= "besave-worker.2026-09-21.log"`; código `src/ciclo.rs:196-205` | ✅ PASS (R3 morto) |
+| AGD-01 tarefa aponta para `besave-ciclo.exe`, sem `--ciclo` | script rejeita outro exe; argumento só `--env-file` | `scripts/registrar-tarefa.ps1:33-36` `if ($nomeExe -ne 'besave-ciclo.exe') { throw … }`; `:44` `-Argument` só com `--env-file`; os outros gatilhos e limites não mudaram (rodada 2) | ✅ PASS |
+| AGD-03 README atualizado | dois executáveis, cópia do `besave-ciclo.exe`, novas variáveis | `README.md:332` título; `:342` tabela `besave-ciclo.exe` (sem console); `:408-409` cópia e registro com `besave-ciclo.exe`; `:415` "o script só aceita o `besave-ciclo.exe`"; `BESAVE_DESTINO_LOCAL`/`BESAVE_AGORA` na tabela de variáveis | ✅ PASS |
+
+**`--ciclo` sem mudança de comportamento:** os 10 testes antigos e novos de `tests/cli_ciclo.rs`
+e os de `tests/execucao.rs` passam; M15b, M16b e M19b (os mutantes da rodada 2 que tocavam código
+movido para `src/ciclo.rs`) morrem; e o `--ciclo` mantém o relatório no stdout (`c7ef61c`:
+`lidas: 10`/`validas: 3`, R6 morto).
+
+### Gate
+
+- `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` (`CARGO_BUILD_JOBS=2`): exit 0.
+- **Gate**: 276 passed, 0 failed, 3 ignored em `a5eea29`, rodado pelo Verifier.
+- Em `c7ef61c`, `cargo test --test cli_ciclo` deu 10/10 depois do sensor; o coordenador informou 276/0/3 no gate completo nesse commit.
+
+### Discrimination Sensor (rodada 3)
+
+Rodou numa worktree temporária fora do repo, uma por execução, com `CARGO_BUILD_JOBS=2`, só `--test cli_ciclo`, alvo compartilhado, sem AWS nem `TELEGRAM_*`. Os binários do topo de `debug/` ganharam backup antes e foram restaurados depois.
+
+| # | File:line | Mutação | `a5eea29` | `c7ef61c` |
+| - | --------- | ------- | --------- | --------- |
+| R1 | `src/ciclo.rs:115` | `Opcoes::do_env` com `stderr: true` | ✅ morto | - |
+| R2 | `src/bin/besave-ciclo.rs:16` | `besave-ciclo` ignora o `.env` | ✅ morto | - |
+| R3 | `src/ciclo.rs:197-198` | `BESAVE_AGORA` vale sem destino local | ✅ morto | - |
+| R4 | `src/bin/besave-ciclo.rs:17` | aceita argumento desconhecido (1–2 args) | ✅ morto | - |
+| R5 | `src/bin/besave-ciclo.rs:18` | aceita 3+ argumentos | ❌ sobreviveu | ✅ morto |
+| R6 | `src/main.rs` (`ao_publicar: Some(&imprimir_publicacao)`) | `--ciclo` sem relatório no stdout | ❌ sobreviveu | ✅ morto |
+| R7 | `src/ciclo.rs:262` | `ao_publicar` chamado também na falha | ❌ sobreviveu | ✅ morto |
+| R8 | `src/ciclo.rs:285` | destino local ignorado (cai na AWS → 2) | ✅ morto | - |
+| M15b | `src/ciclo.rs:81` | `dotenvy::from_path_override` | ✅ morto | - |
+| M16b | `src/ciclo.rs:250` | ciclo pulado sai com 1 | ✅ morto | - |
+| M19b | `src/ciclo.rs:85` | `erro_env_file` → `e.to_string()` | ✅ morto | - |
+
+**Resultado (rodada 3)**: 11/11 mortos em `c7ef61c`. R5–R7 foram rodados de novo pelo Verifier, de forma independente, numa worktree nova a partir de `c7ef61c`.
+**Isolamento**: o `git status --porcelain` da árvore real ficou idêntico antes e depois (vazio); a worktree foi removida e podada.
+
+### Gaps (rodada 3)
+
+1. **G1, minor (CIC-06):** `src/bin/besave-ciclo.rs:13-19` aceita um argumento extra quando o `.env` vem como `--env-file=<arq>`: `--env-file=a.env --sim` e `--sim --env-file=a.env` rodam o ciclo. O Agendador não passa isso, mas o AC diz "argumento desconhecido SHALL sair com código 2".
+   - **Correção:** aceitar só `[]`, `["--env-file", arq]` ou `[a]` com `a` começando por `--env-file=`; o resto vira `Argumento`.
+   - **Teste:** incluir `("ciclo-arg-igual", ["--env-file=x.env", "--sim"])` no loop de `besave_ciclo_argumento_invalido_sai_com_2`.
+2. **Observação (não bloqueia):** um `BESAVE_DESTINO_LOCAL` esquecido no `.env` de produção faz todo ciclo "dar certo" (código 0) sem publicar no S3, e nem o log nem a linha `relatorio` dizem o destino.
+   - **Sugestão:** um `WARN destino local: …` no início do ciclo, ou `destino=local` no relatório.
+
+---
+
+# Histórico: rodada 2 (texto original)
+
+**Date (r2)**: 2026-10-01 (rodada 2)
+**Spec (r2)**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md`)
+**Diff range (r2)**: `e24a757..6a5f3a8` (commits `cce0f85..6a5f3a8`, branch `rubenmarcus/rub-14-bsv-14-telegram`)
+**Verifier (r2)**: sub-agente independente (autor ≠ verificador)
+
+### Veredito da rodada 2: PASS ✅
 
 - Todos os 23 ACs têm evidência `arquivo:linha`, e os valores testados batem com a spec.
 - Gate verde: 273 passados, 0 falhos.
@@ -15,7 +136,7 @@
 
 ---
 
-## Task Completion
+### Task Completion
 
 | Task | Status | Notes |
 | ---- | ------ | ----- |
@@ -30,7 +151,7 @@
 
 ---
 
-## Spec-Anchored Acceptance Criteria
+### Spec-Anchored Acceptance Criteria
 
 Caminhos relativos a `apps/worker/`.
 
@@ -86,7 +207,7 @@ Caminhos relativos a `apps/worker/`.
 
 ---
 
-## Edge Cases
+### Edge Cases
 
 - [x] `alerta.json` corrompido → WARN + estado vazio: `tests/alerta.rs:247-248`.
 - [x] Duas variantes na mesma janela → um envio cada: `tests/alerta.rs:119-120`.
@@ -95,7 +216,7 @@ Caminhos relativos a `apps/worker/`.
 
 ---
 
-## Owner scope (`docs/specs/BSV-14.md`) vs spec derivada
+### Owner scope (`docs/specs/BSV-14.md`) vs spec derivada
 
 | # | Desvio | Classificação |
 | - | ------ | ------------- |
@@ -111,7 +232,7 @@ Caminhos relativos a `apps/worker/`.
 
 ---
 
-## Gate Check
+### Gate Check
 
 - **Gate command** (em `apps/worker`, `CARGO_TARGET_DIR=C:\cargo-target\besave`, `CARGO_BUILD_JOBS=2`): `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 - **Gate**: exit 0. **273 passed, 0 failed, 3 ignored** (os 3 ignorados são de antes: `ciclo.rs`, `imagens.rs`, `paginas.rs`).
@@ -119,10 +240,10 @@ Caminhos relativos a `apps/worker/`.
 
 ---
 
-## Discrimination Sensor
+### Discrimination Sensor
 
 **Sensor depth**: expandido. São 19 mutações manuais cobrindo os ramos de risco (estado persistido, concorrência, dados sensíveis, código de saída).
-**Result**: 19/19 killed - PASS ✅
+**Resultado (rodada 2)**: 19/19 killed
 
 Os mutantes rodaram numa worktree temporária (`git worktree add --detach <scratchpad>/wt HEAD`, fora do repo), um por vez:
 - cada mutante aplica uma troca exata de texto, roda `cargo test --test <alvo>` só nos testes relevantes e restaura o arquivo;
@@ -156,7 +277,7 @@ Os mutantes rodaram numa worktree temporária (`git worktree add --detach <scrat
 
 ---
 
-## Code Quality
+### Code Quality
 
 | Principle | Status |
 | --------- | ------ |
@@ -169,7 +290,7 @@ Os mutantes rodaram numa worktree temporária (`git worktree add --detach <scrat
 
 ---
 
-## Gaps
+### Gaps
 
 Nenhum gap bloqueante. Observações:
 - **Merge bloqueado pela execução real do dono** (spec → Success Criteria): 6 execuções com resultado 0 em 30 min, 6 linhas `relatorio`, um alerta com `BESAVE_KVS_ARN` inválido e o "recuperado" depois. Sem isso, nada valida o gatilho do Agendador, o TLS do Telegram nem o caminho Oracle/AWS do `--ciclo`.
@@ -177,7 +298,7 @@ Nenhum gap bloqueante. Observações:
 
 ---
 
-## Histórico
+### Histórico
 
 ### Rodada 1 (2026-10-01, `e24a757..21e2fe3`): FAIL
 
@@ -193,7 +314,7 @@ Nenhum gap bloqueante. Observações:
 
 ---
 
-## Requirement Traceability Update
+### Requirement Traceability Update
 
 | Requirement | New Status |
 | ----------- | ---------- |
@@ -201,7 +322,7 @@ Nenhum gap bloqueante. Observações:
 
 ---
 
-## Summary
+### Summary
 
 **Overall**: ✅ Ready (do lado do código; a execução real do dono continua bloqueando o merge)
 
