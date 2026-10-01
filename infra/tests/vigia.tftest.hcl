@@ -95,6 +95,13 @@ run "vigia" {
           Resource = "${aws_s3_bucket.site.arn}/_estado/vigia.json"
         },
         {
+          Sid       = "EstadoAusenteComo404"
+          Effect    = "Allow"
+          Action    = "s3:ListBucket"
+          Resource  = aws_s3_bucket.site.arn
+          Condition = { StringEquals = { "s3:prefix" = "_estado/vigia.json" } }
+        },
+        {
           Sid    = "LerSegredos"
           Effect = "Allow"
           Action = "ssm:GetParameter"

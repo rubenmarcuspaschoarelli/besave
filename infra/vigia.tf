@@ -62,6 +62,14 @@ resource "aws_iam_role_policy" "vigia" {
         Action   = "s3:PutObject"
         Resource = "${aws_s3_bucket.site.arn}/_estado/vigia.json"
       },
+      # Só para o S3 responder NoSuchKey (e não AccessDenied) quando o estado ainda não existe.
+      {
+        Sid       = "EstadoAusenteComo404"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = aws_s3_bucket.site.arn
+        Condition = { StringEquals = { "s3:prefix" = "_estado/vigia.json" } }
+      },
       {
         Sid    = "LerSegredos"
         Effect = "Allow"

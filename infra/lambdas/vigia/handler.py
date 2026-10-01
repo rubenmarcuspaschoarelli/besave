@@ -118,7 +118,7 @@ def ler_estado(s3, cfg):
         if codigo == "NoSuchKey":
             log.info("%s ainda não existe; sem estado", CHAVE_ESTADO)
         else:
-            # Sem s3:ListBucket, objeto inexistente também vem como AccessDenied.
+            # Com s3:ListBucket no prefixo do estado, AccessDenied é problema real.
             log.error("GetObject de %s falhou (%s); seguindo sem estado", CHAVE_ESTADO, codigo)
         return {}
     try:
