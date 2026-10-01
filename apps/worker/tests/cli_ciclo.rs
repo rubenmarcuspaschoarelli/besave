@@ -118,6 +118,8 @@ fn ambiente_vence_o_env_file() {
         .output()
         .unwrap();
     assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
+    // Ciclo que falha não imprime relatório no stdout.
+    assert!(out.stdout.is_empty(), "{}", texto(&out));
     let log = logs(&local);
     assert!(log.contains("do_ambiente"), "{log}");
     assert!(
@@ -274,29 +276,46 @@ fn besave_ciclo_e_ciclo_dao_o_mesmo_relatorio() {
     assert_eq!(out_c.status.code(), Some(0), "{}", texto(&out_c));
     assert!(out_c.stdout.is_empty(), "{}", texto(&out_c));
     assert!(out_c.stderr.is_empty(), "{}", texto(&out_c));
+    // `--ciclo` à mão mantém o relatório no stdout ("além da saída atual").
+    let stdout_w = String::from_utf8_lossy(&out_w.stdout);
+    assert!(stdout_w.contains("lidas: 10\n"), "{}", texto(&out_w));
+    assert!(stdout_w.contains("validas: 3\n"), "{}", texto(&out_w));
     let rel_w = relatorio_estavel(&local_w);
     assert!(rel_w.contains("lidas=10 validas=3 rejeitadas=7"), "{rel_w}");
     assert_eq!(relatorio_estavel(&local_c), rel_w);
     assert!(local_c.join("saida").join("manifest.json").exists());
 }
 
-/// CIC-06: argumento desconhecido no `besave-ciclo` → código 2, registrado só no log.
+/// CIC-06: argumento desconhecido no `besave-ciclo` → código 2, registrado só no log. Vale
+/// para um argumento solto e para sobra depois de `--env-file <arq>`.
 #[test]
 fn besave_ciclo_argumento_invalido_sai_com_2() {
-    let local = dir_temp("ciclo-arg");
-    let out = comando_de(env!("CARGO_BIN_EXE_besave-ciclo"), &local)
-        .arg("--publicar")
-        .output()
-        .unwrap();
-    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
-    assert!(out.stdout.is_empty(), "{}", texto(&out));
-    assert!(out.stderr.is_empty(), "{}", texto(&out));
-    let log = logs(&local);
-    assert!(
-        log.lines()
-            .any(|l| l.contains("ERROR") && l.contains("variante=Argumento")),
-        "{log}"
-    );
+    for (nome, args) in [
+        ("ciclo-arg", vec!["--publicar".to_owned()]),
+        (
+            "ciclo-arg-sobra",
+            vec![
+                "--env-file".to_owned(),
+                "x.env".to_owned(),
+                "--sim".to_owned(),
+            ],
+        ),
+    ] {
+        let local = dir_temp(nome);
+        let out = comando_de(env!("CARGO_BIN_EXE_besave-ciclo"), &local)
+            .args(&args)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{args:?}: {}", texto(&out));
+        assert!(out.stdout.is_empty(), "{}", texto(&out));
+        assert!(out.stderr.is_empty(), "{}", texto(&out));
+        let log = logs(&local);
+        assert!(
+            log.lines()
+                .any(|l| l.contains("ERROR") && l.contains("variante=Argumento")),
+            "{args:?}: {log}"
+        );
+    }
 }
 
 /// CIC-07: `BESAVE_AGORA` só vale com `BESAVE_DESTINO_LOCAL`; sem ele, o relógio é o do
