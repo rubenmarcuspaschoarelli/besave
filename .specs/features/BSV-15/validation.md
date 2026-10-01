@@ -5,9 +5,8 @@
 **Diff range**: `e24a757..29f3d18` (99e45a7, 7211ffb, e338c5e, 29f3d18)
 **Verifier**: independent sub-agent (author ≠ verifier)
 
-**Verdict (current, round 2 at `3d06caf`)**: FAIL. All 22 ACs are now covered and every AC-level mutant
-is killed. Two survivors remain in the round-2 hardening code: N7 (`from None`) and T12/T13 (`output_file_mode`).
-Each needs a one-line assertion. See "Round 2" at the end.
+**Verdict (current, round 3 at `f93662c`)**: PASS. 22/22 ACs are spec-anchored and the gates are green.
+The round-2 sensor (14 mutants, re-run on `f93662c`) killed all 14. See "Round 3" at the end. The owner's real run still blocks the merge.
 
 Round 1 verdict was FAIL. Two surviving mutants (AVI-05 recovery state, VER-04 "status ≠ 200") mean the tests do not pin down those
 spec outcomes. Both fixes are test-only and small. The code behaves as the spec says. Owner's real run is still pending (merge blocker).
@@ -104,7 +103,7 @@ I confirmed that the TF kills are assertion failures, for example "grupo de log 
 | T11 | `vigia.tf:139` | Scheduler role invoke `Resource = "*"` | ✅ Killed |
 
 **Sensor depth**: expanded (27 mutants)
-**Result**: 24/27 killed, 3 survived → FAIL
+Result (round 1, historical): 24/27 killed, 3 survived; gaps fixed in `3d06caf`
 **Isolation**: real tree `git status --porcelain` was empty before and after; the scratch worktree was removed and pruned.
 
 ---
@@ -232,7 +231,7 @@ The unmutated scratch was green before the run. Afterwards the scratch was remov
 | T12 | `vigia.tf:24` | `output_file_mode` removed | ❌ Survived |
 | T13 | `vigia.tf:24` | `output_file_mode = "0666"` | ❌ Survived |
 
-**Result**: 11/14 killed, 3 survived → FAIL
+Result (round 2, historical): 11/14 killed, 3 survived; gaps fixed in `f93662c`
 
 Why they survive:
 - **N7**: `test_handler.py:304` asserts only `__cause__ is None`. Without `from None`, `__cause__` is still `None`, but `__context__` holds the botocore `ClientError` and is no longer suppressed. A standard traceback would print it ("During handling of the above exception…"), message and ARN included.
@@ -247,6 +246,48 @@ Why they survive:
   - Change: in `infra/tests/vigia.tftest.hcl` (`run "vigia"`), add `assert { condition = data.archive_file.vigia.output_file_mode == "0644" ... }`.
   - Done when: T12/T13 are killed.
 
-### Round 2 verdict
-FAIL. Both fixes are test-only and one line each. All spec ACs pass, and the implementation is unchanged by these fixes.
+### Round 2 verdict (historical)
+Not passed in round 2. Both fixes are test-only and one line each. All spec ACs pass, and the implementation is unchanged by these fixes.
 After them, round 3 is the last allowed iteration. The owner's real run (SSM params, `plan` only `to add`, `apply`, `lambda invoke`, 40-min outage) still blocks the merge.
+
+---
+
+## Round 3 (fix commit `f93662c`, final iteration)
+
+**Diff range**: `4cc0b50..f93662c` (whole feature: `e24a757..f93662c`). Test-only change; `handler.py` and `vigia.tf` are unchanged.
+
+### Gate
+In `infra/`:
+- `terraform fmt -check -recursive`: exit 0.
+- `terraform validate`: Success.
+- `terraform test`: 9 passed, 0 failed.
+- `python -m unittest discover -s lambdas/vigia`: 35 OK.
+- `npm test`: 14 pass.
+
+### Round-2 gaps
+| Gap | Evidence | Status |
+| --- | -------- | ------ |
+| N7: chained context not suppressed | `infra/lambdas/vigia/test_handler.py:305` `assertTrue(ctx.exception.__suppress_context__)` | ✅ Closed |
+| T12/T13: zip mode not asserted | `infra/tests/vigia.tftest.hcl:23` `data.archive_file.vigia.output_file_mode == "0644"` | ✅ Closed |
+
+### Discrimination sensor (round 3)
+Fresh scratch worktree (detached `f93662c`) with `.terraform` copied in. I re-ran all 14 round-2 mutants, not just the three survivors. The unmutated scratch was green before the run. Afterwards the scratch was removed and pruned, and the real tree's `git status --porcelain` was empty before and after.
+
+| # | Mutation | Result |
+| - | -------- | ------ |
+| N7 | `handler.py:120` `from None` removed | ✅ Killed |
+| T12 | `vigia.tf:24` `output_file_mode` removed | ✅ Killed (assertion "modo fixo no zip…") |
+| T13 | `vigia.tf:24` `output_file_mode = "0666"` | ✅ Killed (same assertion) |
+| M9, M9b, M15, N1-N6, N8, N9 | regression re-run | ✅ 11/11 Killed |
+
+Across the three rounds, all 41 distinct mutants were killed in their final run (27 round 1 + 14 round 2; M9/M9b/M15 overlap).
+
+**Result**: 14/14 killed → PASS
+
+### Remaining (non-blocking for this verdict)
+- R1 (spam when AccessDenied on the state file is real) was accepted by the owner. R4-R6 are informational.
+- Ticket deviation to record as an AD: the runtime `boto3` instead of stdlib-only. New provider `hashicorp/archive` 2.8.1, to justify in the PR (CLAUDE.md rule 7).
+- **Merge blocker**: the owner's real run. Create the 2 SSM params, `plan` only `to add` / `0 to change` / `0 to destroy`, `apply`, `aws lambda invoke` → `sem_aviso`, stop the worker 40 min → ⚠️, re-enable it → ✅.
+
+### Requirement Traceability (final)
+VER-01..05, AVI-01..08, INF-01..07, OPS-03, OPS-04: ✅ Verified (22/22).
