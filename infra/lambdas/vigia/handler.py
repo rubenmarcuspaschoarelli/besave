@@ -110,14 +110,16 @@ def verificar_disponibilidade(http, cfg, agora):
 
 
 def ler_estado(s3, cfg):
-    """Estado gravado, ou {} (= ok). Sem s3:ListBucket, objeto ausente vem como AccessDenied."""
+    """Estado gravado, ou {} (= ok). Qualquer falha de leitura vale como "sem estado" (risco aceito)."""
     try:
         corpo = s3.get_object(Bucket=cfg.bucket, Key=CHAVE_ESTADO)["Body"].read()
     except Exception as e:
         codigo = codigo_erro(e)
-        if codigo not in ("NoSuchKey", "404", "AccessDenied", "403"):
-            log.error("GetObject de %s falhou: %s", CHAVE_ESTADO, codigo)
-            raise RuntimeError(f"leitura do estado falhou: {codigo}") from None
+        if codigo == "NoSuchKey":
+            log.info("%s ainda não existe; sem estado", CHAVE_ESTADO)
+        else:
+            # Sem s3:ListBucket, objeto inexistente também vem como AccessDenied.
+            log.error("GetObject de %s falhou (%s); seguindo sem estado", CHAVE_ESTADO, codigo)
         return {}
     try:
         estado = json.loads(corpo)

@@ -94,6 +94,7 @@ Os avisos vão para o Telegram:
 - ✅ na volta ("site atualizado de novo (parado por 1h40)").
 
 O estado do vigia fica em `s3://besave-site/_estado/vigia.json` e só é gravado quando algum aviso sai.
+Se a leitura do estado falhar, o vigia segue "sem estado", ou seja, como `ok`. Quando o arquivo ainda não existe (`NoSuchKey`) isso vai para o log como INFO; qualquer outro código vai como ERROR. Sem `s3:ListBucket`, um arquivo que ainda não existe volta como `AccessDenied`, então esse ERROR aparece até o primeiro aviso gravar o estado.
 Se o Telegram falhar, o estado não avança e a próxima execução tenta de novo. Por isso o Scheduler e a
 invocação assíncrona têm 0 retentativas: repetir um aviso já enviado duplicaria a mensagem.
 

@@ -287,30 +287,38 @@ class Estado(unittest.TestCase):
         self.assertIn("AccessDenied", texto)
         self.assertNotIn("arn:", texto)
 
-    def test_erro_inesperado_ao_ler_estado_nao_vaza_mensagem(self):  # AVI-08
+    def test_estado_nosuchkey_e_sem_estado_com_log_info(self):  # AVI-09
         c = Cenario()
-        c.manifest_com_idade(T0, 5)
-        c.s3.gravar("_estado/vigia.json", b"{}", None)
-
-        def get_falha(**kw):
-            erro = ErroCliente("SlowDown")
-            erro.args = ("arn:aws:iam::111111111111:role/besave-vigia",)
-            raise erro
-
-        c.s3.get_object = get_falha
-        with self.assertLogs("vigia", "ERROR") as logs, self.assertRaises(RuntimeError) as ctx:
-            c.rodar(T0)
-        self.assertNotIn("arn:", "\n".join(logs.output) + str(ctx.exception))
-        self.assertIsNone(ctx.exception.__cause__)
-        self.assertTrue(ctx.exception.__suppress_context__)  # traceback sem o ClientError original
-
-    def test_estado_ausente_com_403_conta_como_ok(self):
-        # sem s3:ListBucket, o S3 responde AccessDenied para objeto inexistente
-        c = Cenario()
-        c.s3.codigo_ausente = "AccessDenied"
         c.manifest_com_idade(T0, 45)
-        self.assertEqual(c.rodar(T0), "avisado")
+        with self.assertLogs("vigia", "INFO") as logs:
+            self.assertEqual(c.rodar(T0), "avisado")
         self.assertEqual(len(c.enviadas), 1)
+        leitura = [r for r in logs.records if "_estado/vigia.json" in r.getMessage()]
+        self.assertEqual([r.levelname for r in leitura], ["INFO"])
+
+    def test_outro_erro_na_leitura_e_sem_estado_com_log_error(self):  # AVI-09 + AVI-08
+        for codigo in ("AccessDenied", "SlowDown"):
+            with self.subTest(codigo=codigo):
+                c = Cenario()
+                c.manifest_com_idade(T0, 45)
+                c.s3.gravar("_estado/vigia.json", json.dumps({
+                    "situacao": "alerta", "desde": "2026-10-01T14:15:00Z", "ultimo_aviso": "2026-10-01T14:30:00Z",
+                }).encode(), None)
+
+                def get_falha(**kw):
+                    erro = ErroCliente(codigo)
+                    erro.args = ("arn:aws:iam::111111111111:role/besave-vigia",)
+                    raise erro
+
+                c.s3.get_object = get_falha
+                with self.assertLogs("vigia", "INFO") as logs:
+                    # sem estado = ok: o alerta gravado é ignorado e sai um novo ⚠️
+                    self.assertEqual(c.rodar(T0), "avisado")
+                self.assertTrue(c.enviadas[0].startswith("⚠️"))
+                leitura = [r for r in logs.records if "_estado/vigia.json" in r.getMessage()]
+                self.assertEqual([r.levelname for r in leitura], ["ERROR"])
+                self.assertIn(codigo, leitura[0].getMessage())
+                self.assertNotIn("arn:", "\n".join(logs.output))
 
     def test_lembrete_antes_de_3_h_nao_sai(self):  # AVI-03
         c = Cenario()

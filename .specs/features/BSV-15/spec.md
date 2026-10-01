@@ -34,7 +34,7 @@ máquina, que perceba que o site parou de ser atualizado ou parou de responder.
 | Import do `boto3` | Só dentro de `lambda_handler`, ao montar os clientes reais | Os testes importam o módulo sem `boto3` instalado | y |
 | Referência aos parâmetros SSM | O ARN é montado a partir de `data.aws_caller_identity` + `data.aws_region` + o nome. Não há `data "aws_ssm_parameter"` | O data source `aws_ssm_parameter` guarda `value` no state, que é o que a spec proíbe. O preço é que o `plan` não falha se o parâmetro não existir; nesse caso o erro aparece no `lambda invoke` do README | n |
 | Chave KMS do `kms:Decrypt` | `data "aws_kms_alias" "ssm"` (`alias/aws/ssm`) → `target_key_arn` | A spec pede a chave padrão `aws/ssm`. O alias existe depois que o dono cria o 1º SecureString, e o README manda criar os parâmetros antes do `plan` | n |
-| Estado ausente | `NoSuchKey`, `404` ou `AccessDenied`/`403` no `GetObject` de `_estado/vigia.json` → situação inicial `ok`; JSON inválido → `ok` + log de erro | Sem `s3:ListBucket` (policy mínima da spec), o S3 responde 403 para objeto inexistente | n |
+| Estado ausente ou ilegível | Qualquer falha no `GetObject` de `_estado/vigia.json` → "sem estado" (`ok`). `NoSuchKey` → log INFO; qualquer outro código → log ERROR com o código. JSON inválido → `ok` + log ERROR | Risco aceito pelo dono (01/10). Sem `s3:ListBucket`, objeto inexistente vem como `AccessDenied` → ERROR até o 1º aviso gravar o arquivo | y |
 | Formato de data no estado | ISO 8601 UTC com `Z` (`2026-10-01T12:00:00Z`) | CLAUDE.md regra 5: no dado é UTC; na exibição é Brasília (-03:00) | y |
 | Quando o estado é gravado | Só quando se envia um aviso (alerta, lembrete ou recuperação). Ciclo ok→ok e alerta sem lembrete devido não fazem `PutObject` | Evita uma escrita a cada 10 min; a spec só pede estado para o anti-spam | n |
 | Lembrete | Quando `agora - ultimo_aviso >= 180 min` | Spec: "lembrete a cada 3 h" | y |
@@ -85,6 +85,7 @@ máquina, que perceba que o site parou de ser atualizado ou parou de responder.
 6. AVI-06: IF o envio ao Telegram falha (erro de rede, status ≠ 200, `ok` ≠ `true`, ou falha ao ler o SSM) THEN o vigia SHALL logar o erro e SHALL NOT gravar o estado; a execução seguinte SHALL tentar de novo.
 7. AVI-07: The horários nas mensagens SHALL estar em Brasília (-03:00, `HH:MM`); no estado SHALL ser ISO 8601 UTC.
 8. AVI-08: The mensagens e os logs SHALL NOT conter o token, o `chat_id`, ARN nem URL de afiliado.
+9. AVI-09: IF a leitura de `_estado/vigia.json` falha THEN o vigia SHALL seguir sem estado (`ok`); com `NoSuchKey` SHALL logar em INFO, e com qualquer outro código SHALL logar em ERROR com o código.
 
 **Independent Test**: a sequência do critério de aceite (10 min → 31 min → ainda velho → +3 h → fresco) sobre um S3 em memória.
 
@@ -139,6 +140,7 @@ Dimensions: estado persistido e transições (AVI-01..05); falha de dependência
 | AVI-06 | P1: Avisos | T1 | Done |
 | AVI-07 | P1: Avisos | T1 | Done |
 | AVI-08 | P1: Avisos | T1 | Done |
+| AVI-09 | P1: Avisos | T1 | Done |
 | INF-01 | P1: Infra | T2 | Done |
 | INF-02 | P1: Infra | T2 | Done |
 | INF-03 | P1: Infra | T2 | Done |
@@ -149,7 +151,7 @@ Dimensions: estado persistido e transições (AVI-01..05); falha de dependência
 | OPS-03 | P2: Operação | T3 | Done |
 | OPS-04 | P2: Operação | T3 | Done |
 
-**Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
+**Coverage:** 23 total, 23 mapped to tasks, 0 unmapped.
 
 ---
 
