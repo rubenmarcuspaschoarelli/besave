@@ -139,13 +139,13 @@ Dimensions: estado persistido e transições (AVI-01..05); falha de dependência
 | AVI-06 | P1: Avisos | T1 | Done |
 | AVI-07 | P1: Avisos | T1 | Done |
 | AVI-08 | P1: Avisos | T1 | Done |
-| INF-01 | P1: Infra | T2 | Pending |
-| INF-02 | P1: Infra | T2 | Pending |
-| INF-03 | P1: Infra | T2 | Pending |
-| INF-04 | P1: Infra | T2 | Pending |
-| INF-05 | P1: Infra | T2 | Pending |
-| INF-06 | P1: Infra | T2 | Pending |
-| INF-07 | P1: Infra | T2 | Pending |
+| INF-01 | P1: Infra | T2 | Done |
+| INF-02 | P1: Infra | T2 | Done |
+| INF-03 | P1: Infra | T2 | Done |
+| INF-04 | P1: Infra | T2 | Done |
+| INF-05 | P1: Infra | T2 | Done |
+| INF-06 | P1: Infra | T2 | Done |
+| INF-07 | P1: Infra | T2 | Done |
 | OPS-03 | P2: Operação | T3 | Pending |
 | OPS-04 | P2: Operação | T3 | Pending |
 

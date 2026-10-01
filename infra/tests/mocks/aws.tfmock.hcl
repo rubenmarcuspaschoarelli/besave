@@ -32,3 +32,27 @@ override_resource {
 mock_data "aws_canonical_user_id" {
   defaults = { id = "0000000000000000000000000000000000000000000000000000000000dono" }
 }
+# Vigia (BSV-15)
+mock_data "aws_caller_identity" {
+  defaults = { account_id = "111111111111" }
+}
+mock_data "aws_region" {
+  defaults = { region = "us-east-1" }
+}
+mock_data "aws_kms_alias" {
+  defaults = { target_key_arn = "arn:aws:kms:us-east-1:111111111111:key/00000000-0000-0000-0000-00000000055a" }
+}
+mock_resource "aws_cloudwatch_log_group" {
+  defaults = { arn = "arn:aws:logs:us-east-1:111111111111:log-group:/aws/lambda/besave-vigia" }
+}
+mock_resource "aws_lambda_function" {
+  defaults = { arn = "arn:aws:lambda:us-east-1:111111111111:function:besave-vigia" }
+}
+override_resource {
+  target = aws_iam_role.vigia
+  values = { arn = "arn:aws:iam::111111111111:role/besave-vigia", id = "besave-vigia" }
+}
+override_resource {
+  target = aws_iam_role.vigia_agenda
+  values = { arn = "arn:aws:iam::111111111111:role/besave-vigia-agenda", id = "besave-vigia-agenda" }
+}

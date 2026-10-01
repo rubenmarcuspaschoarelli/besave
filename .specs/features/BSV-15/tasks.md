@@ -89,9 +89,9 @@ T1 → T2 → T3
 
 **Done when**:
 
-- [ ] A policy da Lambda é igual à da spec (asserção de igualdade exata)
-- [ ] Nenhum `aws_ssm_parameter` em `.tf`; nenhum recurso existente alterado
-- [ ] Gate check passes: `terraform fmt -check -recursive && terraform validate && terraform test`
+- [x] A policy da Lambda é igual à da spec (asserção de igualdade exata)
+- [x] Nenhum `aws_ssm_parameter` em `.tf`; nenhum recurso existente alterado
+- [x] Gate check passes: `terraform fmt -check -recursive && terraform validate && terraform test`
 
 **Tests**: integration
 **Gate**: full
