@@ -40,6 +40,8 @@ sem spam. Máquina desligada é BSV-15.
 | Variante do erro | Primeiros 2 identificadores do `Debug` do erro (`Redirects(Kvs { … })` → `Redirects::Kvs`); só `[A-Za-z0-9_]` | Spec: "nome da variante, não o texto completo"; nunca carrega dado do erro | n |
 | Fase | `env_file`, `config`, `trava`, `conexao_oracle`, `contexto_aws`; erro de `gerar()` → `leitura_fonte` (Fonte), `imagens`, `chunks` (Chunk, ChunkAcimaDoOrcamento), `paginas` (Site), `redirects`, `manifest` (Manifest*, VersaoContrato), `s3` (Publicador) | `gerar()` não muda (spec); a variante de topo de `ErroGeracao` diz o módulo onde parou. `Publicador` ocorre em várias fases: `s3` é o nome honesto | n |
 | Código 2 (configuração) | `.env` ilegível/ausente; env obrigatória ausente ou inválida (`BESAVE_*`, `BESAVE_FONTE`, mapeamento, `TELEGRAM_*` pela metade, `LOCALAPPDATA` ausente sem `BESAVE_LOCK`/`BESAVE_LOG_DIR`); região AWS ausente | Spec §3 | n |
+| Gatilho de boot | Só "1 min após o logon"; sem gatilho de inicialização | Com "somente quando conectado" (Interactive), um gatilho de boot sem logon não roda a tarefa; o de logon cobre o boot seguido de logon | n |
+| Erro do `.env` | `LineParse` do `dotenvy` vira "linha malformada (posição N)", sem o texto da linha | O erro original ecoa a linha, que pode ter token/senha (achado do Verifier) | n |
 | Alerta em código 2 | Também alerta (fase `config`/`env_file`) quando `TELEGRAM_*` está disponível | É falha de ciclo; a execução real do dono depende de um alerta | n |
 | `TELEGRAM_*` pela metade | Código 2 | Desligar em silêncio esconderia o erro | n |
 | Host na mensagem | `COMPUTERNAME` (Windows) ou `HOSTNAME`; só `[A-Za-z0-9._-]`, até 63 chars; senão `desconhecido` | Spec pede host; filtro garante que não vaza caminho | n |
@@ -68,6 +70,7 @@ sem spam. Máquina desligada é BSV-15.
 2. CIC-02: IF `--env-file` aponta para arquivo inexistente ou ilegível THEN o worker SHALL sair com código 2 e mensagem que nomeia `--env-file`.
 3. CIC-03: WHEN uma variável está no ambiente e no `.env` THEN o valor do ambiente SHALL vencer.
 4. CIC-04: IF a configuração obrigatória está ausente ou inválida THEN o worker SHALL sair com código 2; falha de execução do ciclo SHALL sair com 1; sucesso ou ciclo pulado SHALL sair com 0.
+5. CIC-05: IF uma linha do `.env` está malformada THEN o worker SHALL sair com código 2 e SHALL NOT ecoar o conteúdo da linha no log nem no stderr (spec do dono: "tokens nunca em log").
 
 **Independent Test**: binário com `--ciclo --env-file` e env controlada, sem rede.
 
@@ -125,7 +128,7 @@ sem spam. Máquina desligada é BSV-15.
 - WHEN duas variantes diferentes falham na mesma janela THEN cada uma SHALL ter seu envio (janela por variante).
 - WHEN o envio do "recuperado" falha THEN o estado SHALL permanecer e o próximo sucesso SHALL tentar de novo.
 
-Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de dependência externa (ALR-05); concorrência (TRV-01..04); dados sensíveis (ALR-04, ALR-07); observabilidade (LOG-01..04); configuração (CIC-02..04, ALR-06). Auth e rate limit: N/A because o worker só envia mensagem ao próprio bot e o anti-spam limita o volume.
+Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edge de JSON corrompido); falha de dependência externa (ALR-05); concorrência (TRV-01..04); dados sensíveis (ALR-04, ALR-07); observabilidade (LOG-01..04); configuração (CIC-02..04, ALR-06). Auth e rate limit: N/A because o worker só envia mensagem ao próprio bot e o anti-spam limita o volume.
 
 ---
 
@@ -137,6 +140,7 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | CIC-02 | P1: Modo ciclo | T6 | Done |
 | CIC-03 | P1: Modo ciclo | T6 | Done |
 | CIC-04 | P1: Modo ciclo | T5, T6 | Done |
+| CIC-05 | P1: Modo ciclo | T8 | Done |
 | TRV-01 | P1: Trava | T1, T6 | Done |
 | TRV-02 | P1: Trava | T1 | Done |
 | TRV-03 | P1: Trava | T1 | Done |
@@ -156,7 +160,7 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | AGD-02 | P2: Agendador | T7 | Done |
 | AGD-03 | P2: Agendador | T7 | Done |
 
-**Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
+**Coverage:** 23 total, 23 mapped to tasks, 0 unmapped.
 
 ---
 

@@ -41,7 +41,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-7 tarefas, um lote: execução inline, sem sub-agentes.
+8 tarefas (T8 = correção do Verifier), um lote: execução inline, sem sub-agentes.
 
 ### Phase 1: Blocos
 
@@ -52,7 +52,7 @@ T1 → T2 → T3 → T4
 ### Phase 2: Integração
 
 ```
-T4 → T5 → T6 → T7
+T4 → T5 → T6 → T7 → T8
 ```
 
 ---
@@ -194,4 +194,22 @@ T4 → T5 → T6 → T7
 - [x] Gate build passa
 
 **Tests**: none
+**Gate**: build
+
+---
+
+### T8: `.env` malformado sem ecoar a linha (fix do Verifier)
+
+**What**: `erro_env_file` troca o `LineParse` do `dotenvy` por mensagem sem o conteúdo; teste com token numa linha inválida; byte de controle no comentário de `pastas`.
+**Where**: `apps/worker/src/main.rs`
+**Depends on**: T7
+**Reuses**: nenhum
+**Requirement**: CIC-02, CIC-05
+
+**Done when**:
+
+- [x] `.env` malformado → código 2, `fase=env_file`, sem o token no log e no stderr
+- [x] Gate build passa
+
+**Tests**: integration
 **Gate**: build

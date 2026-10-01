@@ -100,6 +100,19 @@ fn env_file_do_argv() -> Option<PathBuf> {
     None
 }
 
+/// Texto do erro do `.env` sem o conteúdo da linha: o `LineParse` do `dotenvy` ecoa a linha,
+/// que pode ter token ou senha.
+fn erro_env_file(e: &dotenvy::Error) -> String {
+    match e {
+        dotenvy::Error::LineParse(_, pos) => {
+            format!("linha malformada (posição {pos}); caminhos do Windows vão entre aspas simples")
+        }
+        dotenvy::Error::Io(io) => io.to_string(),
+        dotenvy::Error::EnvVar(v) => v.to_string(),
+        _ => "erro ao ler o arquivo".to_owned(),
+    }
+}
+
 fn main() -> ExitCode {
     // Antes de qualquer thread: `dotenvy` usa `set_var`. Não sobrescreve o que já está definido.
     let carga = env_file_do_argv().map(|p| {
@@ -107,7 +120,7 @@ fn main() -> ExitCode {
             .map(|_| ())
             .map_err(|e| ErroCiclo::EnvFile {
                 caminho: p.display().to_string(),
-                erro: e.to_string(),
+                erro: erro_env_file(&e),
             })
     });
     let args = Args::parse();
@@ -225,7 +238,7 @@ fn imprimir_publicacao(rel: &Relatorio, inicio: Instant) {
     println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
 }
 
-/// Pastas do `--ciclo`: `BESAVE_LOG_DIR`/`BESAVE_LOCK` ou `%LOCALAPPDATA%esave\…`.
+/// Pastas do `--ciclo`: `BESAVE_LOG_DIR`/`BESAVE_LOCK` ou `%LOCALAPPDATA%\besave\…`.
 struct Pastas {
     logs: PathBuf,
     trava: PathBuf,

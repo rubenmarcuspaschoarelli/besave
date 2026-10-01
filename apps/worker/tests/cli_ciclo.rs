@@ -202,3 +202,24 @@ fn lock_e_logs_configuraveis() {
     let n = std::fs::read_dir(&logs_dir).unwrap().count();
     assert_eq!(n, 1);
 }
+
+/// CIC-02 (ilegível) + CIC-05: `.env` malformado → código 2, e nem o log nem o stderr ecoam a
+/// linha (que pode ter token ou senha).
+#[test]
+fn env_file_malformado_sai_com_2_sem_ecoar_a_linha() {
+    let local = dir_temp("malformado");
+    let env = local.join("ruim.env");
+    std::fs::write(&env, "TELEGRAM_BOT_TOKEN=123:SEGREDO\\q x y\n").unwrap();
+    let out = comando(&local)
+        .args(["--ciclo", "--env-file"])
+        .arg(&env)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("--env-file"), "{}", texto(&out));
+    assert!(!stderr.contains("SEGREDO"), "{}", texto(&out));
+    let log = logs(&local);
+    assert!(log.contains("fase=env_file"), "{log}");
+    assert!(!log.contains("SEGREDO"), "{log}");
+}
