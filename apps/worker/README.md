@@ -9,7 +9,8 @@ Lê OFERTA/PRODUTO do Oracle e converte cada linha em `OfertaCard` e `OfertaPagi
 - `--publicar [--sim]` (BSV-12): o mesmo que `--gerar`, mas no bucket S3, e sincroniza a KVS de
   redirects `id → DS_URL_AFILIADO`. Sem `--sim` só imprime o plano.
 - `--ciclo [--env-file <.env>]` (BSV-14): `--publicar --sim` para o Agendador de Tarefas, com
-  trava, log em arquivo e alerta no Telegram (ver abaixo).
+  trava, log em arquivo e alerta no Telegram (ver abaixo). O binário `besave-ciclo` faz o mesmo
+  sem janela de console.
 
 Um dos quatro modos é obrigatório; eles são mutuamente exclusivos. `--gerar` e `--publicar` exigem
 `--imagens-dir`/`BESAVE_IMAGENS_DIR` (BSV-13, ver abaixo); `--dry-run` não usa.
@@ -328,11 +329,18 @@ ainda aplica horário de verão em `America/Sao_Paulo`.
 Rejeições saem no log (`WARN ... id=… motivo=…`) e no relatório. Erro de conexão ou de SQL
 encerra com código ≠ 0 e a mensagem do Oracle, sem panic.
 
-## Execução agendada (`--ciclo`, BSV-14)
+## Execução agendada (`--ciclo` e `besave-ciclo`, BSV-14)
 
-`--ciclo` é o `--publicar --sim` feito para o Agendador de Tarefas do Windows: a cada 5 min,
+O ciclo é o `--publicar --sim` feito para o Agendador de Tarefas do Windows: a cada 5 min,
 com trava (nunca dois ciclos juntos), log em arquivo e alerta no Telegram quando um ciclo falha.
 Ciclo ok é silencioso (só log). Não há loop interno: quem repete é o Agendador.
+
+Dois executáveis, o mesmo caminho (`worker::ciclo::executar`):
+
+| executável | uso | saída |
+|---|---|---|
+| `besave-ciclo.exe --env-file <arq>` | o Agendador | **sem janela de console**; nada em stdout/stderr, só o log em arquivo e o código de saída |
+| `besave-worker.exe --ciclo --env-file <arq>` | rodar à mão, ver o que acontece | log também no stderr e relatório no stdout |
 
 ```powershell
 besave-worker.exe --ciclo --env-file C:\besave\worker.env
@@ -386,6 +394,8 @@ Variáveis novas:
 | `TELEGRAM_CHAT_ID` | não (as duas ou nenhuma) | chat que recebe os alertas |
 | `BESAVE_LOG_DIR` | não | pasta dos logs; padrão `%LOCALAPPDATA%\besave\logs` |
 | `BESAVE_LOCK` | não | arquivo de trava; padrão `%LOCALAPPDATA%\besave\worker.lock` |
+| `BESAVE_DESTINO_LOCAL` | não (ensaio/teste) | publica numa pasta (layout do bucket) com KVS em memória, em vez do S3/KVS; dispensa `BESAVE_BUCKET`/`BESAVE_KVS_ARN` |
+| `BESAVE_AGORA` | não (ensaio/teste) | segundos Unix que fixam o relógio; **só vale com `BESAVE_DESTINO_LOCAL`** |
 
 Sem as duas `TELEGRAM_*`, o alerta fica desligado (`INFO alerta desligado` no log), útil em dev.
 
@@ -395,15 +405,15 @@ Sem as duas `TELEGRAM_*`, o alerta fica desligado (`INFO alerta desligado` no lo
 cd apps\worker
 cargo build --release
 # Copie o .exe para uma pasta estável: um build novo não sobrescreve o .exe enquanto a tarefa roda.
-Copy-Item "$env:CARGO_TARGET_DIR\release\besave-worker.exe" C:\besave\   # ou target\release\
-.\scripts\registrar-tarefa.ps1 -Executavel C:\besave\besave-worker.exe -EnvFile C:\besave\worker.env
+Copy-Item "$env:CARGO_TARGET_DIR\release\besave-ciclo.exe" C:\besave\   # ou target\release\
+.\scripts\registrar-tarefa.ps1 -Executavel C:\besave\besave-ciclo.exe -EnvFile C:\besave\worker.env
 ```
 
 A tarefa "Besave Worker" roda a cada 5 min, indefinidamente, e 1 min após o logon; não abre
 nova instância se a anterior ainda roda; para a execução que passar de 20 min; roda com o seu
 usuário **somente quando você está conectado** (o Oracle e as imagens estão no seu perfil), sem
-senha gravada. Rodar o script de novo atualiza a tarefa. Como a tarefa é interativa, uma janela
-de console pisca a cada execução.
+senha gravada. Rodar o script de novo atualiza a tarefa. O script só aceita o `besave-ciclo.exe`,
+que não abre janela de console.
 
 Histórico: Agendador de Tarefas → Biblioteca → "Besave Worker" → aba Histórico (habilite em
 "Ações → Habilitar Histórico de Todas as Tarefas", se estiver desligado); a coluna "Resultado da

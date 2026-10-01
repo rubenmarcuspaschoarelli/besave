@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; `docs/specs/BSV-14.md` fixa o comportamento; decisões em `spec.md` → Assumptions)
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -246,9 +246,9 @@ T4 → T5 → T6 → T7 → T8 → T9 → T10
 
 **Done when**:
 
-- [ ] Script aceita/recomenda `besave-ciclo.exe` e avisa se receber `besave-worker.exe`
-- [ ] README: dois binários, sem janela, `BESAVE_DESTINO_LOCAL`/`BESAVE_AGORA`
-- [ ] Gate build passa
+- [x] Script aceita/recomenda `besave-ciclo.exe` e avisa se receber `besave-worker.exe`
+- [x] README: dois binários, sem janela, `BESAVE_DESTINO_LOCAL`/`BESAVE_AGORA`
+- [x] Gate build passa
 
 **Tests**: none
 **Gate**: build
