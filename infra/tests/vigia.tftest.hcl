@@ -20,6 +20,10 @@ run "vigia" {
     error_message = "o zip deve vir de lambdas/vigia/handler.py"
   }
   assert {
+    condition     = data.archive_file.vigia.output_file_mode == "0644"
+    error_message = "modo fixo no zip: o source_code_hash não pode depender do SO"
+  }
+  assert {
     condition = aws_lambda_function.vigia.environment[0].variables == tomap({
       BUCKET        = "besave-site"
       URL_MANIFEST  = "https://${aws_cloudfront_distribution.site.domain_name}/manifest.json"

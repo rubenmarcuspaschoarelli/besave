@@ -302,6 +302,7 @@ class Estado(unittest.TestCase):
             c.rodar(T0)
         self.assertNotIn("arn:", "\n".join(logs.output) + str(ctx.exception))
         self.assertIsNone(ctx.exception.__cause__)
+        self.assertTrue(ctx.exception.__suppress_context__)  # traceback sem o ClientError original
 
     def test_estado_ausente_com_403_conta_como_ok(self):
         # sem s3:ListBucket, o S3 responde AccessDenied para objeto inexistente
