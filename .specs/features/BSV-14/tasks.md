@@ -69,9 +69,9 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Segunda aquisição com a primeira viva → `None`; depois do drop → `Some`
-- [ ] Arquivo com PID e horário; arquivo órfão tomado com `WARN`
-- [ ] Gate quick passa
+- [x] Segunda aquisição com a primeira viva → `None`; depois do drop → `Some`
+- [x] Arquivo com PID e horário; arquivo órfão tomado com `WARN`
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

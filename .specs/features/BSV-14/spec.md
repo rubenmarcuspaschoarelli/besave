@@ -32,7 +32,7 @@ sem spam. Máquina desligada é BSV-15.
 | --------------------- | -------------- | --------- | ---------- |
 | Forma do modo | Flag `--ciclo` no mesmo grupo de `--dry-run`/`--gerar`/`--publicar`; `--env-file` vale para qualquer modo | A spec aceita flag ou subcomando; flag mantém o CLI atual intacto | n |
 | Precedência do `.env` | `--env-file` é lido do `argv` antes do `clap` (os `env =` do clap já enxergam o `.env`); `dotenvy::from_path` não sobrescreve variável já definida | "carrega antes de qualquer outra coisa"; "ambiente vence o `.env`" | y |
-| Trava | `std::fs::File::try_lock` (estável desde Rust 1.89; toolchain 1.95), sem `fs2`. O SO solta a trava quando o processo morre, então "lock órfão" = arquivo com conteúdo (`pid=… inicio=…`) cuja trava o SO já soltou → tomado com `WARN`. Ao terminar, o conteúdo é truncado; o arquivo não é apagado | Spec permite "fs2 ou equivalente"; a std dispensa dependência e checagem de PID por API do Windows | n |
+| Trava | `std::fs::File::try_lock` (estável desde Rust 1.89; toolchain 1.95), sem `fs2`. O SO solta a trava quando o processo morre. Ao adquirir, grava `pid=… inicio=…`; ao soltar, acrescenta ` fim=…`. "Lock órfão" = conteúdo sem `fim=` com a trava livre (o processo morreu sem soltar) → tomado com `WARN` que cita o conteúdo anterior. O arquivo nunca é apagado | Spec permite "fs2 ou equivalente"; a std dispensa dependência e checagem de PID por API do Windows. No Windows a trava bloqueia leitura por outro handle, então o PID só é lido depois (diagnóstico do órfão) | n |
 | Log em arquivo | Sem `tracing-appender`: cada execução dura < 20 min, então o arquivo do dia é escolhido no início (`besave-worker.AAAA-MM-DD.log`, data de Brasília, -03:00) e aberto em append; `tracing-subscriber` escreve nele e no stderr | `tracing-appender` rotaciona por data UTC (virada às 21h de Brasília) e só serve a processos longos; uma dependência a menos | n |
 | Retenção | No início do ciclo (depois da trava) remove `besave-worker.AAAA-MM-DD.log` com data < hoje − 14 dias (Brasília); outros arquivos da pasta ficam | "mais de 14 dias"; data no nome é determinística (mtime muda com cópia) | n |
 | Cliente HTTPS | `hyper-util` (client legacy) + `hyper-rustls` + `http-body-util` + `bytes`, todos já no `Cargo.lock` pelo SDK AWS (TLS = rustls/aws-lc-rs já compilado); nenhum pacote novo no lock | Spec: "cliente HTTP já presente no SDK; justificar". `reqwest` traria crates novas e inclui a URL (com o token) no texto do erro | n |
@@ -138,9 +138,9 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | CIC-03 | P1: Modo ciclo | T6 | Pending |
 | CIC-04 | P1: Modo ciclo | T5, T6 | Pending |
 | TRV-01 | P1: Trava | T1, T6 | Pending |
-| TRV-02 | P1: Trava | T1 | Pending |
-| TRV-03 | P1: Trava | T1 | Pending |
-| TRV-04 | P1: Trava | T1 | Pending |
+| TRV-02 | P1: Trava | T1 | Done |
+| TRV-03 | P1: Trava | T1 | Done |
+| TRV-04 | P1: Trava | T1 | Done |
 | LOG-01 | P1: Logs | T2 | Pending |
 | LOG-02 | P1: Logs | T2 | Pending |
 | LOG-03 | P1: Logs | T5 | Pending |

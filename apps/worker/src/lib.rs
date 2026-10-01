@@ -16,3 +16,4 @@ pub mod plano;
 pub mod publicador;
 pub mod redirects;
 pub mod site;
+pub mod trava;
