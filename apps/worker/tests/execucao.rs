@@ -16,8 +16,8 @@ use worker::conversao::{LinhaOferta, LinhaProduto};
 use worker::execucao::{Codigo, Falha, concluir, rodar, variante_de};
 use worker::fonte::{ErroFonte, FakeFonte, FonteOfertas};
 use worker::geracao::{ErroGeracao, Relatorio};
-use worker::publicador::{ErroPublicador, PublicadorMemoria};
-use worker::redirects::{ErroRedirects, RedirectsMemoria};
+use worker::publicador::{ErroPublicador, Publicador, PublicadorMemoria};
+use worker::redirects::{ErroRedirects, Redirects, RedirectsMemoria};
 use worker::site::ConfigSite;
 
 /// Fonte que sempre erra (falha injetada).
@@ -309,4 +309,30 @@ fn variante_so_tem_identificadores() {
     };
     assert_eq!(variante_de(&e), "Concorrencia");
     assert_eq!(variante_de(&"texto solto"), "Desconhecido");
+}
+
+/// CIC-01: o ciclo é o `--publicar --sim`: escreve no destino (manifest no bucket, ids na KVS).
+#[test]
+fn rodar_escreve_no_destino_como_publicar_sim() {
+    let fonte = FakeFonte::new(vec![linha(1), linha(2)], vec![], AGORA);
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    let (r, _) = com_log(|| {
+        rodar(
+            &fonte,
+            &mapeamento(),
+            &mut p,
+            &mut kvs,
+            &dir_imagens_vazio(),
+            &ConfigSite::default(),
+            AGORA,
+        )
+    });
+    let rel = r.unwrap();
+    assert_eq!(rel.validas, 2);
+    assert!(p.ler("manifest.json").unwrap().is_some());
+    assert_eq!(
+        kvs.listar().unwrap().keys().copied().collect::<Vec<_>>(),
+        vec![1, 2]
+    );
 }

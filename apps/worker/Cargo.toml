@@ -21,6 +21,8 @@ aws-sdk-s3 = { version = "1.149.0", default-features = false, features = ["defau
 brotli = "9.0.0"
 bytes = "1.12.1"
 clap = { version = "4.6.7", features = ["derive", "env"] }
+# `--env-file` (BSV-14): não sobrescreve variável já definida.
+dotenvy = "0.15.7"
 hex = "0.4.3"
 # Cliente HTTPS do Telegram (BSV-14): as mesmas crates que o SDK AWS já compila; nenhum pacote novo no lock.
 http = "1.5.0"

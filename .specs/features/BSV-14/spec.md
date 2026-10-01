@@ -133,11 +133,11 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CIC-01 | P1: Modo ciclo | T6 | Pending |
-| CIC-02 | P1: Modo ciclo | T6 | Pending |
-| CIC-03 | P1: Modo ciclo | T6 | Pending |
-| CIC-04 | P1: Modo ciclo | T5, T6 | Pending |
-| TRV-01 | P1: Trava | T1, T6 | Pending |
+| CIC-01 | P1: Modo ciclo | T6 | Done |
+| CIC-02 | P1: Modo ciclo | T6 | Done |
+| CIC-03 | P1: Modo ciclo | T6 | Done |
+| CIC-04 | P1: Modo ciclo | T5, T6 | Done |
+| TRV-01 | P1: Trava | T1, T6 | Done |
 | TRV-02 | P1: Trava | T1 | Done |
 | TRV-03 | P1: Trava | T1 | Done |
 | TRV-04 | P1: Trava | T1 | Done |
@@ -150,7 +150,7 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | ALR-03 | P1: Alerta | T3, T5 | Done |
 | ALR-04 | P1: Alerta | T3 | Done |
 | ALR-05 | P1: Alerta | T3, T5 | Done |
-| ALR-06 | P1: Alerta | T3, T6 | Pending |
+| ALR-06 | P1: Alerta | T3, T6 | Done |
 | ALR-07 | P1: Alerta | T3 | Done |
 | AGD-01 | P2: Agendador | T7 | Pending |
 | AGD-02 | P2: Agendador | T7 | Pending |

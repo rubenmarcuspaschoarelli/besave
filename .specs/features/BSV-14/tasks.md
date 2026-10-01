@@ -168,11 +168,11 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `.env` inexistente → 2 com mensagem nomeando `--env-file`
-- [ ] Ambiente vence o `.env`
-- [ ] Trava ocupada → 0 e "ciclo anterior em andamento" no log
-- [ ] `TELEGRAM_*` pela metade → 2
-- [ ] Gate build passa
+- [x] `.env` inexistente → 2 com mensagem nomeando `--env-file`
+- [x] Ambiente vence o `.env`
+- [x] Trava ocupada → 0 e "ciclo anterior em andamento" no log
+- [x] `TELEGRAM_*` pela metade → 2
+- [x] Gate build passa
 
 **Tests**: integration
 **Gate**: build
