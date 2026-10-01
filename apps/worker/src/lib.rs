@@ -1,6 +1,7 @@
 //! Worker Besave: leitura do Oracle e conversão para o contrato (BSV-10), geração de chunks + manifest (BSV-11)
 //! e página HTML da oferta (BSV-20).
 
+pub mod alerta;
 pub mod aws;
 pub mod chunks;
 pub mod conversao;

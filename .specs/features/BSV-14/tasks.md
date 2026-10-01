@@ -107,11 +107,11 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Falha → 1 envio; mesma variante < 2 h → 0; ≥ 2 h → 1; variante diferente → 1
-- [ ] Sucesso após N falhas → "recuperado após N falhas (desde HH:MM)"; seguinte → 0
-- [ ] Envio falho não registra; JSON corrompido → estado vazio
-- [ ] Mensagem sem `http`, token, `C:\Users\`; `Debug` sem token; config pela metade → erro
-- [ ] Gate quick passa
+- [x] Falha → 1 envio; mesma variante < 2 h → 0; ≥ 2 h → 1; variante diferente → 1
+- [x] Sucesso após N falhas → "recuperado após N falhas (desde HH:MM)"; seguinte → 0
+- [x] Envio falho não registra; JSON corrompido → estado vazio
+- [x] Mensagem sem `http`, token, `C:\Users\`; `Debug` sem token; config pela metade → erro
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
