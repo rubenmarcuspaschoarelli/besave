@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `spec.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -115,9 +115,9 @@ T1 → T2 → T3
 
 **Done when**:
 
-- [ ] O job `infra` roda os testes do vigia
-- [ ] O README cobre a criação dos parâmetros, o `lambda invoke` e o custo
-- [ ] Gate check passes: build gate
+- [x] O job `infra` roda os testes do vigia
+- [x] O README cobre a criação dos parâmetros, o `lambda invoke` e o custo
+- [x] Gate check passes: build gate
 
 **Tests**: none
 **Gate**: build

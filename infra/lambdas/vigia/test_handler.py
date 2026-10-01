@@ -133,7 +133,9 @@ class SequenciaDoCriterioDeAceite(unittest.TestCase):
         c.manifest_com_idade(t4, 1)
         self.assertEqual(c.rodar(t4), "avisado")
         self.assertEqual(c.enviadas[2], "✅ Besave: site atualizado de novo (parado por 3h40)")
-        self.assertEqual(c.s3.estado()["situacao"], "ok")
+        self.assertEqual(c.s3.estado(), {
+            "situacao": "ok", "desde": "2026-10-01T18:30:00Z", "ultimo_aviso": "2026-10-01T18:30:00Z",
+        })
 
         self.assertEqual(c.rodar(t4 + timedelta(minutes=10)), "sem_aviso")
         self.assertEqual(len(c.enviadas), 3)
@@ -184,6 +186,12 @@ class Disponibilidade(unittest.TestCase):
         self.assertIn("HTTP 403", msg)
         self.assertNotIn("manifest.json inacessível no S3", msg)
         self.assertNotIn("sem atualização", msg)
+
+    def test_status_diferente_de_200(self):  # VER-04: 2xx que não é 200 também é problema
+        msg = self.alerta(lambda c: setattr(c, "http", (204, b'{"versao": 1}')))
+        self.assertIn("HTTP 204", msg)
+        msg = self.alerta(lambda c: setattr(c, "http", (500, b"")))
+        self.assertIn("HTTP 500", msg)
 
     def test_timeout(self):  # VER-04
         msg = self.alerta(lambda c: setattr(c, "http_erro", TimeoutError()))
@@ -261,6 +269,39 @@ class Estado(unittest.TestCase):
         self.assertEqual(c.rodar(T0), "sem_aviso")
         c.s3.gravar("_estado/vigia.json", b'{"situacao": "alerta"}', None)
         self.assertEqual(c.rodar(T0), "sem_aviso")
+
+    def test_falha_ao_gravar_estado_loga_so_o_codigo(self):  # AVI-08
+        c = Cenario()
+        c.manifest_com_idade(T0, 45)
+        arn = "arn:aws:sts::111111111111:assumed-role/besave-vigia/besave-vigia"
+
+        def put_negado(**kw):
+            erro = ErroCliente("AccessDenied")
+            erro.args = (f"User: {arn} is not authorized",)
+            raise erro
+
+        c.s3.put_object = put_negado
+        with self.assertLogs("vigia", "INFO") as logs:
+            self.assertEqual(c.rodar(T0), "falha_estado")
+        texto = "\n".join(logs.output)
+        self.assertIn("AccessDenied", texto)
+        self.assertNotIn("arn:", texto)
+
+    def test_erro_inesperado_ao_ler_estado_nao_vaza_mensagem(self):  # AVI-08
+        c = Cenario()
+        c.manifest_com_idade(T0, 5)
+        c.s3.gravar("_estado/vigia.json", b"{}", None)
+
+        def get_falha(**kw):
+            erro = ErroCliente("SlowDown")
+            erro.args = ("arn:aws:iam::111111111111:role/besave-vigia",)
+            raise erro
+
+        c.s3.get_object = get_falha
+        with self.assertLogs("vigia", "ERROR") as logs, self.assertRaises(RuntimeError) as ctx:
+            c.rodar(T0)
+        self.assertNotIn("arn:", "\n".join(logs.output) + str(ctx.exception))
+        self.assertIsNone(ctx.exception.__cause__)
 
     def test_estado_ausente_com_403_conta_como_ok(self):
         # sem s3:ListBucket, o S3 responde AccessDenied para objeto inexistente

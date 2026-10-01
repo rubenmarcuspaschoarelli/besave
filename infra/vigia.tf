@@ -20,6 +20,8 @@ data "archive_file" "vigia" {
   type        = "zip"
   source_file = "${path.module}/lambdas/vigia/handler.py"
   output_path = "${path.module}/.build/vigia.zip"
+  # Modo fixo: o zip (e o source_code_hash) fica igual no Windows e no Linux.
+  output_file_mode = "0644"
 }
 
 resource "aws_cloudwatch_log_group" "vigia" {

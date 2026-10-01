@@ -134,6 +134,7 @@ Valores possíveis de `resultado`:
 - `sem_aviso`: nada a avisar;
 - `avisado`: mensagem enviada e estado gravado;
 - `falha_envio`: o Telegram ou o SSM falhou, o estado ficou como estava e a próxima execução tenta de novo.
+- `falha_estado`: a mensagem saiu, mas a gravação do estado falhou, e o próximo ciclo repete o aviso.
 
 Teste real: desative a tarefa do worker (BSV-14) por 40 min e um ⚠️ chega em até 10 min depois dos 30 min
 sem atualização. Reative e o ✅ chega no ciclo seguinte à próxima publicação.

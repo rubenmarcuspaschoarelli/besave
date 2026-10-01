@@ -116,7 +116,8 @@ def ler_estado(s3, cfg):
     except Exception as e:
         codigo = codigo_erro(e)
         if codigo not in ("NoSuchKey", "404", "AccessDenied", "403"):
-            raise
+            log.error("GetObject de %s falhou: %s", CHAVE_ESTADO, codigo)
+            raise RuntimeError(f"leitura do estado falhou: {codigo}") from None
         return {}
     try:
         estado = json.loads(corpo)
@@ -164,13 +165,18 @@ def executar(s3, http, segredos, enviar, agora, cfg):
     except Exception as e:
         log.error("envio ao Telegram falhou (%s); estado mantido, tenta no próximo ciclo", codigo_erro(e))
         return "falha_envio"
-    s3.put_object(
-        Bucket=cfg.bucket,
-        Key=CHAVE_ESTADO,
-        Body=json.dumps(novo).encode(),
-        ContentType="application/json",
-        CacheControl="no-store",
-    )
+    try:
+        s3.put_object(
+            Bucket=cfg.bucket,
+            Key=CHAVE_ESTADO,
+            Body=json.dumps(novo).encode(),
+            ContentType="application/json",
+            CacheControl="no-store",
+        )
+    except Exception as e:
+        # A mensagem do botocore traz o ARN do role; só o código vai ao log.
+        log.error("aviso enviado, mas PutObject de %s falhou: %s", CHAVE_ESTADO, codigo_erro(e))
+        return "falha_estado"
     log.info("aviso enviado; situacao=%s", novo["situacao"])
     return "avisado"
 
