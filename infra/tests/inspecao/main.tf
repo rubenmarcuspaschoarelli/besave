@@ -26,3 +26,13 @@ output "expiracao_no_site" {
 output "prevent_destroy" {
   value = { for k, v in local.blocos : k => can(regex("(?s)lifecycle\\s*\\{[^}]*prevent_destroy\\s*=\\s*true", v)) }
 }
+
+# BSV-15: data source que leria o valor de um parâmetro SSM (o valor iria ao state).
+output "le_parametro_ssm" {
+  value = anytrue([for src in local.fontes : can(regex("(?m)^data \"aws_ssm_parameters?(_by_path)?\"", src))])
+}
+
+# BSV-15: recursos declarados em vigia.tf.
+output "recursos_vigia" {
+  value = [for m in regexall("(?m)^resource \"([^\"]+)\" \"([^\"]+)\"", replace(file("${local.raiz}/vigia.tf"), "/(?m)^[ \t]*(#|//).*$/", "")) : "${m[0]}.${m[1]}"]
+}

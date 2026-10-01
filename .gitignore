@@ -27,3 +27,5 @@ __pycache__/
 *.tfstate.*
 *.tfvars
 
+# zip das Lambdas gerado pelo archive_file (BSV-15)
+infra/.build/
