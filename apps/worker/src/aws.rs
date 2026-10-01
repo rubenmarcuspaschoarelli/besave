@@ -15,7 +15,7 @@ use tokio::task::JoinSet;
 use tracing::warn;
 
 use crate::publicador::{self, ErroPublicador, Meta, Publicador};
-use crate::redirects::{self, ErroRedirects, Redirects, id_da_chave, lotes_kvs};
+use crate::redirects::{self, ErroRedirects, EstadoKvs, Redirects, id_da_chave, lotes_kvs};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroAws {
@@ -372,9 +372,33 @@ impl Redirects for RedirectsKvs {
         Ok(mapa)
     }
 
-    /// Um `UpdateKeys` por lote de `lotes_kvs` (puts e deletes juntos), encadeando o `ETag`
-    /// a partir de `DescribeKeyValueStore`.
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<()> {
+    /// `DescribeKeyValueStore`; `ItemCount` negativo (não documentado) vira 0.
+    fn descrever(&self) -> redirects::Result<EstadoKvs> {
+        let d = self
+            .rt
+            .block_on(
+                self.cliente
+                    .describe_key_value_store()
+                    .kvs_arn(&self.arn)
+                    .send(),
+            )
+            .map_err(|e| erro_kvs("DescribeKeyValueStore", e))?;
+        Ok(EstadoKvs {
+            item_count: u64::try_from(d.item_count()).unwrap_or(0),
+            etag: d.e_tag().to_owned(),
+        })
+    }
+
+    /// Um `UpdateKeys` por lote de `lotes_kvs` (puts e deletes juntos). O 1º usa `If-Match: etag`
+    /// (lido em `carregar_base`, sem `DescribeKeyValueStore` aqui); os seguintes encadeiam o `ETag`
+    /// devolvido pelo anterior. `ConflictException` → `Concorrencia`. Devolve `ItemCount`/`ETag` da
+    /// última `UpdateKeys`.
+    fn aplicar(
+        &mut self,
+        etag: &str,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> redirects::Result<EstadoKvs> {
         let mut chamadas = Vec::new();
         for lote in lotes_kvs(put, del) {
             let puts = lote
@@ -403,31 +427,38 @@ impl Redirects for RedirectsKvs {
                 (!dels.is_empty()).then_some(dels),
             ));
         }
+        if chamadas.is_empty() {
+            return self.descrever();
+        }
         self.rt.block_on(async {
-            let mut etag = self
-                .cliente
-                .describe_key_value_store()
-                .kvs_arn(&self.arn)
-                .send()
-                .await
-                .map_err(|e| erro_kvs("DescribeKeyValueStore", e))?
-                .e_tag()
-                .to_owned();
+            let mut etag = etag.to_owned();
+            let mut item_count = 0;
             for (puts, dels) in chamadas {
-                etag = self
+                let r = self
                     .cliente
                     .update_keys()
                     .kvs_arn(&self.arn)
-                    .if_match(etag)
+                    .if_match(etag.clone())
                     .set_puts(puts)
                     .set_deletes(dels)
                     .send()
                     .await
-                    .map_err(|e| erro_kvs("UpdateKeys", e))?
-                    .e_tag()
-                    .to_owned();
+                    .map_err(|e| {
+                        if e.as_service_error()
+                            .is_some_and(|s| s.is_conflict_exception())
+                        {
+                            ErroRedirects::Concorrencia {
+                                etag: etag.clone(),
+                                fonte: texto_erro(e),
+                            }
+                        } else {
+                            erro_kvs("UpdateKeys", e)
+                        }
+                    })?;
+                item_count = u64::try_from(r.item_count()).unwrap_or(0);
+                etag = r.e_tag().to_owned();
             }
-            Ok(())
+            Ok(EstadoKvs { item_count, etag })
         })
     }
 }

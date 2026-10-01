@@ -303,6 +303,8 @@ fn primeira_execucao_publica_paginas_css_sitemap_robots_e_indice() {
             "sitemap.xml",
             "robots.txt",
             "_estado/paginas.json",
+            // BSV-12c: índice da KVS, gravado na sincronização (antes do manifest).
+            "_estado/redirects.json",
         ]
     );
     let css = std::fs::read(concat!(

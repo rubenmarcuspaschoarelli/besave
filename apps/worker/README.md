@@ -219,7 +219,8 @@ Nenhuma credencial vai em arquivo versionado, argumento de CLI ou log. `BESAVE_B
 `BESAVE_KVS_ARN` são checadas antes de abrir o Oracle.
 
 **Plano (sem `--sim`).** O worker lê o destino de verdade (`manifest.json`, `HeadObject` dos
-chunks, `ListObjectsV2`, `ListKeys`) e imprime cada escrita que faria, sem executá-la:
+chunks, `ListObjectsV2`, `_estado/redirects.json`, `DescribeKeyValueStore` e, só na reconstrução,
+`ListKeys`) e imprime cada escrita que faria, sem executá-la:
 
 ```
 PLANO: nada foi escrito. Rode com --sim para executar.
@@ -241,7 +242,7 @@ redirects_total: 3
 ```
 
 **Execução (`--sim`).** Ordem de MANIFEST §6: imagens → chunks novos → CSS, páginas, sitemaps,
-robots e `_estado/paginas.json` (BSV-21) → KVS → `manifest.prev.json` →
+robots e `_estado/paginas.json` (BSV-21) → KVS → `_estado/redirects.json` → `manifest.prev.json` →
 `manifest.json` → remoção de chunks órfãos. Se a KVS falhar, o manifest não é gravado e o anterior
 continua valendo.
 
@@ -254,6 +255,24 @@ continua valendo.
   (MANIFEST §5).
 - **A KVS espelha o conjunto publicado** (`ST_ATIVO = 1 OR DT_DESATIVACAO >= hoje - 7`), não
   `ST_ATIVO`: oferta expirada mantém o redirect até o expurgo e some junto com a página.
+- **Índice da KVS (`_estado/redirects.json`, BSV-12c).** `{"kvs_item_count": N, "kvs_etag":
+  "…", "urls": {"<id>": "<hash16 da URL>"}}`, `application/json`, `no-store`. Guarda o hash
+  (SHA-256, 16 hex), nunca a URL de afiliado. Por ciclo: 1 `GetObject` do índice + 1
+  `DescribeKeyValueStore`.
+  - **Modo `indice`:** índice legível e `ETag`/`ItemCount` iguais aos da KVS. O diff e a base do
+    expurgo de imagens saem do índice; `ListKeys` não é chamado.
+  - **Modo `reconstrucao`:** índice ausente, ilegível ou KVS alterada por fora. `WARN` com o motivo
+    (`indice_ausente`, `indice_ilegivel`, `etag_divergente`, `item_count_divergente`), um
+    `ListKeys` completo, diff e índice reconstruído.
+  - O diff vai com `If-Match` do `ETag` lido no início do ciclo (sem `DescribeKeyValueStore` extra;
+    os lotes seguintes encadeiam o `ETag` devolvido). KVS alterada nesse meio-tempo →
+    `ConflictException` → erro `Concorrencia`: o ciclo aborta antes do índice e do manifest, e o
+    seguinte reconstrói.
+  - Depois do diff, o índice é gravado com o `ETag`/`ItemCount` da última `UpdateKeys`, só quando
+    muda. Falha ao gravar o índice aborta antes do manifest; o ciclo seguinte reconstrói.
+  - A saída traz `redirects_modo` e `redirects_motivo_reconstrucao` (`-` no modo `indice`). No
+    `--gerar` local a KVS é uma memória vazia a cada execução, então o modo é sempre
+    `reconstrucao`.
 - Segunda execução sem mudança: 0 chunks e 0 put/del na KVS; `manifest.json` e
   `manifest.prev.json` são regravados (`versao` nova).
 - **Imagens em paralelo (BSV-13):** o trait `Publicador` tem `existem`/`gravar_lote` (checagem e

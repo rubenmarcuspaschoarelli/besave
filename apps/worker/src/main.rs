@@ -180,6 +180,11 @@ fn imprimir_relatorio(rel: &Relatorio) {
         None => println!("maior_chunk: -"),
     }
     println!("versao: {}", rel.versao);
+    println!("redirects_modo: {}", rel.redirects.modo);
+    println!(
+        "redirects_motivo_reconstrucao: {}",
+        rel.redirects.motivo_texto()
+    );
     let img = &rel.imagens;
     println!("imagens_publicadas: {}", img.publicadas);
     println!("imagens_reaproveitadas: {}", img.reaproveitadas);

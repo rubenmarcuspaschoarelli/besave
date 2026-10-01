@@ -216,3 +216,46 @@ fn diff_de_120_chaves_vira_3_lotes_mistos() {
     assert!(lotes_kvs(&[], &[]).is_empty());
     assert_eq!(lotes_kvs(&[], &(1..=50).collect::<Vec<_>>()).len(), 1);
 }
+
+/// BSV-12c (spec, regras): `RedirectsMemoria` expõe `ItemCount` (todas as chaves) e um `ETag`
+/// que muda a cada escrita, inclusive a escrita "por fora" (`inserir_bruto`).
+#[test]
+fn memoria_expoe_item_count_e_etag_que_muda_a_cada_escrita() {
+    use worker::redirects::EstadoKvs;
+    let mut kvs = RedirectsMemoria::new();
+    let e0 = kvs.descrever().unwrap();
+    assert_eq!(e0.item_count, 0);
+
+    let e1 = kvs
+        .aplicar(&e0.etag, &ativos(&[(1, "a"), (2, "b")]), &[])
+        .unwrap();
+    assert_eq!(e1.item_count, 2);
+    assert_ne!(e1.etag, e0.etag);
+    assert_eq!(
+        kvs.descrever().unwrap(),
+        e1,
+        "aplicar devolve o estado pós-escrita"
+    );
+
+    kvs.inserir_bruto("config", "x");
+    let e2 = kvs.descrever().unwrap();
+    assert_eq!(e2.item_count, 3, "chave não numérica conta no ItemCount");
+    assert_ne!(e2.etag, e1.etag);
+
+    let e3 = kvs.aplicar(&e2.etag, &[], &[1]).unwrap();
+    assert_eq!(e3.item_count, 2);
+    assert!(![&e0.etag, &e1.etag, &e2.etag].contains(&&e3.etag));
+
+    kvs.definir_etag(&e1.etag);
+    assert_eq!(
+        kvs.descrever().unwrap(),
+        EstadoKvs {
+            item_count: 2,
+            etag: e1.etag.clone()
+        }
+    );
+    assert_eq!(kvs.descrever_chamadas(), 4);
+    assert_eq!(kvs.listar_chamadas(), 0);
+    kvs.listar().unwrap();
+    assert_eq!(kvs.listar_chamadas(), 1);
+}
