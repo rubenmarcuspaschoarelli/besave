@@ -42,6 +42,9 @@ sem spam. Máquina desligada é BSV-15.
 | Código 2 (configuração) | `.env` ilegível/ausente; env obrigatória ausente ou inválida (`BESAVE_*`, `BESAVE_FONTE`, mapeamento, `TELEGRAM_*` pela metade, `LOCALAPPDATA` ausente sem `BESAVE_LOCK`/`BESAVE_LOG_DIR`); região AWS ausente | Spec §3 | n |
 | Gatilho de boot | Só "1 min após o logon"; sem gatilho de inicialização | Com "somente quando conectado" (Interactive), um gatilho de boot sem logon não roda a tarefa; o de logon cobre o boot seguido de logon | n |
 | Erro do `.env` | `LineParse` do `dotenvy` vira "linha malformada (posição N)", sem o texto da linha | O erro original ecoa a linha, que pode ter token/senha (achado do Verifier) | n |
+| Sem janela de console | Binário `besave-ciclo` com `windows_subsystem = "windows"` chama `ciclo::executar` da lib (mesmo caminho do `--ciclo`); o `--ciclo` continua para uso manual, com stderr e stdout | Ajuste do dono (01/10): janela a cada 5 min é inaceitável | y |
+| Argumentos do `besave-ciclo` | Só `--env-file <arq>`/`--env-file=<arq>` (ou nenhum); o resto → código 2 (`variante=Argumento`), só no log | Sem console, `clap` imprimiria erro no vazio | n |
+| Teste sem AWS do ciclo inteiro | `BESAVE_DESTINO_LOCAL` (pasta + KVS em memória) e `BESAVE_AGORA` (só com destino local) | A fonte fake data as ofertas a partir de `agora`; sem relógio fixo os bytes do chunk mudam entre execuções. Restrito ao destino local para nunca afetar publicação real | n |
 | Alerta em código 2 | Também alerta (fase `config`/`env_file`) quando `TELEGRAM_*` está disponível | É falha de ciclo; a execução real do dono depende de um alerta | n |
 | `TELEGRAM_*` pela metade | Código 2 | Desligar em silêncio esconderia o erro | n |
 | Host na mensagem | `COMPUTERNAME` (Windows) ou `HOSTNAME`; só `[A-Za-z0-9._-]`, até 63 chars; senão `desconhecido` | Spec pede host; filtro garante que não vaza caminho | n |
@@ -71,6 +74,8 @@ sem spam. Máquina desligada é BSV-15.
 3. CIC-03: WHEN uma variável está no ambiente e no `.env` THEN o valor do ambiente SHALL vencer.
 4. CIC-04: IF a configuração obrigatória está ausente ou inválida THEN o worker SHALL sair com código 2; falha de execução do ciclo SHALL sair com 1; sucesso ou ciclo pulado SHALL sair com 0.
 5. CIC-05: IF uma linha do `.env` está malformada THEN o worker SHALL sair com código 2 e SHALL NOT ecoar o conteúdo da linha no log nem no stderr (spec do dono: "tokens nunca em log").
+6. CIC-06: The binário `besave-ciclo` (`#![windows_subsystem = "windows"]`, ajuste do dono de 01/10) SHALL executar o mesmo caminho do `--ciclo` (função da lib, sem lógica duplicada), SHALL NOT escrever em stdout nem stderr, e SHALL produzir a mesma linha `relatorio` que `besave-worker --ciclo` para a mesma fonte fake; argumento desconhecido SHALL sair com código 2.
+7. CIC-07: WHERE `BESAVE_DESTINO_LOCAL` está definida, o ciclo SHALL publicar na pasta (layout do bucket) com KVS em memória, sem exigir `BESAVE_BUCKET`/`BESAVE_KVS_ARN`; `BESAVE_AGORA` SHALL fixar o relógio só nesse caso.
 
 **Independent Test**: binário com `--ciclo --env-file` e env controlada, sem rede.
 
@@ -116,7 +121,7 @@ sem spam. Máquina desligada é BSV-15.
 
 **Acceptance Criteria**:
 
-1. AGD-01: `scripts/registrar-tarefa.ps1` SHALL registrar ou atualizar "Besave Worker": a cada 5 min indefinidamente, gatilho 1 min após logon, `MultipleInstances IgnoreNew`, limite de 20 min, usuário atual em modo interativo (somente quando conectado), executável e `.env` por parâmetro, sem senha.
+1. AGD-01: `scripts/registrar-tarefa.ps1` SHALL registrar ou atualizar "Besave Worker" apontando para `besave-ciclo.exe` (sem janela de console): a cada 5 min indefinidamente, gatilho 1 min após logon, `MultipleInstances IgnoreNew`, limite de 20 min, usuário atual em modo interativo (somente quando conectado), executável e `.env` por parâmetro, sem senha.
 2. AGD-02: `scripts/remover-tarefa.ps1` SHALL remover a tarefa.
 3. AGD-03: The README SHALL documentar BotFather, `chat_id`, variáveis novas, registrar/remover e local dos logs.
 
@@ -141,6 +146,8 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | CIC-03 | P1: Modo ciclo | T6 | Done |
 | CIC-04 | P1: Modo ciclo | T5, T6 | Done |
 | CIC-05 | P1: Modo ciclo | T8 | Done |
+| CIC-06 | P1: Modo ciclo | T9 | Done |
+| CIC-07 | P1: Modo ciclo | T9 | Done |
 | TRV-01 | P1: Trava | T1, T6 | Done |
 | TRV-02 | P1: Trava | T1 | Done |
 | TRV-03 | P1: Trava | T1 | Done |
@@ -156,11 +163,11 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | ALR-05 | P1: Alerta | T3, T5 | Done |
 | ALR-06 | P1: Alerta | T3, T6 | Done |
 | ALR-07 | P1: Alerta | T3 | Done |
-| AGD-01 | P2: Agendador | T7 | Done |
+| AGD-01 | P2: Agendador | T7, T10 | Done |
 | AGD-02 | P2: Agendador | T7 | Done |
-| AGD-03 | P2: Agendador | T7 | Done |
+| AGD-03 | P2: Agendador | T7, T10 | Done |
 
-**Coverage:** 23 total, 23 mapped to tasks, 0 unmapped.
+**Coverage:** 25 total, 25 mapped to tasks, 0 unmapped.
 
 ---
 

@@ -4,6 +4,7 @@
 pub mod alerta;
 pub mod aws;
 pub mod chunks;
+pub mod ciclo;
 pub mod conversao;
 pub mod execucao;
 pub mod fonte;

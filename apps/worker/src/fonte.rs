@@ -90,3 +90,117 @@ impl FonteOfertas for FakeFonte {
             .collect())
     }
 }
+
+/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição
+/// e uma inativa há 8 dias (fora da fonte).
+pub fn fake_demo(agora: i64) -> FakeFonte {
+    const DIA: i64 = 86_400;
+    let ok = |id, id_produto, loja: &str, titulo: &str, de, por, area: &str, publico: &str| {
+        LinhaOferta {
+            id,
+            id_produto: Some(id_produto),
+            loja: Some(loja.into()),
+            titulo: Some(titulo.into()),
+            preco_de: de,
+            preco_por: Some(por),
+            dt_oferta: Some(agora - DIA),
+            area: Some(area.into()),
+            publico: Some(publico.into()),
+            ativo: true,
+            url_afiliado: format!("https://loja.example/{id}"),
+            ..Default::default()
+        }
+    };
+    let base = ok(1000, 1, "Amazon", "Base", None, 10.0, "Tech", "U");
+    let ofertas = vec![
+        LinhaOferta {
+            cupom: Some("besave10".into()),
+            ..ok(
+                5412,
+                910,
+                "Amazon",
+                "Fone Bluetooth XYZ com ANC",
+                Some(299.9),
+                199.9,
+                "Tecnologia",
+                "Unissex",
+            )
+        },
+        ok(
+            5413,
+            911,
+            "Shopee",
+            "Kit Skincare Vitamina C 3 passos",
+            None,
+            89.9,
+            "Elas",
+            "Mulher",
+        ),
+        LinhaOferta {
+            ativo: false,
+            dt_desativacao: Some(agora - DIA),
+            ..ok(
+                5420,
+                912,
+                "MercadoLivre",
+                "Ração Premium Cães Adultos 15kg",
+                Some(249.0),
+                199.0,
+                "Pet",
+                "U",
+            )
+        },
+        LinhaOferta {
+            id: 1001,
+            preco_por: None,
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1002,
+            titulo: Some("  ".into()),
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1003,
+            loja: Some("Americanas".into()),
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1004,
+            area: Some("Moda".into()),
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1005,
+            publico: Some("Adulto".into()),
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1006,
+            dt_oferta: None,
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1007,
+            id_produto: None,
+            ..base.clone()
+        },
+        LinhaOferta {
+            id: 1008,
+            ativo: false,
+            dt_desativacao: Some(agora - 8 * DIA),
+            ..base
+        },
+    ];
+    let produtos = vec![LinhaProduto {
+        id_produto: 910,
+        descricao: Some(
+            "Fone over-ear com cancelamento ativo de ruído e 40 horas de bateria.".into(),
+        ),
+        marca: Some("XYZ".into()),
+        preco_min: Some(179.9),
+        preco_max: Some(349.9),
+        ..Default::default()
+    }];
+    FakeFonte::new(ofertas, produtos, agora)
+}

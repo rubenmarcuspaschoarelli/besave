@@ -1,33 +1,22 @@
 use std::collections::BTreeMap;
-use std::ffi::OsString;
-use std::fs::File;
 use std::io::IsTerminal;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::Mutex;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
-use tracing::{info, warn};
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use worker::alerta::{Alertas, ConfigTelegram, host_do_env};
-use worker::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
-use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao};
-use worker::execucao::{Codigo, Falha, concluir, rodar};
-use worker::fonte::{FakeFonte, FonteOfertas};
+use worker::aws::{ConfigAws, ContextoAws, PublicadorS3, RedirectsKvs};
+use worker::ciclo;
+use worker::conversao::Rejeicao;
+use worker::fonte::{FonteOfertas, fake_demo};
 use worker::geracao::{Relatorio, contar_paginas, gerar};
-use worker::logs::{arquivo_do_dia, limpar_antigos};
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::plano::publicar;
 use worker::publicador::PublicadorLocal;
 use worker::redirects::RedirectsMemoria;
 use worker::site::ConfigSite;
-use worker::telegram::TelegramHttp;
-use worker::trava::Trava;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
@@ -54,7 +43,7 @@ struct Args {
     #[arg(
         long,
         env = "BESAVE_MAPEAMENTO",
-        default_value = "../../packages/contract/mapeamento.json"
+        default_value = ciclo::MAPEAMENTO_PADRAO
     )]
     mapeamento: PathBuf,
     /// Raiz das imagens do robô: `{dir}/{id}/{id}[-small].webp`. Obrigatória com `--gerar` e
@@ -70,69 +59,27 @@ struct Args {
     env_file: Option<PathBuf>,
 }
 
-/// Erros do `--ciclo` fora de `gerar()`; o nome da variante vai para o alerta.
-#[derive(Debug, thiserror::Error)]
-enum ErroCiclo {
-    #[error("--env-file {caminho}: {erro}")]
-    EnvFile { caminho: String, erro: String },
-    #[error("{0} ausente: defina LOCALAPPDATA ou {0}")]
-    PastaAusente(&'static str),
-    #[error("BESAVE_IMAGENS_DIR (ou --imagens-dir) é obrigatória com --ciclo")]
-    ImagensAusente,
-    #[error("BESAVE_FONTE inválida: {0} (use oracle ou fake)")]
-    FonteInvalida(String),
-}
-
-/// `--env-file` direto do `argv`: precisa estar no ambiente antes do `clap` ler os `env =`.
-fn env_file_do_argv() -> Option<PathBuf> {
-    let mut args = std::env::args_os().skip(1);
-    while let Some(a) = args.next() {
-        if a == "--" {
-            break;
-        }
-        if a == "--env-file" {
-            return args.next().map(PathBuf::from);
-        }
-        if let Some(v) = a.to_str().and_then(|s| s.strip_prefix("--env-file=")) {
-            return Some(PathBuf::from(v));
-        }
-    }
-    None
-}
-
-/// Texto do erro do `.env` sem o conteúdo da linha: o `LineParse` do `dotenvy` ecoa a linha,
-/// que pode ter token ou senha.
-fn erro_env_file(e: &dotenvy::Error) -> String {
-    match e {
-        dotenvy::Error::LineParse(_, pos) => {
-            format!("linha malformada (posição {pos}); caminhos do Windows vão entre aspas simples")
-        }
-        dotenvy::Error::Io(io) => io.to_string(),
-        dotenvy::Error::EnvVar(v) => v.to_string(),
-        _ => "erro ao ler o arquivo".to_owned(),
-    }
-}
-
 fn main() -> ExitCode {
-    // Antes de qualquer thread: `dotenvy` usa `set_var`. Não sobrescreve o que já está definido.
-    let carga = env_file_do_argv().map(|p| {
-        dotenvy::from_path(&p)
-            .map(|_| ())
-            .map_err(|e| ErroCiclo::EnvFile {
-                caminho: p.display().to_string(),
-                erro: erro_env_file(&e),
-            })
-    });
+    // Antes de qualquer thread: `dotenvy` usa `set_var`. `.env` antes do `clap`, que lê os
+    // `env =`; não sobrescreve o que já está definido.
+    let previa =
+        ciclo::env_file_dos_args(std::env::args_os().skip(1)).map(|p| ciclo::carregar_env_file(&p));
     let args = Args::parse();
     if args.ciclo {
-        return ExitCode::from(ciclo(&args, carga).valor());
+        let op = ciclo::Opcoes {
+            mapeamento: args.mapeamento,
+            imagens_dir: args.imagens_dir,
+            stderr: true,
+            ao_publicar: Some(&imprimir_publicacao),
+        };
+        return ExitCode::from(ciclo::executar(&op, previa).valor());
     }
     tracing_subscriber::fmt()
-        .with_env_filter(filtro())
+        .with_env_filter(ciclo::filtro())
         .with_writer(std::io::stderr)
         .with_ansi(std::io::stderr().is_terminal())
         .init();
-    let r = match carga {
+    let r = match previa {
         Some(Err(e)) => Err(e.into()),
         _ => executar(args),
     };
@@ -143,10 +90,6 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-fn filtro() -> EnvFilter {
-    EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into())
 }
 
 fn executar(args: Args) -> Result<()> {
@@ -226,182 +169,16 @@ fn publicar_aws(
             println!("{linha}");
         }
     }
-    imprimir_publicacao(&pb.relatorio, inicio);
+    imprimir_publicacao(&pb.relatorio, inicio.elapsed());
     Ok(())
 }
 
-fn imprimir_publicacao(rel: &Relatorio, inicio: Instant) {
+fn imprimir_publicacao(rel: &Relatorio, tempo: Duration) {
     imprimir_relatorio(rel);
     println!("redirects_put: {}", rel.redirects.puts);
     println!("redirects_del: {}", rel.redirects.dels);
     println!("redirects_total: {}", rel.redirects.total);
-    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
-}
-
-/// Pastas do `--ciclo`: `BESAVE_LOG_DIR`/`BESAVE_LOCK` ou `%LOCALAPPDATA%\besave\…`.
-struct Pastas {
-    logs: PathBuf,
-    trava: PathBuf,
-    alerta: PathBuf,
-}
-
-fn pastas() -> Result<Pastas, ErroCiclo> {
-    let var = |k| {
-        std::env::var_os(k)
-            .filter(|v: &OsString| !v.is_empty())
-            .map(PathBuf::from)
-    };
-    let base = var("LOCALAPPDATA").map(|d| d.join("besave"));
-    let logs = var("BESAVE_LOG_DIR")
-        .or_else(|| base.as_ref().map(|b| b.join("logs")))
-        .ok_or(ErroCiclo::PastaAusente("BESAVE_LOG_DIR"))?;
-    let trava = var("BESAVE_LOCK")
-        .or_else(|| base.as_ref().map(|b| b.join("worker.lock")))
-        .ok_or(ErroCiclo::PastaAusente("BESAVE_LOCK"))?;
-    let alerta = match &base {
-        Some(b) => b.join("alerta.json"),
-        None => trava.with_file_name("alerta.json"),
-    };
-    Ok(Pastas {
-        logs,
-        trava,
-        alerta,
-    })
-}
-
-/// stderr + arquivo do dia (sem ANSI). Devolve o erro de abertura do arquivo, se houve.
-fn iniciar_log(dir: Option<&Path>, agora: i64) -> Option<std::io::Error> {
-    let arquivo = dir.map(|d| {
-        std::fs::create_dir_all(d).and_then(|()| {
-            File::options()
-                .create(true)
-                .append(true)
-                .open(arquivo_do_dia(d, agora))
-        })
-    });
-    let (camada, erro) = match arquivo {
-        Some(Ok(f)) => (
-            Some(
-                tracing_subscriber::fmt::layer()
-                    .with_ansi(false)
-                    .with_writer(Mutex::new(f)),
-            ),
-            None,
-        ),
-        Some(Err(e)) => (None, Some(e)),
-        None => (None, None),
-    };
-    tracing_subscriber::registry()
-        .with(filtro())
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_writer(std::io::stderr)
-                .with_ansi(std::io::stderr().is_terminal()),
-        )
-        .with(camada)
-        .init();
-    erro
-}
-
-/// `--ciclo`: trava, retenção de logs, `--publicar --sim`, relatório e alerta.
-fn ciclo(args: &Args, carga: Option<Result<(), ErroCiclo>>) -> Codigo {
-    let inicio = Instant::now();
-    let agora = agora().unwrap_or(0);
-    let pastas = pastas();
-    if let Some(e) = iniciar_log(pastas.as_ref().ok().map(|p| p.logs.as_path()), agora) {
-        warn!(erro = %e, "log em arquivo indisponível; seguindo só com stderr");
-    }
-    let pastas = match pastas {
-        Ok(p) => p,
-        Err(e) => return concluir(Err(Falha::config("config", &e)), None, agora),
-    };
-    let telegram = match ConfigTelegram::do_env() {
-        Err(e) => return concluir(Err(Falha::config("config", &e)), None, agora),
-        Ok(None) => {
-            info!("alerta desligado: TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID ausentes");
-            None
-        }
-        Ok(Some(cfg)) => match TelegramHttp::new(cfg) {
-            Ok(t) => Some(t),
-            Err(e) => {
-                warn!(erro = %e, "alerta indisponível: cliente do Telegram não iniciou");
-                None
-            }
-        },
-    };
-    let alertas = telegram
-        .as_ref()
-        .map(|t| Alertas::new(t, pastas.alerta.clone(), host_do_env()));
-    let alertas = alertas.as_ref();
-    if let Some(Err(e)) = carga {
-        return concluir(Err(Falha::config("env_file", &e)), alertas, agora);
-    }
-    let trava = match Trava::adquirir(&pastas.trava, agora) {
-        Ok(Some(t)) => t,
-        Ok(None) => {
-            info!("ciclo anterior em andamento; este foi pulado");
-            return Codigo::Ok;
-        }
-        Err(e) => return concluir(Err(Falha::execucao("trava", &e)), alertas, agora),
-    };
-    match limpar_antigos(&pastas.logs, agora) {
-        Ok(removidos) => {
-            for p in removidos {
-                info!(arquivo = %p.display(), "log antigo removido");
-            }
-        }
-        Err(e) => warn!(erro = %e, "limpando logs antigos"),
-    }
-    let resultado = executar_ciclo(args, agora).map(|rel| {
-        imprimir_publicacao(&rel, inicio);
-        let ms = u64::try_from(inicio.elapsed().as_millis()).unwrap_or(u64::MAX);
-        (rel, ms)
-    });
-    let codigo = concluir(resultado, alertas, agora);
-    drop(trava);
-    codigo
-}
-
-/// Configuração (código 2 se faltar), fonte e destino; depois o mesmo `gerar()` do
-/// `--publicar --sim`.
-fn executar_ciclo(args: &Args, agora: i64) -> Result<Relatorio, Falha> {
-    let m = Mapeamento::carregar(&args.mapeamento).map_err(|e| Falha::config("config", &e))?;
-    let aws = ConfigAws::do_env().map_err(|e| Falha::config("config", &e))?;
-    let dir_imagens = args
-        .imagens_dir
-        .clone()
-        .ok_or_else(|| Falha::config("config", &ErroCiclo::ImagensAusente))?;
-    let site = ConfigSite::do_env().map_err(|e| Falha::config("config", &e))?;
-    let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
-        Ok("fake") => Box::new(fake_demo(agora)),
-        Ok("oracle") | Err(_) => {
-            let cfg = ConfigOracle::do_env().map_err(|e| Falha::config("config", &e))?;
-            Box::new(
-                OracleFonte::conectar(&cfg).map_err(|e| Falha::execucao("conexao_oracle", &e))?,
-            )
-        }
-        Ok(outra) => {
-            return Err(Falha::config(
-                "config",
-                &ErroCiclo::FonteInvalida(outra.to_owned()),
-            ));
-        }
-    };
-    let ctx = ContextoAws::carregar().map_err(|e| match e {
-        ErroAws::RegiaoAusente | ErroAws::ConfigAusente(_) => Falha::config("contexto_aws", &e),
-        ErroAws::Runtime(_) => Falha::execucao("contexto_aws", &e),
-    })?;
-    let mut pub_ = PublicadorS3::new(&ctx, &aws.bucket);
-    let mut kvs = RedirectsKvs::new(&ctx, &aws.kvs_arn);
-    rodar(
-        fonte.as_ref(),
-        &m,
-        &mut pub_,
-        &mut kvs,
-        &dir_imagens,
-        &site,
-        agora,
-    )
+    println!("tempo: {:.2}s", tempo.as_secs_f64());
 }
 
 fn gerar_em(
@@ -508,118 +285,4 @@ fn imprimir_contagens(lidas: u64, validas: u64, rejeitadas: &BTreeMap<Rejeicao, 
 fn agora() -> Result<i64> {
     let s = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(i64::try_from(s)?)
-}
-
-/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição
-/// e uma inativa há 8 dias (fora da fonte).
-fn fake_demo(agora: i64) -> FakeFonte {
-    const DIA: i64 = 86_400;
-    let ok = |id, id_produto, loja: &str, titulo: &str, de, por, area: &str, publico: &str| {
-        LinhaOferta {
-            id,
-            id_produto: Some(id_produto),
-            loja: Some(loja.into()),
-            titulo: Some(titulo.into()),
-            preco_de: de,
-            preco_por: Some(por),
-            dt_oferta: Some(agora - DIA),
-            area: Some(area.into()),
-            publico: Some(publico.into()),
-            ativo: true,
-            url_afiliado: format!("https://loja.example/{id}"),
-            ..Default::default()
-        }
-    };
-    let base = ok(1000, 1, "Amazon", "Base", None, 10.0, "Tech", "U");
-    let ofertas = vec![
-        LinhaOferta {
-            cupom: Some("besave10".into()),
-            ..ok(
-                5412,
-                910,
-                "Amazon",
-                "Fone Bluetooth XYZ com ANC",
-                Some(299.9),
-                199.9,
-                "Tecnologia",
-                "Unissex",
-            )
-        },
-        ok(
-            5413,
-            911,
-            "Shopee",
-            "Kit Skincare Vitamina C 3 passos",
-            None,
-            89.9,
-            "Elas",
-            "Mulher",
-        ),
-        LinhaOferta {
-            ativo: false,
-            dt_desativacao: Some(agora - DIA),
-            ..ok(
-                5420,
-                912,
-                "MercadoLivre",
-                "Ração Premium Cães Adultos 15kg",
-                Some(249.0),
-                199.0,
-                "Pet",
-                "U",
-            )
-        },
-        LinhaOferta {
-            id: 1001,
-            preco_por: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1002,
-            titulo: Some("  ".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1003,
-            loja: Some("Americanas".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1004,
-            area: Some("Moda".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1005,
-            publico: Some("Adulto".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1006,
-            dt_oferta: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1007,
-            id_produto: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1008,
-            ativo: false,
-            dt_desativacao: Some(agora - 8 * DIA),
-            ..base
-        },
-    ];
-    let produtos = vec![LinhaProduto {
-        id_produto: 910,
-        descricao: Some(
-            "Fone over-ear com cancelamento ativo de ruído e 40 horas de bateria.".into(),
-        ),
-        marca: Some("XYZ".into()),
-        preco_min: Some(179.9),
-        preco_max: Some(349.9),
-        ..Default::default()
-    }];
-    FakeFonte::new(ofertas, produtos, agora)
 }

@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; `docs/specs/BSV-14.md` fixa o comportamento; decisões em `spec.md` → Assumptions)
-**Status**: Done
+**Status**: In Progress
 
 ---
 
@@ -41,7 +41,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-8 tarefas (T8 = correção do Verifier), um lote: execução inline, sem sub-agentes.
+10 tarefas (T8 = correção do Verifier; T9–T10 = ajuste do dono), execução inline, sem sub-agentes.
 
 ### Phase 1: Blocos
 
@@ -52,7 +52,7 @@ T1 → T2 → T3 → T4
 ### Phase 2: Integração
 
 ```
-T4 → T5 → T6 → T7 → T8
+T4 → T5 → T6 → T7 → T8 → T9 → T10
 ```
 
 ---
@@ -212,4 +212,43 @@ T4 → T5 → T6 → T7 → T8
 - [x] Gate build passa
 
 **Tests**: integration
+**Gate**: build
+
+---
+
+### T9: `besave-ciclo` sem console (ajuste do dono)
+
+**What**: caminho do `--ciclo` movido para `ciclo::executar` na lib (`Opcoes { stderr, ao_publicar }`); `fake_demo` em `fonte.rs`; `src/bin/besave-ciclo.rs` com `windows_subsystem = "windows"`; destino local + relógio fixo para o teste.
+**Where**: `apps/worker/src/ciclo.rs`, `apps/worker/src/bin/besave-ciclo.rs`, `apps/worker/src/main.rs`, `apps/worker/src/fonte.rs`
+**Depends on**: T8
+**Reuses**: `execucao`, `trava`, `logs`, `alerta`, `telegram`
+**Requirement**: CIC-06, CIC-07
+
+**Done when**:
+
+- [x] Mesma linha `relatorio` (sem `t_*`/`tempo_ms`) nos dois binários, fonte fake, destino local
+- [x] `besave-ciclo` sem stdout/stderr; argumento inválido → 2
+- [x] `BESAVE_AGORA` ignorado sem destino local
+- [x] Gate build passa
+
+**Tests**: integration
+**Gate**: build
+
+---
+
+### T10: Agendador aponta para `besave-ciclo.exe`; README
+
+**What**: `registrar-tarefa.ps1` recebe o `besave-ciclo.exe`; README atualizado.
+**Where**: `apps/worker/scripts/registrar-tarefa.ps1`, `apps/worker/README.md`
+**Depends on**: T9
+**Reuses**: nenhum
+**Requirement**: AGD-01, AGD-03
+
+**Done when**:
+
+- [ ] Script aceita/recomenda `besave-ciclo.exe` e avisa se receber `besave-worker.exe`
+- [ ] README: dois binários, sem janela, `BESAVE_DESTINO_LOCAL`/`BESAVE_AGORA`
+- [ ] Gate build passa
+
+**Tests**: none
 **Gate**: build

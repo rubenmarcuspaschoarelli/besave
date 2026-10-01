@@ -37,9 +37,14 @@ fn env_file(dir: &Path, extra: &str) -> PathBuf {
     p
 }
 
-/// Ambiente limpo das variáveis do worker; `LOCALAPPDATA` aponta para `local`.
+/// `besave-worker` com o ambiente de `comando_de`.
 fn comando(local: &Path) -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_besave-worker"));
+    comando_de(env!("CARGO_BIN_EXE_besave-worker"), local)
+}
+
+/// Ambiente limpo das variáveis do worker; `LOCALAPPDATA` aponta para `local`.
+fn comando_de(exe: &str, local: &Path) -> Command {
+    let mut c = Command::new(exe);
     c.current_dir(env!("CARGO_MANIFEST_DIR"))
         .env("LOCALAPPDATA", local)
         .env("RUST_LOG", "info");
@@ -54,6 +59,8 @@ fn comando(local: &Path) -> Command {
         "BESAVE_ORACLE_DSN",
         "BESAVE_ORACLE_USER",
         "BESAVE_ORACLE_PASS",
+        "BESAVE_DESTINO_LOCAL",
+        "BESAVE_AGORA",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
     ] {
@@ -222,4 +229,92 @@ fn env_file_malformado_sai_com_2_sem_ecoar_a_linha() {
     let log = logs(&local);
     assert!(log.contains("fase=env_file"), "{log}");
     assert!(!log.contains("SEGREDO"), "{log}");
+}
+
+/// Linha `relatorio` do log, sem as medições de tempo (`t_*`, `tempo_ms`).
+fn relatorio_estavel(local: &Path) -> String {
+    let log = logs(local);
+    let linhas: Vec<&str> = log.lines().filter(|l| l.contains(" relatorio ")).collect();
+    assert_eq!(linhas.len(), 1, "{log}");
+    let pares = linhas[0].split_once(" relatorio ").unwrap().1;
+    pares
+        .split(' ')
+        .filter(|p| !p.starts_with("t_") && !p.starts_with("tempo_ms="))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// CIC-06: `besave-ciclo` e `besave-worker --ciclo` dão a mesma linha de relatório para a mesma
+/// fonte fake; o `besave-ciclo` não escreve nada em stdout nem stderr. Destino local
+/// (`BESAVE_DESTINO_LOCAL`, CIC-07): sem AWS; `BESAVE_AGORA` fixa o relógio da fonte fake.
+#[test]
+fn besave_ciclo_e_ciclo_dao_o_mesmo_relatorio() {
+    let rodar = |exe: &str, args: &[&str], nome: &str| {
+        let local = dir_temp(nome);
+        let extra = format!(
+            "BESAVE_FONTE=fake\nBESAVE_DESTINO_LOCAL='{}'\nBESAVE_AGORA=1790000000\n",
+            local.join("saida").display()
+        );
+        let env = env_file(&local, &extra);
+        let out = comando_de(exe, &local)
+            .args(args)
+            .arg("--env-file")
+            .arg(&env)
+            .output()
+            .unwrap();
+        (local, out)
+    };
+    let (local_w, out_w) = rodar(
+        env!("CARGO_BIN_EXE_besave-worker"),
+        &["--ciclo"],
+        "rel-worker",
+    );
+    let (local_c, out_c) = rodar(env!("CARGO_BIN_EXE_besave-ciclo"), &[], "rel-ciclo");
+    assert_eq!(out_w.status.code(), Some(0), "{}", texto(&out_w));
+    assert_eq!(out_c.status.code(), Some(0), "{}", texto(&out_c));
+    assert!(out_c.stdout.is_empty(), "{}", texto(&out_c));
+    assert!(out_c.stderr.is_empty(), "{}", texto(&out_c));
+    let rel_w = relatorio_estavel(&local_w);
+    assert!(rel_w.contains("lidas=10 validas=3 rejeitadas=7"), "{rel_w}");
+    assert_eq!(relatorio_estavel(&local_c), rel_w);
+    assert!(local_c.join("saida").join("manifest.json").exists());
+}
+
+/// CIC-06: argumento desconhecido no `besave-ciclo` → código 2, registrado só no log.
+#[test]
+fn besave_ciclo_argumento_invalido_sai_com_2() {
+    let local = dir_temp("ciclo-arg");
+    let out = comando_de(env!("CARGO_BIN_EXE_besave-ciclo"), &local)
+        .arg("--publicar")
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
+    assert!(out.stdout.is_empty(), "{}", texto(&out));
+    assert!(out.stderr.is_empty(), "{}", texto(&out));
+    let log = logs(&local);
+    assert!(
+        log.lines()
+            .any(|l| l.contains("ERROR") && l.contains("variante=Argumento")),
+        "{log}"
+    );
+}
+
+/// CIC-07: `BESAVE_AGORA` só vale com `BESAVE_DESTINO_LOCAL`; sem ele, o relógio é o do
+/// sistema (o arquivo de log não é o de 2026-09-21).
+#[test]
+fn agora_fixo_ignorado_sem_destino_local() {
+    let local = dir_temp("agora-ignorado");
+    let env = env_file(&local, "BESAVE_FONTE=invalida\nBESAVE_AGORA=1790000000\n");
+    let out = comando(&local)
+        .args(["--ciclo", "--env-file"])
+        .arg(&env)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
+    let nomes: Vec<String> = std::fs::read_dir(local.join("besave").join("logs"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(nomes.len(), 1);
+    assert_ne!(nomes[0], "besave-worker.2026-09-21.log");
 }
