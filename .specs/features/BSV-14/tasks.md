@@ -148,10 +148,10 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Fonte fake que erra → código 1, `ERROR` com `fase=leitura_fonte`, 1 envio; repetição < 2 h → 0; sucesso → 1 "recuperado"
-- [ ] Sucesso → linha `relatorio` com `chave=valor`
-- [ ] Telegram falhando → mesmo código e `WARN`
-- [ ] Gate quick passa
+- [x] Fonte fake que erra → código 1, `ERROR` com `fase=leitura_fonte`, 1 envio; repetição < 2 h → 0; sucesso → 1 "recuperado"
+- [x] Sucesso → linha `relatorio` com `chave=valor`
+- [x] Telegram falhando → mesmo código e `WARN`
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
