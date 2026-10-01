@@ -3,6 +3,7 @@
 //! Nada em stdout/stderr: só o log em arquivo e o código de saída (0, 1, 2).
 #![windows_subsystem = "windows"]
 
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 use worker::ciclo::{self, ErroCiclo, Opcoes};
@@ -10,12 +11,21 @@ use worker::ciclo::{self, ErroCiclo, Opcoes};
 fn main() -> ExitCode {
     // Antes de qualquer thread: `dotenvy` usa `set_var`.
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    let previa = match args.as_slice() {
-        [] => None,
-        [_, _] | [_] => ciclo::env_file_dos_args(args.iter().cloned())
-            .map(|p| ciclo::carregar_env_file(&p))
-            .or_else(|| Some(Err(argumento(&args)))),
-        _ => Some(Err(argumento(&args))),
+    // Só: nada, `--env-file <arq>` ou `--env-file=<arq>`. Qualquer outra coisa → código 2.
+    let env_file = match args.as_slice() {
+        [] => Ok(None),
+        [opcao, arq] if opcao == "--env-file" => Ok(Some(PathBuf::from(arq))),
+        [a] => a
+            .to_str()
+            .and_then(|s| s.strip_prefix("--env-file="))
+            .map(|arq| Some(PathBuf::from(arq)))
+            .ok_or_else(|| argumento(&args)),
+        _ => Err(argumento(&args)),
+    };
+    let previa = match env_file {
+        Ok(None) => None,
+        Ok(Some(p)) => Some(ciclo::carregar_env_file(&p)),
+        Err(e) => Some(Err(e)),
     };
     ExitCode::from(ciclo::executar(&Opcoes::do_env(), previa).valor())
 }

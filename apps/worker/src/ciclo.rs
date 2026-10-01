@@ -309,6 +309,7 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
     let fonte = fonte.as_ref();
     match destino {
         Destino::Local(dir) => {
+            warn!(pasta = %dir.display(), "BESAVE_DESTINO_LOCAL definida: publicando na pasta, não no S3");
             let mut pub_ = PublicadorLocal::new(&dir);
             let mut kvs = RedirectsMemoria::new();
             rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)

@@ -280,6 +280,14 @@ fn besave_ciclo_e_ciclo_dao_o_mesmo_relatorio() {
     let stdout_w = String::from_utf8_lossy(&out_w.stdout);
     assert!(stdout_w.contains("lidas: 10\n"), "{}", texto(&out_w));
     assert!(stdout_w.contains("validas: 3\n"), "{}", texto(&out_w));
+    // Destino local nunca passa calado: `WARN` no log.
+    let log_c = logs(&local_c);
+    assert!(
+        log_c
+            .lines()
+            .any(|l| l.contains("WARN") && l.contains("BESAVE_DESTINO_LOCAL")),
+        "{log_c}"
+    );
     let rel_w = relatorio_estavel(&local_w);
     assert!(rel_w.contains("lidas=10 validas=3 rejeitadas=7"), "{rel_w}");
     assert_eq!(relatorio_estavel(&local_c), rel_w);
@@ -299,6 +307,14 @@ fn besave_ciclo_argumento_invalido_sai_com_2() {
                 "x.env".to_owned(),
                 "--sim".to_owned(),
             ],
+        ),
+        (
+            "ciclo-arg-igual",
+            vec!["--env-file=x.env".to_owned(), "--sim".to_owned()],
+        ),
+        (
+            "ciclo-arg-antes",
+            vec!["--sim".to_owned(), "--env-file=x.env".to_owned()],
         ),
     ] {
         let local = dir_temp(nome);
