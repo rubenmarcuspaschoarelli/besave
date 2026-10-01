@@ -5,9 +5,11 @@
 **Diff range**: `e24a757..29f3d18` (99e45a7, 7211ffb, e338c5e, 29f3d18)
 **Verifier**: independent sub-agent (author ≠ verifier)
 
-**Verdict**: FAIL
+**Verdict (current, round 2 at `3d06caf`)**: FAIL. All 22 ACs are now covered and every AC-level mutant
+is killed. Two survivors remain in the round-2 hardening code: N7 (`from None`) and T12/T13 (`output_file_mode`).
+Each needs a one-line assertion. See "Round 2" at the end.
 
-Two surviving mutants (AVI-05 recovery state, VER-04 "status ≠ 200") mean the tests do not pin down those
+Round 1 verdict was FAIL. Two surviving mutants (AVI-05 recovery state, VER-04 "status ≠ 200") mean the tests do not pin down those
 spec outcomes. Both fixes are test-only and small. The code behaves as the spec says. Owner's real run is still pending (merge blocker).
 
 ---
@@ -181,3 +183,70 @@ I confirmed that the TF kills are assertion failures, for example "grupo de log 
 **Gate**: all green
 
 **Next steps**: Fix 1-3 → re-verify; then the owner's real run (SSM params, `plan` only `to add`, `apply`, `lambda invoke`, 40-min outage) before merge.
+
+---
+
+## Round 2 (fix commit `3d06caf`)
+
+**Diff range**: `82aa7ab..3d06caf` (whole feature: `e24a757..3d06caf`)
+
+### Gate
+In `infra/`:
+- `terraform fmt -check -recursive`: exit 0.
+- `terraform validate`: Success.
+- `terraform test`: 9 passed, 0 failed.
+- `python -m unittest discover -s lambdas/vigia`: 35 OK (+3).
+- `npm test`: 14 pass.
+- No test removed or weakened.
+
+### Round-1 gaps
+| Gap | Evidence | Status |
+| --- | -------- | ------ |
+| 1. AVI-05 recovery state | `infra/lambdas/vigia/test_handler.py:136-138` `assertEqual(c.s3.estado(), {"situacao": "ok", "desde": "2026-10-01T18:30:00Z", "ultimo_aviso": "2026-10-01T18:30:00Z"})` | ✅ Closed (M15 killed) |
+| 2. VER-04 status ≠ 200 | `infra/lambdas/vigia/test_handler.py:190-194` 204 → `"HTTP 204"`, 500 → `"HTTP 500"` | ✅ Closed (M9, M9b killed) |
+| 3. tasks.md T3 | `.specs/features/BSV-15/tasks.md` Status `Done`, T3 boxes ticked | ✅ Closed |
+| R2. ARN in logs | `infra/lambdas/vigia/handler.py:168-179` PutObject → `"falha_estado"` + log of the code only; `:118-120` unexpected GetObject → `RuntimeError(f"...{codigo}") from None`; tests `test_handler.py:273-288`, `:290-304` | ⚠️ Mostly closed (N7 survives) |
+| R3. zip mode | `infra/vigia.tf:24` `output_file_mode = "0644"` | ⚠️ Implemented but not asserted (T12/T13 survive) |
+| R1 | accepted by the owner as is | — |
+
+AVI-05 and VER-04 now match the spec-defined outcome, so 22/22 ACs are spec-anchored.
+
+### Discrimination sensor (round 2)
+Ran in a fresh scratch worktree (detached `3d06caf`) with `.terraform` copied in. Every mutant was applied and then the original file was restored.
+The unmutated scratch was green before the run. Afterwards the scratch was removed and pruned, and the real tree's `git status --porcelain` was empty before and after.
+
+| # | File:line | Mutation | Result |
+| - | --------- | -------- | ------ |
+| M9 | `handler.py:102` | `status != 200` → `status >= 400` | ✅ Killed |
+| M9b | `handler.py:102` | accept 204 | ✅ Killed |
+| M15 | `handler.py:150` | recovery state keeps old `desde`/`ultimo_aviso` | ✅ Killed |
+| N1 | `handler.py:179` | PutObject failure returns `"avisado"` | ✅ Killed |
+| N2 | `handler.py:179` | PutObject failure re-raises | ✅ Killed |
+| N3 | `handler.py:178` | PutObject failure logs `e` (message with ARN) | ✅ Killed |
+| N4 | `handler.py:178` | PutObject failure not logged | ✅ Killed |
+| N5 | `handler.py:120` | `RuntimeError` message includes `str(e)` | ✅ Killed |
+| N6 | `handler.py:120` | `from None` → `from e` | ✅ Killed |
+| N7 | `handler.py:120` | `from None` removed (implicit `__context__` chaining) | ❌ Survived |
+| N8 | `handler.py:120` | unexpected GetObject error swallowed as `{}` | ✅ Killed |
+| N9 | `handler.py:119` | GetObject failure logs `e` | ✅ Killed |
+| T12 | `vigia.tf:24` | `output_file_mode` removed | ❌ Survived |
+| T13 | `vigia.tf:24` | `output_file_mode = "0666"` | ❌ Survived |
+
+**Result**: 11/14 killed, 3 survived → FAIL
+
+Why they survive:
+- **N7**: `test_handler.py:304` asserts only `__cause__ is None`. Without `from None`, `__cause__` is still `None`, but `__context__` holds the botocore `ClientError` and is no longer suppressed. A standard traceback would print it ("During handling of the above exception…"), message and ARN included.
+  Whether the Lambda Python runtime prints the chained context is **uncertain**: I could not fetch the `awslambdaric` source offline. If the runtime does not print it, the mutant is equivalent in production. The test still does not guard what it claims to guard.
+- **T12/T13**: `infra/tests/vigia.tftest.hcl` has no assertion on `data.archive_file.vigia.output_file_mode`.
+
+### Fix plans (round 2)
+- **Fix 5 (Minor)**:
+  - Change: in `test_erro_inesperado_ao_ler_estado_nao_vaza_mensagem` (`test_handler.py:304`), add `self.assertTrue(ctx.exception.__suppress_context__)`. An alternative that checks the rendered output is `self.assertNotIn("arn:", "".join(traceback.format_exception(ctx.exception)))`.
+  - Done when: N7 is killed.
+- **Fix 6 (Minor)**:
+  - Change: in `infra/tests/vigia.tftest.hcl` (`run "vigia"`), add `assert { condition = data.archive_file.vigia.output_file_mode == "0644" ... }`.
+  - Done when: T12/T13 are killed.
+
+### Round 2 verdict
+FAIL. Both fixes are test-only and one line each. All spec ACs pass, and the implementation is unchanged by these fixes.
+After them, round 3 is the last allowed iteration. The owner's real run (SSM params, `plan` only `to add`, `apply`, `lambda invoke`, 40-min outage) still blocks the merge.
