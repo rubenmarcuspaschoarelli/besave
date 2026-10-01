@@ -458,3 +458,57 @@ fn motivo_texto_e_traco_no_modo_indice() {
     assert_eq!(r.redirects.modo, ModoRedirects::Indice);
     assert_eq!(r.redirects.motivo_texto(), "-");
 }
+
+/// Ajuste do dono (30/09): `aplicar` usa o `ETag` lido em `carregar_base`. KVS alterada entre a
+/// leitura e a escrita → `Concorrencia`, nada aplicado, índice e manifest não gravados; o ciclo
+/// seguinte reconstrói (`etag_divergente`) e publica.
+#[test]
+fn kvs_alterada_entre_leitura_e_escrita_e_concorrencia() {
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar(&linhas(1001..=1003), &mut p, &mut kvs).unwrap();
+    let antes = kvs.listar().unwrap();
+    let indice_antes = p.ler(INDICE).unwrap();
+    let aplicados = kvs.aplicados().len();
+    let marca = p.gravacoes().len();
+
+    let mut kvs = kvs.com_escrita_concorrente();
+    let erro = rodar(&linhas(1001..=1004), &mut p, &mut kvs).unwrap_err();
+    assert!(
+        matches!(
+            &erro,
+            ErroGeracao::Redirects(ErroRedirects::Concorrencia { .. })
+        ),
+        "{erro:?}"
+    );
+    assert_eq!(
+        kvs.aplicados().len(),
+        aplicados,
+        "diff aplicado com ETag velho"
+    );
+    assert_eq!(kvs.listar().unwrap(), antes);
+    assert_eq!(p.ler(INDICE).unwrap(), indice_antes);
+    let depois = gravadas(&p, marca);
+    assert!(
+        depois
+            .iter()
+            .all(|c| c != INDICE && !c.starts_with("manifest")),
+        "{depois:?}"
+    );
+
+    let r = rodar(&linhas(1001..=1004), &mut p, &mut kvs).unwrap();
+    assert_eq!(r.redirects.motivo, Some(MotivoReconstrucao::EtagDivergente));
+    assert!(kvs.listar().unwrap().contains_key(&1004));
+}
+
+/// Ajuste do dono (30/09): com diff, o ciclo faz 1 `descrever` (em `carregar_base`), não 2.
+#[test]
+fn ciclo_com_diff_descreve_a_kvs_uma_vez() {
+    let mut p = PublicadorMemoria::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar(&linhas(1001..=1003), &mut p, &mut kvs).unwrap();
+    let descrever = kvs.descrever_chamadas();
+    let r = rodar(&linhas(1001..=1004), &mut p, &mut kvs).unwrap();
+    assert_eq!(r.redirects.puts, 1);
+    assert_eq!(kvs.descrever_chamadas() - descrever, 1);
+}

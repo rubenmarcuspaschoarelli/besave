@@ -264,6 +264,10 @@ continua valendo.
   - **Modo `reconstrucao`:** índice ausente, ilegível ou KVS alterada por fora. `WARN` com o motivo
     (`indice_ausente`, `indice_ilegivel`, `etag_divergente`, `item_count_divergente`), um
     `ListKeys` completo, diff e índice reconstruído.
+  - O diff vai com `If-Match` do `ETag` lido no início do ciclo (sem `DescribeKeyValueStore` extra;
+    os lotes seguintes encadeiam o `ETag` devolvido). KVS alterada nesse meio-tempo →
+    `ConflictException` → erro `Concorrencia`: o ciclo aborta antes do índice e do manifest, e o
+    seguinte reconstrói.
   - Depois do diff, o índice é gravado com o `ETag`/`ItemCount` da última `UpdateKeys`, só quando
     muda. Falha ao gravar o índice aborta antes do manifest; o ciclo seguinte reconstrói.
   - A saída traz `redirects_modo` e `redirects_motivo_reconstrucao` (`-` no modo `indice`). No

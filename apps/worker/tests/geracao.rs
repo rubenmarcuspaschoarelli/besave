@@ -428,11 +428,12 @@ impl Redirects for KvsComTempo {
     }
     fn aplicar(
         &mut self,
+        etag: &str,
         put: &[(i64, String)],
         del: &[i64],
     ) -> worker::redirects::Result<EstadoKvs> {
         self.1.borrow_mut().push("KVS".into());
-        self.0.aplicar(put, del)
+        self.0.aplicar(etag, put, del)
     }
 }
 

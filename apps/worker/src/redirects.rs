@@ -32,6 +32,10 @@ pub enum ErroRedirects {
         operacao: &'static str,
         fonte: String,
     },
+    /// A KVS mudou entre `carregar_base` e `aplicar` (`If-Match` recusado): nada foi aplicado
+    /// a partir do lote recusado; o ciclo aborta e o próximo reconstrói.
+    #[error("KVS alterada durante o ciclo (If-Match {etag} recusado): {fonte}")]
+    Concorrencia { etag: String, fonte: String },
     #[error("índice {CHAVE_INDICE}: {0}")]
     Indice(ErroPublicador),
     #[error("serializando {CHAVE_INDICE}: {0}")]
@@ -54,8 +58,9 @@ pub trait Redirects {
     fn listar(&self) -> Result<BTreeMap<i64, String>>;
     /// Estado atual, sem listar.
     fn descrever(&self) -> Result<EstadoKvs>;
-    /// Aplica o diff e devolve o estado depois da última escrita.
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs>;
+    /// Aplica o diff com `If-Match: etag` (o `ETag` lido no início do ciclo) e devolve o estado
+    /// depois da última escrita. `etag` desatualizado → `ErroRedirects::Concorrencia`.
+    fn aplicar(&mut self, etag: &str, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs>;
 }
 
 /// Caminho que o ciclo tomou (BSV-12c).
@@ -213,6 +218,7 @@ fn validar(ativos: &[(i64, String)]) -> Result<BTreeMap<i64, &str>> {
 fn aplicar_diff(
     alvo: &BTreeMap<i64, &str>,
     base: &BTreeMap<i64, String>,
+    etag: &str,
     kvs: &mut dyn Redirects,
 ) -> Result<(RelatorioRedirects, Option<EstadoKvs>)> {
     let put: Vec<(i64, String)> = alvo
@@ -226,7 +232,7 @@ fn aplicar_diff(
         .copied()
         .collect();
     let estado = if !put.is_empty() || !del.is_empty() {
-        Some(kvs.aplicar(&put, &del)?)
+        Some(kvs.aplicar(etag, &put, &del)?)
     } else {
         None
     };
@@ -255,8 +261,9 @@ pub fn sincronizar_redirects(
     kvs: &mut dyn Redirects,
 ) -> Result<RelatorioRedirects> {
     let alvo = validar(ativos)?;
+    let etag = kvs.descrever()?.etag;
     let base = hashes(kvs.listar()?);
-    Ok(aplicar_diff(&alvo, &base, kvs)?.0)
+    Ok(aplicar_diff(&alvo, &base, &etag, kvs)?.0)
 }
 
 /// Como `sincronizar_redirects`, mas contra `base` (de `carregar_base`), sem listar; depois grava
@@ -269,7 +276,7 @@ pub fn sincronizar_com_indice(
     pub_: &mut dyn Publicador,
 ) -> Result<RelatorioRedirects> {
     let alvo = validar(ativos)?;
-    let (mut rel, estado) = aplicar_diff(&alvo, &base.urls, kvs)?;
+    let (mut rel, estado) = aplicar_diff(&alvo, &base.urls, &base.estado.etag, kvs)?;
     let estado = estado.unwrap_or(base.estado);
     let indice = IndiceRedirects {
         kvs_item_count: estado.item_count,
@@ -339,6 +346,7 @@ pub struct RedirectsMemoria {
     chaves: BTreeMap<String, String>,
     aplicados: Vec<Aplicacao>,
     falhar: bool,
+    concorrente: bool,
     escritas: u64,
     etag_forcado: Option<String>,
     listar_chamadas: Cell<u64>,
@@ -363,6 +371,13 @@ impl RedirectsMemoria {
     /// Todo `aplicar` passa a falhar sem mudar o estado.
     pub fn falhando(mut self) -> Self {
         self.falhar = true;
+        self
+    }
+
+    /// O próximo `aplicar` encontra a KVS alterada por fora (escrita entre a leitura do `ETag` e
+    /// a `UpdateKeys`) e falha com `Concorrencia`.
+    pub fn com_escrita_concorrente(mut self) -> Self {
+        self.concorrente = true;
         self
     }
 
@@ -424,11 +439,20 @@ impl Redirects for RedirectsMemoria {
         Ok(self.estado())
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs> {
+    fn aplicar(&mut self, etag: &str, put: &[(i64, String)], del: &[i64]) -> Result<EstadoKvs> {
         if self.falhar {
             return Err(ErroRedirects::Kvs {
                 operacao: "aplicar",
                 fonte: "falha injetada".into(),
+            });
+        }
+        if std::mem::take(&mut self.concorrente) {
+            self.inserir_bruto("_concorrente", "x");
+        }
+        if etag != self.estado().etag {
+            return Err(ErroRedirects::Concorrencia {
+                etag: etag.to_owned(),
+                fonte: "ETag desatualizado".into(),
             });
         }
         for (id, url) in put {

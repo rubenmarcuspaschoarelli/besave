@@ -117,7 +117,13 @@ impl Redirects for RedirectsPlano<'_> {
         self.destino.descrever()
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<EstadoKvs> {
+    fn aplicar(
+        &mut self,
+        // Plano não escreve: não há `If-Match` a checar.
+        _etag: &str,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> redirects::Result<EstadoKvs> {
         self.ops
             .extend(put.iter().map(|(id, url)| Operacao::PutKey {
                 id: *id,

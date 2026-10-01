@@ -56,11 +56,12 @@ impl Redirects for KvsEspiao {
     }
     fn aplicar(
         &mut self,
+        etag: &str,
         put: &[(i64, String)],
         del: &[i64],
     ) -> worker::redirects::Result<EstadoKvs> {
         self.aplicar += 1;
-        self.dentro.aplicar(put, del)
+        self.dentro.aplicar(etag, put, del)
     }
 }
 

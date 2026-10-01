@@ -226,7 +226,9 @@ fn memoria_expoe_item_count_e_etag_que_muda_a_cada_escrita() {
     let e0 = kvs.descrever().unwrap();
     assert_eq!(e0.item_count, 0);
 
-    let e1 = kvs.aplicar(&ativos(&[(1, "a"), (2, "b")]), &[]).unwrap();
+    let e1 = kvs
+        .aplicar(&e0.etag, &ativos(&[(1, "a"), (2, "b")]), &[])
+        .unwrap();
     assert_eq!(e1.item_count, 2);
     assert_ne!(e1.etag, e0.etag);
     assert_eq!(
@@ -240,7 +242,7 @@ fn memoria_expoe_item_count_e_etag_que_muda_a_cada_escrita() {
     assert_eq!(e2.item_count, 3, "chave não numérica conta no ItemCount");
     assert_ne!(e2.etag, e1.etag);
 
-    let e3 = kvs.aplicar(&[], &[1]).unwrap();
+    let e3 = kvs.aplicar(&e2.etag, &[], &[1]).unwrap();
     assert_eq!(e3.item_count, 2);
     assert!(![&e0.etag, &e1.etag, &e2.etag].contains(&&e3.etag));
 

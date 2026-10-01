@@ -389,9 +389,16 @@ impl Redirects for RedirectsKvs {
         })
     }
 
-    /// Um `UpdateKeys` por lote de `lotes_kvs` (puts e deletes juntos), encadeando o `ETag`
-    /// a partir de `DescribeKeyValueStore`. Devolve `ItemCount`/`ETag` da última `UpdateKeys`.
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<EstadoKvs> {
+    /// Um `UpdateKeys` por lote de `lotes_kvs` (puts e deletes juntos). O 1º usa `If-Match: etag`
+    /// (lido em `carregar_base`, sem `DescribeKeyValueStore` aqui); os seguintes encadeiam o `ETag`
+    /// devolvido pelo anterior. `ConflictException` → `Concorrencia`. Devolve `ItemCount`/`ETag` da
+    /// última `UpdateKeys`.
+    fn aplicar(
+        &mut self,
+        etag: &str,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> redirects::Result<EstadoKvs> {
         let mut chamadas = Vec::new();
         for lote in lotes_kvs(put, del) {
             let puts = lote
@@ -420,25 +427,38 @@ impl Redirects for RedirectsKvs {
                 (!dels.is_empty()).then_some(dels),
             ));
         }
-        let mut estado = self.descrever()?;
+        if chamadas.is_empty() {
+            return self.descrever();
+        }
         self.rt.block_on(async {
+            let mut etag = etag.to_owned();
+            let mut item_count = 0;
             for (puts, dels) in chamadas {
                 let r = self
                     .cliente
                     .update_keys()
                     .kvs_arn(&self.arn)
-                    .if_match(estado.etag)
+                    .if_match(etag.clone())
                     .set_puts(puts)
                     .set_deletes(dels)
                     .send()
                     .await
-                    .map_err(|e| erro_kvs("UpdateKeys", e))?;
-                estado = EstadoKvs {
-                    item_count: u64::try_from(r.item_count()).unwrap_or(0),
-                    etag: r.e_tag().to_owned(),
-                };
+                    .map_err(|e| {
+                        if e.as_service_error()
+                            .is_some_and(|s| s.is_conflict_exception())
+                        {
+                            ErroRedirects::Concorrencia {
+                                etag: etag.clone(),
+                                fonte: texto_erro(e),
+                            }
+                        } else {
+                            erro_kvs("UpdateKeys", e)
+                        }
+                    })?;
+                item_count = u64::try_from(r.item_count()).unwrap_or(0);
+                etag = r.e_tag().to_owned();
             }
-            Ok(estado)
+            Ok(EstadoKvs { item_count, etag })
         })
     }
 }

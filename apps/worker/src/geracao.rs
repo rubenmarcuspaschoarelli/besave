@@ -117,8 +117,13 @@ impl Redirects for ListagemCronometrada<'_> {
         self.dentro.descrever()
     }
 
-    fn aplicar(&mut self, put: &[(i64, String)], del: &[i64]) -> redirects::Result<EstadoKvs> {
-        self.dentro.aplicar(put, del)
+    fn aplicar(
+        &mut self,
+        etag: &str,
+        put: &[(i64, String)],
+        del: &[i64],
+    ) -> redirects::Result<EstadoKvs> {
+        self.dentro.aplicar(etag, put, del)
     }
 }
 

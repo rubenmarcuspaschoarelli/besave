@@ -41,6 +41,8 @@ de imagens) e outra em `sincronizar_redirects` (diff). Com ciclo de 5 min (BSV-1
 | `--publicar` sem `--sim` | `RedirectsPlano::descrever` repassa ao destino; `aplicar` registra as ops e devolve `descrever()` do destino; o índice vira uma op `gravar` no plano | O plano não escreve nada, mas mostra a gravação do índice | n |
 | `RedirectsMemoria` | `ETag` = `m{n}`, com `n` = escritas desde a criação (`aplicar` e `inserir_bruto`); `ItemCount` = todas as chaves; contadores de `listar` e `descrever`; `definir_etag` força o `ETag` (teste de `item_count_divergente`) | Spec: "`ETag` que muda a cada escrita"; `inserir_bruto` simula escrita por fora | n |
 | `--gerar` local | `RedirectsMemoria::new()` a cada execução → toda execução local reconstrói (motivo `etag_divergente` a partir da 2ª) e loga `WARN` | O espelho local não tem KVS; o comportamento é correto (a KVS em memória está vazia) | y |
+| `If-Match` da 1ª `UpdateKeys` (ajuste do dono, 30/09) | `aplicar(etag, put, del)` recebe o `ETag` lido em `carregar_base`; `RedirectsKvs::aplicar` não chama mais `DescribeKeyValueStore`; os lotes seguintes encadeiam o `ETag` devolvido | `IfMatch` é obrigatório na API (`API_kvs_UpdateKeys`: "Required: Yes"; SDK 1.111: "This field is required") | y |
+| Erro de `ETag` desatualizado | `ConflictException` da `UpdateKeys` → `ErroRedirects::Concorrencia`; outros erros continuam `Kvs` | A API lista `ConflictException` (409, "Resource is not in expected state") e não nomeia outro erro para `If-Match` divergente; confirmar na execução real | n |
 | Teste SIT-01 (`primeira_execucao_publica_...`) | A lista esperada de chaves do site ganha `_estado/redirects.json` | Objeto novo exigido pela spec; nenhuma asserção enfraquecida | y |
 | Testes com `impl Redirects` próprio (`tests/geracao.rs`, `tests/plano.rs`) e o literal de `RelatorioRedirects` | Ganham `descrever` e o novo retorno de `aplicar`; o literal recebe `modo`/`motivo` | Mudança de assinatura do trait | n |
 
@@ -78,6 +80,9 @@ de imagens) e outra em `sincronizar_redirects` (diff). Com ciclo de 5 min (BSV-1
 4. REC-04: IF o índice não é um JSON com `kvs_item_count`, `kvs_etag` e `urls` THEN `gerar` SHALL reconstruir com motivo `indice_ilegivel`, sem abortar, e regravar o índice.
 5. REC-05: WHEN reconstrói THEN o worker SHALL registrar um `WARN` com o motivo.
 6. REC-06: IF gravar o índice falha THEN `gerar` SHALL retornar erro e SHALL NOT gravar `manifest.json`.
+
+7. CON-01: IF a KVS muda entre `carregar_base` e `aplicar` THEN `gerar` SHALL retornar `ErroRedirects::Concorrencia`, SHALL NOT aplicar o diff nem gravar o índice ou o manifest, e o ciclo seguinte SHALL reconstruir com motivo `etag_divergente`.
+8. CON-02: WHEN o ciclo tem diff THEN `gerar` SHALL chamar `descrever()` exatamente 1 vez.
 
 **Independent Test**: índice ausente, corrompido e KVS alterada por `inserir_bruto`.
 
@@ -119,10 +124,12 @@ Dimensions: estado persistido (IDX-03..05, REC-04); falha de dependência extern
 | REC-04 | P1: Reconstrução | Step 2 | Done |
 | REC-05 | P1: Reconstrução | Step 2 | Done |
 | REC-06 | P1: Reconstrução | Step 2 | Done |
+| CON-01 | P1: Reconstrução | Step 4 | Done |
+| CON-02 | P1: Reconstrução | Step 4 | Done |
 | REL-01 | P1: Relatório | Step 2 | Done |
 | REL-02 | P1: Relatório | Step 3 | Done |
 
-**Coverage:** 15 total, 15 mapped to steps, 0 unmapped.
+**Coverage:** 17 total, 17 mapped to steps, 0 unmapped.
 
 ---
 
