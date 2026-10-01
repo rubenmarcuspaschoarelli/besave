@@ -152,9 +152,9 @@ Dimensions: estado persistido (ALR-01..03, edge de JSON corrompido); falha de de
 | ALR-05 | P1: Alerta | T3, T5 | Done |
 | ALR-06 | P1: Alerta | T3, T6 | Done |
 | ALR-07 | P1: Alerta | T3 | Done |
-| AGD-01 | P2: Agendador | T7 | Pending |
-| AGD-02 | P2: Agendador | T7 | Pending |
-| AGD-03 | P2: Agendador | T7 | Pending |
+| AGD-01 | P2: Agendador | T7 | Done |
+| AGD-02 | P2: Agendador | T7 | Done |
+| AGD-03 | P2: Agendador | T7 | Done |
 
 **Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
 

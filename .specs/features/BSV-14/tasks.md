@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; `docs/specs/BSV-14.md` fixa o comportamento; decisões em `spec.md` → Assumptions)
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -189,9 +189,9 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Script registra/atualiza com os gatilhos e limites da spec, sem senha
-- [ ] README com BotFather, `chat_id`, variáveis, tarefa e logs
-- [ ] Gate build passa
+- [x] Script registra/atualiza com os gatilhos e limites da spec, sem senha
+- [x] README com BotFather, `chat_id`, variáveis, tarefa e logs
+- [x] Gate build passa
 
 **Tests**: none
 **Gate**: build
