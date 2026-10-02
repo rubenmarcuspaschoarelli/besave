@@ -1,15 +1,17 @@
 use std::collections::BTreeMap;
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::process::ExitCode;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
-use tracing_subscriber::EnvFilter;
 use worker::aws::{ConfigAws, ContextoAws, PublicadorS3, RedirectsKvs};
-use worker::conversao::{LinhaOferta, LinhaProduto, Rejeicao};
-use worker::fonte::{FakeFonte, FonteOfertas};
+use worker::ciclo;
+use worker::conversao::Rejeicao;
+use worker::fonte::{FonteOfertas, fake_demo};
 use worker::geracao::{Relatorio, contar_paginas, gerar};
+use worker::logs::HoraBrasilia;
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::plano::publicar;
@@ -20,7 +22,7 @@ use worker::site::ConfigSite;
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
 #[command(version)]
-#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar", "publicar"])))]
+#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar", "publicar", "ciclo"])))]
 struct Args {
     /// Lê a fonte, converte e imprime contagens; não gera nem publica nada.
     #[arg(long)]
@@ -38,32 +40,62 @@ struct Args {
     /// Executa o `--publicar` (sem ele, nada é escrito).
     #[arg(long)]
     sim: bool,
-    /// Caminho do mapeamento.json do contrato.
-    #[arg(
-        long,
-        env = "BESAVE_MAPEAMENTO",
-        default_value = "../../packages/contract/mapeamento.json"
-    )]
-    mapeamento: PathBuf,
+    /// Override do mapeamento.json; sem ele, o mapeamento do contrato embutido no binário.
+    #[arg(long, env = "BESAVE_MAPEAMENTO")]
+    mapeamento: Option<PathBuf>,
     /// Raiz das imagens do robô: `{dir}/{id}/{id}[-small].webp`. Obrigatória com `--gerar` e
     /// `--publicar` (BSV-13); `--dry-run` não publica nada e não precisa dela.
     #[arg(long, env = "BESAVE_IMAGENS_DIR")]
     imagens_dir: Option<PathBuf>,
+    /// Execução agendada (BSV-14): `--publicar --sim` com trava, log em arquivo e alerta no
+    /// Telegram. Sai com 0 (ok ou ciclo anterior em andamento), 1 (falha) ou 2 (configuração).
+    #[arg(long)]
+    ciclo: bool,
+    /// `.env` fora do repo, lido antes de tudo; variável já definida no ambiente vence.
+    #[arg(long)]
+    env_file: Option<PathBuf>,
 }
 
-fn main() -> Result<()> {
+fn main() -> ExitCode {
+    // Antes de qualquer thread: `dotenvy` usa `set_var`. `.env` antes do `clap`, que lê os
+    // `env =`; não sobrescreve o que já está definido.
+    let previa =
+        ciclo::env_file_dos_args(std::env::args_os().skip(1)).map(|p| ciclo::carregar_env_file(&p));
+    let args = Args::parse();
+    if args.ciclo {
+        let op = ciclo::Opcoes {
+            mapeamento: args.mapeamento,
+            imagens_dir: args.imagens_dir,
+            stderr: true,
+            ao_publicar: Some(&imprimir_publicacao),
+        };
+        return ExitCode::from(ciclo::executar(&op, previa).valor());
+    }
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_timer(HoraBrasilia::default())
+        .with_env_filter(ciclo::filtro())
         .with_writer(std::io::stderr)
         .with_ansi(std::io::stderr().is_terminal())
         .init();
+    let r = match previa {
+        Some(Err(e)) => Err(e.into()),
+        _ => executar(args),
+    };
+    match r {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("Error: {e:?}");
+            ExitCode::FAILURE
+        }
+    }
+}
 
-    let args = Args::parse();
+fn executar(args: Args) -> Result<()> {
     // `requires` do clap não pega flag booleana (o padrão `false` conta como presente).
     if args.sim && !args.publicar {
         bail!("--sim só vale junto com --publicar");
     }
-    let m = Mapeamento::carregar(&args.mapeamento)?;
+    let m = Mapeamento::carregar_ou_embutido(args.mapeamento.as_deref())?;
     let agora = agora()?;
     // Config do destino antes de abrir o Oracle: erro de env não gasta conexão.
     let aws = if args.publicar {
@@ -135,12 +167,16 @@ fn publicar_aws(
             println!("{linha}");
         }
     }
-    imprimir_relatorio(&pb.relatorio);
-    println!("redirects_put: {}", pb.relatorio.redirects.puts);
-    println!("redirects_del: {}", pb.relatorio.redirects.dels);
-    println!("redirects_total: {}", pb.relatorio.redirects.total);
-    println!("tempo: {:.2}s", inicio.elapsed().as_secs_f64());
+    imprimir_publicacao(&pb.relatorio, inicio.elapsed());
     Ok(())
+}
+
+fn imprimir_publicacao(rel: &Relatorio, tempo: Duration) {
+    imprimir_relatorio(rel);
+    println!("redirects_put: {}", rel.redirects.puts);
+    println!("redirects_del: {}", rel.redirects.dels);
+    println!("redirects_total: {}", rel.redirects.total);
+    println!("tempo: {:.2}s", tempo.as_secs_f64());
 }
 
 fn gerar_em(
@@ -247,118 +283,4 @@ fn imprimir_contagens(lidas: u64, validas: u64, rejeitadas: &BTreeMap<Rejeicao, 
 fn agora() -> Result<i64> {
     let s = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     Ok(i64::try_from(s)?)
-}
-
-/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição
-/// e uma inativa há 8 dias (fora da fonte).
-fn fake_demo(agora: i64) -> FakeFonte {
-    const DIA: i64 = 86_400;
-    let ok = |id, id_produto, loja: &str, titulo: &str, de, por, area: &str, publico: &str| {
-        LinhaOferta {
-            id,
-            id_produto: Some(id_produto),
-            loja: Some(loja.into()),
-            titulo: Some(titulo.into()),
-            preco_de: de,
-            preco_por: Some(por),
-            dt_oferta: Some(agora - DIA),
-            area: Some(area.into()),
-            publico: Some(publico.into()),
-            ativo: true,
-            url_afiliado: format!("https://loja.example/{id}"),
-            ..Default::default()
-        }
-    };
-    let base = ok(1000, 1, "Amazon", "Base", None, 10.0, "Tech", "U");
-    let ofertas = vec![
-        LinhaOferta {
-            cupom: Some("besave10".into()),
-            ..ok(
-                5412,
-                910,
-                "Amazon",
-                "Fone Bluetooth XYZ com ANC",
-                Some(299.9),
-                199.9,
-                "Tecnologia",
-                "Unissex",
-            )
-        },
-        ok(
-            5413,
-            911,
-            "Shopee",
-            "Kit Skincare Vitamina C 3 passos",
-            None,
-            89.9,
-            "Elas",
-            "Mulher",
-        ),
-        LinhaOferta {
-            ativo: false,
-            dt_desativacao: Some(agora - DIA),
-            ..ok(
-                5420,
-                912,
-                "MercadoLivre",
-                "Ração Premium Cães Adultos 15kg",
-                Some(249.0),
-                199.0,
-                "Pet",
-                "U",
-            )
-        },
-        LinhaOferta {
-            id: 1001,
-            preco_por: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1002,
-            titulo: Some("  ".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1003,
-            loja: Some("Americanas".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1004,
-            area: Some("Moda".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1005,
-            publico: Some("Adulto".into()),
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1006,
-            dt_oferta: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1007,
-            id_produto: None,
-            ..base.clone()
-        },
-        LinhaOferta {
-            id: 1008,
-            ativo: false,
-            dt_desativacao: Some(agora - 8 * DIA),
-            ..base
-        },
-    ];
-    let produtos = vec![LinhaProduto {
-        id_produto: 910,
-        descricao: Some(
-            "Fone over-ear com cancelamento ativo de ruído e 40 horas de bateria.".into(),
-        ),
-        marca: Some("XYZ".into()),
-        preco_min: Some(179.9),
-        preco_max: Some(349.9),
-        ..Default::default()
-    }];
-    FakeFonte::new(ofertas, produtos, agora)
 }
