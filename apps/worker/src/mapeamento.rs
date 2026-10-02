@@ -30,6 +30,10 @@ pub struct Mapeamento {
     area: HashMap<String, Area>,
 }
 
+/// `packages/contract/mapeamento.json`, embutido no build: o padrão não depende da pasta de
+/// trabalho (o Agendador roda na pasta do executável).
+const MAPEAMENTO_CONTRATO: &str = include_str!("../../../packages/contract/mapeamento.json");
+
 impl Mapeamento {
     pub fn carregar(caminho: impl AsRef<Path>) -> Result<Self, ErroMapeamento> {
         let caminho = caminho.as_ref();
@@ -37,9 +41,23 @@ impl Mapeamento {
             caminho: caminho.display().to_string(),
             fonte,
         })?;
+        Self::de_json(&txt, &caminho.display().to_string())
+    }
+
+    /// O mapeamento do contrato embutido no binário.
+    pub fn embutido() -> Result<Self, ErroMapeamento> {
+        Self::de_json(MAPEAMENTO_CONTRATO, "mapeamento embutido")
+    }
+
+    /// `caminho` (override explícito, `BESAVE_MAPEAMENTO`/`--mapeamento`) ou o embutido.
+    pub fn carregar_ou_embutido(caminho: Option<&Path>) -> Result<Self, ErroMapeamento> {
+        caminho.map_or_else(Self::embutido, Self::carregar)
+    }
+
+    fn de_json(txt: &str, origem: &str) -> Result<Self, ErroMapeamento> {
         let bruto: Mapeamento =
-            serde_json::from_str(&txt).map_err(|fonte| ErroMapeamento::Json {
-                caminho: caminho.display().to_string(),
+            serde_json::from_str(txt).map_err(|fonte| ErroMapeamento::Json {
+                caminho: origem.to_owned(),
                 fonte,
             })?;
         Ok(Self {

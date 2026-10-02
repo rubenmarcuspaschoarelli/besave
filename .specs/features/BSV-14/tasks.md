@@ -41,7 +41,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-10 tarefas (T8 = correção do Verifier; T9–T10 = ajuste do dono), execução inline, sem sub-agentes.
+11 tarefas (T8 = correção do Verifier; T9–T10 = ajuste do dono; T11 = bug da execução real), execução inline, sem sub-agentes.
 
 ### Phase 1: Blocos
 
@@ -52,7 +52,7 @@ T1 → T2 → T3 → T4
 ### Phase 2: Integração
 
 ```
-T4 → T5 → T6 → T7 → T8 → T9 → T10
+T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
 ```
 
 ---
@@ -251,4 +251,24 @@ T4 → T5 → T6 → T7 → T8 → T9 → T10
 - [x] Gate build passa
 
 **Tests**: none
+**Gate**: build
+
+---
+
+### T11: Mapeamento embutido (bug da execução real)
+
+**What**: `Mapeamento::embutido()`/`carregar_ou_embutido`; `Opcoes.mapeamento` e `--mapeamento` viram `Option` (override); README sem dependência do repo.
+**Where**: `apps/worker/src/mapeamento.rs`, `apps/worker/src/ciclo.rs`, `apps/worker/src/main.rs`, `apps/worker/README.md`
+**Depends on**: T10
+**Reuses**: padrão `include_str!` do `PACKAGE_CONTRATO`
+**Requirement**: CIC-08
+
+**Done when**:
+
+- [x] `--ciclo` e `besave-ciclo` com pasta de trabalho fora do repo e sem `BESAVE_MAPEAMENTO` → 0 e relatório
+- [x] `--dry-run` fora do repo funciona; `BESAVE_MAPEAMENTO` explícito ausente → 2
+- [x] Embutido = arquivo do contrato
+- [x] Gate build passa
+
+**Tests**: integration
 **Gate**: build

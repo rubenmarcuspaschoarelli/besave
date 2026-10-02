@@ -353,3 +353,74 @@ fn agora_fixo_ignorado_sem_destino_local() {
     assert_eq!(nomes.len(), 1);
     assert_ne!(nomes[0], "besave-worker.2026-09-21.log");
 }
+
+/// CIC-08: sem `BESAVE_MAPEAMENTO` e com a pasta de trabalho fora do repo (como o Agendador,
+/// que roda na pasta do executável), o ciclo usa o mapeamento embutido e publica, nos dois
+/// binários.
+#[test]
+fn ciclo_fora_do_repo_usa_mapeamento_embutido() {
+    for (exe, args, nome) in [
+        (
+            env!("CARGO_BIN_EXE_besave-worker"),
+            &["--ciclo"][..],
+            "embutido-worker",
+        ),
+        (
+            env!("CARGO_BIN_EXE_besave-ciclo"),
+            &[][..],
+            "embutido-ciclo",
+        ),
+    ] {
+        let local = dir_temp(nome);
+        let trabalho = local.join("bin");
+        std::fs::create_dir_all(&trabalho).unwrap();
+        let env = local.join("worker.env");
+        std::fs::write(
+            &env,
+            format!(
+                "BESAVE_FONTE=fake\nBESAVE_IMAGENS_DIR='{}'\nBESAVE_DESTINO_LOCAL='{}'\n",
+                local.join("imagens").display(),
+                local.join("saida").display()
+            ),
+        )
+        .unwrap();
+        let out = comando_de(exe, &local)
+            .current_dir(&trabalho)
+            .args(args)
+            .arg("--env-file")
+            .arg(&env)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(0), "{nome}: {}", texto(&out));
+        let rel = relatorio_estavel(&local);
+        assert!(
+            rel.contains("lidas=10 validas=3 rejeitadas=7"),
+            "{nome}: {rel}"
+        );
+        assert!(local.join("saida").join("manifest.json").exists(), "{nome}");
+    }
+}
+
+/// CIC-08: `BESAVE_MAPEAMENTO` continua valendo como override explícito (arquivo ausente → 2).
+#[test]
+fn mapeamento_explicito_continua_valendo() {
+    let local = dir_temp("mapeamento-override");
+    let falta = local.join("nao-existe-mapeamento.json");
+    let env = env_file(
+        &local,
+        &format!(
+            "BESAVE_FONTE=fake\nBESAVE_DESTINO_LOCAL='{}'\n",
+            local.join("saida").display()
+        ),
+    );
+    let out = comando(&local)
+        .env("BESAVE_MAPEAMENTO", &falta)
+        .args(["--ciclo", "--env-file"])
+        .arg(&env)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
+    let log = logs(&local);
+    assert!(log.contains("nao-existe-mapeamento.json"), "{log}");
+    assert!(!local.join("saida").join("manifest.json").exists());
+}

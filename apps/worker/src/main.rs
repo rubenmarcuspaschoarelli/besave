@@ -39,13 +39,9 @@ struct Args {
     /// Executa o `--publicar` (sem ele, nada é escrito).
     #[arg(long)]
     sim: bool,
-    /// Caminho do mapeamento.json do contrato.
-    #[arg(
-        long,
-        env = "BESAVE_MAPEAMENTO",
-        default_value = ciclo::MAPEAMENTO_PADRAO
-    )]
-    mapeamento: PathBuf,
+    /// Override do mapeamento.json; sem ele, o mapeamento do contrato embutido no binário.
+    #[arg(long, env = "BESAVE_MAPEAMENTO")]
+    mapeamento: Option<PathBuf>,
     /// Raiz das imagens do robô: `{dir}/{id}/{id}[-small].webp`. Obrigatória com `--gerar` e
     /// `--publicar` (BSV-13); `--dry-run` não publica nada e não precisa dela.
     #[arg(long, env = "BESAVE_IMAGENS_DIR")]
@@ -97,7 +93,7 @@ fn executar(args: Args) -> Result<()> {
     if args.sim && !args.publicar {
         bail!("--sim só vale junto com --publicar");
     }
-    let m = Mapeamento::carregar(&args.mapeamento)?;
+    let m = Mapeamento::carregar_ou_embutido(args.mapeamento.as_deref())?;
     let agora = agora()?;
     // Config do destino antes de abrir o Oracle: erro de env não gasta conexão.
     let aws = if args.publicar {

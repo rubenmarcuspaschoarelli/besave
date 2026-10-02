@@ -308,7 +308,7 @@ Pré-requisitos:
 | `BESAVE_ORACLE_CLIENT_DIR` | não | `C:\oraclexe\app\instantclient_19_30` |
 | `BESAVE_ORACLE_TZ` | não | fuso das colunas `DATE`, só offset `±HH:MM`; padrão `-03:00` |
 | `BESAVE_FONTE` | não | `oracle` (padrão) ou `fake` |
-| `BESAVE_MAPEAMENTO` | não | padrão `../../packages/contract/mapeamento.json` |
+| `BESAVE_MAPEAMENTO` | não | override explícito do `mapeamento.json`; sem ela, vale o `packages/contract/mapeamento.json` embutido no binário no build (não depende da pasta de trabalho nem do repo) |
 | `RUST_LOG` | não | nível de log; padrão `info` |
 
 ```sh
@@ -372,7 +372,6 @@ BESAVE_ORACLE_DSN=localhost:1521/XE
 BESAVE_ORACLE_USER=...
 BESAVE_ORACLE_PASS=...
 BESAVE_ORACLE_CLIENT_DIR='C:\oracle\instantclient_19_25'
-BESAVE_MAPEAMENTO='C:\git\besave\packages\contract\mapeamento.json'
 BESAVE_IMAGENS_DIR='C:\robo\imagens'
 BESAVE_BUCKET=...
 BESAVE_KVS_ARN=arn:aws:cloudfront::...:key-value-store/...
@@ -383,8 +382,10 @@ TELEGRAM_BOT_TOKEN=123456789:AA...
 TELEGRAM_CHAT_ID=-100...
 ```
 
-`BESAVE_MAPEAMENTO` precisa ser absoluto: o padrão é relativo à pasta do repo, e a tarefa roda na
-pasta do executável. Variável já definida no ambiente **vence** a do `.env`.
+O executável não depende do repositório: o `mapeamento.json` do contrato vai embutido no binário
+(`BESAVE_MAPEAMENTO` só se quiser outro arquivo, como override explícito). Depois de mudar o
+mapeamento no contrato, recompile e copie o `.exe` de novo. Variável já definida no ambiente
+**vence** a do `.env`.
 
 Variáveis novas:
 

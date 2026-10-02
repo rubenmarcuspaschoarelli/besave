@@ -47,3 +47,26 @@ fn sem_mapeamento_devolve_none() {
     assert_eq!(m.area("ESPORTES RADICAIS"), None);
     assert_eq!(m.publico(""), None);
 }
+
+/// CIC-08 (BSV-14): o mapeamento embutido no binário é o mesmo `mapeamento.json` do contrato.
+#[test]
+fn embutido_igual_ao_arquivo_do_contrato() {
+    let e = Mapeamento::embutido().unwrap();
+    let f = m();
+    for t in ["MERCADOLIVRE", " ml ", "Amazon", "Shopee", "Americanas"] {
+        assert_eq!(e.loja(t), f.loja(t), "{t}");
+    }
+    for t in [
+        "Família & filhos",
+        "casa",
+        "Esporte e Vida",
+        "Tecnologia",
+        "Moda",
+    ] {
+        assert_eq!(e.area(t), f.area(t), "{t}");
+    }
+    for t in [" criança ", "mulher", "Unissex", "Adulto"] {
+        assert_eq!(e.publico(t), f.publico(t), "{t}");
+    }
+    assert_eq!(e.loja("Amazon"), Some(Loja::Amazon));
+}

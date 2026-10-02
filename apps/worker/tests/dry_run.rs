@@ -400,3 +400,27 @@ fn gerar_fake_imprime_tempo_por_fase() {
     }
     assert!(stdout.contains("imagens_chaves_estranhas: 0\n"), "{stdout}");
 }
+
+/// BSV-14 CIC-08: o modo manual também usa o mapeamento embutido; pasta de trabalho fora do
+/// repo e sem `BESAVE_MAPEAMENTO` funciona.
+#[test]
+fn dry_run_fora_do_repo_usa_mapeamento_embutido() {
+    let fora = std::env::temp_dir().join(format!("besave-dry-run-fora-{}", std::process::id()));
+    std::fs::create_dir_all(&fora).unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_besave-worker"))
+        .arg("--dry-run")
+        .current_dir(&fora)
+        .env("BESAVE_FONTE", "fake")
+        .env("RUST_LOG", "warn")
+        .env_remove("BESAVE_MAPEAMENTO")
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(stdout.contains("validas: 3\n"), "{stdout}");
+    assert!(stdout.contains("rejeitadas: 7\n"), "{stdout}");
+}

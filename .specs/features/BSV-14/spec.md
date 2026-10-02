@@ -45,6 +45,7 @@ sem spam. Máquina desligada é BSV-15.
 | Sem janela de console | Binário `besave-ciclo` com `windows_subsystem = "windows"` chama `ciclo::executar` da lib (mesmo caminho do `--ciclo`); o `--ciclo` continua para uso manual, com stderr e stdout | Ajuste do dono (01/10): janela a cada 5 min é inaceitável | y |
 | Argumentos do `besave-ciclo` | Só `--env-file <arq>`/`--env-file=<arq>` (ou nenhum); o resto → código 2 (`variante=Argumento`), só no log | Sem console, `clap` imprimiria erro no vazio | n |
 | Teste sem AWS do ciclo inteiro | `BESAVE_DESTINO_LOCAL` (pasta + KVS em memória) e `BESAVE_AGORA` (só com destino local) | A fonte fake data as ofertas a partir de `agora`; sem relógio fixo os bytes do chunk mudam entre execuções. Restrito ao destino local para nunca afetar publicação real | n |
+| Mapeamento padrão | `include_str!` de `packages/contract/mapeamento.json` (mesmo padrão do `PACKAGE_CONTRATO` em `geracao.rs`); `BESAVE_MAPEAMENTO`/`--mapeamento` só como override | Execução real: caminho relativo depende da pasta de trabalho do Agendador | y |
 | Alerta em código 2 | Também alerta (fase `config`/`env_file`) quando `TELEGRAM_*` está disponível | É falha de ciclo; a execução real do dono depende de um alerta | n |
 | `TELEGRAM_*` pela metade | Código 2 | Desligar em silêncio esconderia o erro | n |
 | Host na mensagem | `COMPUTERNAME` (Windows) ou `HOSTNAME`; só `[A-Za-z0-9._-]`, até 63 chars; senão `desconhecido` | Spec pede host; filtro garante que não vaza caminho | n |
@@ -76,6 +77,7 @@ sem spam. Máquina desligada é BSV-15.
 5. CIC-05: IF uma linha do `.env` está malformada THEN o worker SHALL sair com código 2 e SHALL NOT ecoar o conteúdo da linha no log nem no stderr (spec do dono: "tokens nunca em log").
 6. CIC-06: The binário `besave-ciclo` (`#![windows_subsystem = "windows"]`, ajuste do dono de 01/10) SHALL executar o mesmo caminho do `--ciclo` (função da lib, sem lógica duplicada), SHALL NOT escrever em stdout nem stderr, e SHALL produzir a mesma linha `relatorio` que `besave-worker --ciclo` para a mesma fonte fake; argumento desconhecido SHALL sair com código 2.
 7. CIC-07: WHERE `BESAVE_DESTINO_LOCAL` está definida, o ciclo SHALL publicar na pasta (layout do bucket) com KVS em memória, sem exigir `BESAVE_BUCKET`/`BESAVE_KVS_ARN`; `BESAVE_AGORA` SHALL fixar o relógio só nesse caso.
+8. CIC-08: WHEN `BESAVE_MAPEAMENTO` não está definida THEN `--ciclo`, `besave-ciclo` e os modos manuais SHALL usar o `mapeamento.json` do contrato embutido no binário (`include_str!`), com qualquer pasta de trabalho; WHEN está definida THEN SHALL ler esse arquivo (override explícito). Bug da execução real do dono (02/10): o Agendador roda em `C:esavein` e o padrão relativo `../../packages/contract/mapeamento.json` não resolvia (código 2).
 
 **Independent Test**: binário com `--ciclo --env-file` e env controlada, sem rede.
 
@@ -148,6 +150,7 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | CIC-05 | P1: Modo ciclo | T8 | Done |
 | CIC-06 | P1: Modo ciclo | T9 | Done |
 | CIC-07 | P1: Modo ciclo | T9 | Done |
+| CIC-08 | P1: Modo ciclo | T11 | Done |
 | TRV-01 | P1: Trava | T1, T6 | Done |
 | TRV-02 | P1: Trava | T1 | Done |
 | TRV-03 | P1: Trava | T1 | Done |
@@ -167,7 +170,7 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | AGD-02 | P2: Agendador | T7 | Done |
 | AGD-03 | P2: Agendador | T7, T10 | Done |
 
-**Coverage:** 25 total, 25 mapped to tasks, 0 unmapped.
+**Coverage:** 26 total, 26 mapped to tasks, 0 unmapped.
 
 ---
 

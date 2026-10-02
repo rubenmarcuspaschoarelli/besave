@@ -28,9 +28,6 @@ use crate::site::ConfigSite;
 use crate::telegram::TelegramHttp;
 use crate::trava::Trava;
 
-/// Padrão de `BESAVE_MAPEAMENTO`, relativo à pasta de trabalho (`apps/worker`).
-pub const MAPEAMENTO_PADRAO: &str = "../../packages/contract/mapeamento.json";
-
 /// Erros do ciclo fora de `gerar()`; o nome da variante vai para o alerta.
 #[derive(Debug, thiserror::Error)]
 pub enum ErroCiclo {
@@ -96,7 +93,8 @@ pub type AoPublicar<'a> = &'a dyn Fn(&Relatorio, Duration);
 
 /// Como o binário chama o ciclo.
 pub struct Opcoes<'a> {
-    pub mapeamento: PathBuf,
+    /// Override explícito do mapeamento; `None` = o embutido no binário.
+    pub mapeamento: Option<PathBuf>,
     pub imagens_dir: Option<PathBuf>,
     /// Log também no stderr (`--ciclo`); o `besave-ciclo` só escreve no arquivo.
     pub stderr: bool,
@@ -105,12 +103,12 @@ pub struct Opcoes<'a> {
 }
 
 impl Opcoes<'_> {
-    /// `BESAVE_MAPEAMENTO` (padrão `MAPEAMENTO_PADRAO`) e `BESAVE_IMAGENS_DIR`, sem saída em console.
+    /// `BESAVE_MAPEAMENTO` (override; sem ela, o mapeamento embutido) e `BESAVE_IMAGENS_DIR`,
+    /// sem saída em console.
     pub fn do_env() -> Self {
         let var = |k| std::env::var_os(k).filter(|v: &OsString| !v.is_empty());
         Self {
-            mapeamento: var("BESAVE_MAPEAMENTO")
-                .map_or_else(|| PathBuf::from(MAPEAMENTO_PADRAO), PathBuf::from),
+            mapeamento: var("BESAVE_MAPEAMENTO").map(PathBuf::from),
             imagens_dir: var("BESAVE_IMAGENS_DIR").map(PathBuf::from),
             stderr: false,
             ao_publicar: None,
@@ -281,7 +279,8 @@ enum Destino {
 /// Configuração (código 2 se faltar), fonte e destino; depois o mesmo `gerar()` do
 /// `--publicar --sim`.
 fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
-    let m = Mapeamento::carregar(&op.mapeamento).map_err(|e| Falha::config("config", &e))?;
+    let m = Mapeamento::carregar_ou_embutido(op.mapeamento.as_deref())
+        .map_err(|e| Falha::config("config", &e))?;
     let destino = match destino_local() {
         Some(dir) => Destino::Local(dir),
         None => Destino::Aws(ConfigAws::do_env().map_err(|e| Falha::config("config", &e))?),
