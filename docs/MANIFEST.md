@@ -40,7 +40,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.3.0",
+  "contrato": "1.3.2",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,
@@ -72,7 +72,8 @@ Regras:
   `Content-Type: application/json`.
 - Orçamento: **≤ 60 KB comprimido por chunk** (gate no CI do worker sobre fixtures).
 - Imutável: se o conteúdo muda, o hash muda, o nome muda. O worker apaga arquivos de
-  chunk que não estão em nenhum manifest há mais de 24 h.
+  chunk que não estão em nenhum dos dois últimos manifests (`manifest.json` e
+  `manifest.prev.json`; ver §6 passo 6).
 
 ### 3.1 Algoritmo do cliente (F3, referência para o agente)
 1. `GET /manifest.json` (respeita `max-age`; polling a cada 5 min enquanto a aba está visível).

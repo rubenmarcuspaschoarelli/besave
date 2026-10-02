@@ -27,7 +27,6 @@ Uma tarefa = uma pasta principal. Não editar fora dela sem que a spec autorize.
 - site: `pnpm install --frozen-lockfile && pnpm lint && pnpm check && pnpm test && pnpm build`
 
 ## Regras não negociáveis
-## Regras não negociáveis
 1. Testes derivam do critério de aceite da spec; nunca espelham a implementação. O runner decide, não a autoavaliação.
 2. Nunca enfraquecer, pular ou apagar teste para passar.
 3. Um commit por tarefa, Conventional Commits (`feat(worker): …`, `fix(site): …`).
@@ -44,7 +43,7 @@ Uma tarefa = uma pasta principal. Não editar fora dela sem que a spec autorize.
 Use a skill `tlc-spec-driven` para toda tarefa: specify → (design) → (tasks) → execute.
 Ao final, o Verifier roda sozinho e escreve `.specs/features/<ticket>/validation.md`.
 Em worktree de ticket, **não** grave em `.specs/STATE.md` nem em `LESSONS.md`; relate decisões
-e lições no resumo final do PR — o dono as move para `docs/DECISOES.md` em `main`.
+e lições no resumo final do PR — o dono as move para `docs/DECISOES.md` em `develop`, via PR (AD-060).
 Detalhes: @docs/WORKFLOW-AGENTES.md
 
 ## Estilo

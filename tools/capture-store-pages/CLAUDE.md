@@ -1,7 +1,7 @@
 # tools/capture-store-pages — Python: detalhe, classificação e consolidação em OFERTA (existente)
 
 Código pré-existente. É a origem de `DS_LOJA`, `DS_COMUNIDADE`, `DS_PUBLICO`: qualquer valor novo precisa entrar em `packages/contract/mapeamento.json`, senão o worker rejeita.
-Deve passar a preencher `DT_DESATIVACAO` e `DS_SLUG` (CONTRATO.md §7). Não alterar sem ticket explícito.
+Preenche `DT_DESATIVACAO` quando `ST_ATIVO` vai a 0 (CONTRATO.md §7). `DS_SLUG` não existe mais (AD-018). Não alterar sem ticket explícito.
 
 ## Regras de classificação (AD-039)
 Oferta que não for classificada grava `DS_COMUNIDADE = 'Outros'` e `DS_PUBLICO = 'Unisex'`. Nunca deixar vazio: o worker rejeita.

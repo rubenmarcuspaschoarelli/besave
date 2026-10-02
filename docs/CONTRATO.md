@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.3.1** (SemVer; mudança incompatível = major).
-Histórico: 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.3.2** (SemVer; mudança incompatível = major).
+Histórico: 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -163,7 +163,7 @@ Derivadas do id, nunca campo de dado:
 
 | uso | chave S3 | tamanho |
 |---|---|---|
-| card da lista | `img/ofertas/{id}-small.webp` | lado maior 320 px, ≤ 25 KB |
+| card da lista | `img/ofertas/{id}-small.webp` | lado maior ≤ 320 px, ≤ 25 KB (arquivo publicado; o robô entrega 200 px hoje — AD-059) |
 | página da oferta | `img/ofertas/{id}.webp` | lado maior 1200 px |
 | produto (futuro) | `img/produtos/{id_produto}.webp` | |
 
@@ -234,5 +234,5 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
    redirect `/ir/{id}` usa `DS_URL_AFILIADO`; `DS_URL_BESAVE`/`DS_URL_FINAL` ficam só no banco.
 2. `DS_GENERO`/`DS_FAIXA_ETARIA` do produto são texto livre — ok por ora (só exibição).
 3. Cupons da tabela `CUPOM` aparecem na home (F3) ou só em página própria (F4)?
-4. `DT_ULT_ATUALIZACAO`: criar ou não? (ver §7)
+4. ~~`DT_ULT_ATUALIZACAO`: criar ou não?~~ **Respondido:** não será criada; os índices de `_estado/` resolveram o custo (AD-058).
 5. Domínio curto: `besave.io` ou `besave.me`?
