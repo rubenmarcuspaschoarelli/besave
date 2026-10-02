@@ -424,3 +424,32 @@ fn dry_run_fora_do_repo_usa_mapeamento_embutido() {
     assert!(stdout.contains("validas: 3\n"), "{stdout}");
     assert!(stdout.contains("rejeitadas: 7\n"), "{stdout}");
 }
+
+/// BSV-14 LOG-05: modo manual também carimba o log em Brasília: toda linha do stderr começa com
+/// `AAAA-MM-DDTHH:MM:SS.mmm-03:00 ` (sem relógio fixo, confere o formato).
+#[test]
+fn modo_manual_loga_em_horario_de_brasilia() {
+    let out = rodar(&["--dry-run"], "fake");
+    assert!(out.status.success());
+    let stderr = String::from_utf8(out.stderr).unwrap();
+    let linhas: Vec<&str> = stderr.lines().filter(|l| !l.is_empty()).collect();
+    assert!(!linhas.is_empty(), "esperava WARN de rejeição no stderr");
+    // `AAAA-MM-DDTHH:MM:SS.mmm-03:00 `: 29 caracteres + espaço.
+    let formato = |l: &str| {
+        let b = l.as_bytes();
+        b.len() > 30
+            && b[..30].iter().enumerate().all(|(i, c)| match i {
+                4 | 7 => *c == b'-',
+                10 => *c == b'T',
+                13 | 16 | 26 => *c == b':',
+                19 => *c == b'.',
+                23 => *c == b'-',
+                29 => *c == b' ',
+                _ => c.is_ascii_digit(),
+            })
+            && &l[23..29] == "-03:00"
+    };
+    for l in linhas {
+        assert!(formato(l), "{l}");
+    }
+}
