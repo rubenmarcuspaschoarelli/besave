@@ -1,11 +1,152 @@
 # BSV-14 Validation
 
-**Date**: 2026-10-01 (rodada 4: fix→re-verify 1 de 3)
-**Spec**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md` + ajuste de 01/10)
-**Diff range**: rodada 4 `c7ef61c..7322698`; feature inteira `e24a757..7322698`
+**Date**: 2026-10-02 (rodada 7: fechamento do G3)
+**Spec**: `.specs/features/BSV-14/spec.md` (27 ACs: CIC-01..08, TRV-01..04, LOG-01..05, ALR-01..07, AGD-01..03)
+**Diff range**: rodada 7 `374845c..cbee68e`; feature inteira `e24a757..cbee68e`
 **Verifier**: sub-agente independente (autor ≠ verificador)
 
 ## Validation: BSV-14 - PASS ✅
+
+O G3 está fechado; não há gap aberto. Os 27 ACs têm evidência `arquivo:linha` (rodadas 2–7).
+A execução real do dono (Agendador + Telegram) continua bloqueando o merge (spec → Success Criteria).
+
+## Rodada 7
+
+| Item | Evidência | Result |
+| ---- | --------- | ------ |
+| G3 / LOG-05 nos modos manuais | `apps/worker/tests/dry_run.rs:431-455` `modo_manual_loga_em_horario_de_brasilia`: stderr do `--dry-run` fake não vazio (`:436`); toda linha confere posição a posição com `AAAA-MM-DDTHH:MM:SS.mmm-03:00 ` (`:438-451`, `&l[23..29] == "-03:00"`); `:453` `assert!(formato(l))` | ✅ PASS |
+
+**Sensor (rodada 7)**: worktree temporária a partir de `cbee68e`, `CARGO_BUILD_JOBS=2`, só `--test dry_run`.
+
+| # | Mutação | Killed? |
+| - | ------- | ------- |
+| R18 | remove `.with_timer(HoraBrasilia::default())` dos modos manuais (`apps/worker/src/main.rs:75`) | ✅ morto (`modo_manual_loga_em_horario_de_brasilia`, `tests/dry_run.rs:453`) |
+
+**Resultado (rodada 7)**: 1/1 morto. Acumulado do ticket: 19 + 11 + 2 + 2 (R11, R12) + 6 (R13–R18) = 40 mutantes, todos mortos depois das correções.
+**Isolamento**: a worktree foi removida e podada, e os binários de `debug/` foram restaurados. O `git status --porcelain` da árvore real ficou idêntico antes e depois: só ` M .specs/features/BSV-14/validation.md`.
+
+**Gate** (rodado pelo Verifier na árvore real, em `cbee68e` + este relatório): `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` (`CARGO_BUILD_JOBS=2`) → exit 0; **283 passed, 0 failed, 3 ignored** (os 3 ignorados são de antes do ticket).
+
+**Gaps**: nenhum.
+
+---
+
+# Histórico: rodada 6 (texto original)
+
+**Date (r6)**: 2026-10-02 (G2 + ajuste do dono LOG-05)
+**Spec (r6)**: `.specs/features/BSV-14/spec.md` (CIC-08, LOG-05, T12)
+**Diff range (r6)**: rodada 6 `123cd5f..374845c`; feature inteira `e24a757..374845c`
+**Verifier (r6)**: sub-agente independente (autor ≠ verificador)
+
+## Veredito da rodada 6: FAIL ❌
+
+O G2 está fechado e o LOG-05 está certo no ciclo (arquivo e stderr). O timer dos **modos manuais**
+do `besave-worker` não tem teste: o mutante R18 sobrevive. O LOG-05 cobre "console do `besave-worker`"
+e o coordenador declara o timer nos modos manuais. A correção é só um teste.
+
+## Rodada 6
+
+### LOG-05 contra o pedido do dono
+
+| Ponto | Evidência | Result |
+| ----- | --------- | ------ |
+| Formato `AAAA-MM-DDTHH:MM:SS.mmm-03:00`, Brasília com offset fixo | `apps/worker/src/logs.rs` `carimbo_brasilia(ms)`; `apps/worker/tests/logs.rs:100-108` `== "2026-10-02T11:45:00.000-03:00"` e `== "2026-10-01T22:30:00.123-03:00"` | ✅ PASS (R15, R16 mortos) |
+| Reaproveita `OFFSET_BRASILIA_MIN` (pedido do dono) | `apps/worker/src/logs.rs` `FUSO_BRASILIA = OFFSET_BRASILIA_MIN * 60`; `carimbo_brasilia` usa `OFFSET_BRASILIA_MIN`; `apps/worker/src/pagina_html.rs:22` agora `pub`. Uma fonte só | ✅ PASS |
+| Nunca o fuso do sistema; sem dependência nova | `HoraBrasilia::format_time` usa `SystemTime` + offset fixo; `Cargo.toml`/`Cargo.lock` fora do diff `123cd5f..374845c` | ✅ PASS |
+| Arquivo e stderr do ciclo, nos dois binários; 01:30Z → arquivo do dia anterior | `apps/worker/tests/cli_ciclo.rs:453-503` `log_em_horario_de_brasilia`: `:494` arquivo `besave-worker.2026-10-01.log` para 01:30Z; `:498` toda linha do arquivo `starts_with("2026-10-01T22:30:00.000-03:00 ")`/`11:45`; `:503` toda linha do stderr idem | ✅ PASS (R14, R17 mortos) |
+| Relógio fixo (`BESAVE_AGORA`, só com destino local) fixa o carimbo | `apps/worker/src/ciclo.rs` `relogio_fixo()` → `HoraBrasilia::fixa(s * 1000)`; mesmo teste `:498` | ✅ PASS |
+| Modos manuais do `besave-worker` (`--dry-run`/`--gerar`/`--publicar`) | `apps/worker/src/main.rs:75` `.with_timer(HoraBrasilia::default())`; **sem teste** | ❌ GAP G3 (R18 sobreviveu) |
+
+### G2 (rodada 5)
+
+`apps/worker/tests/cli_ciclo.rs:409-443` `mapeamento_explicito_continua_valendo` agora roda os dois binários, com um `.env` sem `BESAVE_MAPEAMENTO` e o override vindo só do ambiente; `:440` `Some(2)` e `:442` log cita o arquivo. **R13 morto** → G2 fechado.
+
+### Sensor (rodada 6)
+
+Rodou numa worktree temporária a partir de `374845c`, com `CARGO_BUILD_JOBS=2`, só os testes relevantes, sem AWS, sem `TELEGRAM_*` e sem `BESAVE_MAPEAMENTO`.
+
+| # | Mutação | Testes | Killed? |
+| - | ------- | ------ | ------- |
+| R13 | `Opcoes::do_env` ignora `BESAVE_MAPEAMENTO` | `cli_ciclo` | ✅ morto (`tests/cli_ciclo.rs:440`) |
+| R14 | arquivo com o timer padrão (UTC) | `cli_ciclo` | ✅ morto (`tests/cli_ciclo.rs:498`) |
+| R15 | sinal do offset trocado (`+03:00`) | `logs`, `cli_ciclo` | ✅ morto |
+| R16 | sem milissegundos | `logs`, `cli_ciclo` | ✅ morto |
+| R17 | stderr do ciclo sem o timer | `cli_ciclo` | ✅ morto (`tests/cli_ciclo.rs:503`) |
+| R18 (extra, do Verifier) | modos manuais sem o timer (`main.rs:75`) | `cli_ciclo`, `dry_run` | ❌ sobreviveu |
+
+**Resultado (rodada 6)**: 5/6 mortos.
+**Isolamento**: a worktree foi removida e podada, e os binários de `debug/` foram restaurados. O `git status --porcelain` da árvore real ficou idêntico antes e depois: só ` M .specs/features/BSV-14/validation.md`.
+
+**Gate**: o coordenador informou 282 passed, 0 failed, 3 ignored em `374845c`; o Verifier não rodou o gate completo nesta rodada.
+
+### Gaps (rodada 6)
+
+1. **G3, minor (LOG-05, modos manuais):** nenhum teste confere o carimbo no stderr de `besave-worker --dry-run`/`--gerar`.
+   - **Correção (só teste):** em `tests/dry_run.rs` (ex.: `dry_run_fora_do_repo_usa_mapeamento_embutido`), exigir que toda linha do stderr com nível de log case `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}-03:00 `. O modo manual não tem relógio fixo, então o teste confere o padrão, não o valor.
+
+---
+
+# Histórico: rodada 5 (texto original)
+
+**Date (r5)**: 2026-10-02 (bug da execução real do dono, CIC-08)
+**Spec (r5)**: `.specs/features/BSV-14/spec.md` (CIC-08, T11)
+**Diff range (r5)**: rodada 5 `7322698..123cd5f` (`70bc9d8`, `123cd5f`); feature inteira `e24a757..123cd5f`
+**Verifier (r5)**: sub-agente independente (autor ≠ verificador)
+
+## Veredito da rodada 5: FAIL ❌
+
+A correção do bug está certa e o bug original (R11) é detectado pelos testes. Mas o override
+`BESAVE_MAPEAMENTO` não tem teste no `besave-ciclo`, o binário que o Agendador usa: o mutante R13
+sobrevive. O CIC-08 exige o override nos dois binários.
+
+## Rodada 5
+
+### CIC-08 contra o pedido do dono
+
+| Ponto | Evidência | Result |
+| ----- | --------- | ------ |
+| Padrão = mapeamento embutido, com qualquer pasta de trabalho, em `--ciclo` e `besave-ciclo` | `apps/worker/src/mapeamento.rs` `MAPEAMENTO_CONTRATO = include_str!("../../../packages/contract/mapeamento.json")`, `embutido()`, `carregar_ou_embutido(None) → embutido`; `apps/worker/src/ciclo.rs` `publicar_ciclo` usa `carregar_ou_embutido(op.mapeamento.as_deref())`; `apps/worker/tests/cli_ciclo.rs:361-401` `ciclo_fora_do_repo_usa_mapeamento_embutido` (os dois binários, `current_dir` fora do repo, sem `BESAVE_MAPEAMENTO`) → `:394` `Some(0)`, `:396-399` `lidas=10 validas=3 rejeitadas=7`, `:400` `manifest.json` | ✅ PASS (R11 morto) |
+| Padrão embutido nos modos manuais | `apps/worker/src/main.rs` `executar` usa `carregar_ou_embutido(args.mapeamento.as_deref())`; `apps/worker/tests/dry_run.rs:407` `dry_run_fora_do_repo_usa_mapeamento_embutido` → `:424-425` `validas: 3`, `rejeitadas: 7` | ✅ PASS |
+| Embutido = arquivo do contrato | `apps/worker/tests/mapeamento.rs:53` `embutido_igual_ao_arquivo_do_contrato` (`:57` `assert_eq!(e.loja(t), f.loja(t))` …) | ✅ PASS |
+| Override `BESAVE_MAPEAMENTO` vale (`--ciclo`/manual via `clap env`) | `apps/worker/tests/cli_ciclo.rs:406-425` `mapeamento_explicito_continua_valendo` (só `besave-worker --ciclo`) → `:422` `Some(2)`, `:424` log cita o arquivo, `:425` sem `manifest.json` | ✅ PASS (R12 morto) |
+| Override vale no `besave-ciclo` (`Opcoes::do_env`) | sem teste: `apps/worker/src/ciclo.rs` `Opcoes::do_env` `mapeamento: var("BESAVE_MAPEAMENTO").map(PathBuf::from)` não é exercitado com um override que mude o resultado | ❌ GAP G2 (R13 sobreviveu) |
+| README sem dependência do repo | `apps/worker/README.md:311` `BESAVE_MAPEAMENTO` = override, padrão embutido; `:386` "o executável não depende do repositório … recompile e copie o `.exe`"; a linha `BESAVE_MAPEAMENTO='C:\git\besave\…'` saiu do `.env` de exemplo | ✅ PASS |
+
+### Sensor (rodada 5)
+
+Rodou numa worktree temporária a partir de `123cd5f`, com `CARGO_BUILD_JOBS=2`, só os testes relevantes, sem AWS, sem `TELEGRAM_*` e sem `BESAVE_MAPEAMENTO` no ambiente.
+
+| # | Mutação | Testes | Killed? |
+| - | ------- | ------ | ------- |
+| R11 | `carregar_ou_embutido(None)` → `carregar("../../packages/contract/mapeamento.json")` (bug original) | `cli_ciclo`, `dry_run`, `mapeamento` | ✅ morto (`ciclo_fora_do_repo_usa_mapeamento_embutido`, `tests/cli_ciclo.rs:394`) |
+| R12 | `carregar_ou_embutido` ignora o `Some` | `cli_ciclo`, `dry_run`, `mapeamento` | ✅ morto (`mapeamento_explicito_continua_valendo`, `tests/cli_ciclo.rs:422`) |
+| R13 | `Opcoes::do_env` ignora `BESAVE_MAPEAMENTO` (`mapeamento: None`) | `cli_ciclo` | ❌ sobreviveu |
+
+**Resultado (rodada 5)**: 2/3 mortos.
+
+**Isolamento**: a worktree foi removida e podada, e os binários de `debug/` foram restaurados do backup. O `git status --porcelain` da árvore real **não** ficou igual: durante o sensor apareceram ` M` em `src/ciclo.rs`, `src/logs.rs`, `src/main.rs`, `src/pagina_html.rs`, `tests/cli_ciclo.rs` e `tests/logs.rs`.
+- Não vieram do sensor: nenhum padrão dos mutantes R11–R13 aparece no diff, e `logs.rs`/`pagina_html.rs` nem são alvo dos mutantes.
+- Correção da rodada 6: eram edições em andamento do próprio coordenador (o ajuste LOG-05), depois commitadas em `374845c`; não eram de outra sessão.
+- O Verifier não tocou nesses arquivos.
+
+**Gate**: o coordenador informou 280 passed, 0 failed, 3 ignored em `123cd5f`. O Verifier não rodou o gate completo nesta rodada: a árvore real tinha edições não commitadas de outra sessão.
+
+### Gaps (rodada 5)
+
+1. **G2, major (CIC-08, override no `besave-ciclo`):** o mutante R13 sobrevive. Se o `besave-ciclo` (o binário do Agendador) ignorar o `BESAVE_MAPEAMENTO`, nenhum teste falha.
+   - **Correção (só teste):** fazer `mapeamento_explicito_continua_valendo` rodar nos dois binários: `besave-worker --ciclo` e `besave-ciclo --env-file …`, com `BESAVE_MAPEAMENTO` apontando para um arquivo ausente → código 2, log citando o arquivo e nenhum `manifest.json`.
+   - **Atenção:** o helper `env_file()` grava `BESAVE_MAPEAMENTO` no `.env`; para provar o override do ambiente, use um `.env` sem essa linha ou um valor diferente.
+
+---
+
+# Histórico: rodada 4 (texto original)
+
+**Date (r4)**: 2026-10-01 (fix→re-verify 1 de 3)
+**Spec (r4)**: `.specs/features/BSV-14/spec.md` (escopo do dono: `docs/specs/BSV-14.md` + ajuste de 01/10)
+**Diff range (r4)**: rodada 4 `c7ef61c..7322698`; feature inteira `e24a757..7322698`
+**Verifier (r4)**: sub-agente independente (autor ≠ verificador)
+
+## Veredito da rodada 4: PASS ✅
 
 O gap G1 da rodada 3 está fechado e a observação 2 foi acatada. Os 25 ACs têm evidência
 `arquivo:linha`. A execução real do dono (Agendador + Telegram) continua bloqueando o merge.
