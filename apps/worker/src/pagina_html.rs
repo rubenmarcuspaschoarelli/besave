@@ -19,7 +19,7 @@ pub const URL_BASE: &str = "https://besave.com.br";
 const DESCRICAO_MAX: usize = 155;
 /// Offset fixo −03:00 (Brasília sem horário de verão desde 2019). Nunca o fuso do sistema:
 /// a página é gerada numa máquina qualquer e precisa sair igual.
-const OFFSET_BRASILIA_MIN: i64 = -180;
+pub const OFFSET_BRASILIA_MIN: i64 = -180;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroTemplate {

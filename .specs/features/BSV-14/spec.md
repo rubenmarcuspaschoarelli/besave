@@ -46,6 +46,7 @@ sem spam. Máquina desligada é BSV-15.
 | Argumentos do `besave-ciclo` | Só `--env-file <arq>`/`--env-file=<arq>` (ou nenhum); o resto → código 2 (`variante=Argumento`), só no log | Sem console, `clap` imprimiria erro no vazio | n |
 | Teste sem AWS do ciclo inteiro | `BESAVE_DESTINO_LOCAL` (pasta + KVS em memória) e `BESAVE_AGORA` (só com destino local) | A fonte fake data as ofertas a partir de `agora`; sem relógio fixo os bytes do chunk mudam entre execuções. Restrito ao destino local para nunca afetar publicação real | n |
 | Mapeamento padrão | `include_str!` de `packages/contract/mapeamento.json` (mesmo padrão do `PACKAGE_CONTRATO` em `geracao.rs`); `BESAVE_MAPEAMENTO`/`--mapeamento` só como override | Execução real: caminho relativo depende da pasta de trabalho do Agendador | y |
+| Carimbo do log | `logs::HoraBrasilia` implementa `FormatTime` com `carimbo_brasilia(ms)`; `FUSO_BRASILIA` passa a derivar de `pagina_html::OFFSET_BRASILIA_MIN` (agora `pub`), uma fonte só; relógio fixo (`BESAVE_AGORA`) também fixa o carimbo | Ajuste do dono (02/10): log em UTC e arquivo/alerta em Brasília confundiam | y |
 | Alerta em código 2 | Também alerta (fase `config`/`env_file`) quando `TELEGRAM_*` está disponível | É falha de ciclo; a execução real do dono depende de um alerta | n |
 | `TELEGRAM_*` pela metade | Código 2 | Desligar em silêncio esconderia o erro | n |
 | Host na mensagem | `COMPUTERNAME` (Windows) ou `HOSTNAME`; só `[A-Za-z0-9._-]`, até 63 chars; senão `desconhecido` | Spec pede host; filtro garante que não vaza caminho | n |
@@ -102,6 +103,7 @@ sem spam. Máquina desligada é BSV-15.
 2. LOG-02: WHEN o ciclo começa THEN arquivos `besave-worker.AAAA-MM-DD.log` com mais de 14 dias SHALL ser removidos e os demais SHALL ficar.
 3. LOG-03: WHEN o ciclo termina com sucesso THEN o log SHALL ter uma linha `relatorio` com os campos em `chave=valor`.
 4. LOG-04: WHEN o ciclo falha THEN o log SHALL ter uma linha `ERROR` com `fase=` e `variante=`.
+5. LOG-05: The worker SHALL carimbar cada linha de log (arquivo e console do `besave-worker`) em `AAAA-MM-DDTHH:MM:SS.mmm-03:00`, Brasília com offset fixo (`OFFSET_BRASILIA_MIN`), nunca o fuso do sistema; uma linha das 01:30Z SHALL ir para o arquivo do dia anterior com 22:30 (ajuste do dono, 02/10).
 
 ### P1: Alerta no Telegram
 
@@ -159,6 +161,7 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | LOG-02 | P1: Logs | T2 | Done |
 | LOG-03 | P1: Logs | T5 | Done |
 | LOG-04 | P1: Logs | T5 | Done |
+| LOG-05 | P1: Logs | T12 | Done |
 | ALR-01 | P1: Alerta | T3, T5 | Done |
 | ALR-02 | P1: Alerta | T3, T5 | Done |
 | ALR-03 | P1: Alerta | T3, T5 | Done |
@@ -170,7 +173,7 @@ Dimensions: dados sensíveis no log (CIC-05); estado persistido (ALR-01..03, edg
 | AGD-02 | P2: Agendador | T7 | Done |
 | AGD-03 | P2: Agendador | T7, T10 | Done |
 
-**Coverage:** 26 total, 26 mapped to tasks, 0 unmapped.
+**Coverage:** 27 total, 27 mapped to tasks, 0 unmapped.
 
 ---
 

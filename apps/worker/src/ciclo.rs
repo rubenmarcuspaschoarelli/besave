@@ -19,7 +19,7 @@ use crate::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
 use crate::execucao::{Codigo, Falha, concluir, rodar};
 use crate::fonte::{FonteOfertas, fake_demo};
 use crate::geracao::Relatorio;
-use crate::logs::{arquivo_do_dia, limpar_antigos};
+use crate::logs::{HoraBrasilia, arquivo_do_dia, limpar_antigos};
 use crate::mapeamento::Mapeamento;
 use crate::oracle::{ConfigOracle, OracleFonte};
 use crate::publicador::PublicadorLocal;
@@ -149,7 +149,12 @@ fn pastas() -> Result<Pastas, ErroCiclo> {
 
 /// Arquivo do dia (sem ANSI) e, se `stderr`, também o stderr. Devolve o erro de abertura do
 /// arquivo, se houve.
-fn iniciar_log(dir: Option<&Path>, agora: i64, stderr: bool) -> Option<std::io::Error> {
+fn iniciar_log(
+    dir: Option<&Path>,
+    agora: i64,
+    stderr: bool,
+    hora: HoraBrasilia,
+) -> Option<std::io::Error> {
     let arquivo = dir.map(|d| {
         std::fs::create_dir_all(d).and_then(|()| {
             File::options()
@@ -162,6 +167,7 @@ fn iniciar_log(dir: Option<&Path>, agora: i64, stderr: bool) -> Option<std::io::
         Some(Ok(f)) => (
             Some(
                 tracing_subscriber::fmt::layer()
+                    .with_timer(hora)
                     .with_ansi(false)
                     .with_writer(Mutex::new(f)),
             ),
@@ -172,6 +178,7 @@ fn iniciar_log(dir: Option<&Path>, agora: i64, stderr: bool) -> Option<std::io::
     };
     let console = stderr.then(|| {
         tracing_subscriber::fmt::layer()
+            .with_timer(hora)
             .with_writer(std::io::stderr)
             .with_ansi(std::io::stderr().is_terminal())
     });
@@ -189,13 +196,17 @@ fn destino_local() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// Segundos Unix. `BESAVE_AGORA` fixa o relógio, mas só com `BESAVE_DESTINO_LOCAL` (ensaio e
-/// testes): publicação real usa sempre o relógio do sistema.
-fn agora() -> i64 {
-    let fixo = destino_local()
+/// `BESAVE_AGORA` (segundos Unix), mas só com `BESAVE_DESTINO_LOCAL` (ensaio e testes):
+/// publicação real usa sempre o relógio do sistema.
+fn relogio_fixo() -> Option<i64> {
+    destino_local()
         .and_then(|_| std::env::var("BESAVE_AGORA").ok())
-        .and_then(|v| v.parse().ok());
-    fixo.unwrap_or_else(|| {
+        .and_then(|v| v.parse().ok())
+}
+
+/// Segundos Unix: `relogio_fixo` ou o relógio do sistema.
+fn agora() -> i64 {
+    relogio_fixo().unwrap_or_else(|| {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
@@ -209,7 +220,8 @@ pub fn executar(op: &Opcoes, previa: Option<Result<(), ErroCiclo>>) -> Codigo {
     let agora = agora();
     let pastas = pastas();
     let dir_logs = pastas.as_ref().ok().map(|p| p.logs.as_path());
-    if let Some(e) = iniciar_log(dir_logs, agora, op.stderr) {
+    let hora = relogio_fixo().map_or_else(HoraBrasilia::default, |s| HoraBrasilia::fixa(s * 1000));
+    if let Some(e) = iniciar_log(dir_logs, agora, op.stderr, hora) {
         warn!(erro = %e, "log em arquivo indisponível");
     }
     let pastas = match pastas {

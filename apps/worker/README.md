@@ -426,12 +426,12 @@ Histórico: Agendador de Tarefas → Biblioteca → "Besave Worker" → aba Hist
 
 ### Logs
 
-Um arquivo por dia de Brasília em `%LOCALAPPDATA%\besave\logs\besave-worker.AAAA-MM-DD.log`.
+Todas as linhas saem no horário de Brasília, offset fixo (`AAAA-MM-DDTHH:MM:SS.mmm-03:00`), no arquivo e no console do `besave-worker`; nunca no fuso do sistema. Um arquivo por dia de Brasília em `%LOCALAPPDATA%\besave\logs\besave-worker.AAAA-MM-DD.log`.
 No início de cada ciclo, arquivos com mais de 14 dias são apagados. Cada ciclo ok deixa uma
 linha `relatorio` em `chave=valor`:
 
 ```
-2026-10-01T13:05:41Z  INFO worker::execucao: relatorio lidas=11630 validas=11598 rejeitadas=32 chunks_escritos=1 … tempo_ms=24310
+2026-10-01T10:05:41.274-03:00  INFO worker::execucao: relatorio lidas=11630 validas=11598 rejeitadas=32 chunks_escritos=1 … tempo_ms=24310
 ```
 
 Falha deixa uma linha `ERROR … falha no ciclo fase=… variante=… erro=…`. Ciclo pulado pela trava:

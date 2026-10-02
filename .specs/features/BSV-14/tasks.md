@@ -41,7 +41,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-11 tarefas (T8 = correção do Verifier; T9–T10 = ajuste do dono; T11 = bug da execução real), execução inline, sem sub-agentes.
+12 tarefas (T8 = correção do Verifier; T9–T10 e T12 = ajustes do dono; T11 = bug da execução real), execução inline, sem sub-agentes.
 
 ### Phase 1: Blocos
 
@@ -52,7 +52,7 @@ T1 → T2 → T3 → T4
 ### Phase 2: Integração
 
 ```
-T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
+T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11 → T12
 ```
 
 ---
@@ -268,6 +268,26 @@ T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
 - [x] `--ciclo` e `besave-ciclo` com pasta de trabalho fora do repo e sem `BESAVE_MAPEAMENTO` → 0 e relatório
 - [x] `--dry-run` fora do repo funciona; `BESAVE_MAPEAMENTO` explícito ausente → 2
 - [x] Embutido = arquivo do contrato
+- [x] Gate build passa
+
+**Tests**: integration
+**Gate**: build
+
+---
+
+### T12: Carimbo do log em Brasília (ajuste do dono)
+
+**What**: `FormatTime` próprio (`HoraBrasilia`) no arquivo e no console; `carimbo_brasilia`; `FUSO_BRASILIA` derivado de `OFFSET_BRASILIA_MIN`. Junto: override de `BESAVE_MAPEAMENTO` testado também no `besave-ciclo` (gap G2 da rodada 5).
+**Where**: `apps/worker/src/logs.rs`, `apps/worker/src/ciclo.rs`, `apps/worker/src/main.rs`, `apps/worker/src/pagina_html.rs`
+**Depends on**: T11
+**Reuses**: `OFFSET_BRASILIA_MIN`, `iso_brasilia`
+**Requirement**: LOG-05, CIC-08
+
+**Done when**:
+
+- [x] Relógio fixo 14:45Z → linhas começam com `2026-10-02T11:45:00.000-03:00`, nos dois binários
+- [x] 01:30Z → arquivo `2026-10-01` e `22:30:00.000-03:00`
+- [x] Override de mapeamento → 2 também no `besave-ciclo`
 - [x] Gate build passa
 
 **Tests**: integration

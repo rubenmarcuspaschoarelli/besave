@@ -401,26 +401,107 @@ fn ciclo_fora_do_repo_usa_mapeamento_embutido() {
     }
 }
 
-/// CIC-08: `BESAVE_MAPEAMENTO` continua valendo como override explícito (arquivo ausente → 2).
+/// CIC-08: `BESAVE_MAPEAMENTO` do ambiente continua valendo como override explícito nos dois
+/// binários (arquivo ausente → 2). O `.env` não tem `BESAVE_MAPEAMENTO`: o valor vem só do
+/// ambiente.
 #[test]
 fn mapeamento_explicito_continua_valendo() {
-    let local = dir_temp("mapeamento-override");
-    let falta = local.join("nao-existe-mapeamento.json");
-    let env = env_file(
-        &local,
-        &format!(
-            "BESAVE_FONTE=fake\nBESAVE_DESTINO_LOCAL='{}'\n",
-            local.join("saida").display()
+    for (exe, args, nome) in [
+        (
+            env!("CARGO_BIN_EXE_besave-worker"),
+            &["--ciclo"][..],
+            "override-worker",
         ),
-    );
-    let out = comando(&local)
-        .env("BESAVE_MAPEAMENTO", &falta)
-        .args(["--ciclo", "--env-file"])
-        .arg(&env)
-        .output()
+        (
+            env!("CARGO_BIN_EXE_besave-ciclo"),
+            &[][..],
+            "override-ciclo",
+        ),
+    ] {
+        let local = dir_temp(nome);
+        let falta = local.join("nao-existe-mapeamento.json");
+        let env = local.join("worker.env");
+        std::fs::write(
+            &env,
+            format!(
+                "BESAVE_FONTE=fake\nBESAVE_IMAGENS_DIR='{}'\nBESAVE_DESTINO_LOCAL='{}'\n",
+                local.join("imagens").display(),
+                local.join("saida").display()
+            ),
+        )
         .unwrap();
-    assert_eq!(out.status.code(), Some(2), "{}", texto(&out));
-    let log = logs(&local);
-    assert!(log.contains("nao-existe-mapeamento.json"), "{log}");
-    assert!(!local.join("saida").join("manifest.json").exists());
+        let out = comando_de(exe, &local)
+            .env("BESAVE_MAPEAMENTO", &falta)
+            .args(args)
+            .arg("--env-file")
+            .arg(&env)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{nome}: {}", texto(&out));
+        let log = logs(&local);
+        assert!(log.contains("nao-existe-mapeamento.json"), "{nome}: {log}");
+        assert!(
+            !local.join("saida").join("manifest.json").exists(),
+            "{nome}"
+        );
+    }
+}
+
+/// LOG-05: com o relógio fixo, toda linha do log (arquivo e, no `besave-worker`, stderr) começa
+/// com o horário de Brasília `…-03:00`; às 01:30Z o arquivo é o do dia anterior em Brasília.
+#[test]
+fn log_em_horario_de_brasilia() {
+    for (agora, arquivo, prefixo) in [
+        (
+            1_790_952_300, // 2026-10-02T14:45:00Z
+            "besave-worker.2026-10-02.log",
+            "2026-10-02T11:45:00.000-03:00 ",
+        ),
+        (
+            1_790_904_600, // 2026-10-02T01:30:00Z
+            "besave-worker.2026-10-01.log",
+            "2026-10-01T22:30:00.000-03:00 ",
+        ),
+    ] {
+        for (exe, args, nome) in [
+            (
+                env!("CARGO_BIN_EXE_besave-worker"),
+                &["--ciclo"][..],
+                "hora-worker",
+            ),
+            (env!("CARGO_BIN_EXE_besave-ciclo"), &[][..], "hora-ciclo"),
+        ] {
+            let local = dir_temp(nome);
+            let env = env_file(
+                &local,
+                &format!(
+                    "BESAVE_FONTE=fake\nBESAVE_DESTINO_LOCAL='{}'\nBESAVE_AGORA={agora}\n",
+                    local.join("saida").display()
+                ),
+            );
+            let out = comando_de(exe, &local)
+                .args(args)
+                .arg("--env-file")
+                .arg(&env)
+                .output()
+                .unwrap();
+            assert_eq!(out.status.code(), Some(0), "{nome}: {}", texto(&out));
+            let dir = local.join("besave").join("logs");
+            let nomes: Vec<String> = std::fs::read_dir(&dir)
+                .unwrap()
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect();
+            assert_eq!(nomes, vec![arquivo.to_owned()], "{nome}");
+            let log = std::fs::read_to_string(dir.join(arquivo)).unwrap();
+            assert!(log.lines().count() >= 2, "{log}");
+            for l in log.lines() {
+                assert!(l.starts_with(prefixo), "{nome}: {l}");
+            }
+            assert!(log.contains(" relatorio "), "{log}");
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            for l in stderr.lines() {
+                assert!(l.starts_with(prefixo), "{nome} stderr: {l}");
+            }
+        }
+    }
 }

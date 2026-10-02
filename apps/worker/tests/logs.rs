@@ -90,3 +90,20 @@ fn retencao_conta_dias_de_brasilia() {
     assert!(limpar_antigos(&dir, VIRADA - 60).unwrap().is_empty());
     assert_eq!(nomes(&dir), vec!["besave-worker.2026-09-16.log"]);
 }
+
+/// LOG-05: carimbo `AAAA-MM-DDTHH:MM:SS.mmm-03:00`, Brasília com offset fixo; 01:30Z cai às
+/// 22:30 do dia anterior.
+#[test]
+fn carimbo_em_brasilia_com_milissegundos() {
+    use worker::logs::carimbo_brasilia;
+    // 2026-10-02T14:45:00Z
+    assert_eq!(
+        carimbo_brasilia(1_790_952_300_000),
+        "2026-10-02T11:45:00.000-03:00"
+    );
+    // 2026-10-02T01:30:00.123Z
+    assert_eq!(
+        carimbo_brasilia(1_790_904_600_123),
+        "2026-10-01T22:30:00.123-03:00"
+    );
+}

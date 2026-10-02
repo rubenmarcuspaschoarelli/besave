@@ -11,6 +11,7 @@ use worker::ciclo;
 use worker::conversao::Rejeicao;
 use worker::fonte::{FonteOfertas, fake_demo};
 use worker::geracao::{Relatorio, contar_paginas, gerar};
+use worker::logs::HoraBrasilia;
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
 use worker::plano::publicar;
@@ -71,6 +72,7 @@ fn main() -> ExitCode {
         return ExitCode::from(ciclo::executar(&op, previa).valor());
     }
     tracing_subscriber::fmt()
+        .with_timer(HoraBrasilia::default())
         .with_env_filter(ciclo::filtro())
         .with_writer(std::io::stderr)
         .with_ansi(std::io::stderr().is_terminal())

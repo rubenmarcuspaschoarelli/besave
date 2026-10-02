@@ -1,12 +1,18 @@
 //! Log em arquivo do `--ciclo` (BSV-14): um arquivo por dia de Brasília, retenção de 14 dias.
 //! Cada execução dura minutos, então o arquivo é escolhido no início (sem rotação em processo).
 
+use std::fmt;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use tracing_subscriber::fmt::format::Writer;
+use tracing_subscriber::fmt::time::FormatTime;
 
 use crate::conversao::iso_utc;
+use crate::pagina_html::OFFSET_BRASILIA_MIN;
 
-/// Brasília, offset fixo (CLAUDE.md regra 5).
-pub const FUSO_BRASILIA: i64 = -3 * 3600;
+/// Brasília, offset fixo (CLAUDE.md regra 5), em segundos.
+pub const FUSO_BRASILIA: i64 = OFFSET_BRASILIA_MIN * 60;
 pub const RETENCAO_DIAS: i64 = 14;
 const PREFIXO: &str = "besave-worker.";
 const SUFIXO: &str = ".log";
@@ -16,6 +22,43 @@ pub fn iso_brasilia(agora: i64) -> String {
     let mut s = iso_utc(agora + FUSO_BRASILIA);
     s.pop(); // `Z`
     s
+}
+
+/// `AAAA-MM-DDTHH:MM:SS.mmm-03:00` de um instante em milissegundos Unix.
+pub fn carimbo_brasilia(ms: i64) -> String {
+    let min = OFFSET_BRASILIA_MIN.abs();
+    let sinal = if OFFSET_BRASILIA_MIN < 0 { '-' } else { '+' };
+    format!(
+        "{}.{:03}{sinal}{:02}:{:02}",
+        iso_brasilia(ms.div_euclid(1000)),
+        ms.rem_euclid(1000),
+        min / 60,
+        min % 60
+    )
+}
+
+/// Timer do `tracing-subscriber` em Brasília, offset fixo (nunca o fuso do sistema). `fixo`:
+/// relógio de ensaio/teste em ms (`BESAVE_AGORA`).
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HoraBrasilia {
+    fixo: Option<i64>,
+}
+
+impl HoraBrasilia {
+    pub fn fixa(ms: i64) -> Self {
+        Self { fixo: Some(ms) }
+    }
+}
+
+impl FormatTime for HoraBrasilia {
+    fn format_time(&self, w: &mut Writer<'_>) -> fmt::Result {
+        let ms = self.fixo.unwrap_or_else(|| {
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        });
+        w.write_str(&carimbo_brasilia(ms))
+    }
 }
 
 fn data_brasilia(agora: i64) -> String {
