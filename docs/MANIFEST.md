@@ -21,10 +21,14 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /img/ofertas/{id}.webp
 /img/ofertas/{id}-small.webp
 /img/produtos/{id_produto}.webp
-/img/placeholder/{area}.webp
-/sitemap.xml                        ← sitemap index
-/sitemap-{n}.xml                    ← ≤ 50.000 URLs cada
-/robots.txt
+/img/placeholder/{slug}.webp
+/assets/besave.css                  ← CSS da página de oferta (BSV-21; BSV-30 passa a gerá-lo)
+/sitemap.xml                        ← sitemap index (só ofertas ATIVAS)
+/sitemap-{n}.xml                    ← ≤ 45.000 URLs cada
+/robots.txt                         ← Disallow: / até a virada de DNS (BESAVE_INDEXAVEL)
+/_estado/paginas.json               ← índice id → hash do HTML (worker, BSV-21)
+/_estado/redirects.json             ← índice id → hash da URL + ItemCount/ETag da KVS (BSV-12c)
+/_estado/vigia.json                 ← estado de aviso do vigia (Lambda, BSV-15)
 ```
 
 O que foi proposto como `server\s3\ofertas\img` e `server\s3\produtos\img` são os
@@ -93,6 +97,11 @@ Regras:
 | `img/**` | `public, max-age=31536000, immutable` | `image/webp` | — |
 | `_app/**` (build Svelte, nomes com hash) | `public, max-age=31536000, immutable` | conforme | — |
 | `index.html`, `sitemap*.xml`, `robots.txt` | `public, max-age=300` | conforme | — |
+| `assets/*.css` | `public, max-age=3600, stale-while-revalidate=86400` | `text/css; charset=utf-8` | — |
+| `_estado/*.json` | `no-store` | `application/json` | — |
+
+`_estado/` é legível pela borda (behavior padrão). Contém só ids, hashes, contagens e o estado
+do vigia — nunca URL de afiliado nem segredo (AD-055).
 
 Nota: chunks pré-comprimidos em Brotli exigem que o CloudFront **não** recomprima (ele só
 comprime quando não há `Content-Encoding`). Cliente sem suporte a `br` recebe bytes br
@@ -130,18 +139,19 @@ depois; o dado já existe).
 
 ## 6. Worker — ordem de publicação (evita janela inconsistente)
 
-1. Upload de imagens novas.
-2. Upload de chunks e índice de busca novos (nomes novos, nunca sobrescreve).
-3. Upload/atualização de páginas HTML e sitemaps.
-4. Atualização da KVS de redirects.
-5. **Por último**, upload do `manifest.json`.
-6. Limpeza de chunks órfãos (> 24 h fora do manifest).
-7. Ids presentes no manifest anterior e ausentes no Oracle (expurgo, CONTRATO.md §7) → apagar
-   `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
+1. Imagens novas (existência decidida por **uma listagem** de `img/ofertas/`, nunca HEAD por chave — AD-042).
+2. Chunks e índice de busca novos (nomes novos, nunca sobrescreve).
+3. CSS, páginas HTML, sitemaps, robots e `_estado/paginas.json` (só o que mudou de hash — AD-041).
+4. KVS de redirects pelo diff contra `_estado/redirects.json`; KVS só é listada quando o índice
+   não é confiável (ItemCount/ETag divergentes, ausente, ilegível) — AD-044.
+5. **Por último**, `manifest.json` e `manifest.prev.json` (regravados em todo ciclo: são o batimento
+   que o vigia monitora — AD-028, AD-052).
+6. Órfãos: chunks fora dos dois últimos manifests.
+7. Expurgo: ids que saíram do conjunto publicado → apagar `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
 
 Se falhar antes do passo 5, o manifest antigo continua válido e aponta para arquivos que
 ainda existem. Idempotente: rodar duas vezes sem mudança no Oracle não altera nenhum
-objeto (comparar hash antes do upload).
+objeto além dos dois manifests. Ciclo em regime medido em 01–02/10/2026: ~20 s, zero escritas.
 
 ---
 

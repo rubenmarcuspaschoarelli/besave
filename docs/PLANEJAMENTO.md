@@ -3,7 +3,7 @@
 Documento de contexto, em linguagem simples, para quem chega agora (pessoa ou agente).
 **Não é fonte de verdade.** Quando este texto e outro arquivo discordarem, valem, nesta ordem:
 `docs/CONTRATO.md` (dados), `docs/MANIFEST.md` (S3/CloudFront), `docs/DECISOES.md` (por que), e a
-spec do ticket em `docs/specs/`. Atualizado em 27/09/2026.
+spec do ticket em `docs/specs/`. Atualizado em 02/10/2026.
 
 ---
 
@@ -76,29 +76,31 @@ Canal (broadcast), nunca automação de grupos.
 7. **Nenhuma URL de loja no site.** Só `/ir/{id}`. Troca de rede de afiliado sem regerar 30 mil
    páginas, e o Google não vê link de afiliado.
 
-## 4. Onde estamos (27/09/2026)
+## 4. Onde estamos (02/10/2026)
 
-Feito e no ar:
-- Contrato de dados (v1.3.1), layout do S3, decisões registradas (AD-001 a AD-031), CI.
-- Worker: lê o Oracle real, gera chunks e manifest, publica no S3 e atualiza os redirects.
-  Primeira execução real: ~25 mil ofertas, 31 chunks, 972 KB no total, 6 segundos.
-- Infra em Terraform: bucket privado, CloudFront novo (ainda no domínio `*.cloudfront.net`),
-  função de redirect testada, usuário IAM do worker.
-- **Os dados já estão publicados no CloudFront novo.** Ainda não há tela.
+**O worker está em produção e roda sozinho.** A cada 5 minutos o Agendador do Windows executa
+`C:\besave\bin\besave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
+páginas de oferta, sitemap e redirects. Ciclo em regime: ~20 s. Hoje são ~17 mil ofertas válidas
+(o robô ainda está preenchendo URLs de afiliado das antigas).
 
-Em andamento:
-- BSV-13 — worker copia as imagens do robô para o S3 e aprende a área "Outros".
-- BSV-20 — template HTML da página de oferta.
+Feito e no ar (ainda no domínio `*.cloudfront.net`, com `robots.txt` bloqueando indexação):
+- Contrato de dados 1.3.1, layout do S3, 57 decisões registradas, CI com filtro por pasta.
+- Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom e botão `/ir/{id}`.
+- Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
+- Infra inteira em Terraform; o worker usa um usuário IAM com permissões mínimas.
+- Alertas no Telegram: o worker avisa quando um ciclo falha; uma função na AWS avisa quando o
+  site para de ser atualizado (por exemplo, PC desligado).
 
 Próximos, nesta ordem:
-- BSV-21 gerar as ~30 mil páginas + sitemap · BSV-14 agendamento e alerta no Telegram.
-- BSV-30..34 site SvelteKit: shell, lista, polling do manifest, áreas, busca.
-- Virada de DNS de `besave.com.br` para a distribuição nova (o protótipo antigo sai do ar).
-- F4 Telegram · F5 usuários · F6 app · F7 admin · link curto `besave.io`.
+- **Direção visual** (sessão com o dono) → BSV-30..34: site SvelteKit (shell e design system,
+  lista com carga progressiva, novas ofertas, páginas de área, busca).
+- Virada de DNS de `besave.com.br` para a distribuição nova e liberação da indexação.
+- Robô: Outros/Unisex para não classificadas, um cupom por oferta, URL de afiliado nas antigas.
+- Depois: canal no Telegram (F4), usuários (F5), app (F6), admin (F7), link curto `besave.io`.
 
-O que ainda não está decidido: domínio curto (`.io` ou `.me`), ordenação padrão da home,
-tamanho definitivo da imagem `-small` (200 px hoje; talvez 320 para telas de alta densidade),
-como os cupons da tabela CUPOM aparecem no site.
+Em aberto: domínio curto (`.io` ou `.me`), ordenação padrão da home, tamanho da imagem `-small`
+(200 px hoje; 320–400 para telas de alta densidade), cupons da tabela CUPOM no site, e quando
+tirar o worker do PC do dono.
 
 ## 5. Como o trabalho é feito
 
