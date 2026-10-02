@@ -14,7 +14,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /                                   ← build do SvelteKit (index.html, _app/…)
 /manifest.json                      ← ÚNICO arquivo mutável de dados
 /data/chunks/{n}-{hash}.json.br     ← OfertaCard[] (imutável)
-/data/busca/{hash}.json.br          ← índice de busca compacto (F3, imutável)
+/data/busca/{hash}.json.br          ← reservado, não gerado: a busca é no cliente (AD-061)
 /oferta/{id}/index.html             ← página estática da oferta (OfertaPagina)
 /{area}/index.html                  ← página de área, prerender (ex.: /elas/)
 /{area}/{publico}/index.html        ← ex.: /elas/feminino/
@@ -40,7 +40,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.3.2",
+  "contrato": "1.3.3",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,
@@ -48,7 +48,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
     { "n": 0,  "arquivo": "data/chunks/0-9f2a1c3b4d5e6f70.json.br",  "ids": [1, 999],       "qtd": 812, "bytes": 41210 },
     { "n": 30, "arquivo": "data/chunks/30-77b0e4d5c6b7a890.json.br", "ids": [30000, 30999], "qtd": 640, "bytes": 33980 }
   ],
-  "busca": { "arquivo": "data/busca/aa310912ab34cd56.json.br", "bytes": 1480200 },
+  "busca": null,
   "areas": { "TECH": 4120, "ELAS": 9800 }
 }
 ```
@@ -60,7 +60,7 @@ Regras:
   só o chunk da sua faixa.
 - Chunks vazios (faixa sem ofertas ativas) não aparecem.
 - `hash` = 16 hex do SHA-256 do conteúdo **antes** da compressão.
-- `busca` é `null` até F3.
+- `busca` é `null`: a busca é construída no cliente sobre os títulos dos chunks (AD-061); o campo fica reservado.
 - `areas` = contagem de ativas por área, para o menu mostrar "(4.120)" sem baixar tudo.
 
 ---
@@ -76,12 +76,15 @@ Regras:
   `manifest.prev.json`; ver §6 passo 6).
 
 ### 3.1 Algoritmo do cliente (F3, referência para o agente)
-1. `GET /manifest.json` (respeita `max-age`; polling a cada 5 min enquanto a aba está visível).
+1. `GET /manifest.json` sempre com `cache: 'no-cache'` (revalida na borda; com `max-age` no navegador o
+   cliente pode ficar 2 ciclos atrás e pedir chunk já apagado como órfão — AD-062). Polling a cada
+   5 min enquanto a aba está visível.
 2. Para cada `chunks[]`: se `arquivo` ≠ o que tenho em memória para aquele `n`, baixar.
    Chunks não listados no novo manifest são descartados.
-3. Ordenar/filtrar localmente por `dt`, `a`, `p`; busca sobre o índice.
-4. Se houve chunk novo e há cards com `dt` maior que o maior `dt` já exibido → toast
-   "N novas ofertas" (não insere no topo; o usuário clica).
+3. Ordenar/filtrar localmente por `dt`, `a`, `p`; busca sobre os títulos já carregados (AD-061).
+4. Se houve chunk novo com ids nunca exibidos e não expirados → toast "N novas ofertas" (não
+   insere no topo; o usuário clica). Nova = id nunca exibido, não `dt` maior: oferta antiga pode
+   ser publicada depois, quando ganha a URL de afiliado (AD-063).
 5. Primeira carga: baixar primeiro os 3 chunks de `n` mais alto (ofertas mais recentes),
    renderizar, depois os demais em `requestIdleCallback`.
 
@@ -141,7 +144,7 @@ depois; o dado já existe).
 ## 6. Worker — ordem de publicação (evita janela inconsistente)
 
 1. Imagens novas (existência decidida por **uma listagem** de `img/ofertas/`, nunca HEAD por chave — AD-042).
-2. Chunks e índice de busca novos (nomes novos, nunca sobrescreve).
+2. Chunks novos (nomes novos, nunca sobrescreve).
 3. CSS, páginas HTML, sitemaps, robots e `_estado/paginas.json` (só o que mudou de hash — AD-041).
 4. KVS de redirects pelo diff contra `_estado/redirects.json`; KVS só é listada quando o índice
    não é confiável (ItemCount/ETag divergentes, ausente, ilegível) — AD-044.
@@ -161,8 +164,8 @@ objeto além dos dois manifests. Ciclo em regime medido em 01–02/10/2026: ~20 
 | item | limite |
 |---|---|
 | chunk comprimido | ≤ 60 KB |
-| `OfertaCard` bruto | ≤ 220 B (média ≤ 160 B) |
-| índice de busca comprimido | ≤ 2 MB |
+| `OfertaCard` bruto | média ≤ 200 B, sem teto por card; o gate é o chunk comprimido (AD-064) |
+| índice de busca | não existe; busca no cliente (AD-061) |
 | HTML de oferta (sem imagens) | ≤ 30 KB |
 | imagem `-small` | ≤ 25 KB |
 | geração completa (30k páginas + chunks) no worker | ≤ 2 min |

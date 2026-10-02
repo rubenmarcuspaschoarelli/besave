@@ -63,3 +63,16 @@ Agentes em worktree relatam propostas no PR; não editam este arquivo.
 - AD-058 · 2026-10-02 · `DT_ULT_ATUALIZACAO` não será criada no Oracle · os índices de `_estado/` (AD-041, AD-044) e o hash dos chunks já tornam o ciclo proporcional à mudança (~20 s, zero escritas em regime) · coluna + trigger `BEFORE UPDATE`
 - AD-059 · 2026-10-02 · O contrato da imagem `-small` vale para o arquivo publicado: lado maior ≤ 320 px e ≤ 25 KB; o robô entrega 200 px hoje (dentro do limite); subir para 320 px continua em aberto · contrato descreve o que o site consome, não o que o robô produz · fixar 200 px no contrato (obrigaria nova versão para subir)
 - AD-060 · 2026-10-02 · `develop` é integração (protegida, toda mudança por branch + PR, inclusive docs e `DECISOES.md`); `main` é o que está em produção. PR `develop → main` sempre que um novo `besave-ciclo.exe` for copiado para `C:\besave\bin` ou houver `terraform apply`; o binário de produção é compilado a partir de `main` · produção rastreável a um commit; `main` estava 166 commits atrás sem significado · `main` como integração; tags de release
+- AD-061 · 2026-10-02 · Busca construída no cliente sobre os títulos dos chunks (varredura por prefixo de palavra em texto normalizado, pré-computado por chunk); `manifest.busca` fica `null` · zero byte extra (a lista já baixa todos os chunks), zero trabalho no worker, sempre consistente com os chunks; medido em produção: 11–17 ms por consulta sobre 17 mil títulos em Python · índice gerado pelo worker em `data/busca/`; revisitar acima de ~80 mil ofertas ou se a lista deixar de baixar todos os chunks
+
+  | | índice no cliente | índice gerado pelo worker (`data/busca/`) |
+  |---|---|---|
+  | bytes extras por visita | 0 (títulos já vêm nos chunks: 690 KB br para 17 mil cards) | +0,5–1,5 MB br; arquivo único muda a cada ciclo com oferta nova → visitante recorrente rebaixa quase sempre |
+  | CPU no cliente | normalizar 30 mil títulos uma vez (~20–50 ms desktop, ~4× em celular fraco, diluído por chunk); consulta por varredura ~2–5 ms desktop | parse do índice, da mesma ordem |
+  | trabalho no worker | nenhum | geração + ticket Rust + mudança de contrato (regra 10) |
+  | consistência | sempre igual aos chunks | pode divergir dos chunks entre ciclos |
+  | busca antes de baixar tudo | parcial (`completo: false`) | completa, mas sem os cards para exibir |
+
+- AD-062 · 2026-10-02 · Cliente pede `manifest.json` sempre com `cache: 'no-cache'` · `max-age=300` no navegador + 300 s na borda deixam o cliente até 2 ciclos atrás, e o worker só guarda chunks dos 2 últimos manifests (404 em chunk órfão); 304 é barato · respeitar `max-age`; reter órfãos por mais tempo
+- AD-063 · 2026-10-02 · Oferta "nova" (toast) = id nunca exibido e não expirado, não `dt` maior · o robô publica ofertas com `dt` antigo quando preenche a URL de afiliado depois; por `dt` elas nunca disparariam o toast · `dt` maior que o maior exibido (MANIFEST §3.1 original)
+- AD-064 · 2026-10-02 · Orçamento do `OfertaCard` bruto: média ≤ 200 B, sem teto por card; o gate é o chunk comprimido ≤ 60 KB (já imposto pelo worker); título não é cortado além da regra de `t` · produção mede média 188 B e máximo 341 B com chunks de até 36 KB; o título é o que a busca usa · ≤ 220 B por card e média ≤ 160 B (estimativa de projeto); cortar título em ~120 caracteres
