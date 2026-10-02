@@ -1,6 +1,6 @@
 # DECISOES.md — registro de decisões de arquitetura
 
-Formato: `AD-nnn · data · decisão · motivo · alternativas descartadas`. Só o dono/arquiteto escreve aqui, em `main`.
+Formato: `AD-nnn · data · decisão · motivo · alternativas descartadas`. Só o dono/arquiteto escreve aqui, em `develop` via PR (AD-060). AD superada não é apagada nem reescrita: ganha "→ superada por AD-nnn" no fim da linha.
 Agentes em worktree relatam propostas no PR; não editam este arquivo.
 
 - AD-001 · 2026-09-19 · Leitura 100% estática (S3 + CloudFront), sem banco e sem Lambda no caminho de leitura · custo e resiliência a pico · Lambda + DynamoDB na leitura (custo e latência sem ganho)
@@ -11,8 +11,8 @@ Agentes em worktree relatam propostas no PR; não editam este arquivo.
 - AD-006 · 2026-09-24 · Nenhuma URL de afiliado em HTML/chunks; CTA `/ir/{id}` via CloudFront Function + KeyValueStore · log de clique dia 1, SEO limpo, troca de rede sem regerar páginas · URL direta no botão
 - AD-007 · 2026-09-24 · Dinheiro em centavos (integer); datas ISO 8601 UTC; enums fechados com `mapeamento.json` · evita float e texto livre · NUMBER/VARCHAR do Oracle repassados
 - AD-008 · 2026-09-24 · JSON + Brotli, não Protobuf, na v1 · ganho de 20–30 % não paga o atrito para agentes e debug · Protobuf (revisitar com medição)
-- AD-009 · 2026-09-24 · Oferta encerrada: página regerada com `noindex` e CTA desabilitado por 30 dias, depois apagada · preserva tráfego residual; 410 real fica para função de borda futura · apagar imediatamente (404 em massa)
-- AD-010 · 2026-09-24 · Oracle recebe `DT_DESATIVACAO`, `DT_ULT_ATUALIZACAO`, `DS_SLUG` · sem elas o worker não sabe o que mudou nem o que morreu · regerar tudo sempre (custo) ; slug recalculado (URL instável)
+- AD-009 · 2026-09-24 · Oferta encerrada: página regerada com `noindex` e CTA desabilitado por 30 dias, depois apagada · preserva tráfego residual; 410 real fica para função de borda futura · apagar imediatamente (404 em massa) → superada por AD-013
+- AD-010 · 2026-09-24 · Oracle recebe `DT_DESATIVACAO`, `DT_ULT_ATUALIZACAO`, `DS_SLUG` · sem elas o worker não sabe o que mudou nem o que morreu · regerar tudo sempre (custo) ; slug recalculado (URL instável) → superada por AD-018 (`DS_SLUG`) e AD-058 (`DT_ULT_ATUALIZACAO`)
 - AD-011 · 2026-09-23 · Monorepo único; um ticket = uma pasta principal; `CLAUDE.md` por app · contrato compartilhado e worktrees do Orca · repo por projeto (drift de contrato)
 - AD-012 · 2026-09-24 · Skill `tlc-spec-driven` como workflow de execução; workers não gravam `STATE.md`/`LESSONS.md` em worktree · evita conflito entre PRs paralelos · cada worker gravando no log
 - AD-013 · 2026-09-25 · Estado da oferta vem de `ST_ATIVO` (1/0) + `DT_DESATIVACAO`; expiradas ficam nos chunks (`x:1`) e nas páginas até expurgo em 7 dias · decisão do dono: usuário vê "expirada" em vez de sumiço; Promobit faz igual · sumir imediatamente (perde contexto e tráfego residual)
@@ -60,3 +60,6 @@ Agentes em worktree relatam propostas no PR; não editam este arquivo.
 - AD-055 · 2026-10-02 · `_estado/` fica legível pela borda; contém só ids, hashes, contagens e estado do vigia · não vale um behavior só para esconder dados inofensivos · bucket separado
 - AD-056 · 2026-10-02 · `*.tfplan`, `plan.bin/txt` e eventos de teste fora do git · plano contém ARNs e estado completo; repo é público · versionar planos
 - AD-057 · 2026-10-02 · Operação depende do PC do dono ligado e logado (Oracle, robô e worker locais); o vigia avisa quando para · aceitável no MVP; reavaliar máquina dedicada quando houver tráfego · VPS/EC2 agora
+- AD-058 · 2026-10-02 · `DT_ULT_ATUALIZACAO` não será criada no Oracle · os índices de `_estado/` (AD-041, AD-044) e o hash dos chunks já tornam o ciclo proporcional à mudança (~20 s, zero escritas em regime) · coluna + trigger `BEFORE UPDATE`
+- AD-059 · 2026-10-02 · O contrato da imagem `-small` vale para o arquivo publicado: lado maior ≤ 320 px e ≤ 25 KB; o robô entrega 200 px hoje (dentro do limite); subir para 320 px continua em aberto · contrato descreve o que o site consome, não o que o robô produz · fixar 200 px no contrato (obrigaria nova versão para subir)
+- AD-060 · 2026-10-02 · `develop` é integração (protegida, toda mudança por branch + PR, inclusive docs e `DECISOES.md`); `main` é o que está em produção. PR `develop → main` sempre que um novo `besave-ciclo.exe` for copiado para `C:\besave\bin` ou houver `terraform apply`; o binário de produção é compilado a partir de `main` · produção rastreável a um commit; `main` estava 166 commits atrás sem significado · `main` como integração; tags de release

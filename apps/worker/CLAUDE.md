@@ -16,4 +16,4 @@ Roda local (cron 5–10 min). Lê OFERTA/PRODUTO/CUPOM, gera os artefatos de MAN
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 
 ## Orçamentos (gates de teste)
-chunk comprimido ≤ 60 KB · HTML de oferta ≤ 30 KB · `_small` ≤ 25 KB · geração completa ≤ 2 min (medir com fixture de 30k).
+chunk comprimido ≤ 60 KB · HTML de oferta ≤ 30 KB · `-small` ≤ 25 KB e lado maior ≤ 320 px (AD-059) · geração completa ≤ 2 min (medir com fixture de 30k).

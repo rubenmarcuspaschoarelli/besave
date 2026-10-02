@@ -15,7 +15,8 @@ sem credenciais no código.
 ## Entregáveis
 1. `infra/main.tf`, `variables.tf`, `outputs.tf`, `README.md` (como aplicar; state local por ora,
    `*.tfstate` no `.gitignore`; migrar para S3 backend é ticket futuro).
-2. Bucket `besave-site` (us-east-1): privado, Block Public Access total, sem website hosting,
+2. **[Nota 2026-10-02: lifecycle de chunks revogado — ver AD-041/AD-042. Chunk de faixa antiga não muda e continua no manifest; expirar por idade apagaria arquivo em uso. Órfãos são removidos pelo worker (MANIFEST §6).]**
+   Bucket `besave-site` (us-east-1): privado, Block Public Access total, sem website hosting,
    versionamento desligado, lifecycle: `data/chunks/` e `data/busca/` expiram em 7 dias
    (só órfãos sobrevivem tanto; o manifest atual sempre aponta para arquivos recentes).
 3. Bucket `besave-logs` (ou reutilizar `logs.besave.com.br`): logs padrão do CloudFront, prefixo `cf/`.
@@ -30,7 +31,8 @@ sem credenciais no código.
      worker (BSV-12) popula.
    - Funções versionadas no repo em `infra/functions/*.js` com teste unitário do runtime
      (`cloudfront-js-2.0`) usando fixtures de evento.
-6. IAM: usuário `besave-worker` (sem console) com policy mínima:
+6. **[Nota 2026-10-02: policy revisada — ver AD-046 (UpdateKeys, sem PutKey/DeleteKey).]**
+   IAM: usuário `besave-worker` (sem console) com policy mínima:
    `s3:PutObject, s3:DeleteObject, s3:ListBucket, s3:GetObject` no bucket `besave-site`;
    `cloudfront-keyvaluestore:DescribeKeyValueStore, PutKey, DeleteKey, ListKeys` na KVS;
    `cloudfront:CreateInvalidation` restrito à distribuição nova. **Sem** access key criada pelo

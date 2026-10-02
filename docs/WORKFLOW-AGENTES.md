@@ -57,7 +57,7 @@ máximo 3 ciclos antes de escalar para o dono.
 
 | padrão da skill | no Besave |
 |---|---|
-| `STATE.md` = log de decisões, qualquer agente grava | **Só o dono/arquiteto grava**, em `docs/DECISOES.md` em `main`. Worker em worktree relata propostas no resumo do PR. Evita conflito entre PRs paralelos. |
+| `STATE.md` = log de decisões, qualquer agente grava | **Só o dono/arquiteto grava**, em `docs/DECISOES.md`, em `develop` via PR (AD-060). Worker em worktree relata propostas no resumo do PR. Evita conflito entre PRs paralelos. |
 | `LESSONS.md` / `lessons.json` auto-alimentados pelo Verifier | Desligado nos workers por enquanto (mesmo motivo). O dono coleta lições dos `validation.md` e consolida manualmente. Reavaliar em F5. |
 | Sub-agentes por lote de ~7 tarefas | Não usar: no Orca cada sessão já é um ticket (≤ 8 tarefas). Se a spec gerar mais que isso, o ticket está grande — dividir, não delegar. |
 | UAT interativo em features com UI | Substituído pelo ticket `BSV-nn-TEST` (agente Tester em sessão separada) nos tickets de F2/F3 com UI. |
