@@ -42,7 +42,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-8 tarefas, um lote: execução inline, sem sub-agentes (WORKFLOW-AGENTES §3).
+9 tarefas (T9 = correções do Verifier), um lote: execução inline, sem sub-agentes (WORKFLOW-AGENTES §3).
 
 ### Phase 1: Base
 
@@ -59,7 +59,7 @@ T3 → T4 → T5 → T6
 ### Phase 3: Fachada e medição
 
 ```
-T6 → T7 → T8
+T6 → T7 → T8 → T9
 ```
 
 ---
@@ -206,4 +206,21 @@ T6 → T7 → T8
 - [x] Gate build passa (fim da fase 3)
 
 **Tests**: none
+**Gate**: build
+
+---
+
+### T9: Correções do Verifier (rodada 1)
+
+**What**: `novas(n)` emitido sempre que a contagem muda nesta sincronização (inclusive depois de `confirmarNovas()`); POL-01/POL-03 fixam o intervalo literal de 5 min; teste de primeira carga com 404 persistente (sem `completo`).
+**Where**: `apps/site/src/lib/dados/sincronizador.ts`
+**Depends on**: T8
+**Reuses**: harness de `sincronizador.test.ts`
+**Requirement**: CAT-07, POL-01, POL-03, SIN-01
+
+**Done when**:
+
+- [x] Fix 1..3 do `validation.md` com teste; gate build passa
+
+**Tests**: unit
 **Gate**: build

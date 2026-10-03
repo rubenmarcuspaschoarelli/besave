@@ -75,7 +75,6 @@ export function criarSincronizador(cat: Catalogo, deps: Deps): Sincronizador {
 	let desinscrever: (() => void) | null = null;
 	let prontoEmitido = false;
 	let completoEmitido = false;
-	let ultimasNovas = 0;
 
 	async function lerManifest(): Promise<Manifest | null> {
 		try {
@@ -144,6 +143,8 @@ export function criarSincronizador(cat: Catalogo, deps: Deps): Sincronizador {
 		const m = await lerManifest();
 		if (!aceitavel(m)) return;
 		atual = m;
+		// Antes do diff: confirmarNovas() zera a contagem fora daqui.
+		const novasAntes = cat.novas();
 		let { falhas, mudou } = await aplicar(m);
 		if (falhas.length > 0) {
 			// Regra 5: refaz o manifest uma vez e tenta de novo.
@@ -160,10 +161,7 @@ export function criarSincronizador(cat: Catalogo, deps: Deps): Sincronizador {
 		}
 		if (mudou) emitir({ tipo: 'atualizado' });
 		const novas = cat.novas();
-		if (novas !== ultimasNovas) {
-			ultimasNovas = novas;
-			emitir({ tipo: 'novas', n: novas });
-		}
+		if (novas !== novasAntes) emitir({ tipo: 'novas', n: novas });
 	}
 
 	function sincronizarAgora(): Promise<void> {

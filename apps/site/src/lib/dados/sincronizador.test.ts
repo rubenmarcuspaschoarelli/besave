@@ -2,13 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buscar } from './busca.ts';
 import { Catalogo } from './catalogo.ts';
 import { gerarCards, gerarManifest, type Publicacao } from './gerador.ts';
-import {
-	INTERVALO_MS,
-	criarSincronizador,
-	diferenca,
-	type Deps,
-	type Evento
-} from './sincronizador.ts';
+import { criarSincronizador, diferenca, type Deps, type Evento } from './sincronizador.ts';
 import type { Manifest, OfertaCard } from './tipos.ts';
 import { card, manifest, ref } from './apoio-teste.ts';
 
@@ -357,6 +351,49 @@ describe('sincronizador: versão, contrato e falhas', () => {
 		expect(cat.completo).toBe(true);
 	});
 
+	it('novas(n) volta a ser emitido depois de confirmarNovas(); sync sem mudança não emite', async () => {
+		const cards = [card(1), card(2)];
+		const amb = ambiente(gerarManifest(cards));
+		const cat = new Catalogo();
+		const s = criarSincronizador(cat, amb.deps);
+		await s.sincronizarAgora();
+		amb.publicar(gerarManifest([...cards, card(3)], 20261002120500));
+		await s.sincronizarAgora();
+		cat.confirmarNovas();
+		amb.publicar(gerarManifest([...cards, card(3), card(4)], 20261002121000));
+		amb.limpar();
+		await s.sincronizarAgora();
+		expect(amb.eventos).toContainEqual({ tipo: 'novas', n: 1 });
+		amb.limpar();
+		await s.sincronizarAgora();
+		expect(amb.eventos.filter((e) => e.tipo === 'novas')).toEqual([]);
+	});
+
+	it('SIN-01: 404 persistente na primeira carga → pronto e erro, sem completo; completo no ciclo seguinte', async () => {
+		const { pub } = publicacao();
+		const amb = ambiente(pub);
+		const arq = pub.manifest.chunks[0].arquivo;
+		amb.falhar.set(arq, 99);
+		const cat = new Catalogo();
+		const s = criarSincronizador(cat, amb.deps);
+		await s.sincronizarAgora();
+		expect(amb.log).toContain('pronto');
+		expect(amb.eventos).toContainEqual({
+			tipo: 'erro',
+			erro: 'chunk',
+			n: pub.manifest.chunks[0].n
+		});
+		expect(amb.log).not.toContain('completo');
+		expect(cat.completo).toBe(false);
+		amb.falhar.delete(arq);
+		amb.limpar();
+		await s.sincronizarAgora();
+		expect(amb.eventos.filter((e) => e.tipo === 'completo')).toHaveLength(1);
+		amb.limpar();
+		await s.sincronizarAgora();
+		expect(amb.log).not.toContain('completo');
+	});
+
 	it('novas: chunk com ids novos depois de completo emite novas(n)', async () => {
 		const cards = [card(1), card(2)];
 		const amb = ambiente(gerarManifest(cards));
@@ -381,9 +418,13 @@ describe('sincronizador: polling por visibilidade', () => {
 		return { amb, s };
 	}
 
-	it('POL-01: 15 min visível → 3 polls', async () => {
+	it('POL-01: 15 min visível → 3 polls, um a cada 5 min', async () => {
 		const { amb } = await iniciado();
-		await amb.avancar(15 * MIN);
+		await amb.avancar(5 * MIN - 1);
+		expect(amb.manifests()).toBe(0);
+		await amb.avancar(1);
+		expect(amb.manifests()).toBe(1);
+		await amb.avancar(10 * MIN);
 		expect(amb.manifests()).toBe(3);
 	});
 
@@ -401,7 +442,7 @@ describe('sincronizador: polling por visibilidade', () => {
 		expect(amb.manifests()).toBe(0);
 		await amb.mudarVisibilidade(true);
 		expect(amb.manifests()).toBe(1);
-		await amb.avancar(INTERVALO_MS - 1);
+		await amb.avancar(5 * MIN - 1);
 		expect(amb.manifests()).toBe(1);
 		await amb.avancar(1);
 		expect(amb.manifests()).toBe(2);
