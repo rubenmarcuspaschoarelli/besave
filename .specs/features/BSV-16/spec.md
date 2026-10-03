@@ -142,7 +142,7 @@ existir e redirecionar antes do primeiro post.
 | PAG-02 | P2: Páginas | Tasks | Implemented |
 | PAG-03 | P2: Páginas | Tasks | Implemented |
 | PAG-04 | P2: Páginas | Tasks | Implemented |
-| OPS-01 | P2: README | Tasks | Pending |
+| OPS-01 | P2: README | Tasks | Implemented |
 
 **Coverage:** 25 total, 25 mapped to tasks, 0 unmapped
 

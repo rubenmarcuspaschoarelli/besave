@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `spec.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -159,15 +159,15 @@ T4 → T5 → T6
 ### T6: README do roteiro
 
 **What**: roteiro da virada, upload das páginas, `test-function`, custos e reversão.
-**Where**: `infra/README.md`
+**Where**: `infra/README.md`, `infra/functions/eventos/`
 **Depends on**: T5
 **Reuses**: README atual
 **Requirement**: OPS-01
 
 **Done when**:
 
-- [ ] Roteiro de 6 passos, custos e reversão no README
-- [ ] Gate check passes: build gate
+- [x] Roteiro de 6 passos, custos e reversão no README
+- [x] Gate check passes: build gate
 
 **Tests**: none
 **Gate**: build
