@@ -6,9 +6,10 @@ use std::path::Path;
 
 use tracing::{error, info};
 
-use crate::alerta::Alertas;
+use crate::alerta::{Alertas, horas_sem_novas};
 use crate::fonte::FonteOfertas;
 use crate::geracao::{ErroGeracao, Relatorio};
+use crate::logs::iso_brasilia;
 use crate::mapeamento::Mapeamento;
 use crate::plano::publicar;
 use crate::publicador::Publicador;
@@ -121,11 +122,16 @@ pub fn rodar(
         .map_err(|e| Falha::de_geracao(&e))
 }
 
+/// `dt` mais recente em ISO 8601 com offset -03:00; `-` se o conjunto é vazio.
+pub fn dt_max_texto(dt: Option<i64>) -> String {
+    dt.map_or_else(|| "-".to_owned(), |d| format!("{}-03:00", iso_brasilia(d)))
+}
+
 /// Relatório do ciclo em pares `chave=valor` separados por espaço.
-pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64) -> String {
+pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 26] = [
+    let pares: [(&str, String); 28] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -140,6 +146,12 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64) -> String {
         ("chunks_removidos", rel.chunks_removidos.to_string()),
         ("bytes_totais", rel.bytes_totais.to_string()),
         ("versao", rel.versao.to_string()),
+        ("dt_max", dt_max_texto(rel.dt_mais_recente)),
+        (
+            "horas_sem_novas",
+            horas_sem_novas(rel.dt_mais_recente, agora)
+                .map_or_else(|| "-".to_owned(), |h| h.to_string()),
+        ),
         ("redirects_modo", rel.redirects.modo.to_string()),
         ("redirects_put", rel.redirects.puts.to_string()),
         ("redirects_del", rel.redirects.dels.to_string()),
@@ -175,9 +187,10 @@ pub fn concluir(
 ) -> Codigo {
     match resultado {
         Ok((rel, tempo_ms)) => {
-            info!("relatorio {}", linha_relatorio(&rel, tempo_ms));
+            info!("relatorio {}", linha_relatorio(&rel, tempo_ms, agora));
             if let Some(a) = alertas {
                 a.sucesso(agora);
+                a.avaliar_novas(rel.dt_mais_recente, rel.validas, agora);
             }
             Codigo::Ok
         }
