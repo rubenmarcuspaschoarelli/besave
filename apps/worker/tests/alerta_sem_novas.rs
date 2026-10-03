@@ -313,7 +313,7 @@ fn falha_de_ciclo_nao_mexe_em_sem_novas() {
 fn mensagens_limpas() {
     let t = TelegramFake::default();
     let e = estado("limpas");
-    let host = worker::alerta::sanitizar_host(Some(r"C:\Users\ruben"));
+    let host = worker::alerta::sanitizar_host(Some(r"C:\Users\REDACTED"));
     com_log(|| {
         let a = Alertas::new(&t, e.clone(), host).com_sem_novas(ConfigSemNovas {
             limiar_horas: 24,
