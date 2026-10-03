@@ -20,6 +20,8 @@
 		"@sveltejs/kit": "^3.0.0",
 		"@sveltejs/vite-plugin-svelte": "^7.2.0",
 		"@types/node": "^24",
+		"ajv": "^8.17.1",
+		"ajv-formats": "^3.0.1",
 		"eslint": "^10.4.1",
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.19.0",

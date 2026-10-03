@@ -112,8 +112,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] 30 mil cards e o manifest passam no schema; mesma semente → mesmos bytes; distribuições na tolerância
-- [ ] Gate build passa (fim da fase 1)
+- [x] 30 mil cards e o manifest passam no schema; mesma semente → mesmos bytes; distribuições na tolerância
+- [x] Gate build passa (fim da fase 1)
 
 **Tests**: unit
 **Gate**: build

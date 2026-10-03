@@ -156,9 +156,9 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 | ESQ-01 | Esqueleto | T1 | Verified |
 | TIP-01 | Contrato | T2 | Verified |
 | TIP-02 | Contrato | T2 | Verified |
-| GER-01 | Gerador | T3 | Pending |
-| GER-02 | Gerador | T3 | Pending |
-| GER-03 | Gerador | T3 | Pending |
+| GER-01 | Gerador | T3 | Verified |
+| GER-02 | Gerador | T3 | Verified |
+| GER-03 | Gerador | T3 | Verified |
 | CAT-01 | Lista e novas | T4 | Pending |
 | CAT-02 | Lista e novas | T4 | Pending |
 | CAT-03 | Lista e novas | T4 | Pending |
