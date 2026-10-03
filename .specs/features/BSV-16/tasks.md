@@ -85,9 +85,9 @@ T4 → T5 → T6
 
 **Done when**:
 
-- [ ] `Host: www.besave.com.br` + `/oferta/1/?a=1` → 301 `https://besave.com.br/oferta/1/?a=1`
-- [ ] Testes FN-01..03 existentes verdes
-- [ ] Gate check passes: `cd functions && npm test`
+- [x] `Host: www.besave.com.br` + `/oferta/1/?a=1` → 301 `https://besave.com.br/oferta/1/?a=1`
+- [x] Testes FN-01..03 existentes verdes
+- [x] Gate check passes: `cd functions && npm test`
 
 **Tests**: unit
 **Gate**: quick

@@ -122,9 +122,9 @@ existir e redirecionar antes do primeiro post.
 | VIR-02 | P1: Virada | Tasks | Pending |
 | VIR-03 | P1: Virada | Tasks | Pending |
 | VIR-04 | P1: Virada | Tasks | Pending |
-| WWW-01 | P1: www | Tasks | Pending |
-| WWW-02 | P1: www | Tasks | Pending |
-| WWW-03 | P1: www | Tasks | Pending |
+| WWW-01 | P1: www | Tasks | Implemented |
+| WWW-02 | P1: www | Tasks | Implemented |
+| WWW-03 | P1: www | Tasks | Implemented |
 | CUR-01 | P1: Domínios curtos | Tasks | Pending |
 | CUR-02 | P1: Domínios curtos | Tasks | Pending |
 | CUR-03 | P1: Domínios curtos | Tasks | Pending |
