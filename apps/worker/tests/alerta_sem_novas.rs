@@ -351,3 +351,68 @@ fn volta_sem_aviso_previo_nao_envia() {
     com_log(|| alertas(&t, &e, 24, 24).avaliar_novas(Some(DT), 10, DT + H));
     assert_eq!(*t.tentativas.borrow(), 0);
 }
+
+const MIN: i64 = 60;
+
+/// Fronteira do limiar (estrito, "mais velho que"): 24 h − 1 min → 0; 24 h + 1 min → 1 aviso.
+#[test]
+fn limiar_estrito_em_torno_de_24_h() {
+    let antes = TelegramFake::default();
+    com_log(|| {
+        alertas(&antes, &estado("lim-antes"), 24, 24).avaliar_novas(Some(DT), 10, DT + 24 * H - MIN)
+    });
+    assert_eq!(antes.n(), 0);
+
+    let exato = TelegramFake::default();
+    com_log(|| {
+        alertas(&exato, &estado("lim-exato"), 24, 24).avaliar_novas(Some(DT), 10, DT + 24 * H)
+    });
+    assert_eq!(
+        exato.n(),
+        0,
+        "exatamente 24 h ainda não é mais velho que o limiar"
+    );
+
+    let depois = TelegramFake::default();
+    com_log(|| {
+        alertas(&depois, &estado("lim-depois"), 24, 24).avaliar_novas(
+            Some(DT),
+            10,
+            DT + 24 * H + MIN,
+        )
+    });
+    assert_eq!(depois.n(), 1);
+}
+
+/// Fronteira do lembrete de 24 h (`>=`): 23h59 depois do aviso entregue → 0; 24h00 → 1.
+#[test]
+fn lembrete_de_24_h_na_fronteira() {
+    let t = TelegramFake::default();
+    let e = estado("lemb24");
+    com_log(|| {
+        let a = alertas(&t, &e, 24, 24);
+        let aviso = DT + 25 * H;
+        a.avaliar_novas(Some(DT), 10, aviso);
+        assert_eq!(t.n(), 1);
+        a.avaliar_novas(Some(DT), 10, aviso + 24 * H - MIN);
+        assert_eq!(t.n(), 1, "23h59 depois");
+        a.avaliar_novas(Some(DT), 10, aviso + 24 * H);
+        assert_eq!(t.n(), 2, "24h00 depois");
+    });
+}
+
+/// Fronteira do lembrete de 6 h: 5h59 → 0; 6h00 → 1.
+#[test]
+fn lembrete_de_6_h_na_fronteira() {
+    let t = TelegramFake::default();
+    let e = estado("lemb6");
+    com_log(|| {
+        let a = alertas(&t, &e, 24, 6);
+        let aviso = DT + 25 * H;
+        a.avaliar_novas(Some(DT), 10, aviso);
+        a.avaliar_novas(Some(DT), 10, aviso + 6 * H - MIN);
+        assert_eq!(t.n(), 1, "5h59 depois");
+        a.avaliar_novas(Some(DT), 10, aviso + 6 * H);
+        assert_eq!(t.n(), 2, "6h00 depois");
+    });
+}
