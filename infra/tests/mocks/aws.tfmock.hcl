@@ -60,3 +60,31 @@ override_resource {
   target = aws_iam_role.vigia_agenda
   values = { arn = "arn:aws:iam::111111111111:role/besave-vigia-agenda", id = "besave-vigia-agenda" }
 }
+# Domínios curtos (BSV-16). zone_id fica aleatório: cada zona recebe um diferente.
+mock_resource "aws_route53_zone" {
+  defaults = { name_servers = ["ns-1.awsdns-01.org", "ns-2.awsdns-02.co.uk", "ns-3.awsdns-03.com", "ns-4.awsdns-04.net"] }
+}
+override_resource {
+  target = aws_acm_certificate.curto
+  values = {
+    arn = "arn:aws:acm:us-east-1:111111111111:certificate/00000000-0000-0000-0000-0000000c0870"
+    domain_validation_options = [
+      { domain_name = "besave.io", resource_record_name = "_a.besave.io.", resource_record_type = "CNAME", resource_record_value = "_x.acm-validations.aws." },
+      { domain_name = "www.besave.io", resource_record_name = "_b.www.besave.io.", resource_record_type = "CNAME", resource_record_value = "_y.acm-validations.aws." },
+      { domain_name = "besave.me", resource_record_name = "_c.besave.me.", resource_record_type = "CNAME", resource_record_value = "_z.acm-validations.aws." },
+      { domain_name = "www.besave.me", resource_record_name = "_d.www.besave.me.", resource_record_type = "CNAME", resource_record_value = "_w.acm-validations.aws." },
+    ]
+  }
+}
+override_resource {
+  target = aws_acm_certificate_validation.curto
+  values = { certificate_arn = "arn:aws:acm:us-east-1:111111111111:certificate/00000000-0000-0000-0000-0000000c0870" }
+}
+override_resource {
+  target = aws_cloudfront_distribution.curto
+  values = { arn = "arn:aws:cloudfront::111111111111:distribution/ECURTO00000000", domain_name = "d222222curto00.cloudfront.net", hosted_zone_id = "Z2FDTNDATAQYW2" }
+}
+override_resource {
+  target = aws_cloudfront_function.link_curto
+  values = { arn = "arn:aws:cloudfront::111111111111:function/link-curto" }
+}

@@ -139,15 +139,15 @@ T4 → T5 → T6
 ### T5: Domínios curtos
 
 **What**: `curto.tf`: zonas `besave.io`/`besave.me` e output dos NS; com `ativar_curto`, certificado ACM (4 nomes, `prevent_destroy`), validação DNS, Function `link-curto`, distribuição `besave-curto` e A/AAAA.
-**Where**: `infra/curto.tf`
+**Where**: `infra/curto.tf`, `infra/variables.tf`, `infra/outputs.tf`
 **Depends on**: T4
 **Reuses**: `cloudfront.tf`, `acm.tf` (padrões), `tests/inspecao`
 **Requirement**: CUR-01, CUR-02, CUR-03, CUR-04, CUR-05, CUR-06, CUR-07, CUR-08
 
 **Done when**:
 
-- [ ] `terraform test`: com `false` só as 2 zonas; com `true` certificado, validação, distribuição e registros conforme a spec
-- [ ] Gate check passes: full gate
+- [x] `terraform test`: com `false` só as 2 zonas; com `true` certificado, validação, distribuição e registros conforme a spec
+- [x] Gate check passes: full gate
 
 **Tests**: integration
 **Gate**: full

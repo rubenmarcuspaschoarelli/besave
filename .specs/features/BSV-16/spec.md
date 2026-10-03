@@ -125,14 +125,14 @@ existir e redirecionar antes do primeiro post.
 | WWW-01 | P1: www | Tasks | Implemented |
 | WWW-02 | P1: www | Tasks | Implemented |
 | WWW-03 | P1: www | Tasks | Implemented |
-| CUR-01 | P1: Domínios curtos | Tasks | Pending |
-| CUR-02 | P1: Domínios curtos | Tasks | Pending |
-| CUR-03 | P1: Domínios curtos | Tasks | Pending |
-| CUR-04 | P1: Domínios curtos | Tasks | Pending |
-| CUR-05 | P1: Domínios curtos | Tasks | Pending |
-| CUR-06 | P1: Domínios curtos | Tasks | Pending |
-| CUR-07 | P1: Domínios curtos | Tasks | Pending |
-| CUR-08 | P1: Domínios curtos | Tasks | Pending |
+| CUR-01 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-02 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-03 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-04 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-05 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-06 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-07 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-08 | P1: Domínios curtos | Tasks | Implemented |
 | LNK-01 | P1: link-curto | Tasks | Implemented |
 | LNK-02 | P1: link-curto | Tasks | Implemented |
 | LNK-03 | P1: link-curto | Tasks | Implemented |
