@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
+T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11 → T12
 ```
 
 ---
@@ -273,3 +273,23 @@ T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
 **Gate**: quick
 
 **Commit**: `docs(infra): check encoded query strings with real curl`
+
+---
+
+### T12: Revisão do dono — certificado validado na distribuição principal
+
+**What**: Run `certificado_validado` em `cloudfront.tftest.hcl` lê o código via `tests/inspecao`.
+**Where**: `infra/tests/cloudfront.tftest.hcl`
+**Depends on**: T11
+**Reuses**: README e testes existentes
+**Requirement**: VIR-06
+
+**Done when**:
+
+- [x] Mutante com `aws_acm_certificate.site.arn` falha; código real passa
+- [x] Gate check passes: full gate
+
+**Tests**: integration
+**Gate**: full
+
+**Commit**: `test(infra): assert main distribution waits for certificate validation`

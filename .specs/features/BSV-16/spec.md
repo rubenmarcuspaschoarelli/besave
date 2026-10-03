@@ -59,6 +59,7 @@ existir e redirecionar antes do primeiro post.
 3. VIR-03: WHERE `ativar_dominios = true` the Lambda `besave-vigia` SHALL receber `URL_MANIFEST = https://besave.com.br/manifest.json`
 4. VIR-04: WHILE `ativar_dominios = false` the Lambda `besave-vigia` SHALL manter `URL_MANIFEST = https://<dominio *.cloudfront.net>/manifest.json`
 5. VIR-05: The registros `aws_route53_record.site` SHALL ter `prevent_destroy = true` (reversão começa por `terraform state rm`)
+6. VIR-06: WHERE `ativar_dominios = true` the distribuição principal SHALL usar o ARN de `aws_acm_certificate_validation.site` (espera a emissão), verificado por leitura do código
 
 **Independent Test**: `terraform test` com `ativar_dominios = true` e `false`.
 
@@ -127,6 +128,7 @@ existir e redirecionar antes do primeiro post.
 | VIR-03 | P1: Virada | Tasks | Implemented |
 | VIR-04 | P1: Virada | Tasks | Implemented |
 | VIR-05 | P1: Virada | Tasks | Implemented |
+| VIR-06 | P1: Virada | Tasks | Implemented |
 | WWW-01 | P1: www | Tasks | Implemented |
 | WWW-02 | P1: www | Tasks | Implemented |
 | WWW-03 | P1: www | Tasks | Implemented |
@@ -152,7 +154,7 @@ existir e redirecionar antes do primeiro post.
 | OPS-02 | P2: README | Tasks | Implemented |
 | OPS-03 | P2: README | Tasks | Implemented |
 
-**Coverage:** 29 total, 29 mapped to tasks, 0 unmapped
+**Coverage:** 30 total, 30 mapped to tasks, 0 unmapped
 
 ---
 
