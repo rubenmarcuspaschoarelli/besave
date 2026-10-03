@@ -159,16 +159,16 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 | GER-01 | Gerador | T3 | Verified |
 | GER-02 | Gerador | T3 | Verified |
 | GER-03 | Gerador | T3 | Verified |
-| CAT-01 | Lista e novas | T4 | Pending |
-| CAT-02 | Lista e novas | T4 | Pending |
-| CAT-03 | Lista e novas | T4 | Pending |
-| CAT-04 | Lista e novas | T4 | Pending |
-| CAT-05 | Lista e novas | T4 | Pending |
-| CAT-06 | Lista e novas | T4 | Pending |
-| CAT-07 | Lista e novas | T4 | Pending |
-| CAT-08 | Lista e novas | T4 | Pending |
-| CAT-09 | Lista e novas | T4 | Pending |
-| CAT-10 | Lista e novas | T4 | Pending |
+| CAT-01 | Lista e novas | T4 | Verified |
+| CAT-02 | Lista e novas | T4 | Verified |
+| CAT-03 | Lista e novas | T4 | Verified |
+| CAT-04 | Lista e novas | T4 | Verified |
+| CAT-05 | Lista e novas | T4 | Verified |
+| CAT-06 | Lista e novas | T4 | Verified |
+| CAT-07 | Lista e novas | T4 | Verified |
+| CAT-08 | Lista e novas | T4 | Verified |
+| CAT-09 | Lista e novas | T4 | Verified |
+| CAT-10 | Lista e novas | T4 | Verified |
 | BUS-01 | Busca | T5 | Pending |
 | BUS-02 | Busca | T5 | Pending |
 | BUS-03 | Busca | T5 | Pending |

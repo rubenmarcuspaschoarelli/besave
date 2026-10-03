@@ -130,8 +130,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Cobertura 1:1 de CAT-01..10
-- [ ] Gate quick passa
+- [x] Cobertura 1:1 de CAT-01..10
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
