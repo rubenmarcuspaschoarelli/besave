@@ -119,15 +119,15 @@ T4 → T5 → T6
 ### T4: Registros de besave.com.br e URL do vigia
 
 **What**: `dominios.tf` com A/AAAA alias de `besave.com.br` e `www` (gated por `ativar_dominios`, `allow_overwrite`); `URL_MANIFEST` do vigia no domínio quando ativo.
-**Where**: `infra/dominios.tf`
+**Where**: `infra/dominios.tf`, `infra/vigia.tf`
 **Depends on**: None
 **Reuses**: `data.aws_route53_zone.site`, `tests/mocks`
 **Requirement**: VIR-01, VIR-02, VIR-03, VIR-04
 
 **Done when**:
 
-- [ ] `terraform test`: com `true` 4 registros com `allow_overwrite` e `URL_MANIFEST` no domínio; com `false` nenhum e URL cloudfront.net
-- [ ] Gate check passes: full gate
+- [x] `terraform test`: com `true` 4 registros com `allow_overwrite` e `URL_MANIFEST` no domínio; com `false` nenhum e URL cloudfront.net
+- [x] Gate check passes: full gate
 
 **Tests**: integration
 **Gate**: full

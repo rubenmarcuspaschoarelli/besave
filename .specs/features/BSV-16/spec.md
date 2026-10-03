@@ -118,10 +118,10 @@ existir e redirecionar antes do primeiro post.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| VIR-01 | P1: Virada | Tasks | Pending |
-| VIR-02 | P1: Virada | Tasks | Pending |
-| VIR-03 | P1: Virada | Tasks | Pending |
-| VIR-04 | P1: Virada | Tasks | Pending |
+| VIR-01 | P1: Virada | Tasks | Implemented |
+| VIR-02 | P1: Virada | Tasks | Implemented |
+| VIR-03 | P1: Virada | Tasks | Implemented |
+| VIR-04 | P1: Virada | Tasks | Implemented |
 | WWW-01 | P1: www | Tasks | Implemented |
 | WWW-02 | P1: www | Tasks | Implemented |
 | WWW-03 | P1: www | Tasks | Implemented |

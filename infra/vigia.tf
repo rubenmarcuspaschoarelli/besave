@@ -105,10 +105,11 @@ resource "aws_lambda_function" "vigia" {
   timeout          = 30
   memory_size      = 128
 
+  # Depois da virada, URL_MANIFEST pelo domínio: testa também DNS e certificado (BSV-16).
   environment {
     variables = {
       BUCKET        = aws_s3_bucket.site.bucket
-      URL_MANIFEST  = "https://${aws_cloudfront_distribution.site.domain_name}/manifest.json"
+      URL_MANIFEST  = "https://${var.ativar_dominios ? var.dominio : aws_cloudfront_distribution.site.domain_name}/manifest.json"
       LIMIAR_MIN    = "30"
       PARAM_TOKEN   = local.vigia_param_token
       PARAM_CHAT_ID = local.vigia_param_chat_id

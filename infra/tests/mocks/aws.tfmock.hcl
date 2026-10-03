@@ -15,7 +15,11 @@ mock_resource "aws_cloudfront_key_value_store" {
   defaults = { arn = "arn:aws:cloudfront::111111111111:key-value-store/00000000-0000-0000-0000-000000000000" }
 }
 mock_resource "aws_cloudfront_distribution" {
-  defaults = { arn = "arn:aws:cloudfront::111111111111:distribution/EEXEMPLO000000" }
+  defaults = {
+    arn            = "arn:aws:cloudfront::111111111111:distribution/EEXEMPLO000000"
+    domain_name    = "d111111abcdef8.cloudfront.net"
+    hosted_zone_id = "Z2FDTNDATAQYW2"
+  }
 }
 mock_resource "aws_acm_certificate_validation" {
   defaults = { certificate_arn = "arn:aws:acm:us-east-1:111111111111:certificate/00000000-0000-0000-0000-000000000000" }
