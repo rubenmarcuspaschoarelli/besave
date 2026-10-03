@@ -98,10 +98,10 @@ existir e redirecionar antes do primeiro post.
 
 **Acceptance Criteria**:
 
-1. PAG-01: The `infra/static/index.html` SHALL ter o nome besave, o texto "site em construção" e link `href="{CANAL_TELEGRAM}"`
-2. PAG-02: The `infra/static/404.html` SHALL ser `noindex`, dizer "Oferta encerrada ou não encontrada" e ter links para `/` e `{CANAL_TELEGRAM}`
+1. PAG-01: The `infra/static/index.html` SHALL ter o nome besave, o texto "site em construção" e link `href="https://t.me/besaveofertas"` (canal público da marca)
+2. PAG-02: The `infra/static/404.html` SHALL ser `noindex`, dizer "Oferta encerrada ou não encontrada" e ter links para `/` e `https://t.me/besaveofertas`
 3. PAG-03: The `404.html` SHALL não ter link para nenhuma página de área
-4. PAG-04: The páginas SHALL não conter link `t.me/` real nem telefone (repositório público)
+4. PAG-04: The páginas SHALL ter `t.me/besaveofertas` como único link do Telegram, sem telefone nem marcador `{CANAL_TELEGRAM}` (repositório público)
 
 ### P2: README
 

@@ -248,15 +248,13 @@ que o robô do Telegram segue os 301).
 ### Páginas provisórias
 
 `static/index.html` (nome, "site em construção", link do canal) e `static/404.html` ("Oferta encerrada ou
-não encontrada", link para o início e para o canal, `noindex`). O link do canal é o marcador
-`{CANAL_TELEGRAM}`, trocado só na cópia enviada: o repositório é público e não leva link de conta,
-telefone ou contato pessoal. O Terraform não gerencia esses objetos; o deploy do site (BSV-30) os substitui.
+não encontrada", link para o início e para o canal, `noindex`). O canal é o público da marca,
+`https://t.me/besaveofertas`; o repositório é público e não leva conta, telefone ou contato pessoal.
+O Terraform não gerencia esses objetos; o deploy do site (BSV-30) os substitui.
 
 ```sh
-CANAL=https://t.me/<canal>
 for f in index.html 404.html; do
-  sed "s|{CANAL_TELEGRAM}|$CANAL|g" static/$f > /tmp/$f
-  aws s3 cp /tmp/$f s3://besave-site/$f --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300"
+  aws s3 cp static/$f s3://besave-site/$f --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300"
 done
 ```
 

@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6 → T7 → T8 → T9
+T4 → T5 → T6 → T7 → T8 → T9 → T10
 ```
 
 ---
@@ -233,3 +233,23 @@ T4 → T5 → T6 → T7 → T8 → T9
 **Gate**: full
 
 **Commit**: `feat(infra): protect domain records and short zones from destroy`
+
+---
+
+### T10: Revisão do dono — canal da marca nas páginas
+
+**What**: `https://t.me/besaveofertas` direto em `index.html` e `404.html`; marcador e `sed` removidos do README; testes PAG-01..04 ajustados.
+**Where**: `infra/static/`, `infra/functions/test/pagina-404.test.mjs`, `infra/README.md`
+**Depends on**: T9
+**Reuses**: README e testes existentes
+**Requirement**: PAG-01, PAG-02, PAG-03, PAG-04
+
+**Done when**:
+
+- [x] Páginas com o canal da marca como único link do Telegram
+- [x] Gate check passes: quick gate
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `feat(infra): link provisional pages to the brand Telegram channel`
