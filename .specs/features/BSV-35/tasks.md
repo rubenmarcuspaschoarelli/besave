@@ -94,8 +94,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Listas de enum iguais às do schema; fixtures `chunk-ok`/`manifest-ok` passam na guarda de tipo
-- [ ] Gate quick passa
+- [x] Listas de enum iguais às do schema; fixtures `chunk-ok`/`manifest-ok` passam na guarda de tipo
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
