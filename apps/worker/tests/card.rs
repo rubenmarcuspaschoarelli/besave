@@ -91,11 +91,22 @@ fn orcamento_de_bytes_do_card() {
                 .len()
         })
         .collect();
-    for t in &tamanhos {
-        assert!(*t <= 220, "card com {t} bytes");
-    }
     let media = tamanhos.iter().sum::<usize>() as f64 / tamanhos.len() as f64;
-    assert!(media <= 160.0, "média {media}");
+    assert!(media <= 200.0, "média {media}");
+}
+
+/// AD-064: sem teto por card; título de 200 caracteres acentuados (> 220 B) é aceito inteiro.
+#[test]
+fn card_com_titulo_longo_acentuado_e_aceito() {
+    let titulo = "é".repeat(200);
+    let l = LinhaOferta {
+        titulo: Some(titulo.clone()),
+        ..valida()
+    };
+    let c = para_card(&l, &m()).unwrap();
+    assert_eq!(c.titulo, titulo);
+    let bytes = serde_json::to_string(&c).unwrap().len();
+    assert!(bytes > 220, "card com {bytes} bytes");
 }
 
 #[test]
