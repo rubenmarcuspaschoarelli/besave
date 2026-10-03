@@ -135,4 +135,10 @@ run "curto_protecao" {
     condition     = output.prevent_destroy["aws_acm_certificate.curto"]
     error_message = "certificado curto com prevent_destroy = true (AD-022)"
   }
+
+  # CUR-06
+  assert {
+    condition     = output.certificado_validado["aws_cloudfront_distribution.curto"]
+    error_message = "distribuição curta deve usar o ARN de aws_acm_certificate_validation (espera a emissão)"
+  }
 }

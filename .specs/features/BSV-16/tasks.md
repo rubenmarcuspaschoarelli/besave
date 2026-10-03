@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6
+T4 → T5 → T6 → T7
 ```
 
 ---
@@ -173,3 +173,23 @@ T4 → T5 → T6
 **Gate**: build
 
 **Commit**: `docs(infra): document DNS cutover and short domains`
+
+---
+
+### T7: Fix — CUR-06 prova o certificado validado
+
+**What**: inspeção do código garante que `besave-curto` usa o ARN de `aws_acm_certificate_validation` (mutante T16 do Verifier sobreviveu: ARNs iguais no mock e na AWS).
+**Where**: `infra/tests/inspecao/main.tf`, `infra/tests/curto.tftest.hcl`
+**Depends on**: T6
+**Reuses**: `tests/inspecao` (padrão do `prevent_destroy`)
+**Requirement**: CUR-06
+
+**Done when**:
+
+- [x] Mutante T16 (`aws_acm_certificate.curto[0].arn`) falha em `curto_protecao`
+- [x] Gate check passes: full gate
+
+**Tests**: integration
+**Gate**: full
+
+**Commit**: `test(infra): assert short distribution waits for certificate validation`
