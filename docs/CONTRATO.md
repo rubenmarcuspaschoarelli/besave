@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.3.2** (SemVer; mudança incompatível = major).
-Histórico: 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.3.3** (SemVer; mudança incompatível = major).
+Histórico: 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -69,7 +69,8 @@ A tabela de mapeamento texto → enum vive em `packages/contract/mapeamento.json
 
 ## 3. `OfertaCard` — projeção compacta (chunks da lista e da busca)
 
-Orçamento: **≤ 220 bytes por registro em JSON bruto** (meta ~150). Chaves curtas por isso.
+Orçamento: **média ≤ 200 bytes por registro em JSON bruto**, sem teto por card; o gate é o chunk
+comprimido ≤ 60 KB (MANIFEST §7, AD-064). Chaves curtas por isso. O título não é cortado além da regra de `t`: a busca depende dele.
 
 | campo | tipo | origem | regra |
 |---|---|---|---|
@@ -236,3 +237,5 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
 3. Cupons da tabela `CUPOM` aparecem na home (F3) ou só em página própria (F4)?
 4. ~~`DT_ULT_ATUALIZACAO`: criar ou não?~~ **Respondido:** não será criada; os índices de `_estado/` resolveram o custo (AD-058).
 5. Domínio curto: `besave.io` ou `besave.me`?
+6. Ordenação da home: `dt` da oferta ou data de publicação no Besave (campo novo, derivável do
+   índice de `_estado/`)? Decidir na sessão de design (BSV-30); afeta AD-063 e o toast de novas.

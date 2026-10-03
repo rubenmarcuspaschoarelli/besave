@@ -84,7 +84,7 @@ páginas de oferta, sitemap e redirects. Ciclo em regime: ~20 s. Hoje são ~17 m
 (o robô ainda está preenchendo URLs de afiliado das antigas).
 
 Feito e no ar (ainda no domínio `*.cloudfront.net`, com `robots.txt` bloqueando indexação):
-- Contrato de dados 1.3.2, layout do S3, 60 decisões registradas, CI com filtro por pasta.
+- Contrato de dados 1.3.3, layout do S3, 64 decisões registradas, CI com filtro por pasta.
 - Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom e botão `/ir/{id}`.
 - Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
 - Infra inteira em Terraform; o worker usa um usuário IAM com permissões mínimas.
