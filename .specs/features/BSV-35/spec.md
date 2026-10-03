@@ -153,7 +153,7 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| ESQ-01 | Esqueleto | T1 | Pending |
+| ESQ-01 | Esqueleto | T1 | Verified |
 | TIP-01 | Contrato | T2 | Pending |
 | TIP-02 | Contrato | T2 | Pending |
 | GER-01 | Gerador | T3 | Pending |

@@ -76,8 +76,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] `pnpm lint && pnpm check && pnpm build` saem 0; `build/index.html` gerado
-- [ ] Sem `dependencies` de runtime
+- [x] `pnpm lint && pnpm check && pnpm build` saem 0; `build/index.html` gerado
+- [x] Sem `dependencies` de runtime
 
 **Tests**: none
 **Gate**: build
