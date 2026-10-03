@@ -68,11 +68,13 @@ máximo 3 ciclos antes de escalar para o dono.
 ## 4. Prompt inicial padrão (colar no Orca ao abrir a sessão)
 
 ```
-Ticket BSV-nn. Leia CLAUDE.md e docs/specs/BSV-nn.md, e só os trechos do
+Ticket BSV-nn. Antes de tudo: `git merge-base --is-ancestor origin/develop HEAD`; se falhar,
+pare e avise (o worktree não nasceu de develop). Leia CLAUDE.md e docs/specs/BSV-nn.md, e só os trechos do
 docs/CONTRATO.md / docs/MANIFEST.md que a spec aponta.
 Use a skill tlc-spec-driven: specify → execute (design/tasks só se necessário).
 Escopo = a pasta indicada na spec. Não faça push. Não grave em .specs/STATE.md nem LESSONS.md.
-Ao terminar, cole o veredito do validation.md e liste: feito / como testar / fora de escopo / decisões que propõe.
+Ao terminar, cole o veredito do validation.md e liste: feito / como testar / fora de escopo /
+decisões que propõe / bloqueia o merge (execução real do dono).
 ```
 
 Para o Tester (quando o ticket tiver `-TEST`):
@@ -97,3 +99,19 @@ Só PASS libera a PR.
 | specs de ticket | `docs/specs/BSV-nn.md` | versionado, lido pelo agente e pelo Linear (link) |
 | decisões | `docs/DECISOES.md` (só dono) | fonte única |
 | artefatos da skill por ticket | `.specs/features/BSV-nn/` | gerados na branch; ficam no histórico do PR |
+
+---
+
+## 6. Lições de processo (BSV-10 a BSV-15, set–out/2026)
+
+| # | regra | por quê |
+|---|---|---|
+| 1 | **Worktree sempre a partir de `develop`.** Conferir no início da sessão (prompt §4); PR sempre com `--base develop`. | `main` está atrás e sem CLAUDE.md, specs nem código atual: o agente implementaria sobre um repo vazio. Aconteceu duas vezes (BSV-20, BSV-12c); nas duas o agente detectou e rebaseou em `develop`, mas a regra não pode depender disso. |
+| 2 | **`CARGO_TARGET_DIR=C:\cargo-target\besave` compartilhado, `CARGO_BUILD_JOBS=4`** (o Verifier pode usar 2). Nunca `cargo clean` no diretório compartilhado. | Um `target/` por worktree custa GBs e recompila tudo; a máquina tem pouca RAM. |
+| 3 | **Evidência revisada por segredo antes do commit (regra 11).** Antes de commitar log, relatório ou print, buscar `C:\Users\`, token de bot (`\d+:[A-Za-z0-9_-]{30,}`), `chat_id`, ARN com conta, hostname interno → `REDACTED`, e avisar no PR. | O repositório é público; evidência de execução real é onde o segredo vaza. |
+| 4 | **Contrato + worker na mesma PR (regra 10, AD-038).** | O contrato 1.3 entrou antes de `Area::Outros` e deixou `develop` vermelha. |
+| 5 | **"Pendente do dono" bloqueia o merge.** Execução real (Oracle/AWS) com infra existente vai na PR em "Bloqueia o merge", não em "depois". | Achados da execução real (permissão IAM, coluna mapeada errada) entram na mesma PR. |
+| 6 | **`aws cloudfront test-function` é obrigatório** para toda mudança em CloudFront Function, com os eventos de fixture; teste em Node não basta (AD-030). | O runtime `cloudfront-js-2.0` não é Node: `await` como argumento passou nos testes e quebrou na borda. |
+| 7 | **Teste real fora do diretório do repo antes de agendar:** rodar o executável de `C:\besave\bin` com outro diretório de trabalho e o `.env` de produção. | O caminho relativo de `mapeamento.json` só funcionava dentro do checkout (AD-050). |
+| 8 | **Tempo por fase (`t_*` no relatório) é a ferramenta de diagnóstico.** Ticket de desempenho traz `t_*` antes e depois, medidos na execução real (AD-043). | Achou a listagem da KVS (300–490 s por ciclo) que nenhum palpite apontava. |
+| 9 | **Promoção para produção = PR `develop → main`** a cada binário copiado para `C:\besave\bin` ou `terraform apply`; compilar a partir de `main` (AD-060). | Produção rastreável a um commit. |
