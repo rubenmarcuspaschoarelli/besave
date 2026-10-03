@@ -351,6 +351,21 @@ describe('sincronizador: versão, contrato e falhas', () => {
 		expect(cat.completo).toBe(true);
 	});
 
+	it('novas(n) = total pendente até confirmarNovas(), não só o que chegou no ciclo', async () => {
+		const cards = [card(1), card(2)];
+		const amb = ambiente(gerarManifest(cards));
+		const cat = new Catalogo();
+		const s = criarSincronizador(cat, amb.deps);
+		await s.sincronizarAgora();
+		amb.publicar(gerarManifest([...cards, card(3)], 20261002120500));
+		await s.sincronizarAgora();
+		amb.publicar(gerarManifest([...cards, card(3), card(4)], 20261002121000));
+		amb.limpar();
+		await s.sincronizarAgora();
+		expect(amb.eventos.filter((e) => e.tipo === 'novas')).toEqual([{ tipo: 'novas', n: 2 }]);
+		expect(cat.novas()).toBe(2);
+	});
+
 	it('novas(n) volta a ser emitido depois de confirmarNovas(); sync sem mudança não emite', async () => {
 		const cards = [card(1), card(2)];
 		const amb = ambiente(gerarManifest(cards));

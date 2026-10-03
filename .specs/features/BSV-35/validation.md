@@ -5,14 +5,13 @@
 **Diff range**: `c8de133..d9061a0`, commits `786390d..d9061a0` (10 commits). A rodada 1 cobriu `c8de133..3745280`; a rodada 2 acrescenta `d9061a0` (T9: correções)
 **Verifier**: sub-agente independente (autor ≠ verificador). Toda a evidência foi recoletada do código e de execuções novas
 
-## Veredito: ✅ PASS (rodada 2), com 1 resíduo para o dono (N4) e 1 risco de ambiente (DES-01/02 sob carga)
+## Veredito: ✅ PASS (rodada 2 + adendo do dono: N4 morto), com 1 risco de ambiente (DES-01/02 sob carga)
 
 **Result**: PASS
 
 Os 3 gaps da rodada 1 foram fechados por `d9061a0`, conferidos por sonda e por mutantes (ver "Rodada 2" no fim).
-Resíduo: o mutante N4 (payload de `novas` como delta em vez de total) sobrevive. A spec não define o `n` de
-`novas(n)`; o código segue a leitura natural (`n == cat.novas()`). Gap de precisão, não desvio; o dono decide se quer a
-asserção. Risco: DES-01/02 flutuam sob carga na máquina compartilhada.
+Resíduo N4 fechado no adendo (fim do arquivo): o dono fixou `novas(n)` = total pendente até `confirmarNovas()` e o
+teste novo mata o mutante. Risco: DES-01/02 flutuam sob carga na máquina compartilhada.
 
 ---
 
@@ -326,7 +325,7 @@ scratch: 55/55 sem `desempenho.test.ts`. Mutantes rodados **sem** `desempenho.te
 | N1 | `sincronizador.ts:164` | `novas` nunca emitido | ✅ Killed (`:354` e "novas: chunk com ids novos…") |
 | N2 | `sincronizador.ts:147` | compara com valor fixo 0 (emite em todo sync com pendentes) | ✅ Killed (`:354`, "sync sem mudança não emite") |
 | N3 | `sincronizador.ts:164` | `novas` emitido sempre | ✅ Killed (`:354`, SIN-01) |
-| N4 | `sincronizador.ts:164` | payload `n: novas - novasAntes` (delta) em vez do total | ⚠️ **Survived**: os testes só exercitam transições a partir de 0, onde delta = total |
+| N4 | `sincronizador.ts:164` | payload `n: novas - novasAntes` (delta) em vez do total | ⚠️ **Survived** na rodada 2 → ✅ morto no adendo (`sincronizador.test.ts:365`) |
 
 **Resultado da rodada 2**: 5/6 mortos. Somando as duas rodadas: 38 mutações em código de produção, 36 mortas,
 1 equivalente (M10) e 1 resíduo de precisão (N4).
@@ -351,3 +350,21 @@ POL-03 fixam 5 min). Observações 2–5 da rodada 1 continuam valendo para o do
 
 **Overall (rodada 2)**: ✅ PASS. Spec-anchored 43/43; gate funcional verde (DES isolado 3/3); sensor 36/38 com 1
 equivalente e 1 resíduo de precisão documentado.
+
+---
+
+## Adendo (revisão do dono, só teste)
+
+O dono aprovou `novas(n)` = total pendente até `confirmarNovas()`. Teste novo em
+`apps/site/src/lib/dados/sincronizador.test.ts:354` publica 1 id novo, sincroniza, publica outro sem confirmar e exige
+`expect(amb.eventos.filter((e) => e.tipo === 'novas')).toEqual([{ tipo: 'novas', n: 2 }])` (`:365`) e
+`cat.novas() == 2`. O código de produção não mudou: nenhuma rodada nova do Verifier é necessária.
+
+| # | File:line | Mutação | Resultado |
+|---|---|---|---|
+| N4 | `sincronizador.ts:164` | `n: novas - novasAntes` (delta) | ✅ Killed: `sincronizador.test.ts:365` (recebe `n: 1`, esperado `n: 2`) |
+
+Total das rodadas: 38 mutantes, 37 mortos, 1 equivalente (M10).
+
+Decisões do dono registradas: `versao` igual refaz o diff (só menor é ignorada), desvio da letra da regra 4 aprovado;
+`novas(n)` = total pendente; `buscar` inclui ids pendentes.
