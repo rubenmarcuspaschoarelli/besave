@@ -61,3 +61,8 @@ test('WWW-03: domínio sem www segue com o rewrite', async () => {
   assert.equal(r.statusCode, undefined);
   assert.equal(r.uri, '/oferta/1/index.html');
 });
+
+test('WWW-01 edge: valor codificado repassado sem recodificar', async () => {
+  const r = await comHost('/oferta/1/', 'www.besave.com.br', { utm_campaign: { value: 'a%20b%26c' } });
+  assert.equal(r.headers.location.value, 'https://besave.com.br/oferta/1/?utm_campaign=a%20b%26c');
+});

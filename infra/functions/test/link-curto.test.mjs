@@ -51,3 +51,9 @@ test('LNK-04: / e qualquer outro caminho → home', () => {
     assert301(chamar(uri), `${SITE}/`);
   }
 });
+
+// Premissa (spec, Assumptions): o valor chega como recebido e é repassado sem recodificar.
+// Só o curl real do README prova como o CloudFront entrega a query.
+test('LNK-03 edge: valor codificado repassado sem recodificar', () => {
+  assert301(chamar('/5412', { utm_campaign: { value: 'a%20b%26c' } }), `${SITE}/oferta/5412/?utm_campaign=a%20b%26c`);
+});

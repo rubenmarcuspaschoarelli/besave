@@ -35,7 +35,7 @@ existir e redirecionar antes do primeiro post.
 | Faixa de 1–12 dígitos | vale para o segmento como chegou (`/0000000000001` tem 13 e vai para a home) | leitura literal da spec | n |
 | id só com zeros (`/0`, `/000`) | home | id ≥ 1 (CONTRATO §3) | n |
 | `/{id}/ir/` (barra final) | home | spec lista só `/{id}/ir` | n |
-| Query string | remontada `chave=valor` como recebida, `&` entre pares, repetidas preservadas (`multiValue`) | padrão do exemplo oficial da AWS; `test-function` real confirma | n |
+| Query string | remontada `chave=valor` como recebida, `&` entre pares, repetidas preservadas (`multiValue`) | padrão do exemplo oficial da AWS; a doc não diz se o valor chega codificado e o evento do `test-function` é sintético: só o `curl` real com `%20`/`%26` (README, Conferir) confirma | n |
 | Protocolo na distribuição curta | `allow-all`: a Function responde em HTTP também, sempre com destino `https://` | evita um salto extra (http→https→besave.com.br) no link colado sem esquema | n |
 | Cache da distribuição curta | política gerenciada CachingDisabled | a Function sempre responde em viewer-request; nada chega à origem | n |
 | Domínio na regra do `www` | literal `www.besave.com.br` → `https://besave.com.br` no `.js` | Function é arquivo estático (`file()`); comparação sem diferenciar maiúsculas | n |
@@ -107,6 +107,7 @@ existir e redirecionar antes do primeiro post.
 
 1. OPS-01: The README SHALL ter o roteiro da virada (6 passos da spec), o upload manual das páginas, os custos e como reverter
 2. OPS-02: The README SHALL ter um passo 0, antes de qualquer `apply`, que cria Functions temporárias pela CLI (`create-function`, `cloudfront-js-2.0`) com o código novo, roda `test-function` em DEVELOPMENT com os eventos de `functions/eventos/` e as apaga (`delete-function`); o upload de `index.html`/`404.html` fica no passo 1 (AD-030)
+3. OPS-03: The README SHALL ter, em Conferir, `curl -I` de `https://besave.io/$ID?utm_campaign=a%20b%26c` e de `https://www.besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c` com o `location` esperado mantendo `%20` e `%26`, e SHALL não afirmar que o `test-function` prova a query
 
 ---
 
@@ -149,8 +150,9 @@ existir e redirecionar antes do primeiro post.
 | PAG-04 | P2: Páginas | Tasks | Implemented |
 | OPS-01 | P2: README | Tasks | Implemented |
 | OPS-02 | P2: README | Tasks | Implemented |
+| OPS-03 | P2: README | Tasks | Implemented |
 
-**Coverage:** 28 total, 28 mapped to tasks, 0 unmapped
+**Coverage:** 29 total, 29 mapped to tasks, 0 unmapped
 
 ---
 

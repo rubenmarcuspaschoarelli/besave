@@ -236,11 +236,20 @@ curl -I https://www.besave.com.br/oferta/$ID/      # 301, location: https://besa
 curl -I https://besave.io/$ID                      # 301, location: https://besave.com.br/oferta/$ID/
 curl -I https://besave.me/$ID                      # 301, idem
 curl -I "https://besave.io/$ID?utm_source=telegram" # 301, query preservada
+curl -I "https://besave.io/$ID?utm_campaign=a%20b%26c"
+#   location: https://besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c   (%20 e %26 intactos)
+curl -I "https://www.besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c"
+#   location: https://besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c   (%20 e %26 intactos)
 curl -s https://besave.com.br/robots.txt           # Allow + Sitemap
 curl -s https://besave.com.br/                     # página provisória
 curl -I https://besave.com.br/nao-existe           # 404 com a 404 provisória
 aws lambda invoke --function-name besave-vigia --cli-binary-format raw-in-base64-out --payload '{}' saida.json && cat saida.json
 ```
+
+Os dois `curl` com `%20`/`%26` são a única prova de como o CloudFront entrega a query às Functions: a
+documentação não diz se o valor chega codificado, e o evento do `test-function` é sintético. As Functions
+repassam o valor como recebido. Se o `location` vier com espaço ou `&` cru (ex.: `utm_campaign=a b&c`), o
+valor chega decodificado e as duas Functions precisam de `encodeURIComponent` antes do merge.
 
 Por último, colar `besave.io/<id>` num chat do Telegram: a prévia precisa mostrar a oferta (confirma
 que o robô do Telegram segue os 301).

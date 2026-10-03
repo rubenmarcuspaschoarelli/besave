@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6 → T7 → T8 → T9 → T10
+T4 → T5 → T6 → T7 → T8 → T9 → T10 → T11
 ```
 
 ---
@@ -253,3 +253,23 @@ T4 → T5 → T6 → T7 → T8 → T9 → T10
 **Gate**: quick
 
 **Commit**: `feat(infra): link provisional pages to the brand Telegram channel`
+
+---
+
+### T11: Revisão do dono — query codificada no Conferir
+
+**What**: README: `curl` com `%20`/`%26` nos dois domínios; afirmação sobre `test-function` corrigida; testes Node de regressão do valor codificado.
+**Where**: `infra/README.md`, `infra/functions/test/`
+**Depends on**: T10
+**Reuses**: README e testes existentes
+**Requirement**: OPS-03, LNK-03, WWW-01
+
+**Done when**:
+
+- [x] Conferir com os dois `curl` e testes de valor codificado verdes
+- [x] Gate check passes: quick gate
+
+**Tests**: unit
+**Gate**: quick
+
+**Commit**: `docs(infra): check encoded query strings with real curl`
