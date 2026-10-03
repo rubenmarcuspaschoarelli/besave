@@ -166,8 +166,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Cobertura 1:1 com fetch e relógio falsos
-- [ ] Gate build passa (fim da fase 2)
+- [x] Cobertura 1:1 com fetch e relógio falsos
+- [x] Gate build passa (fim da fase 2)
 
 **Tests**: unit
 **Gate**: build

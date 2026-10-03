@@ -13,6 +13,8 @@ export default defineConfig({
 			adapter: adapter({ pages: 'build', assets: 'build', fallback: undefined, strict: true })
 		})
 	],
+	// sincronizador.ts lê a versão do contrato em packages/contract (regra 4).
+	server: { fs: { allow: ['../../packages/contract'] } },
 	test: {
 		expect: { requireAssertions: true },
 		environment: 'node',
