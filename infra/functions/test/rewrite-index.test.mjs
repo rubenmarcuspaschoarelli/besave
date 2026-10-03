@@ -27,3 +27,42 @@ test('FN-03: path com extensão passa intacto e a requisição segue para a orig
     assert.equal(r.statusCode, undefined);
   }
 });
+
+// BSV-16: www.besave.com.br → domínio sem www, com caminho original e query.
+function comHost(uri, host, querystring = {}) {
+  const ev = evento(uri);
+  ev.request.headers.host.value = host;
+  ev.request.querystring = querystring;
+  return handler(ev);
+}
+
+test('WWW-01: Host www → 301 para o domínio sem www com caminho e query', async () => {
+  const r = await comHost('/oferta/1/', 'www.besave.com.br', { a: { value: '1' } });
+  assert.equal(r.statusCode, 301);
+  assert.equal(r.headers.location.value, 'https://besave.com.br/oferta/1/?a=1');
+  assert.equal(r.headers['cache-control'].value, 'public, max-age=86400');
+});
+
+test('WWW-01 edge: Host em maiúsculas e chave repetida', async () => {
+  const qs = { t: { value: '1', multiValue: [{ value: '1' }, { value: '2' }] } };
+  const r = await comHost('/elas', 'WWW.Besave.com.br', qs);
+  assert.equal(r.statusCode, 301);
+  assert.equal(r.headers.location.value, 'https://besave.com.br/elas?t=1&t=2');
+});
+
+test('WWW-02: sem query, location sem ?', async () => {
+  const r = await comHost('/', 'www.besave.com.br');
+  assert.equal(r.statusCode, 301);
+  assert.equal(r.headers.location.value, 'https://besave.com.br/');
+});
+
+test('WWW-03: domínio sem www segue com o rewrite', async () => {
+  const r = await comHost('/oferta/1/', 'besave.com.br', { a: { value: '1' } });
+  assert.equal(r.statusCode, undefined);
+  assert.equal(r.uri, '/oferta/1/index.html');
+});
+
+test('WWW-01 edge: valor codificado repassado sem recodificar', async () => {
+  const r = await comHost('/oferta/1/', 'www.besave.com.br', { utm_campaign: { value: 'a%20b%26c' } });
+  assert.equal(r.headers.location.value, 'https://besave.com.br/oferta/1/?utm_campaign=a%20b%26c');
+});
