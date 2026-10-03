@@ -138,10 +138,10 @@ existir e redirecionar antes do primeiro post.
 | LNK-03 | P1: link-curto | Tasks | Implemented |
 | LNK-04 | P1: link-curto | Tasks | Implemented |
 | LNK-05 | P1: link-curto | Tasks | Implemented |
-| PAG-01 | P2: Páginas | Tasks | Pending |
-| PAG-02 | P2: Páginas | Tasks | Pending |
-| PAG-03 | P2: Páginas | Tasks | Pending |
-| PAG-04 | P2: Páginas | Tasks | Pending |
+| PAG-01 | P2: Páginas | Tasks | Implemented |
+| PAG-02 | P2: Páginas | Tasks | Implemented |
+| PAG-03 | P2: Páginas | Tasks | Implemented |
+| PAG-04 | P2: Páginas | Tasks | Implemented |
 | OPS-01 | P2: README | Tasks | Pending |
 
 **Coverage:** 25 total, 25 mapped to tasks, 0 unmapped

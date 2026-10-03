@@ -106,8 +106,8 @@ T4 → T5 → T6
 
 **Done when**:
 
-- [ ] Teste CF-12 antigo (links das 9 áreas) substituído por PAG-03 (spec BSV-16 inverte a regra)
-- [ ] Gate check passes: `cd functions && npm test`
+- [x] Teste CF-12 antigo (links das 9 áreas) substituído por PAG-03 (spec BSV-16 inverte a regra)
+- [x] Gate check passes: `cd functions && npm test`
 
 **Tests**: unit
 **Gate**: quick
