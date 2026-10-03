@@ -1,0 +1,98 @@
+{#- Página da oferta (BSV-20). Variáveis e classes: templates/README.md. -#}
+{% set area = tabela.areas|selectattr("valor", "eq", o.area)|first %}
+{% set p = o.produto %}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ o.titulo }} | Besave</title>
+<meta name="description" content="{{ descricao }}">
+{% if encerrada %}
+<meta name="robots" content="noindex">
+{% endif %}
+<link rel="canonical" href="{{ url }}">
+<meta property="og:type" content="product">
+<meta property="og:site_name" content="Besave">
+<meta property="og:title" content="{{ o.titulo }}">
+<meta property="og:description" content="{{ descricao }}">
+<meta property="og:image" content="{{ imagem }}">
+<meta property="og:url" content="{{ url }}">
+<link rel="stylesheet" href="/assets/besave.css">
+<script type="application/ld+json">{{ jsonld|tojson }}</script>
+</head>
+<body{% if encerrada %} class="encerrada"{% endif %}>
+<header class="topo">
+<a class="logo" href="/">Besave</a>
+<nav class="menu" aria-label="Áreas">
+<ul>
+{% for a in tabela.areas %}
+<li><a href="/{{ a.slug }}/">{{ a.rotulo }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+</header>
+<main class="oferta">
+<h1 class="titulo">{{ o.titulo }}</h1>
+{% if encerrada %}
+<p class="expirada">Oferta expirada</p>
+{% endif %}
+<div class="compra">
+<div class="foto">
+<img src="/img/ofertas/{{ o.id }}.webp" width="600" height="600" loading="eager" fetchpriority="high" alt="{{ o.titulo }}" onerror="this.onerror=null;this.src='/img/placeholder/{{ area.slug }}.webp'">
+</div>
+<div class="painel">
+<section class="preco" aria-label="Preço">
+<p class="loja">{{ tabela.lojas[o.loja] }}</p>
+{% if o.preco_de is not none %}
+<p class="de">de <s>{{ o.preco_de|reais }}</s></p>
+{% endif %}
+<p class="por"><strong>{{ o.preco_por|reais }}</strong>{% if o.desconto_pct is not none %} <span class="desconto">-{{ o.desconto_pct }}%</span>{% endif %}</p>
+<p class="data">publicada em <time datetime="{{ o.dt_oferta }}">{{ o.dt_oferta|data_br }}</time></p>
+</section>
+{% if o.cupom is not none %}
+<p class="cupom">Cupom <code class="codigo">{{ o.cupom }}</code></p>
+{% endif %}
+{% if encerrada %}
+<a class="cta" aria-disabled="true">Acesse a oferta</a>
+{% else %}
+<a class="cta" href="/ir/{{ o.id }}" rel="nofollow sponsored">Acesse a oferta</a>
+{% endif %}
+{% if o.nota is not none and o.qt_avaliacoes is not none %}
+<p class="avaliacao">Nota <strong>{{ o.nota|nota }}</strong> de 5 · {{ o.qt_avaliacoes|milhar }} avaliações</p>
+{% endif %}
+</div>
+</div>
+{% if p is not none %}
+<section class="detalhes">
+<h2>Detalhes do produto</h2>
+<p>{{ p.descricao }}</p>
+{% set rotulos = ["Marca", "Fabricante", "Modelo", "País de origem", "Gênero", "Faixa etária"] %}
+{% set valores = [p.marca, p.fabricante, p.modelo, p.pais_origem, p.genero, p.faixa_etaria] %}
+{% if valores|select|list %}
+<dl class="ficha">
+{% for i in range(valores|length) if valores[i] %}
+<div><dt>{{ rotulos[i] }}</dt><dd>{{ valores[i] }}</dd></div>
+{% endfor %}
+</dl>
+{% endif %}
+</section>
+{% if p.preco_min is not none and p.preco_max is not none and p.preco_min < p.preco_max %}
+{% set pos = (o.preco_por - p.preco_min) * 100 // (p.preco_max - p.preco_min) %}
+{% set pos = [[pos, 0]|max, 100]|min %}
+<section class="faixa">
+<h2>Faixa de preço</h2>
+<div class="barra"><span class="marcador" style="left:{{ pos }}%"></span></div>
+<p class="limites"><span>Mínimo {{ p.preco_min|reais }}</span> <span>Atual {{ o.preco_por|reais }}</span> <span>Máximo {{ p.preco_max|reais }}</span></p>
+</section>
+{% endif %}
+{% endif %}
+</main>
+<footer class="rodape">
+<nav aria-label="Mais ofertas">
+<a href="/{{ area.slug }}/">Mais ofertas de {{ area.rotulo }}</a>
+<a href="/">Página inicial</a>
+</nav>
+</footer>
+</body>
+</html>

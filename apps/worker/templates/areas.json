@@ -1,0 +1,26 @@
+{
+  "_doc": "Tabela única de rótulos e slugs do template (CONTRATO.md §2.3). O teste template_oferta compara com o contrato; não duplicar em outro lugar.",
+  "areas": [
+    { "valor": "TECH", "rotulo": "Tech", "slug": "tech" },
+    { "valor": "PLAYERS", "rotulo": "Players", "slug": "players" },
+    { "valor": "MEU_LAR", "rotulo": "Meu Lar", "slug": "meu-lar" },
+    { "valor": "ELAS", "rotulo": "Elas", "slug": "elas" },
+    { "valor": "ELES", "rotulo": "Eles", "slug": "eles" },
+    { "valor": "CULTURA", "rotulo": "Cultura", "slug": "cultura" },
+    { "valor": "FAMILIA", "rotulo": "Família & filhos", "slug": "familia" },
+    { "valor": "PETS", "rotulo": "Pets", "slug": "pets" },
+    { "valor": "ESPORTE_VIDA", "rotulo": "Esporte & vida", "slug": "esporte-vida" },
+    { "valor": "OUTROS", "rotulo": "Outros", "slug": "outros" }
+  ],
+  "publicos": [
+    { "valor": "FEMININO", "slug": "feminino" },
+    { "valor": "MASCULINO", "slug": "masculino" },
+    { "valor": "UNISSEX", "slug": "unissex" },
+    { "valor": "INFANTIL", "slug": "infantil" }
+  ],
+  "lojas": {
+    "AMAZON": "Amazon",
+    "SHOPEE": "Shopee",
+    "MERCADO_LIVRE": "Mercado Livre"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://besave.com.br/contract/chunk.schema.json",
+  "title": "Chunk",
+  "description": "Conteúdo descomprimido de data/chunks/{n}-{hash}.json.br: array de OfertaCard ordenado por id.",
+  "type": "array",
+  "items": { "$ref": "oferta-card.schema.json" }
+}

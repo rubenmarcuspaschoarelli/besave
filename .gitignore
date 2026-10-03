@@ -1,0 +1,31 @@
+node_modules/
+target/
+.svelte-kit/
+build/
+dist/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+# credenciais dos robôs nunca entram
+tools/**/config.local.*
+tools/**/*.secret*
+# nunca versionar
+.claude/settings.local.json
+**/.claude/settings.local.json
+tools/**/conf/config.json
+tools/**/conf/*.bak*
+tools/**/conf/*.csv
+tools/**/user_data/
+tools/**/captura/
+.venv/
+__pycache__/
+*.pyc
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# zip das Lambdas gerado pelo archive_file (BSV-15)
+infra/.build/

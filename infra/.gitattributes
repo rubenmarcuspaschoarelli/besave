@@ -1,0 +1,2 @@
+# Fonte das Lambdas com LF em qualquer SO: o hash do zip (archive_file) não muda entre Windows e CI.
+lambdas/** text eol=lf

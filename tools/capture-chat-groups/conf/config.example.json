@@ -1,0 +1,30 @@
+{
+  "grupos": {},
+  "controle": {
+    "ultimo_id_processado": 0
+  },
+  "db": {
+    "habilitado": true,
+    "modo": "",
+    "instant_client_dir": "",
+    "host": "",
+    "porta": 0,
+    "servico": "",
+    "usuario": "",
+    "senha": ""
+  },
+  "imagem": {
+    "imagem_marca_dagua": "",
+    "marca_dagua_tecnica": "",
+    "marca_dagua_opacidade": 0,
+    "marca_dagua_largura_rel": 0,
+    "qualidade_jpeg": 0,
+    "resolucao_minima": 0,
+    "espera_imagem_s": 0
+  },
+  "publicacao_s3": {
+    "ativo": true,
+    "destino": "",
+    "qualidade": 0
+  }
+}

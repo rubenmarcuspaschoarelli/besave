@@ -1,0 +1,193 @@
+//! `FonteOfertas` sobre Oracle XE 11.2 (crate `oracle`, OCI via Instant Client ≥ 19).
+
+use std::collections::{BTreeSet, HashMap};
+
+use oracle::sql_type::ToSql;
+use oracle::{Connection, InitParams, Row};
+
+use crate::conversao::{LinhaOferta, LinhaProduto};
+use crate::fonte::{ErroFonte, FonteOfertas, Result};
+
+/// Fuso das colunas DATE (os robôs gravam hora local). Offset fixo: o arquivo de fuso do
+/// XE 11.2 ainda aplica horário de verão em America/Sao_Paulo.
+const FUSO_PADRAO: &str = "-03:00";
+
+/// Credenciais só por env; nunca em arquivo versionado. Sem `Debug` para não vazar a senha.
+pub struct ConfigOracle {
+    pub dsn: String,
+    pub usuario: String,
+    senha: String,
+    /// `BESAVE_ORACLE_TZ`, opcional, formato `±HH:MM`.
+    pub fuso: String,
+    /// `fuso` em segundos (`-03:00` → `-10800`).
+    pub fuso_segundos: i64,
+    /// `BESAVE_ORACLE_CLIENT_DIR`, opcional: pasta do Instant Client; se definida, o `PATH`
+    /// não é consultado.
+    pub client_dir: Option<String>,
+}
+
+impl ConfigOracle {
+    pub fn do_env() -> Result<Self> {
+        Self::de(|k| std::env::var(k).ok())
+    }
+
+    pub fn de(env: impl Fn(&str) -> Option<String>) -> Result<Self> {
+        let opc = |k: &str| env(k).filter(|v| !v.is_empty());
+        let obrig = |k: &'static str| opc(k).ok_or(ErroFonte::ConfigAusente(k));
+        let fuso = opc("BESAVE_ORACLE_TZ").unwrap_or_else(|| FUSO_PADRAO.to_owned());
+        let fuso_segundos = offset_segundos(&fuso).ok_or_else(|| {
+            ErroFonte::ConfigInvalida("BESAVE_ORACLE_TZ", format!("{fuso:?}, esperado ±HH:MM"))
+        })?;
+        Ok(Self {
+            dsn: obrig("BESAVE_ORACLE_DSN")?,
+            usuario: obrig("BESAVE_ORACLE_USER")?,
+            senha: obrig("BESAVE_ORACLE_PASS")?,
+            fuso,
+            fuso_segundos,
+            client_dir: opc("BESAVE_ORACLE_CLIENT_DIR"),
+        })
+    }
+}
+
+/// `±HH:MM` → segundos. Só offset: nome de região exigiria o arquivo de fuso do servidor.
+fn offset_segundos(s: &str) -> Option<i64> {
+    let (sinal, resto) = match s.as_bytes().first()? {
+        b'+' => (1, &s[1..]),
+        b'-' => (-1, &s[1..]),
+        _ => return None,
+    };
+    let (h, m) = resto.split_once(':')?;
+    if h.len() != 2 || m.len() != 2 || !(h.bytes().chain(m.bytes()).all(|b| b.is_ascii_digit())) {
+        return None;
+    }
+    let (h, m): (i64, i64) = (h.parse().ok()?, m.parse().ok()?);
+    (h <= 14 && m < 60).then_some(sinal * (h * 3600 + m * 60))
+}
+
+pub struct OracleFonte {
+    conn: Connection,
+    fuso_segundos: i64,
+}
+
+impl OracleFonte {
+    pub fn conectar(cfg: &ConfigOracle) -> Result<Self> {
+        if let Some(dir) = &cfg.client_dir {
+            InitParams::new().oracle_client_lib_dir(dir)?.init()?;
+        }
+        let conn = Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?;
+        Ok(Self {
+            conn,
+            fuso_segundos: cfg.fuso_segundos,
+        })
+    }
+}
+
+/// DATE local → segundos Unix UTC. Só aritmética de DATE: `FROM_TZ`/`SYS_EXTRACT_UTC`
+/// dão ORA-01882 com Instant Client 19 no XE 11.2.
+macro_rules! epoch_utc {
+    ($col:literal) => {
+        concat!("ROUND((", $col, " - DATE '1970-01-01') * 86400) - :desloc")
+    };
+}
+
+/// Query de publicação (CONTRATO §7). `DT_ULT_ATUALIZACAO` não é lida.
+pub const SQL_OFERTAS: &str = concat!(
+    "SELECT ID_OFERTA, ID_PRODUTO, DS_LOJA, DS_TITULO, VL_PRECO_DE, VL_PRECO_POR, DS_CUPOM, ",
+    "NR_NOTA_AVALIACAO, QT_AVALIACAO, ",
+    epoch_utc!("DT_OFERTA"),
+    ", DS_COMUNIDADE, DS_PUBLICO, CASE WHEN ST_ATIVO = 1 THEN 1 ELSE 0 END, ",
+    epoch_utc!("DT_DESATIVACAO"),
+    ", DS_URL_AFILIADO",
+    " FROM OFERTA WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7 ORDER BY ID_OFERTA"
+);
+
+const COLUNAS_PRODUTO: &str = "SELECT ID_PRODUTO, DS_DESCRICAO_PRODUTO, DS_MARCA, DS_FABRICANTE, \
+     DS_MODELO, DS_PAIS_ORIGEM, DS_GENERO, DS_FAIXA_ETARIA, VR_PRECO_MINIMO, VR_PRECO_MAXIMO \
+     FROM PRODUTO WHERE ID_PRODUTO";
+
+/// Máximo de expressões numa lista `IN` do Oracle (ORA-01795).
+pub const BLOCO_IN: usize = 1000;
+
+/// Ids distintos, ordenados, em blocos de até `BLOCO_IN` (um statement por bloco).
+pub fn blocos_in(ids: &[i64]) -> Vec<Vec<i64>> {
+    let distintos: Vec<i64> = ids
+        .iter()
+        .copied()
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    distintos.chunks(BLOCO_IN).map(<[i64]>::to_vec).collect()
+}
+
+/// Query de produtos com `n` binds posicionais: `... IN (:1, :2, …, :n)`.
+pub fn sql_produtos(n: usize) -> String {
+    let binds: Vec<String> = (1..=n).map(|i| format!(":{i}")).collect();
+    format!("{COLUNAS_PRODUTO} IN ({})", binds.join(", "))
+}
+
+impl FonteOfertas for OracleFonte {
+    fn ofertas(&self) -> Result<Vec<LinhaOferta>> {
+        let linhas = self
+            .conn
+            .query_named(SQL_OFERTAS, &[("desloc", &self.fuso_segundos)])?;
+        linhas.map(|r| linha_oferta(&r?)).collect()
+    }
+
+    fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>> {
+        let sql = format!("{COLUNAS_PRODUTO} = :id");
+        let mut linhas = self.conn.query_named(&sql, &[("id", &id_produto)])?;
+        linhas
+            .next()
+            .transpose()?
+            .map(|r| linha_produto(&r))
+            .transpose()
+    }
+
+    /// Uma query por bloco de `BLOCO_IN` ids distintos.
+    fn produtos(&self, ids: &[i64]) -> Result<HashMap<i64, LinhaProduto>> {
+        let mut out = HashMap::with_capacity(ids.len());
+        for bloco in blocos_in(ids) {
+            let params: Vec<&dyn ToSql> = bloco.iter().map(|id| id as &dyn ToSql).collect();
+            for r in self.conn.query(&sql_produtos(bloco.len()), &params)? {
+                let p = linha_produto(&r?)?;
+                out.insert(p.id_produto, p);
+            }
+        }
+        Ok(out)
+    }
+}
+
+fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
+    Ok(LinhaOferta {
+        id: r.get(0)?,
+        id_produto: r.get(1)?,
+        loja: r.get(2)?,
+        titulo: r.get(3)?,
+        preco_de: r.get(4)?,
+        preco_por: r.get(5)?,
+        cupom: r.get(6)?,
+        nota: r.get(7)?,
+        qt_avaliacoes: r.get(8)?,
+        dt_oferta: r.get(9)?,
+        area: r.get(10)?,
+        publico: r.get(11)?,
+        ativo: r.get::<_, i64>(12)? == 1,
+        dt_desativacao: r.get(13)?,
+        url_afiliado: r.get::<_, Option<String>>(14)?.unwrap_or_default(),
+    })
+}
+
+fn linha_produto(r: &Row) -> Result<LinhaProduto> {
+    Ok(LinhaProduto {
+        id_produto: r.get(0)?,
+        descricao: r.get(1)?,
+        marca: r.get(2)?,
+        fabricante: r.get(3)?,
+        modelo: r.get(4)?,
+        pais_origem: r.get(5)?,
+        genero: r.get(6)?,
+        faixa_etaria: r.get(7)?,
+        preco_min: r.get(8)?,
+        preco_max: r.get(9)?,
+    })
+}

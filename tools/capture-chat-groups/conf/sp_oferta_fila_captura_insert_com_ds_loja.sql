@@ -1,0 +1,89 @@
+-- STP_OFERTA_FILA_CAPTURA_INSERT — versao 22/09/2026: passa a gravar DS_LOJA.
+--
+-- POR QUE: a coluna DS_LOJA da OFERTA_FILA_CAPTURA existe desde sempre e estava
+-- 0 de 29.227 linhas — a SP nao tinha parametro para ela. O marketplace so era
+-- registrado em DS_CUPOM_LOJA, que por desenho e a loja DO CUPOM: 67,7% das
+-- ofertas ficavam sem loja, mesmo com a URL dizendo qual era.
+--
+-- COMPATIVEL COM O CODIGO ANTIGO: P_DS_LOJA entra com DEFAULT NULL e a captura
+-- chama a SP por notacao nomeada (nome => :valor), entao um run com o codigo
+-- velho continua funcionando (grava DS_LOJA nula). O codigo novo (wa/oracle_db.py)
+-- consulta USER_ARGUMENTS ao conectar e so manda o parametro se ele existir —
+-- logo, os dois lados podem subir em qualquer ordem, sem janela de erro.
+--
+-- Backup da versao anterior: conf/sp_atual.sql (extraida de USER_SOURCE em 22/09).
+-- Aplicar como BESAVE:  @conf/sp_oferta_fila_captura_insert_com_ds_loja.sql
+
+CREATE OR REPLACE PROCEDURE STP_OFERTA_FILA_CAPTURA_INSERT (
+  P_DS_TIPO_ORIGEM         IN  VARCHAR2,
+  P_DS_ORIGEM              IN  VARCHAR2,
+  P_DS_TIPO_OFERTA         IN  VARCHAR2,
+  P_ID_OFERTA              IN  NUMBER,
+  P_DT_CAPTACAO            IN  DATE,
+  P_DT_OFERTA              IN  DATE,
+  P_DS_OFERTA              IN  VARCHAR2,
+  P_DS_IMAGEM_OFERTA       IN  VARCHAR2,
+  P_DS_OFERTA_AVISO        IN  VARCHAR2,
+  P_VL_PRECO_DE            IN  NUMBER,
+  P_VL_PRECO_POR           IN  NUMBER,
+  P_DS_DESCRICAO_PAGAMENTO IN  VARCHAR2,
+  P_DS_URL_ORIGEM          IN  VARCHAR2,
+  P_DS_MSG_FINAL           IN  VARCHAR2,
+  P_DS_CUPOM               IN  VARCHAR2,
+  P_DS_CUPOM_COMENTARIO    IN  VARCHAR2,
+  P_DS_CUPOM_LOJA          IN  VARCHAR2,
+  P_DS_LOJA                IN  VARCHAR2 DEFAULT NULL,   -- NOVO (22/09/2026)
+  PV_RETORNO               OUT VARCHAR2,
+  PV_ERRO                  OUT VARCHAR2
+) AS
+BEGIN
+  INSERT INTO OFERTA_FILA_CAPTURA (
+    ID_OFERTA,
+    DS_OFERTA,
+    DT_OFERTA,
+    DT_CAPTACAO,
+    DS_TIPO_ORIGEM,
+    DS_ORIGEM,
+    DS_TIPO_OFERTA,
+    DS_IMAGEM_OFERTA,
+    DS_OFERTA_AVISO,
+    VL_PRECO_DE,
+    VL_PRECO_POR,
+    DS_DESCRICAO_PAGAMENTO,
+    DS_URL_ORIGEM,
+    DS_MSG_FINAL,
+    DS_CUPOM,
+    DS_CUPOM_COMENTARIO,
+    DS_CUPOM_LOJA,
+    DS_LOJA,
+    ST_CAPTURA
+  ) VALUES (
+    P_ID_OFERTA,
+    NVL(SUBSTR(P_DS_OFERTA, 1, 350), '-'),
+    P_DT_OFERTA,
+    P_DT_CAPTACAO,
+    SUBSTR(P_DS_TIPO_ORIGEM, 1, 30),
+    SUBSTR(P_DS_ORIGEM, 1, 100),
+    SUBSTR(P_DS_TIPO_OFERTA, 1, 30),
+    SUBSTR(P_DS_IMAGEM_OFERTA, 1, 350),
+    SUBSTR(P_DS_OFERTA_AVISO, 1, 350),
+    P_VL_PRECO_DE,
+    P_VL_PRECO_POR,
+    SUBSTR(P_DS_DESCRICAO_PAGAMENTO, 1, 50),
+    SUBSTR(P_DS_URL_ORIGEM, 1, 350),
+    SUBSTR(P_DS_MSG_FINAL, 1, 350),
+    SUBSTR(P_DS_CUPOM, 1, 30),
+    SUBSTR(P_DS_CUPOM_COMENTARIO, 1, 50),
+    SUBSTR(P_DS_CUPOM_LOJA, 1, 50),
+    SUBSTR(P_DS_LOJA, 1, 100),
+    '0'
+  );
+
+  PV_RETORNO := 'TRUE';
+  PV_ERRO    := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_OFERTA_FILA_CAPTURA_INSERT;
+/
