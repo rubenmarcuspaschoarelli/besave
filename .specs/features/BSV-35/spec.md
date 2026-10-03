@@ -169,14 +169,14 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 | CAT-08 | Lista e novas | T4 | Verified |
 | CAT-09 | Lista e novas | T4 | Verified |
 | CAT-10 | Lista e novas | T4 | Verified |
-| BUS-01 | Busca | T5 | Pending |
-| BUS-02 | Busca | T5 | Pending |
-| BUS-03 | Busca | T5 | Pending |
-| BUS-04 | Busca | T5 | Pending |
-| BUS-05 | Busca | T5 | Pending |
-| BUS-06 | Busca | T5 | Pending |
-| BUS-07 | Busca | T5 | Pending |
-| BUS-08 | Busca | T5 | Pending |
+| BUS-01 | Busca | T5 | Verified |
+| BUS-02 | Busca | T5 | Verified |
+| BUS-03 | Busca | T5 | Verified |
+| BUS-04 | Busca | T5 | Verified |
+| BUS-05 | Busca | T5 | Verified |
+| BUS-06 | Busca | T5 | Verified |
+| BUS-07 | Busca | T5 | Verified |
+| BUS-08 | Busca | T5 | Verified |
 | DIF-01 | Sincronização | T6 | Pending |
 | SIN-01 | Sincronização | T6 | Pending |
 | SIN-02 | Sincronização | T6 | Pending |

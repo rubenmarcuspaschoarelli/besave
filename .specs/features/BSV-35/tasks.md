@@ -148,8 +148,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Cobertura 1:1 de BUS-01..08
-- [ ] Gate quick passa
+- [x] Cobertura 1:1 de BUS-01..08
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
