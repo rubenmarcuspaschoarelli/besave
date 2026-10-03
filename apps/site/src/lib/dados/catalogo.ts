@@ -3,27 +3,31 @@ import type { ChunkRef, Filtro, Manifest, OfertaCard, Ordem } from './tipos.ts';
 
 /** Minúsculas, sem diacríticos; todo não alfanumérico vira um espaço. */
 export function normalizar(s: string): string {
-	return s
-		.normalize('NFD')
-		.replace(/\p{M}/gu, '')
-		.toLowerCase()
-		.replace(/[^a-z0-9]+/g, ' ')
-		.trim();
+	const min = s.toLowerCase();
+	// NFD só quando há não-ASCII: metade dos títulos não tem acento e o NFD domina o custo.
+	const base = /[\u0080-\uffff]/.test(min)
+		? min.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+		: min;
+	return base.replace(/[^a-z0-9]+/g, ' ').trim();
 }
 
-/** Card + texto pesquisável (título + cupom + loja), com espaço à frente para casar prefixo de palavra. */
-export interface Entrada {
-	card: OfertaCard;
+/**
+ * Chunk carregado. `texto` junta os textos pesquisáveis dos cards (título + cupom + loja,
+ * normalizados, cada um com um espaço à frente) separados por quebra de linha;
+ * `inicios[i]` é onde começa o do card `i`. Pré-computado ao aplicar o chunk, nunca por consulta.
+ */
+export interface Trecho {
+	arquivo: string;
+	cards: OfertaCard[];
+	segmentos: string[];
 	texto: string;
+	inicios: Int32Array;
+	/** `dt` em ms, para ordenar sem comparar strings. */
+	tempos: Float64Array;
 }
 
 function textoDe(c: OfertaCard): string {
 	return ' ' + normalizar(`${c.t} ${c.c ?? ''} ${ROTULO_LOJA[c.l] ?? ''}`);
-}
-
-function porRecentes(a: OfertaCard, b: OfertaCard): number {
-	if (a.dt !== b.dt) return a.dt < b.dt ? 1 : -1;
-	return b.id - a.id;
 }
 
 /** pp/pd: menor = maior desconto; sem `pd` vai para o fim. */
@@ -31,14 +35,34 @@ function razao(c: OfertaCard): number {
 	return c.pd ? c.pp / c.pd : Infinity;
 }
 
-const COMPARADORES: Record<Ordem, (a: OfertaCard, b: OfertaCard) => number> = {
-	recentes: porRecentes,
-	desconto: (a, b) => razao(a) - razao(b) || porRecentes(a, b),
-	preco: (a, b) => a.pp - b.pp || porRecentes(a, b)
-};
+/** Cards selecionados com o `dt` numérico de cada um. */
+export class Selecao {
+	cards: OfertaCard[] = [];
+	tempos: number[] = [];
 
-export function ordenar(cards: OfertaCard[], ordem: Ordem = 'recentes'): OfertaCard[] {
-	return cards.sort(COMPARADORES[ordem]);
+	incluir(c: OfertaCard, tempo: number): void {
+		this.cards.push(c);
+		this.tempos.push(tempo);
+	}
+
+	/** recentes: dt desc, id desc; desconto e preço desempatam por recentes. */
+	ordenar(ordem: Ordem = 'recentes'): OfertaCard[] {
+		const { cards, tempos } = this;
+		const n = cards.length;
+		let chave: Float64Array | null = null;
+		if (ordem !== 'recentes') {
+			chave = new Float64Array(n);
+			for (let i = 0; i < n; i++) chave[i] = ordem === 'preco' ? cards[i].pp : razao(cards[i]);
+		}
+		const idx = new Uint32Array(n);
+		for (let i = 0; i < n; i++) idx[i] = i;
+		// Infinity - Infinity = NaN (falso): empate segue para o próximo critério.
+		idx.sort(
+			(a, b) =>
+				(chave ? chave[a] - chave[b] : 0) || tempos[b] - tempos[a] || cards[b].id - cards[a].id
+		);
+		return Array.from(idx, (i) => cards[i]);
+	}
 }
 
 export function casaFiltro(c: OfertaCard, f: Filtro): boolean {
@@ -50,8 +74,7 @@ export function casaFiltro(c: OfertaCard, f: Filtro): boolean {
 }
 
 export class Catalogo {
-	#porId = new Map<number, Entrada>();
-	#porN = new Map<number, { arquivo: string; ids: number[] }>();
+	#porN = new Map<number, Trecho>();
 	#alvo: Map<number, string> | null = null;
 	/** Ids exibidos; fixada no primeiro `completo` (regra 8). */
 	#base: Set<number> | null = null;
@@ -64,16 +87,25 @@ export class Catalogo {
 	}
 
 	aplicarChunk(ref: ChunkRef, cards: OfertaCard[]): void {
-		const ids = cards.map((c) => c.id);
 		const antigo = this.#porN.get(ref.n);
-		if (antigo) {
-			const ficam = new Set(ids);
-			for (const id of antigo.ids) if (!ficam.has(id)) this.#remover(id);
-		}
-		for (const card of cards) {
-			const e = this.#porId.get(card.id);
-			const mesmoTexto = e && e.card.t === card.t && e.card.c === card.c && e.card.l === card.l;
-			this.#porId.set(card.id, { card, texto: mesmoTexto ? e.texto : textoDe(card) });
+		const anterior = new Map<number, number>();
+		antigo?.cards.forEach((c, i) => anterior.set(c.id, i));
+		const segmentos = new Array<string>(cards.length);
+		const inicios = new Int32Array(cards.length);
+		const tempos = new Float64Array(cards.length);
+		let pos = 0;
+		for (let i = 0; i < cards.length; i++) {
+			const card = cards[i];
+			const j = anterior.get(card.id);
+			const v = j === undefined ? undefined : antigo?.cards[j];
+			segmentos[i] =
+				v && j !== undefined && v.t === card.t && v.c === card.c && v.l === card.l
+					? (antigo?.segmentos[j] ?? textoDe(card))
+					: textoDe(card);
+			anterior.delete(card.id);
+			inicios[i] = pos;
+			tempos[i] = Date.parse(card.dt);
+			pos += segmentos[i].length + 1;
 			if (this.#base && !this.#base.has(card.id)) {
 				if (card.x) {
 					this.#base.add(card.id);
@@ -81,14 +113,23 @@ export class Catalogo {
 				} else this.#pendentes.add(card.id);
 			}
 		}
-		this.#porN.set(ref.n, { arquivo: ref.arquivo, ids });
+		// Ids que saíram do chunk.
+		for (const id of anterior.keys()) this.#remover(id);
+		this.#porN.set(ref.n, {
+			arquivo: ref.arquivo,
+			cards,
+			segmentos,
+			texto: segmentos.join('\n'),
+			inicios,
+			tempos
+		});
 		this.#fixarBase();
 	}
 
 	descartar(n: number): void {
 		const antigo = this.#porN.get(n);
 		if (!antigo) return;
-		for (const id of antigo.ids) this.#remover(id);
+		for (const c of antigo.cards) this.#remover(c.id);
 		this.#porN.delete(n);
 	}
 
@@ -97,18 +138,22 @@ export class Catalogo {
 		return new Map([...this.#porN].map(([n, v]) => [n, v.arquivo]));
 	}
 
-	entradas(): IterableIterator<Entrada> {
-		return this.#porId.values();
+	trechos(): IterableIterator<Trecho> {
+		return this.#porN.values();
 	}
 
 	lista(f: Filtro = {}): OfertaCard[] {
-		const r: OfertaCard[] = [];
-		for (const { card } of this.#porId.values()) {
-			if (this.#pendentes.has(card.id)) continue;
-			if (card.x && !f.mostrarExpiradas) continue;
-			if (casaFiltro(card, f)) r.push(card);
+		const r = new Selecao();
+		const pendentes = this.#pendentes.size > 0 ? this.#pendentes : null;
+		for (const { cards, tempos } of this.#porN.values()) {
+			for (let i = 0; i < cards.length; i++) {
+				const card = cards[i];
+				if (card.x && !f.mostrarExpiradas) continue;
+				if (pendentes?.has(card.id)) continue;
+				if (casaFiltro(card, f)) r.incluir(card, tempos[i]);
+			}
 		}
-		return ordenar(r, f.ordem);
+		return r.ordenar(f.ordem);
 	}
 
 	novas(): number {
@@ -135,12 +180,13 @@ export class Catalogo {
 	}
 
 	#remover(id: number): void {
-		this.#porId.delete(id);
 		this.#pendentes.delete(id);
 		this.#base?.delete(id);
 	}
 
 	#fixarBase(): void {
-		if (!this.#base && this.completo) this.#base = new Set(this.#porId.keys());
+		if (this.#base || !this.completo) return;
+		this.#base = new Set();
+		for (const { cards } of this.#porN.values()) for (const c of cards) this.#base.add(c.id);
 	}
 }

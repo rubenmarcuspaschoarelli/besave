@@ -184,8 +184,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Orçamentos medidos em teste e verdes
-- [ ] Gate quick passa
+- [x] Orçamentos medidos em teste e verdes
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

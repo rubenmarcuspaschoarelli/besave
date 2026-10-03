@@ -190,11 +190,11 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 | POL-01 | POL | T6 | Verified |
 | POL-02 | POL | T6 | Verified |
 | POL-03 | POL | T6 | Verified |
-| DES-01 | Desempenho | T7 | Pending |
-| DES-02 | Desempenho | T7 | Pending |
-| DES-03 | Desempenho | T7 | Pending |
-| DES-04 | Desempenho | T7 | Pending |
-| PUR-01 | Desempenho | T7 | Pending |
+| DES-01 | DES | T7 | Verified |
+| DES-02 | DES | T7 | Verified |
+| DES-03 | DES | T7 | Verified |
+| DES-04 | DES | T7 | Verified |
+| PUR-01 | PUR | T7 | Verified |
 | MED-01 | Medição real | T8 | Pending |
 
 **Coverage:** 43 total, 43 mapped to tasks, 0 unmapped.

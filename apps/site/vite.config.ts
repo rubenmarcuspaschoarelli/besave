@@ -18,6 +18,8 @@ export default defineConfig({
 	test: {
 		expect: { requireAssertions: true },
 		environment: 'node',
+		// Orçamentos de tempo (desempenho.test.ts) não podem disputar CPU com outros arquivos.
+		fileParallelism: false,
 		include: ['src/**/*.test.ts'],
 		testTimeout: 30_000
 	}
