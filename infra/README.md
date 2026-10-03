@@ -186,8 +186,10 @@ distribuição nova nasceu sem aliases. Duas variáveis controlam a virada:
   vigia lendo `https://besave.com.br/manifest.json` (testa também DNS e certificado).
 - `ativar_curto`: fase 2 dos domínios curtos. As zonas `besave.io` e `besave.me` existem sempre (fase 1).
 
-**As variáveis precisam valer em todo `apply` seguinte.** Um `apply` sem elas volta para `false` e
-desfaz a virada. Grave-as em `infra/terraform.tfvars` (ignorado pelo git), não só em `-var`:
+**As variáveis precisam valer em todo `apply` seguinte.** Sem elas, voltam para `false` e o `plan` tenta
+desfazer a virada; o `prevent_destroy` dos registros e do certificado curto o faz falhar, mas qualquer
+`apply` fica bloqueado até elas voltarem. Grave-as em `infra/terraform.tfvars` (ignorado pelo git), não só
+em `-var`:
 
 ```hcl
 ativar_dominios = true
@@ -283,8 +285,9 @@ done
   `ativar_dominios = false` e `apply` (tira os aliases da distribuição nova e o vigia volta ao
   `*.cloudfront.net`). Em seguida, no console: aliases de volta na distribuição do protótipo e os registros
   A/AAAA de `besave.com.br`/`www` apontando para ela. No worker, `BESAVE_INDEXAVEL=false`. Fora do ar entre
-  o `apply` e a edição dos registros. Para refazer a virada depois, basta `ativar_dominios = true`: o
-  `allow_overwrite` assume os registros de novo.
+  o `apply` e a edição dos registros. Para refazer a virada depois, repita o passo 2 do roteiro: tirar
+  de novo os aliases da distribuição do protótipo (AD-021) e `ativar_dominios = true`; o `allow_overwrite`
+  assume os registros de novo.
 - **Domínios curtos:** `ativar_curto = false` falha de propósito no `plan` (certificado com
   `prevent_destroy`, AD-022). Para desligar, remova o `prevent_destroy` num commit explícito. As zonas
   também têm `prevent_destroy` e não dependem de `ativar_curto`: zona recriada ganha outros NS e os links
