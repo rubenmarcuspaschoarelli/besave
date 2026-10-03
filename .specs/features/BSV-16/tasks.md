@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6 → T7
+T4 → T5 → T6 → T7 → T8
 ```
 
 ---
@@ -193,3 +193,23 @@ T4 → T5 → T6 → T7
 **Gate**: full
 
 **Commit**: `test(infra): assert short distribution waits for certificate validation`
+
+---
+
+### T8: Revisão do dono — passo 0 com Functions temporárias
+
+**What**: README: passo 0 com `testar_function` (create/test/delete) antes de qualquer apply; upload das páginas no passo 1.
+**Where**: `infra/README.md`
+**Depends on**: T7
+**Reuses**: README e testes existentes
+**Requirement**: OPS-02
+
+**Done when**:
+
+- [x] Roteiro com passo 0 e upload das páginas no passo 1
+- [x] Gate check passes: build gate
+
+**Tests**: none
+**Gate**: build
+
+**Commit**: `docs(infra): test functions on temporary copies before any apply`

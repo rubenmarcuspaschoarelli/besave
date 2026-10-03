@@ -104,6 +104,7 @@ existir e redirecionar antes do primeiro post.
 ### P2: README
 
 1. OPS-01: The README SHALL ter o roteiro da virada (6 passos da spec), o upload manual das páginas, os custos e como reverter
+2. OPS-02: The README SHALL ter um passo 0, antes de qualquer `apply`, que cria Functions temporárias pela CLI (`create-function`, `cloudfront-js-2.0`) com o código novo, roda `test-function` em DEVELOPMENT com os eventos de `functions/eventos/` e as apaga (`delete-function`); o upload de `index.html`/`404.html` fica no passo 1 (AD-030)
 
 ---
 
@@ -143,8 +144,9 @@ existir e redirecionar antes do primeiro post.
 | PAG-03 | P2: Páginas | Tasks | Implemented |
 | PAG-04 | P2: Páginas | Tasks | Implemented |
 | OPS-01 | P2: README | Tasks | Implemented |
+| OPS-02 | P2: README | Tasks | Implemented |
 
-**Coverage:** 25 total, 25 mapped to tasks, 0 unmapped
+**Coverage:** 26 total, 26 mapped to tasks, 0 unmapped
 
 ---
 

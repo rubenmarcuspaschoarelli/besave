@@ -74,21 +74,39 @@ python -m unittest discover -s lambdas/vigia   # vigia: dublês de S3/HTTP/SSM/T
 cd functions && npm ci && npm test   # Functions com fixtures de evento + 404.html + sem recursos do protótipo
 ```
 
-**Obrigatório** após qualquer mudança em `functions/*.js`: rodar `test-function` no runtime real. O
-cloudfront-js-2.0 é um subconjunto do JS (ex.: `await` como argumento de função é erro de sintaxe) e
-os testes Node acima não o emulam — passam com código que o CloudFront recusa.
-
-Para testar uma Function no runtime real depois do apply (ETag de `aws cloudfront describe-function --name <nome>`):
+**Obrigatório** após qualquer mudança em `functions/*.js`, **antes do `apply`**: rodar `test-function` no
+runtime real (AD-030). O cloudfront-js-2.0 é um subconjunto do JS (ex.: `await` como argumento de função é
+erro de sintaxe) e os testes Node acima não o emulam — passam com código que o CloudFront recusa. Como as
+Functions têm `publish = true`, o `apply` põe o código no ar na hora, em todas as rotas que o usam
+(`rewrite-index` está em todo HTML). Por isso o teste roda numa Function temporária, criada pela CLI com o
+código novo, e apagada em seguida:
 
 ```sh
-aws cloudfront test-function --name redirect-afiliado --if-match <ETag> --stage LIVE --event-object fileb://evento.json
-aws cloudfront test-function --name rewrite-index --if-match <ETag> --stage LIVE --event-object fileb://functions/eventos/rewrite-index-www.json
-#   → 301, location https://besave.com.br/oferta/1/?a=1
-aws cloudfront test-function --name rewrite-index --if-match <ETag> --stage LIVE --event-object fileb://functions/eventos/rewrite-index.json
-#   → request com uri /oferta/1/index.html
-aws cloudfront test-function --name link-curto --if-match <ETag> --stage LIVE --event-object fileb://functions/eventos/link-curto.json
+# testar_function <arquivo .js> <evento .json>...   (rodar em infra/)
+testar_function() {
+  nome="tmp-$(basename "$1" .js)-$(date +%s)"; arq=$1; shift
+  etag=$(aws cloudfront create-function --name "$nome" \
+    --function-config '{"Comment":"teste temporario","Runtime":"cloudfront-js-2.0"}' \
+    --function-code "fileb://$arq" --query ETag --output text) || return 1
+  for ev in "$@"; do
+    echo "== $ev"
+    aws cloudfront test-function --name "$nome" --if-match "$etag" --stage DEVELOPMENT \
+      --event-object "fileb://$ev" --query 'TestResult.[FunctionErrorMessage,FunctionOutput]' --output text
+  done
+  aws cloudfront delete-function --name "$nome" --if-match "$etag"
+}
+
+testar_function functions/rewrite-index.js functions/eventos/rewrite-index-www.json functions/eventos/rewrite-index.json
+#   www  → 301, location https://besave.com.br/oferta/1/?a=1
+#   apex → request com uri /oferta/1/index.html
+testar_function functions/link-curto.js functions/eventos/link-curto.json
 #   → 301, location https://besave.com.br/oferta/5412/?utm_source=telegram, cache-control public, max-age=86400
 ```
+
+A primeira coluna da saída (`FunctionErrorMessage`) tem de vir vazia. `redirect-afiliado` usa KVS e não
+cabe nesse atalho: para ela, `test-function --stage DEVELOPMENT` na própria Function antes de publicar.
+O evento do `test-function` é sintético: ele prova sintaxe e lógica no runtime, não como o CloudFront
+monta o objeto `querystring` de uma requisição real (isso só o `curl` do roteiro prova).
 
 ## Vigia externo (BSV-15)
 
@@ -192,19 +210,22 @@ esquema vira `http://` e a Function já manda para `https://`, sem um salto extr
 
 ### Roteiro (dono)
 
-1. **Zonas curtas.** `terraform plan -out plano.tfplan` com as duas variáveis em `false`. O plano esperado
-   tem 2 adições (as zonas) e 1 alteração in-place (`rewrite-index`, com a regra do `www`, inofensiva antes
-   da virada); `0 to destroy`. `apply`, depois `terraform output ns_curtos` e configurar os 4 NS de cada
-   zona no registrador de `.io` e `.me`.
+0. **Functions no runtime real, antes de qualquer `apply`.** `testar_function` (seção
+   [Testes](#testes-sem-conta-aws)) com `rewrite-index.js` e `link-curto.js` e os eventos de
+   `functions/eventos/`. O `apply` do passo 1 já publica o `rewrite-index` novo em todas as rotas HTML.
+1. **Zonas curtas e páginas provisórias.** `terraform plan -out plano.tfplan` com as duas variáveis em
+   `false`. O plano esperado tem 2 adições (as zonas) e 1 alteração in-place (`rewrite-index`, com a regra
+   do `www`, inofensiva antes da virada); `0 to destroy`. `apply`, depois `terraform output ns_curtos` e
+   configurar os 4 NS de cada zona no registrador de `.io` e `.me`. Upload de `index.html` e `404.html`
+   (seção [Páginas provisórias](#páginas-provisórias)), para a virada já encontrá-las.
 2. **Virada.** No console, remover `besave.com.br` e `www.besave.com.br` dos aliases da distribuição do
    protótipo e salvar. **Logo em seguida**, `ativar_dominios = true` no `terraform.tfvars` e `apply`. O site
    fica fora do ar nos minutos entre os dois passos (protótipo; aceito).
 3. **Indexação.** No `.env` do worker, `BESAVE_INDEXAVEL=true`. O próximo ciclo grava o `robots.txt` com
    `Allow` + `Sitemap`.
-4. **Páginas provisórias.** Upload de `index.html` e `404.html` (seção abaixo).
-5. **Domínios curtos.** Quando o NS propagar (`nslookup -type=NS besave.io` e `besave.me` devolvem os NS da
+4. **Domínios curtos.** Quando o NS propagar (`nslookup -type=NS besave.io` e `besave.me` devolvem os NS da
    AWS), `ativar_curto = true` e `apply`. A validação do certificado espera o DNS; leva alguns minutos.
-6. PR `develop → main` (AD-060).
+5. PR `develop → main` (AD-060).
 
 ### Conferir
 
@@ -222,7 +243,7 @@ aws lambda invoke --function-name besave-vigia --cli-binary-format raw-in-base64
 ```
 
 Por último, colar `besave.io/<id>` num chat do Telegram: a prévia precisa mostrar a oferta (confirma
-que o robô do Telegram segue os 301). Rodar também o `test-function` das duas Functions (seção [Testes](#testes-sem-conta-aws)).
+que o robô do Telegram segue os 301).
 
 ### Páginas provisórias
 
