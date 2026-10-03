@@ -59,7 +59,7 @@ máximo 3 ciclos antes de escalar para o dono.
 |---|---|
 | `STATE.md` = log de decisões, qualquer agente grava | **Só o dono/arquiteto grava**, em `docs/DECISOES.md`, em `develop` via PR (AD-060). Worker em worktree relata propostas no resumo do PR. Evita conflito entre PRs paralelos. |
 | `LESSONS.md` / `lessons.json` auto-alimentados pelo Verifier | Desligado nos workers por enquanto (mesmo motivo). O dono coleta lições dos `validation.md` e consolida manualmente. Reavaliar em F5. |
-| Sub-agentes por lote de ~7 tarefas | Não usar: no Orca cada sessão já é um ticket (≤ 8 tarefas). Se a spec gerar mais que isso, o ticket está grande — dividir, não delegar. |
+| Sub-agentes por lote de ~7 tarefas | Não usar: no Orca cada sessão já é um ticket (≤ 8 tarefas). Se a spec gerar mais que isso, o ticket está grande — dividir, não delegar. **Exceção: o Verifier é sempre sub-agente** (autor ≠ verificador), pedido explicitamente no prompt (§4). |
 | UAT interativo em features com UI | Substituído pelo ticket `BSV-nn-TEST` (agente Tester em sessão separada) nos tickets de F2/F3 com UI. |
 | Modelo por papel (tier) | Escolhido por sessão no Orca: tarefas mecânicas em modelo mais barato; contrato, worker e templates de SEO em modelo forte; Tester em modelo forte. |
 
@@ -72,6 +72,8 @@ Ticket BSV-nn. Antes de tudo: `git merge-base --is-ancestor origin/develop HEAD`
 pare e avise (o worktree não nasceu de develop). Leia CLAUDE.md e docs/specs/BSV-nn.md, e só os trechos do
 docs/CONTRATO.md / docs/MANIFEST.md que a spec aponta.
 Use a skill tlc-spec-driven: specify → execute (design/tasks só se necessário).
+Pedido explícito do dono: ao fim, lance o Verifier como sub-agente independente (autor ≠ verificador),
+com sensor de discriminação; auto-verificação não conta como PASS.
 Escopo = a pasta indicada na spec. Não faça push. Não grave em .specs/STATE.md nem LESSONS.md.
 Ao terminar, cole o veredito do validation.md e liste: feito / como testar / fora de escopo /
 decisões que propõe / bloqueia o merge (execução real do dono).
@@ -114,4 +116,7 @@ Só PASS libera a PR.
 | 6 | **`aws cloudfront test-function` é obrigatório** para toda mudança em CloudFront Function, com os eventos de fixture; teste em Node não basta (AD-030). | O runtime `cloudfront-js-2.0` não é Node: `await` como argumento passou nos testes e quebrou na borda. |
 | 7 | **Teste real fora do diretório do repo antes de agendar:** rodar o executável de `C:\besave\bin` com outro diretório de trabalho e o `.env` de produção. | O caminho relativo de `mapeamento.json` só funcionava dentro do checkout (AD-050). |
 | 8 | **Tempo por fase (`t_*` no relatório) é a ferramenta de diagnóstico.** Ticket de desempenho traz `t_*` antes e depois, medidos na execução real (AD-043). | Achou a listagem da KVS (300–490 s por ciclo) que nenhum palpite apontava. |
-| 9 | **Promoção para produção = PR `develop → main`** a cada binário copiado para `C:\besave\bin` ou `terraform apply`; compilar a partir de `main` (AD-060). | Produção rastreável a um commit. |
+| 9 | **Promoção para produção:** o teste real usa o binário (ou o `apply`) da **branch da PR**, antes do merge; depois do merge em `develop`, PR `develop → main` (merge commit). O que está em `C:\besave\bin` é idêntico ao que entra em `main` (AD-060). | Teste real antes do merge (lição 5) e produção rastreável a um commit, sem compilar duas vezes. |
+| 10 | **O Verifier é pedido explicitamente no prompt** (§4). O validation.md diz quem verificou; "auto-verificação do autor" não é PASS. | O Claude Code não lança sub-agente sem pedido do usuário. Na BSV-14b (Sonnet) o agente seguiu essa regra, fez só auto-verificação e um mutante de fronteira sobreviveu. |
+| 11 | **Mock com o mesmo valor para dois recursos não prova qual deles o código referencia.** Nesses casos a verificação lê o código (como já se faz com `prevent_destroy`), ou o mock dá valores distintos. | Na BSV-16, a distribuição curta podia usar o certificado antes da validação e o teste não pegava (ARN igual no mock). |
+| 12 | **Conferir que o CI rodou** (`gh run list` / aba Checks da PR) antes de aceitar "verde". Falha em 0 s é workflow inválido, não sucesso; o merge em `develop` exige os status checks. | O `ci.yml` teve YAML inválido de 25/09 a 03/10: 40 execuções falharam em 0 s e nenhuma PR passou por CI. |
