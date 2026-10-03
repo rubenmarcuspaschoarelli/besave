@@ -270,14 +270,18 @@ done
 
 ### Reverter
 
-- **Domínio principal (volta ao protótipo):** `terraform state rm 'aws_route53_record.site'` (para o
-  Terraform não apagar os registros), `ativar_dominios = false` e `apply` (tira os aliases da distribuição
-  nova e o vigia volta ao `*.cloudfront.net`). Depois, no console: aliases de volta na distribuição do
-  protótipo e os registros A/AAAA de `besave.com.br`/`www` apontando para ela. No worker,
-  `BESAVE_INDEXAVEL=false`. Fora do ar entre o `apply` e a edição dos registros.
+- **Domínio principal (volta ao protótipo):** primeiro `terraform state rm 'aws_route53_record.site'`.
+  Os registros têm `prevent_destroy`: sem o `state rm`, o `plan` com `ativar_dominios = false` falha de
+  propósito, e o `state rm` tira o Terraform da gestão deles sem apagá-los no Route53. Depois,
+  `ativar_dominios = false` e `apply` (tira os aliases da distribuição nova e o vigia volta ao
+  `*.cloudfront.net`). Em seguida, no console: aliases de volta na distribuição do protótipo e os registros
+  A/AAAA de `besave.com.br`/`www` apontando para ela. No worker, `BESAVE_INDEXAVEL=false`. Fora do ar entre
+  o `apply` e a edição dos registros. Para refazer a virada depois, basta `ativar_dominios = true`: o
+  `allow_overwrite` assume os registros de novo.
 - **Domínios curtos:** `ativar_curto = false` falha de propósito no `plan` (certificado com
-  `prevent_destroy`, AD-022). Para desligar, remova o `prevent_destroy` num commit explícito. Não apague as
-  zonas: zona recriada ganha outros NS e os links já postados param até o registrador ser atualizado.
+  `prevent_destroy`, AD-022). Para desligar, remova o `prevent_destroy` num commit explícito. As zonas
+  também têm `prevent_destroy` e não dependem de `ativar_curto`: zona recriada ganha outros NS e os links
+  já postados param até o registrador ser atualizado.
 
 ## Cuidados
 

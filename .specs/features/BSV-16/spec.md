@@ -58,6 +58,7 @@ existir e redirecionar antes do primeiro post.
 2. VIR-02: WHILE `ativar_dominios = false` the Terraform SHALL não criar nenhum registro A/AAAA do domínio
 3. VIR-03: WHERE `ativar_dominios = true` the Lambda `besave-vigia` SHALL receber `URL_MANIFEST = https://besave.com.br/manifest.json`
 4. VIR-04: WHILE `ativar_dominios = false` the Lambda `besave-vigia` SHALL manter `URL_MANIFEST = https://<dominio *.cloudfront.net>/manifest.json`
+5. VIR-05: The registros `aws_route53_record.site` SHALL ter `prevent_destroy = true` (reversão começa por `terraform state rm`)
 
 **Independent Test**: `terraform test` com `ativar_dominios = true` e `false`.
 
@@ -81,6 +82,7 @@ existir e redirecionar antes do primeiro post.
 6. CUR-06: WHERE `ativar_curto = true` the Terraform SHALL criar a distribuição `besave-curto` com os 4 aliases, certificado validado (`sni-only`, `TLSv1.2_2021`), origem custom `besave.com.br`, `link-curto` em viewer-request e logs em `besave-logs` com prefixo `curto/`
 7. CUR-07: WHERE `ativar_curto = true` the Terraform SHALL criar registros A e AAAA alias de cada um dos 4 nomes, na zona do domínio, apontando para a distribuição curta
 8. CUR-08: The Function `link-curto` SHALL usar `cloudfront-js-2.0`, `publish = true` e código de `infra/functions/link-curto.js`
+9. CUR-09: The zonas `aws_route53_zone.curto` SHALL ter `prevent_destroy = true`
 
 ### P1: Function `link-curto` ⭐ MVP
 
@@ -123,6 +125,7 @@ existir e redirecionar antes do primeiro post.
 | VIR-02 | P1: Virada | Tasks | Implemented |
 | VIR-03 | P1: Virada | Tasks | Implemented |
 | VIR-04 | P1: Virada | Tasks | Implemented |
+| VIR-05 | P1: Virada | Tasks | Implemented |
 | WWW-01 | P1: www | Tasks | Implemented |
 | WWW-02 | P1: www | Tasks | Implemented |
 | WWW-03 | P1: www | Tasks | Implemented |
@@ -134,6 +137,7 @@ existir e redirecionar antes do primeiro post.
 | CUR-06 | P1: Domínios curtos | Tasks | Implemented |
 | CUR-07 | P1: Domínios curtos | Tasks | Implemented |
 | CUR-08 | P1: Domínios curtos | Tasks | Implemented |
+| CUR-09 | P1: Domínios curtos | Tasks | Implemented |
 | LNK-01 | P1: link-curto | Tasks | Implemented |
 | LNK-02 | P1: link-curto | Tasks | Implemented |
 | LNK-03 | P1: link-curto | Tasks | Implemented |
@@ -146,7 +150,7 @@ existir e redirecionar antes do primeiro post.
 | OPS-01 | P2: README | Tasks | Implemented |
 | OPS-02 | P2: README | Tasks | Implemented |
 
-**Coverage:** 26 total, 26 mapped to tasks, 0 unmapped
+**Coverage:** 28 total, 28 mapped to tasks, 0 unmapped
 
 ---
 

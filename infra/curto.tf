@@ -15,6 +15,11 @@ resource "aws_route53_zone" "curto" {
 
   name    = each.key
   comment = "Domínio curto (BSV-16); registrado fora da AWS, delegado por NS"
+
+  # Zona recriada ganha outros NS: os links já postados param até o registrador ser atualizado.
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_acm_certificate" "curto" {

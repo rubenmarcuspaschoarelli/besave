@@ -136,6 +136,12 @@ run "curto_protecao" {
     error_message = "certificado curto com prevent_destroy = true (AD-022)"
   }
 
+  # CUR-09
+  assert {
+    condition     = output.prevent_destroy["aws_route53_zone.curto"]
+    error_message = "zonas curtas com prevent_destroy = true: zona recriada ganha outros NS"
+  }
+
   # CUR-06
   assert {
     condition     = output.certificado_validado["aws_cloudfront_distribution.curto"]

@@ -48,3 +48,16 @@ run "dominios_ativos" {
     error_message = "com ativar_dominios: vigia lê o manifest pelo domínio (testa DNS e certificado)"
   }
 }
+
+run "dominios_protecao" {
+  command = plan
+  module {
+    source = "./tests/inspecao"
+  }
+
+  # VIR-05
+  assert {
+    condition     = output.prevent_destroy["aws_route53_record.site"]
+    error_message = "registros de besave.com.br/www com prevent_destroy = true: apply sem ativar_dominios não pode apagá-los"
+  }
+}

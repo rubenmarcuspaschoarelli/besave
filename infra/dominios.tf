@@ -19,4 +19,9 @@ resource "aws_route53_record" "site" {
     zone_id                = aws_cloudfront_distribution.site.hosted_zone_id
     evaluate_target_health = false
   }
+
+  # Apagar tira o site do ar. Reverter a virada começa por `terraform state rm` (README).
+  lifecycle {
+    prevent_destroy = true
+  }
 }

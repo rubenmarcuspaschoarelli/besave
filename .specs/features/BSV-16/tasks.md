@@ -47,7 +47,7 @@ T1 → T2 → T3
 ### Phase 2: Terraform e README
 
 ```
-T4 → T5 → T6 → T7 → T8
+T4 → T5 → T6 → T7 → T8 → T9
 ```
 
 ---
@@ -213,3 +213,23 @@ T4 → T5 → T6 → T7 → T8
 **Gate**: build
 
 **Commit**: `docs(infra): test functions on temporary copies before any apply`
+
+---
+
+### T9: Revisão do dono — prevent_destroy nos registros e nas zonas
+
+**What**: `prevent_destroy` em `aws_route53_record.site` e `aws_route53_zone.curto`, coberto por leitura do código (`tests/inspecao`); reversão no README conferida.
+**Where**: `infra/dominios.tf`, `infra/curto.tf`, `infra/tests/`, `infra/README.md`
+**Depends on**: T8
+**Reuses**: README e testes existentes
+**Requirement**: VIR-05, CUR-09
+
+**Done when**:
+
+- [x] `dominios_protecao` e `curto_protecao` falham sem o `prevent_destroy` e passam com ele
+- [x] Gate check passes: full gate
+
+**Tests**: integration
+**Gate**: full
+
+**Commit**: `feat(infra): protect domain records and short zones from destroy`
