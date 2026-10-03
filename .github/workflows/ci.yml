@@ -57,10 +57,12 @@ jobs:
         run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
       - if: steps.exists.outputs.ok == 'true'
         uses: dtolnay/rust-toolchain@stable
-        with: { components: rustfmt, clippy }
+        with:
+          components: rustfmt, clippy
       - if: steps.exists.outputs.ok == 'true'
         uses: Swatinem/rust-cache@v2
-        with: { workspaces: apps/${{ matrix.app }} }
+        with:
+          workspaces: apps/${{ matrix.app }}
       - if: steps.exists.outputs.ok == 'true'
         working-directory: apps/${{ matrix.app }}
         run: |
