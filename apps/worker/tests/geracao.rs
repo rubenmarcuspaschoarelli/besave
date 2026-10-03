@@ -845,3 +845,18 @@ fn relatorio_traz_tempo_por_fase() {
     assert!(imagens_listagem <= imagens, "{:?}", rel.tempos);
     assert!(redirects_listagem <= redirects, "{:?}", rel.tempos);
 }
+
+/// BSV-14b: `dt_mais_recente` considera também as expiradas (maior `dt` entre os publicados).
+#[test]
+fn dt_mais_recente_inclui_expiradas() {
+    let mut v = linhas_fixture();
+    let maior = v.iter().filter_map(|l| l.dt_oferta).max().unwrap();
+    v.push(LinhaOferta {
+        ativo: false,
+        dt_desativacao: Some(AGORA - 3600),
+        dt_oferta: Some(maior + 3600),
+        ..linha(1500)
+    });
+    let rel = rodar(v, &mut PublicadorMemoria::new()).unwrap();
+    assert_eq!(rel.dt_mais_recente, Some(maior + 3600));
+}

@@ -416,3 +416,16 @@ fn lembrete_de_6_h_na_fronteira() {
         assert_eq!(t.n(), 2, "6h00 depois");
     });
 }
+
+/// `Alertas::new` sem `com_sem_novas` nasce desligado: nunca avalia.
+#[test]
+fn sem_configurar_nunca_avalia() {
+    let t = TelegramFake::default();
+    let e = estado("nao-configurado");
+    com_log(|| {
+        let a = Alertas::new(&t, e.clone(), "MAQUINA-1".to_owned());
+        a.avaliar_novas(Some(DT), 10, DT + 1000 * H);
+        a.avaliar_novas(None, 0, DT + 1000 * H);
+    });
+    assert_eq!(*t.tentativas.borrow(), 0);
+}
