@@ -68,6 +68,8 @@ pub struct Relatorio {
     /// `(n, bytes)` do maior chunk comprimido.
     pub maior_chunk: Option<(u64, u64)>,
     pub versao: u64,
+    /// Maior `dt` entre os cards publicados (ativos ou expirados); `None` se o conjunto é vazio.
+    pub dt_mais_recente: Option<i64>,
     pub redirects: RelatorioRedirects,
     pub imagens: RelatorioImagens,
     /// CSS, páginas, sitemaps, robots e índice `_estado/` (BSV-21).
@@ -198,6 +200,7 @@ pub fn gerar(
         }
     }
     rel.validas = cards.len() as u64;
+    rel.dt_mais_recente = validas.iter().filter_map(|l| l.dt_oferta).max();
 
     // Produtos em lote, antes de qualquer escrita (sem N+1 no Oracle). `para_pagina` valida o
     // mesmo que `publicavel`, então toda linha válida vira página.
@@ -354,22 +357,34 @@ pub fn contar_paginas(
     fonte: &dyn FonteOfertas,
     m: &Mapeamento,
 ) -> Result<(u64, u64, BTreeMap<Rejeicao, u64>)> {
+    contar_paginas_dt(fonte, m).map(|(lidas, validas, rej, _)| (lidas, validas, rej))
+}
+
+/// `(lidas, válidas, rejeitadas por motivo, maior dt entre as válidas)`.
+pub type ContagemDt = (u64, u64, BTreeMap<Rejeicao, u64>, Option<i64>);
+
+/// Como `contar_paginas`, com o maior `dt` entre as linhas válidas (`None` se não há nenhuma).
+pub fn contar_paginas_dt(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<ContagemDt> {
     let linhas = fonte.ofertas()?;
     let ids: Vec<i64> = linhas.iter().filter_map(|l| l.id_produto).collect();
     let produtos = fonte.produtos(&ids)?;
     let mut validas = 0;
     let mut rejeitadas = BTreeMap::new();
+    let mut dt_max: Option<i64> = None;
     for l in &linhas {
         let p = l.id_produto.and_then(|id| produtos.get(&id));
         match para_pagina(l, p, m) {
-            Ok(_) => validas += 1,
+            Ok(_) => {
+                validas += 1;
+                dt_max = dt_max.max(l.dt_oferta);
+            }
             Err(r) => {
                 warn!(id = l.id, motivo = %r, "oferta rejeitada");
                 *rejeitadas.entry(r).or_default() += 1;
             }
         }
     }
-    Ok((linhas.len() as u64, validas, rejeitadas))
+    Ok((linhas.len() as u64, validas, rejeitadas, dt_max))
 }
 
 /// Chunk comprimido de até `ORCAMENTO_CHUNK` bytes passa; acima disso, erro.
