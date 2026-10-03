@@ -195,7 +195,7 @@ a UI (BSV-30..34) teria fetch, diff, polling e busca espalhados em componentes.
 | DES-03 | DES | T7 | Verified |
 | DES-04 | DES | T7 | Verified |
 | PUR-01 | PUR | T7 | Verified |
-| MED-01 | Medição real | T8 | Pending |
+| MED-01 | Medição real | T8 | Verified |
 
 **Coverage:** 43 total, 43 mapped to tasks, 0 unmapped.
 

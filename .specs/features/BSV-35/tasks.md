@@ -202,8 +202,8 @@ T6 → T7 → T8
 
 **Done when**:
 
-- [ ] `pnpm check` cobre o script; execução real colada no PR (domínio `REDACTED`)
-- [ ] Gate build passa (fim da fase 3)
+- [x] `pnpm check` cobre o script; execução real colada no PR (domínio `REDACTED`)
+- [x] Gate build passa (fim da fase 3)
 
 **Tests**: none
 **Gate**: build
