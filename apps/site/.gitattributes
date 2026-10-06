@@ -1,0 +1,2 @@
+# Prettier exige LF; evita CRLF do core.autocrlf no Windows.
+* text=auto eol=lf
