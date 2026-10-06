@@ -176,3 +176,16 @@ run "distribuicao_com_dominios" {
     error_message = "com ativar_dominios: 2 aliases e certificado ACM validado"
   }
 }
+
+run "certificado_validado" {
+  command = plan
+  module {
+    source = "./tests/inspecao"
+  }
+
+  # VIR-06: os ARNs do certificado e da validação são iguais; só a referência prova a espera.
+  assert {
+    condition     = output.certificado_validado["aws_cloudfront_distribution.site"]
+    error_message = "distribuição principal deve usar o ARN de aws_acm_certificate_validation (espera a emissão)"
+  }
+}

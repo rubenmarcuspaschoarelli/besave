@@ -11,6 +11,8 @@ Terraform que cria, ao lado do protótipo (AD-016), a infra do site novo:
 | KeyValueStore de redirects + Functions `rewrite-index` e `redirect-afiliado` | `besave-redirects` | `cloudfront.tf`, `functions/*.js` |
 | usuário IAM do worker, sem console e sem access key | `besave-worker` | `iam.tf` |
 | vigia externo: Lambda Python a cada 10 min (Scheduler), avisa no Telegram (BSV-15) | `besave-vigia` | `vigia.tf`, `lambdas/vigia/` |
+| A/AAAA de `besave.com.br` e `www` na distribuição nova (com `ativar_dominios`, BSV-16) | — | `dominios.tf` |
+| zonas `besave.io`/`besave.me`; com `ativar_curto`: certificado, Function `link-curto`, distribuição e A/AAAA (BSV-16) | `besave-curto` | `curto.tf`, `functions/link-curto.js` |
 
 Não gerencia o bucket `besave.com.br` nem a distribuição atual do protótipo: o `plan` não mostra nenhum dos dois.
 
@@ -31,7 +33,8 @@ terraform output
 ```
 
 Variáveis (`variables.tf`), todas com padrão: `regiao`, `dominio`, `bucket_site`, `bucket_logs`,
-`ativar_dominios` (`false`), `classe_preco` (`PriceClass_All`: 100/200 não cobrem a América do Sul).
+`ativar_dominios` (`false`), `classe_preco` (`PriceClass_All`: 100/200 não cobrem a América do Sul),
+`dominios_curtos` (`["besave.io", "besave.me"]`), `ativar_curto` (`false`).
 Nome de bucket é global: se `besave-site` ou `besave-logs` estiver tomado, passe `-var bucket_site=...`.
 
 **State local.** `terraform.tfstate` fica em `infra/` e está no `.gitignore`. Faça backup fora do
@@ -42,12 +45,8 @@ git: sem ele o Terraform perde o controle dos recursos. Backend S3 é ticket fut
 1. **Access key do worker**: IAM → Users → `besave-worker` → Security credentials → Create access key.
    Guarde fora do git (gerenciador de senhas / `.env` local). O Terraform nunca cria essa chave.
    O worker (BSV-12) recebe `BESAVE_BUCKET` = output `bucket_site` e `BESAVE_KVS_ARN` = output `arn_kvs`.
-2. **Página 404** (o deploy do site deve **sempre** publicar `/404.html`; até lá, o placeholder):
-
-   ```sh
-   aws s3 cp static/404.html s3://besave-site/404.html \
-     --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300"
-   ```
+2. **Páginas provisórias** `index.html` e `404.html`: ver [Páginas provisórias](#páginas-provisórias)
+   (o deploy do site deve **sempre** publicar `/404.html`; até lá, as provisórias).
 
 3. **Conferir** (`CF=$(terraform output -raw dominio_distribuicao)`):
 
@@ -75,12 +74,39 @@ python -m unittest discover -s lambdas/vigia   # vigia: dublês de S3/HTTP/SSM/T
 cd functions && npm ci && npm test   # Functions com fixtures de evento + 404.html + sem recursos do protótipo
 ```
 
-**Obrigatório** após qualquer mudança em `functions/*.js`: rodar `test-function` no runtime real. O
-cloudfront-js-2.0 é um subconjunto do JS (ex.: `await` como argumento de função é erro de sintaxe) e
-os testes Node acima não o emulam — passam com código que o CloudFront recusa.
+**Obrigatório** após qualquer mudança em `functions/*.js`, **antes do `apply`**: rodar `test-function` no
+runtime real (AD-030). O cloudfront-js-2.0 é um subconjunto do JS (ex.: `await` como argumento de função é
+erro de sintaxe) e os testes Node acima não o emulam — passam com código que o CloudFront recusa. Como as
+Functions têm `publish = true`, o `apply` põe o código no ar na hora, em todas as rotas que o usam
+(`rewrite-index` está em todo HTML). Por isso o teste roda numa Function temporária, criada pela CLI com o
+código novo, e apagada em seguida:
 
-Para testar uma Function no runtime real depois do apply:
-`aws cloudfront test-function --name redirect-afiliado --if-match <ETag> --stage LIVE --event-object fileb://evento.json`.
+```sh
+# testar_function <arquivo .js> <evento .json>...   (rodar em infra/)
+testar_function() {
+  nome="tmp-$(basename "$1" .js)-$(date +%s)"; arq=$1; shift
+  etag=$(aws cloudfront create-function --name "$nome" \
+    --function-config '{"Comment":"teste temporario","Runtime":"cloudfront-js-2.0"}' \
+    --function-code "fileb://$arq" --query ETag --output text) || return 1
+  for ev in "$@"; do
+    echo "== $ev"
+    aws cloudfront test-function --name "$nome" --if-match "$etag" --stage DEVELOPMENT \
+      --event-object "fileb://$ev" --query 'TestResult.[FunctionErrorMessage,FunctionOutput]' --output text
+  done
+  aws cloudfront delete-function --name "$nome" --if-match "$etag"
+}
+
+testar_function functions/rewrite-index.js functions/eventos/rewrite-index-www.json functions/eventos/rewrite-index.json
+#   www  → 301, location https://besave.com.br/oferta/1/?a=1
+#   apex → request com uri /oferta/1/index.html
+testar_function functions/link-curto.js functions/eventos/link-curto.json
+#   → 301, location https://besave.com.br/oferta/5412/?utm_source=telegram, cache-control public, max-age=86400
+```
+
+A primeira coluna da saída (`FunctionErrorMessage`) tem de vir vazia. `redirect-afiliado` usa KVS e não
+cabe nesse atalho: para ela, `test-function --stage DEVELOPMENT` na própria Function antes de publicar.
+O evento do `test-function` é sintético: ele prova sintaxe e lógica no runtime, não como o CloudFront
+monta o objeto `querystring` de uma requisição real (isso só o `curl` do roteiro prova).
 
 ## Vigia externo (BSV-15)
 
@@ -150,14 +176,122 @@ Cerca de US$ 0,01/mês, dentro do free tier:
 - 4.320 requisições no CloudFront;
 - poucos KB de log.
 
-## Virada de DNS (fora deste ticket)
+## Virada de DNS e domínios curtos (BSV-16)
 
-CloudFront recusa o mesmo CNAME em duas distribuições (`CNAMEAlreadyExists`), por isso a distribuição
-nova nasce sem aliases e com o certificado `*.cloudfront.net`. Na virada:
+CloudFront recusa o mesmo CNAME em duas distribuições (`CNAMEAlreadyExists`, AD-021), por isso a
+distribuição nova nasceu sem aliases. Duas variáveis controlam a virada:
 
-1. Tirar `besave.com.br` e `www.besave.com.br` dos aliases da distribuição do protótipo (console).
-2. `terraform apply -var ativar_dominios=true` (aliases + certificado ACM, `sni-only`, `TLSv1.2_2021`).
-3. Apontar os registros A/AAAA alias do Route53 para o output `dominio_distribuicao`.
+- `ativar_dominios`: aliases `besave.com.br`/`www` + certificado na distribuição nova, registros A/AAAA
+  alias para ela (`allow_overwrite`: os atuais foram criados no console e apontam para o protótipo) e
+  vigia lendo `https://besave.com.br/manifest.json` (testa também DNS e certificado).
+- `ativar_curto`: fase 2 dos domínios curtos. As zonas `besave.io` e `besave.me` existem sempre (fase 1).
+
+**As variáveis precisam valer em todo `apply` seguinte.** Sem elas, voltam para `false` e o `plan` tenta
+desfazer a virada; o `prevent_destroy` dos registros e do certificado curto o faz falhar, mas qualquer
+`apply` fica bloqueado até elas voltarem. Grave-as em `infra/terraform.tfvars` (ignorado pelo git), não só
+em `-var`:
+
+```hcl
+ativar_dominios = true
+ativar_curto    = true
+```
+
+`www.besave.com.br` responde 301 para `https://besave.com.br{caminho}{?query}` (Function `rewrite-index`).
+`besave.io` e `besave.me` (com e sem `www`) respondem sempre pela Function `link-curto`, sem estado:
+
+| entrada | 301 para |
+|---|---|
+| `/5412`, `/5412/`, `/05412` | `https://besave.com.br/oferta/5412/` |
+| `/5412/ir` | `https://besave.com.br/ir/5412` |
+| `/`, `/abc`, `/0`, 13+ dígitos, qualquer outro | `https://besave.com.br/` |
+
+A query de entrada é preservada (`/5412?utm_source=telegram` → `/oferta/5412/?utm_source=telegram`) e
+toda resposta leva `Cache-Control: public, max-age=86400`. A origem da `besave-curto` (`besave.com.br`)
+nunca é alcançada. Logs em `besave-logs/curto/`. O behavior aceita HTTP (`allow-all`): link colado sem
+esquema vira `http://` e a Function já manda para `https://`, sem um salto extra.
+
+### Roteiro (dono)
+
+0. **Functions no runtime real, antes de qualquer `apply`.** `testar_function` (seção
+   [Testes](#testes-sem-conta-aws)) com `rewrite-index.js` e `link-curto.js` e os eventos de
+   `functions/eventos/`. O `apply` do passo 1 já publica o `rewrite-index` novo em todas as rotas HTML.
+1. **Zonas curtas e páginas provisórias.** `terraform plan -out plano.tfplan` com as duas variáveis em
+   `false`. O plano esperado tem 2 adições (as zonas) e 1 alteração in-place (`rewrite-index`, com a regra
+   do `www`, inofensiva antes da virada); `0 to destroy`. `apply`, depois `terraform output ns_curtos` e
+   configurar os 4 NS de cada zona no registrador de `.io` e `.me`. Upload de `index.html` e `404.html`
+   (seção [Páginas provisórias](#páginas-provisórias)), para a virada já encontrá-las.
+2. **Virada.** No console, remover `besave.com.br` e `www.besave.com.br` dos aliases da distribuição do
+   protótipo e salvar. **Logo em seguida**, `ativar_dominios = true` no `terraform.tfvars` e `apply`. O site
+   fica fora do ar nos minutos entre os dois passos (protótipo; aceito).
+3. **Indexação.** No `.env` do worker, `BESAVE_INDEXAVEL=true`. O próximo ciclo grava o `robots.txt` com
+   `Allow` + `Sitemap`.
+4. **Domínios curtos.** Quando o NS propagar (`nslookup -type=NS besave.io` e `besave.me` devolvem os NS da
+   AWS), `ativar_curto = true` e `apply`. A validação do certificado espera o DNS; leva alguns minutos.
+5. PR `develop → main` (AD-060).
+
+### Conferir
+
+```sh
+ID=<id de uma oferta ativa>
+curl -I https://besave.com.br/oferta/$ID/          # 200
+curl -I https://www.besave.com.br/oferta/$ID/      # 301, location: https://besave.com.br/oferta/$ID/
+curl -I https://besave.io/$ID                      # 301, location: https://besave.com.br/oferta/$ID/
+curl -I https://besave.me/$ID                      # 301, idem
+curl -I "https://besave.io/$ID?utm_source=telegram" # 301, query preservada
+curl -I "https://besave.io/$ID?utm_campaign=a%20b%26c"
+#   location: https://besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c   (%20 e %26 intactos)
+curl -I "https://www.besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c"
+#   location: https://besave.com.br/oferta/$ID/?utm_campaign=a%20b%26c   (%20 e %26 intactos)
+curl -s https://besave.com.br/robots.txt           # Allow + Sitemap
+curl -s https://besave.com.br/                     # página provisória
+curl -I https://besave.com.br/nao-existe           # 404 com a 404 provisória
+aws lambda invoke --function-name besave-vigia --cli-binary-format raw-in-base64-out --payload '{}' saida.json && cat saida.json
+```
+
+Os dois `curl` com `%20`/`%26` são a única prova de como o CloudFront entrega a query às Functions: a
+documentação não diz se o valor chega codificado, e o evento do `test-function` é sintético. As Functions
+repassam o valor como recebido. Se o `location` vier com espaço ou `&` cru (ex.: `utm_campaign=a b&c`), o
+valor chega decodificado e as duas Functions precisam de `encodeURIComponent` antes do merge.
+
+Por último, colar `besave.io/<id>` num chat do Telegram: a prévia precisa mostrar a oferta (confirma
+que o robô do Telegram segue os 301).
+
+### Páginas provisórias
+
+`static/index.html` (nome, "site em construção", link do canal) e `static/404.html` ("Oferta encerrada ou
+não encontrada", link para o início e para o canal, `noindex`). O canal é o público da marca,
+`https://t.me/besaveofertas`; o repositório é público e não leva conta, telefone ou contato pessoal.
+O Terraform não gerencia esses objetos; o deploy do site (BSV-30) os substitui.
+
+```sh
+for f in index.html 404.html; do
+  aws s3 cp static/$f s3://besave-site/$f --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300"
+done
+```
+
+### Custos
+
+- Zonas `besave.io` e `besave.me`: US$ 0,50/mês cada (+US$ 1,00/mês). Consultas a registros alias para
+  CloudFront não são cobradas.
+- Functions: 2 milhões de execuções/mês gratuitas, depois US$ 0,10 por milhão (AWS Pricing API, 02/10/2026).
+- Certificado ACM público e distribuição `besave-curto`: sem custo fixo; a distribuição só cobra
+  requisições (respostas da Function não vão à origem).
+
+### Reverter
+
+- **Domínio principal (volta ao protótipo):** primeiro `terraform state rm 'aws_route53_record.site'`.
+  Os registros têm `prevent_destroy`: sem o `state rm`, o `plan` com `ativar_dominios = false` falha de
+  propósito, e o `state rm` tira o Terraform da gestão deles sem apagá-los no Route53. Depois,
+  `ativar_dominios = false` e `apply` (tira os aliases da distribuição nova e o vigia volta ao
+  `*.cloudfront.net`). Em seguida, no console: aliases de volta na distribuição do protótipo e os registros
+  A/AAAA de `besave.com.br`/`www` apontando para ela. No worker, `BESAVE_INDEXAVEL=false`. Fora do ar entre
+  o `apply` e a edição dos registros. Para refazer a virada depois, repita o passo 2 do roteiro: tirar
+  de novo os aliases da distribuição do protótipo (AD-021) e `ativar_dominios = true`; o `allow_overwrite`
+  assume os registros de novo.
+- **Domínios curtos:** `ativar_curto = false` falha de propósito no `plan` (certificado com
+  `prevent_destroy`, AD-022). Para desligar, remova o `prevent_destroy` num commit explícito. As zonas
+  também têm `prevent_destroy` e não dependem de `ativar_curto`: zona recriada ganha outros NS e os links
+  já postados param até o registrador ser atualizado.
 
 ## Cuidados
 
