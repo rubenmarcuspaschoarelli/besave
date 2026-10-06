@@ -87,8 +87,14 @@ fn sem_preco_de_nao_tem_desconto() {
 #[test]
 fn rejeita_como_o_worker() {
     let casos: [(fn(&mut LinhaCanal), Rejeicao); 6] = [
-        (|l| l.oferta.preco_por = Some(0.0), Rejeicao::PrecoPorInvalido),
-        (|l| l.oferta.titulo = Some(" ".into()), Rejeicao::TituloVazio),
+        (
+            |l| l.oferta.preco_por = Some(0.0),
+            Rejeicao::PrecoPorInvalido,
+        ),
+        (
+            |l| l.oferta.titulo = Some(" ".into()),
+            Rejeicao::TituloVazio,
+        ),
         (
             |l| l.oferta.loja = Some("Americanas".into()),
             Rejeicao::LojaSemMapeamento,

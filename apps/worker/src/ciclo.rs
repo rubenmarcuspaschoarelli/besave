@@ -16,7 +16,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::alerta::{Alertas, ConfigSemNovas, ConfigTelegram, host_do_env};
 use crate::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
-use crate::execucao::{Codigo, Falha, concluir, rodar};
+use crate::execucao::{Codigo, Falha, concluir, marcar_publicacao_site, rodar};
 use crate::fonte::{FonteOfertas, fake_demo};
 use crate::geracao::Relatorio;
 use crate::logs::{HoraBrasilia, arquivo_do_dia, limpar_antigos};
@@ -327,7 +327,10 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             warn!(pasta = %dir.display(), "BESAVE_DESTINO_LOCAL definida: publicando na pasta, não no S3");
             let mut pub_ = PublicadorLocal::new(&dir);
             let mut kvs = RedirectsMemoria::new();
-            rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)
+            let rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
+            // O site não foi publicado de verdade: o canal não pode achar que a página existe.
+            info!("BESAVE_DESTINO_LOCAL definida: DT_PUBLICACAO_SITE não gravada");
+            Ok(rel)
         }
         Destino::Aws(aws) => {
             let ctx = ContextoAws::carregar().map_err(|e| match e {
@@ -338,7 +341,9 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             })?;
             let mut pub_ = PublicadorS3::new(&ctx, &aws.bucket);
             let mut kvs = RedirectsKvs::new(&ctx, &aws.kvs_arn);
-            rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)
+            let mut rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
+            marcar_publicacao_site(fonte, &mut rel);
+            Ok(rel)
         }
     }
 }

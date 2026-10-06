@@ -87,8 +87,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Segunda execução → 0 updates; 2 500 ids → 3 lotes; falha → código 0 e manifest publicado
-- [ ] Gate quick passa
+- [x] Segunda execução → 0 updates; 2 500 ids → 3 lotes; falha → código 0 e manifest publicado
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

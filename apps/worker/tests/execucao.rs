@@ -36,6 +36,9 @@ impl FonteOfertas for FonteQueErra {
     fn produtos(&self, _: &[i64]) -> Result<HashMap<i64, LinhaProduto>, ErroFonte> {
         Ok(HashMap::new())
     }
+    fn marcar_publicadas_site(&self, _: &[i64]) -> Result<u64, ErroFonte> {
+        Ok(0)
+    }
 }
 
 #[derive(Default)]
