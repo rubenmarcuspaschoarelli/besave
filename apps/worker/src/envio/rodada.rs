@@ -283,3 +283,60 @@ impl EstadoEnvio {
         }
     }
 }
+
+/// Uma prévia do `--sim`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Previa {
+    pub id: i64,
+    pub legenda: String,
+    pub jpeg: Vec<u8>,
+    pub origem: OrigemFoto,
+}
+
+/// O que a execução faria agora, sem Telegram e sem escrita no Oracle.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Simulacao {
+    pub enviados_hoje: u64,
+    pub devido: u32,
+    pub silencioso: bool,
+    /// Próximas `QT_POR_EXECUCAO` candidatas, mesmo fora da janela.
+    pub previas: Vec<Previa>,
+    /// Posts que seriam editados como "Oferta encerrada" (até `MAX_EDICOES`).
+    pub expiradas: usize,
+    pub parada: Option<Parada>,
+}
+
+/// `--sim`: só leituras.
+pub fn simular(ctx: &Contexto) -> Result<Simulacao, Falha> {
+    let agora = ctx.relogio.agora();
+    let fonte = ctx.fonte;
+    let ler = |e: ErroFonte| Falha::execucao("leitura_oracle", &e);
+    let mut sim = Simulacao::default();
+    match fonte.canal(ctx.canal).map_err(ler)? {
+        None => sim.parada = Some(Parada::CanalAusente),
+        Some(c) if !c.ativo => sim.parada = Some(Parada::CanalInativo),
+        Some(_) => {}
+    }
+    let p = fonte
+        .parametros(ctx.canal)
+        .map_err(ler)?
+        .ok_or_else(|| Falha::config("parametros", &ErroEnvio::SemParametros(ctx.canal)))?;
+    sim.enviados_hoje = fonte
+        .enviados_desde(ctx.canal, inicio_do_dia(agora))
+        .map_err(ler)?;
+    sim.devido = lote_devido(&p, agora, sim.enviados_hoje);
+    sim.silencioso = silencioso(&p, agora);
+    let n = sim.devido.max(p.qt_por_execucao) as usize;
+    for c in selecionar(fonte, ctx.m, &p, ctx.canal, agora, n).map_err(ler)? {
+        let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
+            .map_err(|e| Falha::execucao("foto", &e))?;
+        sim.previas.push(Previa {
+            id: c.oferta.id,
+            legenda: legenda(&c.oferta, c.caiu, &p),
+            jpeg,
+            origem,
+        });
+    }
+    sim.expiradas = fonte.expiradas(ctx.canal, MAX_EDICOES).map_err(ler)?.len();
+    Ok(sim)
+}

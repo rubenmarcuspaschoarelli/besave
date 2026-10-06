@@ -177,8 +177,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Sem token → código 2; argumento inválido → 2; `Debug` sem token; multipart com campos certos
-- [ ] Gate quick passa
+- [x] Sem token → código 2; argumento inválido → 2; `Debug` sem token; multipart com campos certos
+- [x] Gate quick passa
 
 **Tests**: integration
 **Gate**: quick

@@ -149,19 +149,24 @@ fn pastas() -> Result<Pastas, ErroCiclo> {
 
 /// Arquivo do dia (sem ANSI) e, se `stderr`, também o stderr. Devolve o erro de abertura do
 /// arquivo, se houve.
-fn iniciar_log(
+pub fn iniciar_log(
     dir: Option<&Path>,
     agora: i64,
     stderr: bool,
     hora: HoraBrasilia,
 ) -> Option<std::io::Error> {
-    let arquivo = dir.map(|d| {
-        std::fs::create_dir_all(d).and_then(|()| {
-            File::options()
-                .create(true)
-                .append(true)
-                .open(arquivo_do_dia(d, agora))
-        })
+    iniciar_log_em(dir.map(|d| (d, arquivo_do_dia(d, agora))), stderr, hora)
+}
+
+/// Como `iniciar_log`, com o arquivo já escolhido: `(pasta, arquivo)`.
+pub fn iniciar_log_em(
+    arquivo: Option<(&Path, PathBuf)>,
+    stderr: bool,
+    hora: HoraBrasilia,
+) -> Option<std::io::Error> {
+    let arquivo = arquivo.map(|(d, caminho)| {
+        std::fs::create_dir_all(d)
+            .and_then(|()| File::options().create(true).append(true).open(caminho))
     });
     let (camada, erro) = match arquivo {
         Some(Ok(f)) => (
