@@ -159,8 +159,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Dia simulado 180 ± 2; parada de 1 h; duplicata; expiradas; 429; pausa
-- [ ] Gate quick passa
+- [x] Dia simulado 180 ± 2; parada de 1 h; duplicata; expiradas; 429; pausa
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
