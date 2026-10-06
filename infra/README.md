@@ -295,6 +295,8 @@ done
 
 ## Cuidados
 
+- **Registro TXT do Google Search Console** em `besave.com.br`: criado no console do Route53 (06/10/2026), fora do Terraform. Não apagar: é a verificação da propriedade de domínio.
+
 - **Registros de validação ACM** usam `allow_overwrite`: o CNAME de validação é o mesmo para o mesmo
   domínio na mesma conta, e o certificado atual pode já tê-lo criado. O Terraform passa a gerenciar
   esse registro. Por isso ele e o certificado ACM têm `prevent_destroy = true`: `terraform destroy`

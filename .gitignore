@@ -29,3 +29,7 @@ __pycache__/
 
 # zip das Lambdas gerado pelo archive_file (BSV-15)
 infra/.build/
+infra/*.tfplan
+infra/plan.bin 
+infra/plan.txt
+infra/saida.json

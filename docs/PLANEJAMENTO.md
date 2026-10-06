@@ -3,7 +3,7 @@
 Documento de contexto, em linguagem simples, para quem chega agora (pessoa ou agente).
 **Não é fonte de verdade.** Quando este texto e outro arquivo discordarem, valem, nesta ordem:
 `docs/CONTRATO.md` (dados), `docs/MANIFEST.md` (S3/CloudFront), `docs/DECISOES.md` (por que), e a
-spec do ticket em `docs/specs/`. Atualizado em 02/10/2026.
+spec do ticket em `docs/specs/`. Atualizado em 06/10/2026.
 
 ---
 
@@ -76,32 +76,34 @@ Canal (broadcast), nunca automação de grupos.
 7. **Nenhuma URL de loja no site.** Só `/ir/{id}`. Troca de rede de afiliado sem regerar 30 mil
    páginas, e o Google não vê link de afiliado.
 
-## 4. Onde estamos (02/10/2026)
+## 4. Onde estamos (06/10/2026)
 
-**O worker está em produção e roda sozinho.** A cada 5 minutos o Agendador do Windows executa
-`C:\besave\bin\besave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
-páginas de oferta, sitemap e redirects. Ciclo em regime: ~20 s. Hoje são ~17 mil ofertas válidas
-(o robô ainda está preenchendo URLs de afiliado das antigas).
+**O site está no ar em `besave.com.br`, indexável.** A cada 5 minutos o Agendador do Windows executa
+`C:esaveinesave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
+páginas de oferta, sitemap e redirects. Ciclo em regime: ~25 s. Hoje são ~25 mil ofertas válidas.
 
-Feito e no ar (ainda no domínio `*.cloudfront.net`, com `robots.txt` bloqueando indexação):
-- Contrato de dados 1.3.3, layout do S3, 64 decisões registradas, CI com filtro por pasta (só passou a rodar em 03/10: YAML inválido desde a
-  criação, PR #21).
+Feito e no ar:
+- `besave.com.br` na distribuição nova (`www` → 301 para o domínio sem www), `robots.txt` liberado,
+  sitemap e Google Search Console verificado. Home e 404 ainda provisórias (BSV-30).
+- Links curtos `besave.io/{id}` e `besave.me/{id}` → `/oferta/{id}/` (BSV-16).
 - Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom e botão `/ir/{id}`.
 - Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
-- Infra inteira em Terraform; o worker usa um usuário IAM com permissões mínimas.
-- Alertas no Telegram: o worker avisa quando um ciclo falha; uma função na AWS avisa quando o
-  site para de ser atualizado (por exemplo, PC desligado).
+- Alertas no Telegram: ciclo que falha, site parado (vigia na AWS) e nenhuma oferta nova em 24 h.
+- Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
+  medida em produção: 25 mil cards, busca p95 ~8 ms.
+- Contrato 1.3.3, 73 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
 
 Próximos, nesta ordem:
+- **Canal do Telegram** (BSV-40, envio de ofertas) e **avisos programados** (BSV-41).
 - **Direção visual** (sessão com o dono) → BSV-30..34: site SvelteKit (shell e design system,
   lista com carga progressiva, novas ofertas, páginas de área, busca).
-- Virada de DNS de `besave.com.br` para a distribuição nova e liberação da indexação.
-- Robô: Outros/Unisex para não classificadas, um cupom por oferta, URL de afiliado nas antigas.
-- Depois: canal no Telegram (F4), usuários (F5), app (F6), admin (F7), link curto `besave.io`.
+- Desligar o protótipo (bucket `besave.com.br` e distribuição antiga) depois de 2 semanas estável (~20/10).
+- Robô: um cupom por oferta, URL de afiliado nas antigas, marcar expiradas (`ST_ATIVO = 0`).
+- Depois: usuários (F5), app (F6), admin (F7).
 
-Em aberto: domínio curto (`.io` ou `.me`), ordenação padrão da home, tamanho da imagem `-small`
-(200 px hoje; subir até 320 px, o teto do contrato — AD-059), cupons da tabela CUPOM no site, e quando
-tirar o worker do PC do dono.
+Em aberto: ordenação padrão da home (CONTRATO §10.6), tamanho da imagem `-small` (200 px hoje; subir
+até 320 px, o teto do contrato — AD-059), cupons da tabela CUPOM no site, e quando tirar o worker do
+PC do dono.
 
 ## 5. Como o trabalho é feito
 
