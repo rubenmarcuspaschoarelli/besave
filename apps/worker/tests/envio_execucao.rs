@@ -410,3 +410,59 @@ fn canal_inativo_nao_envia() {
     assert_eq!(rel.parada, Some(Parada::CanalInativo));
     assert!(tg.chamadas().is_empty());
 }
+
+/// Dois posts antigos (ids 501, 502) de ofertas que expiraram, prontos para edição.
+fn duas_expiradas() -> FakeEnvio {
+    let f = FakeEnvio::new(Parametros::default(), vec![]);
+    for (id_envio, id) in [(1, 501), (2, 502)] {
+        let mut l = oferta(id);
+        l.oferta.ativo = false;
+        f.adicionar(l);
+        f.registrar(RegistroEnvio {
+            id_envio,
+            canal: 1,
+            id_oferta: id,
+            id_produto: Some(id),
+            preco_por: 10000,
+            message_id: Some(id),
+            dt_envio: hora(9, 0),
+            dt_edicao: None,
+        });
+    }
+    f
+}
+
+/// LIM-01 nas edições: 429 na segunda edição → código 0, só a primeira com `DT_EDICAO`,
+/// `retry_after` relatado e a pausa calculada a partir dele.
+#[test]
+fn limite_429_na_edicao() {
+    let f = duas_expiradas();
+    let r = RelogioFake::em(DIA0);
+    let tg = FakeCanal::new(&r);
+    tg.roteirizar([Ok(()), Err(ErroCanal::Limite(30))]);
+    let rel = rodar_em(&f, &tg, &r, hora(23, 0), None).unwrap();
+    assert_eq!(rel.editadas, 1);
+    assert_eq!(rel.retry_after, Some(30));
+    let editadas: Vec<i64> = f
+        .envios()
+        .iter()
+        .filter(|e| e.dt_edicao.is_some())
+        .map(|e| e.id_oferta)
+        .collect();
+    assert_eq!(editadas.len(), 1, "{editadas:?}");
+    let e = EstadoEnvio::depois(&rel, hora(23, 0), EstadoEnvio::default());
+    assert_eq!(e.pausa_ate, Some(hora(23, 0) + 30));
+}
+
+/// Erro na edição que não é 400 nem 429 → falha (código 1) sem marcar a edição.
+#[test]
+fn erro_na_edicao_falha_sem_marcar() {
+    let f = duas_expiradas();
+    let r = RelogioFake::em(DIA0);
+    let tg = FakeCanal::new(&r);
+    tg.roteirizar([Err(ErroCanal::Timeout(30))]);
+    let falha = rodar_em(&f, &tg, &r, hora(23, 0), None).unwrap_err();
+    assert_eq!(falha.codigo, Codigo::Falha);
+    assert_eq!(falha.fase, "edicao_telegram");
+    assert!(f.envios().iter().all(|e| e.dt_edicao.is_none()));
+}
