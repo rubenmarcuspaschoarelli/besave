@@ -6,11 +6,13 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result, bail};
 use clap::{ArgGroup, Parser};
+use worker::alerta::horas_sem_novas;
 use worker::aws::{ConfigAws, ContextoAws, PublicadorS3, RedirectsKvs};
 use worker::ciclo;
 use worker::conversao::Rejeicao;
+use worker::execucao::dt_max_texto;
 use worker::fonte::{FonteOfertas, fake_demo};
-use worker::geracao::{Relatorio, contar_paginas, gerar};
+use worker::geracao::{Relatorio, contar_paginas_dt, gerar};
 use worker::logs::HoraBrasilia;
 use worker::mapeamento::Mapeamento;
 use worker::oracle::{ConfigOracle, OracleFonte};
@@ -216,6 +218,7 @@ fn imprimir_relatorio(rel: &Relatorio) {
         None => println!("maior_chunk: -"),
     }
     println!("versao: {}", rel.versao);
+    imprimir_dt_max(rel.dt_mais_recente);
     println!("redirects_modo: {}", rel.redirects.modo);
     println!(
         "redirects_motivo_reconstrucao: {}",
@@ -266,9 +269,18 @@ fn imprimir_relatorio(rel: &Relatorio) {
 }
 
 fn dry_run(fonte: &dyn FonteOfertas, m: &Mapeamento) -> Result<()> {
-    let (lidas, validas, rejeitadas) = contar_paginas(fonte, m)?;
+    let (lidas, validas, rejeitadas, dt_max) = contar_paginas_dt(fonte, m)?;
     imprimir_contagens(lidas, validas, &rejeitadas);
+    imprimir_dt_max(dt_max);
     Ok(())
+}
+
+fn imprimir_dt_max(dt: Option<i64>) {
+    println!("dt_max: {}", dt_max_texto(dt));
+    match horas_sem_novas(dt, agora().unwrap_or_default()) {
+        Some(h) => println!("horas_sem_novas: {h}"),
+        None => println!("horas_sem_novas: -"),
+    }
 }
 
 fn imprimir_contagens(lidas: u64, validas: u64, rejeitadas: &BTreeMap<Rejeicao, u64>) {

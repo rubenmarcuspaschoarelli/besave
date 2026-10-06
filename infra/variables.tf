@@ -33,3 +33,15 @@ variable "classe_preco" {
   type        = string
   default     = "PriceClass_All"
 }
+
+variable "dominios_curtos" {
+  description = "Domínios curtos (CONTRATO §5), registrados fora da AWS. O primeiro é o nome principal do certificado."
+  type        = list(string)
+  default     = ["besave.io", "besave.me"]
+}
+
+variable "ativar_curto" {
+  description = "Fase 2 dos domínios curtos: certificado, distribuição e registros. Só depois que os NS das zonas propagarem no registrador."
+  type        = bool
+  default     = false
+}

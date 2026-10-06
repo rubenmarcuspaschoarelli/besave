@@ -17,3 +17,8 @@ output "arn_distribuicao" {
   description = "ARN da distribuição nova."
   value       = aws_cloudfront_distribution.site.arn
 }
+
+output "ns_curtos" {
+  description = "NS de cada zona curta, para configurar no registrador antes de ativar_curto."
+  value       = { for d, z in aws_route53_zone.curto : d => z.name_servers }
+}

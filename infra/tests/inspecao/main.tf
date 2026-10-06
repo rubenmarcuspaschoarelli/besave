@@ -36,3 +36,9 @@ output "le_parametro_ssm" {
 output "recursos_vigia" {
   value = [for m in regexall("(?m)^resource \"([^\"]+)\" \"([^\"]+)\"", replace(file("${local.raiz}/vigia.tf"), "/(?m)^[ \t]*(#|//).*$/", "")) : "${m[0]}.${m[1]}"]
 }
+
+# BSV-16: distribuição que usa o ARN de aws_acm_certificate_validation (espera a emissão) e não o do
+# certificado; os ARNs são iguais, só a referência no código prova a dependência.
+output "certificado_validado" {
+  value = { for k, v in local.blocos : k => can(regex("(?m)^\\s*acm_certificate_arn\\s*=.*aws_acm_certificate_validation\\.", v)) if startswith(k, "aws_cloudfront_distribution.") }
+}

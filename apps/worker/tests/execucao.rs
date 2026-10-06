@@ -336,3 +336,47 @@ fn rodar_escreve_no_destino_como_publicar_sim() {
         vec![1, 2]
     );
 }
+
+/// BSV-14b: a linha do relatório traz `dt_max` (ISO -03:00) e `horas_sem_novas`.
+#[test]
+fn relatorio_traz_dt_max_e_horas_sem_novas() {
+    // `linha()` tem `dt` = AGORA - 1 h; o ciclo roda 5 h depois.
+    let agora = AGORA + 5 * 3600;
+    let fonte = FakeFonte::new(vec![linha(1)], vec![], agora);
+    let mut p = PublicadorMemoria::new();
+    let (_, log) = com_log(|| concluir(rodar_em(&fonte, &mut p, agora, 1), None, agora));
+    // 2026-09-24T12:40:00Z - 1 h = 11:40Z = 08:40 -03:00.
+    assert!(log.contains("dt_max=2026-09-24T08:40:00-03:00"), "{log}");
+    assert!(log.contains("horas_sem_novas=6"), "{log}");
+}
+
+/// BSV-14b: ciclo ok com o conjunto parado além do limiar → 1 aviso; falha de ciclo não avalia.
+#[test]
+fn ciclo_ok_parado_alerta_e_falha_nao_avalia() {
+    use worker::alerta::ConfigSemNovas;
+    let t = TelegramFake::default();
+    let a = Alertas::new(&t, estado("sem-novas"), "MAQUINA-1".to_owned()).com_sem_novas(
+        ConfigSemNovas {
+            limiar_horas: 24,
+            lembrete_horas: 24,
+        },
+    );
+    let mut p = PublicadorMemoria::new();
+    let agora = AGORA + 30 * 3600;
+    let fonte = FakeFonte::new(vec![linha(1)], vec![], agora);
+
+    let (cod, _) = com_log(|| concluir(rodar_em(&FonteQueErra, &mut p, agora, 1), Some(&a), agora));
+    assert_eq!(cod, Codigo::Falha);
+    assert_eq!(t.enviados.borrow().len(), 1, "só o alerta de falha");
+
+    let (cod, _) = com_log(|| concluir(rodar_em(&fonte, &mut p, agora, 1), Some(&a), agora));
+    assert_eq!(cod, Codigo::Ok);
+    let enviados = t.enviados.borrow();
+    assert_eq!(enviados.len(), 3, "{enviados:?}");
+    assert!(enviados[1].contains("recuperado"), "{}", enviados[1]);
+    assert!(
+        enviados[2].starts_with("⚠️ Besave: nenhuma oferta nova há 31 h"),
+        "{}",
+        enviados[2]
+    );
+}

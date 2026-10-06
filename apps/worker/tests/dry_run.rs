@@ -453,3 +453,22 @@ fn modo_manual_loga_em_horario_de_brasilia() {
         assert!(formato(l), "{l}");
     }
 }
+
+/// BSV-14b: `--dry-run` imprime `dt_max` (ISO -03:00) e `horas_sem_novas`.
+#[test]
+fn dry_run_imprime_dt_max_e_horas_sem_novas() {
+    let out = rodar(&["--dry-run"], "fake");
+    let stdout = String::from_utf8(out.stdout).unwrap();
+    assert!(out.status.success());
+    let dt = stdout
+        .lines()
+        .find_map(|l| l.strip_prefix("dt_max: "))
+        .unwrap_or_else(|| panic!("sem dt_max: {stdout}"));
+    assert!(dt.ends_with("-03:00"), "{dt}");
+    assert!(
+        stdout
+            .lines()
+            .any(|l| l.starts_with("horas_sem_novas: ") && !l.ends_with(": -")),
+        "{stdout}"
+    );
+}
