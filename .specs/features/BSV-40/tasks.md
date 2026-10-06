@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; `docs/specs/BSV-40.md` fixa regras; decisões em `spec.md` → Assumptions)
-**Status**: In progress
+**Status**: Done
 
 ---
 
@@ -195,8 +195,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Script parseia (`[scriptblock]::Create`); README cobre a operação
-- [ ] Gate build passa
+- [x] Script parseia (`[scriptblock]::Create`); README cobre a operação
+- [x] Gate build passa
 
 **Tests**: none
 **Gate**: build

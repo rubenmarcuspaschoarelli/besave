@@ -487,6 +487,121 @@ host: BESAVE-PC
 Fases: `env_file`, `config`, `trava`, `conexao_oracle`, `contexto_aws`, `leitura_fonte`,
 `imagens`, `chunks`, `paginas`, `redirects`, `manifest`, `s3`.
 
+## Envio ao canal do Telegram (`besave-envio`, BSV-40)
+
+`besave-envio` posta ofertas no canal público (`@besaveofertas`) a cada 5 min: um lote pequeno
+(padrão 2) por execução, distribuído entre 8 h e 22 h (Brasília) até a cota do dia (padrão 180).
+Também edita o post quando a oferta expira ("⛔ Oferta encerrada", texto riscado, sem link).
+Os critérios ficam no Oracle (`PARAMETROS_ENVIO`), não no código.
+
+Só vai ao canal oferta cuja página já está no ar: o `besave-ciclo`, depois de publicar o
+`manifest.json`, grava `OFERTA.DT_PUBLICACAO_SITE` (uma vez por oferta, lotes de 1 000). Falha
+nesse `UPDATE` vira `WARN` e `publicacao_site_falhas=` na linha `relatorio`, sem mudar o código de
+saída. Com `BESAVE_DESTINO_LOCAL` (ensaio) a data não é gravada.
+
+### 1. Oracle
+
+`sql/bsv-40.sql` cria `OFERTA.DT_PUBLICACAO_SITE`, `CANAL_ENVIO`, `PARAMETROS_ENVIO`,
+`ENVIO_TELEGRAM` e `SQ_ENVIO_TELEGRAM`, com o canal 1 e os parâmetros padrão (já rodado). Se o
+worker conecta com outro usuário, rode também os `GRANT` comentados no fim do arquivo.
+
+Parâmetros (por canal; lidos no início de cada execução, então um `UPDATE … ; COMMIT;` vale na
+execução seguinte):
+
+| coluna | padrão | efeito |
+|---|---|---|
+| `QT_MAX_DIA` | 180 | posts por dia (Brasília) |
+| `QT_POR_EXECUCAO` | 2 | tamanho do lote |
+| `NR_HORA_INICIO`, `NR_HORA_FIM` | 8, 22 | janela `[início, fim)`; fora dela não posta |
+| `NR_HORA_SOM_INICIO`, `NR_HORA_SOM_FIM` | 9, 21 | fora daqui o post sai silencioso |
+| `PC_DESCONTO_MIN` | 30 | desconto mínimo; oferta sem preço "de" entra |
+| `NR_HORAS_OFERTA_MAX` | 24 | idade máxima de `DT_OFERTA` |
+| `NR_DIAS_REPETICAO`, `PC_QUEDA_REPETICAO` | 5, 10 | mesmo produto em menos de 5 dias só com queda ≥ 10% ("📉 Caiu mais o preço!!!") |
+| `PC_DESCONTO_DESTAQUE` | 30 | selo `🔥 -xx%` a partir daqui |
+
+Ritmo: `esperado = min(QT_MAX_DIA, L + floor(QT_MAX_DIA × minutos desde o início / minutos da
+janela))`; a execução posta um lote de `L` só se `esperado − enviados hoje ≥ L` (com os padrões,
+2 posts a cada ~10 min). Depois de uma parada, recupera no máximo um lote por execução. Ordem:
+maior desconto → com cupom → `DT_OFERTA` mais recente → id maior. Pausar o canal:
+`UPDATE CANAL_ENVIO SET ST_ATIVO = 0 WHERE ID_CANAL = 1; COMMIT;`.
+
+Sem duplicata: a linha de `ENVIO_TELEGRAM` nasce antes do envio (sem `NR_MESSAGE_ID`), ganha o
+`message_id` quando o Telegram confirma e é apagada se o envio falha.
+
+### 2. Bot do canal
+
+Um bot **só para o canal**, diferente do bot de alertas:
+
+1. No **@BotFather**: `/newbot`, guarde o token só no `.env` (`TELEGRAM_CANAL_BOT_TOKEN`).
+2. No canal `@besaveofertas`: Administradores → Adicionar administrador → o bot novo, com
+   **Publicar mensagens** e **Editar mensagens de outros**. Sem isso o envio falha com
+   `Recusada` (HTTP 400/403) no log.
+
+### 3. `.env`
+
+O mesmo `.env` do ciclo serve (Oracle, `BESAVE_IMAGENS_DIR`, `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`
+para alertas) mais:
+
+| variável | obrigatória | uso |
+|---|---|---|
+| `TELEGRAM_CANAL_BOT_TOKEN` | sim (menos no `--sim`) | token do bot do canal; nunca vai para o log |
+| `BESAVE_ENVIO_CANAL` | não | `ID_CANAL`; padrão `1` |
+| `BESAVE_IMAGENS_DIR` | não | fotos do robô (`{dir}/{id}/{id}.webp`); ausente → placeholder da área |
+| `BESAVE_ENVIO_LOCK` | não | trava; padrão `%LOCALAPPDATA%\besave\envio.lock` (independente da do ciclo) |
+
+A foto é a imagem grande da oferta centralizada num quadrado 800×800 branco, em JPEG, enviada por
+upload (nada vai para o S3). O link é `https://besave.io/{id}?utm_source=telegram`.
+
+### 4. Conferir antes com `--sim`
+
+```powershell
+C:\besave\besave-envio.exe --env-file C:\besave\worker.env --sim | Out-Host
+```
+
+Lê o Oracle, **não** chama o Telegram e **não** grava nada. Mostra enviados hoje, lote devido
+agora, se sairia silencioso, quantas expiradas seriam editadas e, para as próximas
+`QT_POR_EXECUCAO` candidatas (mesmo fora da janela), a legenda e a origem da foto. O mesmo texto e
+as fotos ficam em `%TEMP%\besave-envio-sim\` (`sim.txt`, `{id}.jpg`), útil se o console não
+mostrar nada: o executável não tem janela de console.
+
+### 5. Registrar a tarefa
+
+```powershell
+cargo build --release
+Copy-Item "$env:CARGO_TARGET_DIR\release\besave-envio.exe" C:\besave\
+.\scripts\registrar-tarefa-envio.ps1 -Executavel C:\besave\besave-envio.exe -EnvFile C:\besave\worker.env
+```
+
+Tarefa "Besave Envio": a cada 5 min e 1 min após o logon, sem instância dupla, limite de 20 min, só
+com o usuário conectado (as mesmas regras da "Besave Worker"). Remover:
+`.\scripts\remover-tarefa.ps1 -NomeTarefa 'Besave Envio'`.
+
+### Logs, códigos e alerta
+
+Log diário próprio: `%LOCALAPPDATA%\besave\logs\besave-envio.AAAA-MM-DD.log` (14 dias). Cada
+execução ok deixa:
+
+```
+… INFO worker::envio::binario: relatorio canal=1 enviados_hoje=42 devido=2 enviados=2 editadas=1 edicoes_descartadas=0 retry_after=- parada=- tempo_ms=3120
+```
+
+| código | quando |
+|---|---|
+| 0 | ok, nada devido, canal inativo, pulado pela trava, ou 429 do Telegram |
+| 1 | falha: Oracle, foto, Telegram (fora 429) |
+| 2 | configuração: `.env`, argumento, `TELEGRAM_CANAL_BOT_TOKEN` ausente, Oracle sem config, canal sem `PARAMETROS_ENVIO` |
+
+- **429** (limite do Telegram): a execução para com código 0 e grava o fim da espera em
+  `%LOCALAPPDATA%\besave\envio-estado.json`; as execuções até lá saem sem chamar o Telegram.
+- No máximo 1 chamada por segundo ao Telegram; até 20 edições de expiradas por execução (edições
+  rodam também fora da janela). Edição recusada com 400 (post apagado) é marcada e não repetida.
+- Falha alerta pelo bot de alertas (`⚠️ Besave envio: falha no envio ao canal`), com estado em
+  `%LOCALAPPDATA%\besave\alerta-envio.json` (separado do ciclo), mesma janela de 2 h por variante.
+
+Fases do envio: `env_file`, `config`, `parametros`, `trava`, `conexao_oracle`, `leitura_oracle`,
+`foto`, `reserva_oracle`, `envio_telegram`, `confirmacao_oracle`, `edicao_telegram`,
+`edicao_oracle`, `cliente_telegram`.
+
 ## Testes
 
 ```sh
