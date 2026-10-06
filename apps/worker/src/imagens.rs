@@ -198,6 +198,14 @@ fn placeholders() -> [(Area, &'static [u8]); 10] {
     ]
 }
 
+/// Bytes WebP do placeholder versionado da área (embutido no binário).
+pub fn placeholder(area: Area) -> &'static [u8] {
+    placeholders()
+        .into_iter()
+        .find(|(a, _)| *a == area)
+        .map_or(&[], |(_, b)| b)
+}
+
 /// Publica os 10 placeholders ausentes de `existentes`; reaproveita os demais (regra 5).
 /// Uma gravação `gravar_lote` (nunca 10 chamadas unitárias).
 fn publicar_placeholders(

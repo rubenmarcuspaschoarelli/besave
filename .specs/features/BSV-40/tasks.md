@@ -141,8 +141,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Casos de legenda da spec; JPEG 800×800 com bordas brancas e proporção
-- [ ] Gate build passa (fim da fase 1)
+- [x] Casos de legenda da spec; JPEG 800×800 com bordas brancas e proporção
+- [x] Gate build passa (fim da fase 1)
 
 **Tests**: unit
 **Gate**: build

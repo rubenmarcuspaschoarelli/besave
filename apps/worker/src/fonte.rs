@@ -126,8 +126,8 @@ impl FonteOfertas for FakeFonte {
         let mut datas = self.publicadas_site.borrow_mut();
         let mut n = 0;
         for l in self.ofertas.iter().filter(|l| ids.contains(&l.id)) {
-            if !datas.contains_key(&l.id) {
-                datas.insert(l.id, self.agora);
+            if let std::collections::btree_map::Entry::Vacant(e) = datas.entry(l.id) {
+                e.insert(self.agora);
                 n += 1;
             }
         }

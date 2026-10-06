@@ -86,7 +86,8 @@ fn sem_preco_de_nao_tem_desconto() {
 /// FIL-01: §9 + URL de afiliado + `id_produto`.
 #[test]
 fn rejeita_como_o_worker() {
-    let casos: [(fn(&mut LinhaCanal), Rejeicao); 6] = [
+    type Mexe = fn(&mut LinhaCanal);
+    let casos: [(Mexe, Rejeicao); 6] = [
         (
             |l| l.oferta.preco_por = Some(0.0),
             Rejeicao::PrecoPorInvalido,
