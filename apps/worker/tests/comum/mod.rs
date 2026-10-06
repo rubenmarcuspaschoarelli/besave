@@ -174,3 +174,19 @@ pub fn texto_aleatorio(semente: u64, n: usize) -> String {
         })
         .collect()
 }
+
+/// BSV-40: linha válida para o canal (ativa, página no ar há 1 h, `dt` 2 h antes de `AGORA`),
+/// produto = id, preço "de" e "por" em reais.
+pub fn linha_canal(id: i64, de: Option<f64>, por: f64) -> worker::envio::modelo::LinhaCanal {
+    worker::envio::modelo::LinhaCanal {
+        oferta: worker::conversao::LinhaOferta {
+            preco_de: de,
+            preco_por: Some(por),
+            dt_oferta: Some(AGORA - 2 * 3600),
+            ..linha(id)
+        },
+        destaque: None,
+        recorrencia: false,
+        dt_publicacao_site: Some(AGORA - 3600),
+    }
+}

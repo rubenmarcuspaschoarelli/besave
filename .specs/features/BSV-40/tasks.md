@@ -123,8 +123,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Todos os casos de filtro, repetição e ordem da spec
-- [ ] Gate quick passa
+- [x] Todos os casos de filtro, repetição e ordem da spec
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
