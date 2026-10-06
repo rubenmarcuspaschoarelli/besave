@@ -63,6 +63,8 @@ fn comando_de(exe: &str, local: &Path) -> Command {
         "BESAVE_AGORA",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
+        "BESAVE_ALERTA_SEM_NOVAS_HORAS",
+        "BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS",
     ] {
         c.env_remove(k);
     }
@@ -503,5 +505,28 @@ fn log_em_horario_de_brasilia() {
                 assert!(l.starts_with(prefixo), "{nome} stderr: {l}");
             }
         }
+    }
+}
+
+/// SN-07 (BSV-14b): `abc` ou `-1` em qualquer das variáveis do alerta de "sem novas" → código 2
+/// com a variável nomeada no log.
+#[test]
+fn alerta_sem_novas_invalido_sai_com_2() {
+    for (var, valor) in [
+        ("BESAVE_ALERTA_SEM_NOVAS_HORAS", "abc"),
+        ("BESAVE_ALERTA_SEM_NOVAS_HORAS", "-1"),
+        ("BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS", "abc"),
+        ("BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS", "-1"),
+    ] {
+        let local = dir_temp("sem-novas");
+        let env = env_file(&local, &format!("BESAVE_FONTE=fake\n{var}={valor}\n"));
+        let out = comando(&local)
+            .args(["--ciclo", "--env-file"])
+            .arg(&env)
+            .output()
+            .unwrap();
+        assert_eq!(out.status.code(), Some(2), "{var}={valor}\n{}", texto(&out));
+        let log = logs(&local);
+        assert!(log.contains(var), "{var}={valor}\n{log}");
     }
 }

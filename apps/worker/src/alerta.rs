@@ -1,5 +1,7 @@
 //! Alerta de falha do `--ciclo` no Telegram (BSV-14): mensagens curtas, sem URL, token ou
 //! caminho; no máximo 1 envio por variante de erro a cada 2 h; "recuperado" no 1º sucesso.
+//! BSV-14b: aviso de "nenhuma oferta nova" (limiar, lembrete e mensagem de volta), com estado
+//! próprio em `alerta.json`.
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -128,11 +130,94 @@ pub fn mensagem_falha(variante: &str, fase: &str, agora: i64, host: &str) -> Str
     )
 }
 
+/// `dd/mm HH:MM` de Brasília.
+fn dia_hora(t: i64) -> String {
+    let s = iso_brasilia(t);
+    format!("{}/{} {}", &s[8..10], &s[5..7], &s[11..16])
+}
+
+/// Horas inteiras (para baixo) entre `dt` e `agora`; `None` se o conjunto é vazio.
+pub fn horas_sem_novas(dt: Option<i64>, agora: i64) -> Option<i64> {
+    dt.map(|d| (agora - d).max(0) / 3600)
+}
+
+fn mensagem_sem_novas(dt: Option<i64>, publicadas: u64, agora: i64, host: &str) -> String {
+    let titulo = match horas_sem_novas(dt, agora) {
+        Some(h) => format!("nenhuma oferta nova há {h} h"),
+        None => "nenhuma oferta nova".to_owned(),
+    };
+    let ultima = dt.map_or_else(|| "—".to_owned(), |d| format!("{} (-03:00)", dia_hora(d)));
+    format!("⚠️ Besave: {titulo}\núltima: {ultima}\npublicadas: {publicadas}\nhost: {host}")
+}
+
+fn mensagem_com_novas(desde: Option<i64>) -> String {
+    let desde = desde.map_or_else(|| "—".to_owned(), dia_hora);
+    format!("✅ Besave: ofertas novas de novo (paradas desde {desde})")
+}
+
 pub fn mensagem_recuperado(falhas: u64, desde: i64) -> String {
     format!(
         "✅ Besave worker: recuperado após {falhas} falhas (desde {})",
         hora(desde)
     )
+}
+
+const VAR_LIMIAR: &str = "BESAVE_ALERTA_SEM_NOVAS_HORAS";
+const VAR_LEMBRETE: &str = "BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS";
+
+#[derive(Debug, thiserror::Error)]
+#[error("{var} inválida: use um inteiro ≥ 0 (horas)")]
+pub struct ErroConfigSemNovas {
+    var: &'static str,
+}
+
+/// Limiar e lembrete do aviso de "nenhuma oferta nova", em horas; `0` desliga (limiar) ou
+/// dispensa o lembrete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigSemNovas {
+    pub limiar_horas: u64,
+    pub lembrete_horas: u64,
+}
+
+impl Default for ConfigSemNovas {
+    fn default() -> Self {
+        Self {
+            limiar_horas: 24,
+            lembrete_horas: 24,
+        }
+    }
+}
+
+impl ConfigSemNovas {
+    pub fn do_env() -> Result<Self, ErroConfigSemNovas> {
+        Self::de(|k| std::env::var(k).ok())
+    }
+
+    /// Ausente ou vazio → padrão (24 h); inteiro ≥ 0 ou erro que nomeia a variável.
+    pub fn de(env: impl Fn(&str) -> Option<String>) -> Result<Self, ErroConfigSemNovas> {
+        let ler = |var: &'static str, padrao: u64| -> Result<u64, ErroConfigSemNovas> {
+            match env(var)
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty())
+            {
+                None => Ok(padrao),
+                Some(v) => v.parse().map_err(|_| ErroConfigSemNovas { var }),
+            }
+        };
+        let padrao = Self::default();
+        Ok(Self {
+            limiar_horas: ler(VAR_LIMIAR, padrao.limiar_horas)?,
+            lembrete_horas: ler(VAR_LEMBRETE, padrao.lembrete_horas)?,
+        })
+    }
+}
+
+/// Bloco `sem_novas` do `alerta.json`. `desde`: `dt` da última oferta quando o último aviso foi
+/// entregue; `ultimo_envio`: instante dessa entrega (aviso ou lembrete). `None` = nenhum aviso ativo.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EstadoSemNovas {
+    pub desde: Option<i64>,
+    pub ultimo_envio: Option<i64>,
 }
 
 /// `alerta.json`: ciclos falhos seguidos, início da sequência e último envio entregue por variante.
@@ -141,12 +226,16 @@ pub struct EstadoAlerta {
     pub falhas: u64,
     pub desde: Option<i64>,
     pub envios: BTreeMap<String, i64>,
+    /// Independente do estado de falha; ausente em arquivos da BSV-14.
+    #[serde(default)]
+    pub sem_novas: EstadoSemNovas,
 }
 
 pub struct Alertas<'a> {
     telegram: &'a dyn Telegram,
     estado: PathBuf,
     host: String,
+    sem_novas: ConfigSemNovas,
 }
 
 impl<'a> Alertas<'a> {
@@ -155,7 +244,19 @@ impl<'a> Alertas<'a> {
             telegram,
             estado,
             host,
+            // Desligado até `com_sem_novas`: quem não configura não ganha aviso novo.
+            sem_novas: ConfigSemNovas {
+                limiar_horas: 0,
+                ..ConfigSemNovas::default()
+            },
         }
+    }
+
+    /// Liga o aviso de "nenhuma oferta nova" com este limiar e lembrete.
+    #[must_use]
+    pub fn com_sem_novas(mut self, cfg: ConfigSemNovas) -> Self {
+        self.sem_novas = cfg;
+        self
     }
 
     fn carregar(&self) -> EstadoAlerta {
@@ -222,9 +323,74 @@ impl<'a> Alertas<'a> {
         match self.telegram.enviar(&mensagem_recuperado(e.falhas, desde)) {
             Ok(()) => {
                 info!(falhas = e.falhas, "recuperação enviada ao Telegram");
-                self.salvar(&EstadoAlerta::default());
+                // `sem_novas` não é do estado de falha: sobrevive à recuperação.
+                self.salvar(&EstadoAlerta {
+                    sem_novas: e.sem_novas,
+                    ..EstadoAlerta::default()
+                });
             }
             Err(err) => warn!(erro = %err, "falha ao enviar recuperação ao Telegram"),
+        }
+    }
+
+    /// Ciclo ok: compara o `dt` mais recente publicado com o limiar e chama `sem_novas` ou
+    /// `com_novas`. Limiar 0 = desligado. Conjunto vazio (`None`) conta como "sem novas".
+    pub fn avaliar_novas(&self, dt_mais_recente: Option<i64>, publicadas: u64, agora: i64) {
+        let limiar = self.sem_novas.limiar_horas;
+        if limiar == 0 {
+            return;
+        }
+        let limite = i64::try_from(limiar)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(3600);
+        if dt_mais_recente.is_none_or(|d| agora - d > limite) {
+            self.sem_novas(dt_mais_recente, publicadas, agora);
+        } else {
+            self.com_novas(agora);
+        }
+    }
+
+    /// Aviso no 1º ciclo parado; lembrete a cada `lembrete_horas` do último envio entregue.
+    /// Envio que falha → WARN e o estado não avança.
+    pub fn sem_novas(&self, dt_mais_recente: Option<i64>, publicadas: u64, agora: i64) {
+        let mut e = self.carregar();
+        let lembrete = i64::try_from(self.sem_novas.lembrete_horas)
+            .unwrap_or(i64::MAX)
+            .saturating_mul(3600);
+        let devido = match e.sem_novas.ultimo_envio {
+            None => true,
+            Some(t) => lembrete > 0 && agora - t >= lembrete,
+        };
+        if !devido {
+            return;
+        }
+        let texto = mensagem_sem_novas(dt_mais_recente, publicadas, agora, &self.host);
+        match self.telegram.enviar(&texto) {
+            Ok(()) => {
+                info!("alerta de ofertas paradas enviado ao Telegram");
+                e.sem_novas = EstadoSemNovas {
+                    desde: dt_mais_recente,
+                    ultimo_envio: Some(agora),
+                };
+                self.salvar(&e);
+            }
+            Err(err) => warn!(erro = %err, "falha ao enviar alerta de ofertas paradas ao Telegram"),
+        }
+    }
+
+    /// Chegou oferta dentro do limiar: "de novo", só se um aviso foi entregue.
+    pub fn com_novas(&self, _agora: i64) {
+        let mut e = self.carregar();
+        if e.sem_novas.ultimo_envio.is_none() {
+            return;
+        }
+        match self.telegram.enviar(&mensagem_com_novas(e.sem_novas.desde)) {
+            Ok(()) => {
+                info!("retomada de ofertas enviada ao Telegram");
+                e.sem_novas = EstadoSemNovas::default();
+                self.salvar(&e);
+            }
+            Err(err) => warn!(erro = %err, "falha ao enviar retomada de ofertas ao Telegram"),
         }
     }
 }

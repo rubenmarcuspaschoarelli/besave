@@ -393,6 +393,8 @@ Variáveis novas:
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | não (as duas ou nenhuma) | token do bot; nunca vai para o log |
 | `TELEGRAM_CHAT_ID` | não (as duas ou nenhuma) | chat que recebe os alertas |
+| `BESAVE_ALERTA_SEM_NOVAS_HORAS` | não | limiar do alerta "nenhuma oferta nova", em horas inteiras ≥ 0; padrão `24`; `0` desliga. Inválida → código 2 |
+| `BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS` | não | de quanto em quanto tempo repetir o aviso enquanto durar; padrão `24`; `0` = sem lembrete. Inválida → código 2 |
 | `BESAVE_LOG_DIR` | não | pasta dos logs; padrão `%LOCALAPPDATA%\besave\logs` |
 | `BESAVE_LOCK` | não | arquivo de trava; padrão `%LOCALAPPDATA%\besave\worker.lock` |
 | `BESAVE_DESTINO_LOCAL` | não (ensaio/teste) | publica numa pasta (layout do bucket) com KVS em memória, em vez do S3/KVS; dispensa `BESAVE_BUCKET`/`BESAVE_KVS_ARN` |
@@ -455,6 +457,32 @@ host: BESAVE-PC
 - Estado em `%LOCALAPPDATA%\besave\alerta.json` (pode apagar para zerar).
 - Telegram fora do ar: `WARN` no log, o código de saída não muda e o envio é tentado de novo no
   ciclo seguinte.
+
+#### Nenhuma oferta nova (BSV-14b)
+
+O ciclo pode rodar bem e publicar um conjunto que não muda (robô parado, captura sem
+`DS_URL_AFILIADO`, novas rejeitadas). Quando o maior `dt` publicado (ativas e expiradas) fica mais
+velho que o limiar, o ciclo ok avisa:
+
+```
+⚠️ Besave: nenhuma oferta nova há 26 h
+última: 01/10 21:57 (-03:00)
+publicadas: 17326
+host: BESAVE-PC
+```
+
+- Aviso no primeiro ciclo que cruza o limiar; lembrete (mesmo texto, horas atualizadas) a cada
+  `BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS` contado do último envio entregue.
+- Chegou oferta dentro do limiar: `✅ Besave: ofertas novas de novo (paradas desde 01/10 21:57)`,
+  só se um aviso tinha sido entregue.
+- Conjunto vazio conta como parado (`última: —`).
+- Estado em `alerta.json`, bloco `sem_novas`, independente do alerta de falha: falha de ciclo não o
+  avalia nem o altera. Envio que falha → `WARN` e nova tentativa no ciclo seguinte.
+- A linha `relatorio` e o stdout de `--dry-run`/`--publicar` trazem `dt_max=` (ISO -03:00) e
+  `horas_sem_novas=`.
+
+**Quando o alerta chega:** olhe o robô de captura (`tools/capture-*`) e, no log do dia, a linha
+`relatorio` (`rejeitadas=`) e os `WARN oferta rejeitada` com o motivo.
 
 Fases: `env_file`, `config`, `trava`, `conexao_oracle`, `contexto_aws`, `leitura_fonte`,
 `imagens`, `chunks`, `paginas`, `redirects`, `manifest`, `s3`.

@@ -303,6 +303,8 @@ fn relatorio_com_contagens() {
             bytes_totais: m.chunks.iter().map(|c| c.bytes).sum(),
             maior_chunk: Some((maior.n, maior.bytes)),
             versao: 20_260_924_124_000,
+            // Maior `dt` publicado: o da oferta 5413 (2026-09-24T12:41:00Z).
+            dt_mais_recente: Some(1_790_253_660),
             redirects: RelatorioRedirects {
                 puts: 5,
                 dels: 0,
@@ -842,4 +844,19 @@ fn relatorio_traz_tempo_por_fase() {
     } = rel.tempos;
     assert!(imagens_listagem <= imagens, "{:?}", rel.tempos);
     assert!(redirects_listagem <= redirects, "{:?}", rel.tempos);
+}
+
+/// BSV-14b: `dt_mais_recente` considera também as expiradas (maior `dt` entre os publicados).
+#[test]
+fn dt_mais_recente_inclui_expiradas() {
+    let mut v = linhas_fixture();
+    let maior = v.iter().filter_map(|l| l.dt_oferta).max().unwrap();
+    v.push(LinhaOferta {
+        ativo: false,
+        dt_desativacao: Some(AGORA - 3600),
+        dt_oferta: Some(maior + 3600),
+        ..linha(1500)
+    });
+    let rel = rodar(v, &mut PublicadorMemoria::new()).unwrap();
+    assert_eq!(rel.dt_mais_recente, Some(maior + 3600));
 }

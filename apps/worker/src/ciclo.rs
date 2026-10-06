@@ -14,7 +14,7 @@ use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-use crate::alerta::{Alertas, ConfigTelegram, host_do_env};
+use crate::alerta::{Alertas, ConfigSemNovas, ConfigTelegram, host_do_env};
 use crate::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
 use crate::execucao::{Codigo, Falha, concluir, rodar};
 use crate::fonte::{FonteOfertas, fake_demo};
@@ -228,6 +228,10 @@ pub fn executar(op: &Opcoes, previa: Option<Result<(), ErroCiclo>>) -> Codigo {
         Ok(p) => p,
         Err(e) => return concluir(Err(Falha::config("config", &e)), None, agora),
     };
+    let sem_novas = match ConfigSemNovas::do_env() {
+        Ok(c) => c,
+        Err(e) => return concluir(Err(Falha::config("config", &e)), None, agora),
+    };
     let telegram = match ConfigTelegram::do_env() {
         Err(e) => return concluir(Err(Falha::config("config", &e)), None, agora),
         Ok(None) => {
@@ -244,7 +248,7 @@ pub fn executar(op: &Opcoes, previa: Option<Result<(), ErroCiclo>>) -> Codigo {
     };
     let alertas = telegram
         .as_ref()
-        .map(|t| Alertas::new(t, pastas.alerta.clone(), host_do_env()));
+        .map(|t| Alertas::new(t, pastas.alerta.clone(), host_do_env()).com_sem_novas(sem_novas));
     let alertas = alertas.as_ref();
     if let Some(Err(e)) = previa {
         let fase = match e {
