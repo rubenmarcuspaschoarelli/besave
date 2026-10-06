@@ -105,8 +105,8 @@ T5 → T6 → T7 → T8
 
 **Done when**:
 
-- [ ] Casos 07:59/08:00/08:05/08:10/21:59/22:00 e 08:30/09:00
-- [ ] Gate quick passa
+- [x] Casos 07:59/08:00/08:05/08:10/21:59/22:00 e 08:30/09:00
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
