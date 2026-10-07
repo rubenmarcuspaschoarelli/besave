@@ -4,6 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 
+use crate::avisos::modelo::LinhaAviso;
 use crate::envio::modelo::{Canal, LinhaCanal, OfertaCanal, Parametros};
 use crate::fonte::{ErroFonte, Result};
 
@@ -20,6 +21,17 @@ pub struct Expirada {
     pub id_envio: i64,
     pub message_id: i64,
     pub linha: LinhaCanal,
+}
+
+/// Uma ligação `AVISO_CANAL` (BSV-41) com o aviso e o último envio dele ao canal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AvisoCanal {
+    pub aviso: LinhaAviso,
+    pub intervalo_min: i64,
+    /// `AVISO_CANAL.ST_ATIVO = 1`
+    pub ativo: bool,
+    /// `MAX(ENVIO_AVISO.DT_ENVIO)` do par (aviso, canal), confirmado ou só reservado.
+    pub ultimo_envio: Option<i64>,
 }
 
 pub trait FonteEnvio {
@@ -48,6 +60,32 @@ pub trait FonteEnvio {
     /// Até `limite` posts confirmados de ofertas com `ST_ATIVO = 0` e `DT_EDICAO` nula.
     fn expiradas(&self, canal: i64, limite: usize) -> Result<Vec<Expirada>>;
     fn marcar_editada(&self, id_envio: i64, agora: i64) -> Result<()>;
+    /// Pré-filtro (o envio refaz todos): ligação e aviso ativos, `DT_PUBLICACAO_SITE` preenchida.
+    fn avisos_canal(&self, canal: i64) -> Result<Vec<AvisoCanal>>;
+    /// Linha nova em `ENVIO_AVISO` sem `NR_MESSAGE_ID`, com commit; devolve `ID_ENVIO_AVISO`.
+    fn reservar_aviso(&self, aviso: i64, canal: i64, agora: i64) -> Result<i64>;
+    fn confirmar_aviso(&self, id_envio: i64, message_id: i64) -> Result<()>;
+    /// Apaga a linha de um envio de aviso que falhou.
+    fn cancelar_aviso(&self, id_envio: i64) -> Result<()>;
+}
+
+/// Uma linha de `AVISO_CANAL` no fake.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LigacaoAviso {
+    pub canal: i64,
+    pub aviso: LinhaAviso,
+    pub intervalo_min: i64,
+    pub ativo: bool,
+}
+
+/// Uma linha de `ENVIO_AVISO` no fake.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RegistroAviso {
+    pub id_envio: i64,
+    pub aviso: i64,
+    pub canal: i64,
+    pub message_id: Option<i64>,
+    pub dt_envio: i64,
 }
 
 /// Uma linha de `ENVIO_TELEGRAM` no fake.
@@ -73,6 +111,10 @@ pub struct FakeEnvio {
     envios: RefCell<Vec<RegistroEnvio>>,
     seq: Cell<i64>,
     falhar_reserva: Cell<bool>,
+    ligacoes: RefCell<Vec<LigacaoAviso>>,
+    envios_aviso: RefCell<Vec<RegistroAviso>>,
+    seq_aviso: Cell<i64>,
+    falhar_avisos: Cell<bool>,
 }
 
 impl FakeEnvio {
@@ -124,6 +166,28 @@ impl FakeEnvio {
 
     pub fn envios(&self) -> Vec<RegistroEnvio> {
         self.envios.borrow().clone()
+    }
+
+    /// Linha de `AVISO_CANAL` (substitui a do mesmo par aviso/canal).
+    pub fn ligar_aviso(&self, l: LigacaoAviso) {
+        let mut v = self.ligacoes.borrow_mut();
+        v.retain(|x| !(x.canal == l.canal && x.aviso.id == l.aviso.id));
+        v.push(l);
+    }
+
+    /// Linha já existente em `ENVIO_AVISO` (histórico).
+    pub fn registrar_aviso(&self, r: RegistroAviso) {
+        self.seq_aviso.set(self.seq_aviso.get().max(r.id_envio));
+        self.envios_aviso.borrow_mut().push(r);
+    }
+
+    pub fn envios_aviso(&self) -> Vec<RegistroAviso> {
+        self.envios_aviso.borrow().clone()
+    }
+
+    /// `avisos_canal` passa a falhar (falha injetada).
+    pub fn falhar_avisos(&self, sim: bool) {
+        self.falhar_avisos.set(sim);
     }
 
     fn falha(motivo: &str) -> ErroFonte {
@@ -261,5 +325,59 @@ impl FonteEnvio for FakeEnvio {
 
     fn marcar_editada(&self, id_envio: i64, agora: i64) -> Result<()> {
         self.alterar(id_envio, |r| r.dt_edicao = Some(agora))
+    }
+
+    /// Sem o pré-filtro do SQL: a regra que vale é a do envio.
+    fn avisos_canal(&self, canal: i64) -> Result<Vec<AvisoCanal>> {
+        if self.falhar_avisos.get() {
+            return Err(Self::falha("falha injetada em AVISO_CANAL"));
+        }
+        let envios = self.envios_aviso.borrow();
+        Ok(self
+            .ligacoes
+            .borrow()
+            .iter()
+            .filter(|l| l.canal == canal)
+            .map(|l| AvisoCanal {
+                aviso: l.aviso.clone(),
+                intervalo_min: l.intervalo_min,
+                ativo: l.ativo,
+                ultimo_envio: envios
+                    .iter()
+                    .filter(|r| r.canal == canal && r.aviso == l.aviso.id)
+                    .map(|r| r.dt_envio)
+                    .max(),
+            })
+            .collect())
+    }
+
+    fn reservar_aviso(&self, aviso: i64, canal: i64, agora: i64) -> Result<i64> {
+        let id = self.seq_aviso.get() + 1;
+        self.seq_aviso.set(id);
+        self.envios_aviso.borrow_mut().push(RegistroAviso {
+            id_envio: id,
+            aviso,
+            canal,
+            message_id: None,
+            dt_envio: agora,
+        });
+        Ok(id)
+    }
+
+    fn confirmar_aviso(&self, id_envio: i64, message_id: i64) -> Result<()> {
+        let mut v = self.envios_aviso.borrow_mut();
+        let r = v
+            .iter_mut()
+            .find(|r| r.id_envio == id_envio)
+            .ok_or_else(|| Self::falha("id_envio_aviso inexistente"))?;
+        r.message_id = Some(message_id);
+        Ok(())
+    }
+
+    fn cancelar_aviso(&self, id_envio: i64) -> Result<()> {
+        self.envios_aviso
+            .borrow_mut()
+            .retain(|r| r.id_envio != id_envio);
+        Ok(())
     }
 }

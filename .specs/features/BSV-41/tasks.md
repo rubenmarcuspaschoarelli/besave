@@ -19,11 +19,11 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 | Code Layer | Required Test Type | Coverage Expectation | Location Pattern | Run Command |
 | ---------- | ------------------ | -------------------- | ---------------- | ----------- |
-| Headers (`meta_para`) | unit | PAG-09 | `apps/worker/tests/headers.rs` | `cargo test` |
-| Página do aviso (template) | unit | PAG-03..06 | `apps/worker/tests/aviso_pagina.rs` | `cargo test` |
+| Headers (`meta_para`) | unit | PAG-09 | `apps/worker/tests/aviso_modelo.rs` | `cargo test` |
+| Página do aviso (template) | unit | PAG-03..06 | `apps/worker/tests/aviso_pagina.rs`, `aviso_ciclo_log.rs` | `cargo test` |
 | Ciclo: publicação, índice, remoção, data | unit | PAG-01..02, PAG-07..08, REM-01..06, DTP-01..02 | `apps/worker/tests/aviso_ciclo.rs` | `cargo test` |
-| Ciclo: integração e relatório | unit | DTP-03, REL-01..02 | `apps/worker/tests/aviso_ciclo.rs`, `tests/execucao.rs` | `cargo test` |
-| Envio: seleção, legenda, foto (puro + fake Oracle) | unit | ENV-05..07, ENV-14, LEG-01..02 | `apps/worker/tests/envio_aviso.rs` | `cargo test` |
+| Ciclo: integração e relatório | unit | DTP-03, REL-01..02 | `apps/worker/tests/aviso_relatorio.rs` | `cargo test` |
+| Envio: seleção, legenda, foto (puro + fake Oracle) | unit | ENV-05..07, ENV-14, LEG-01..02 | `apps/worker/tests/envio_aviso_selecao.rs` | `cargo test` |
 | Envio: orquestração (fakes Oracle/Telegram/relógio) | unit | ENV-01..04, ENV-08..13, ENV-15..16 | `apps/worker/tests/envio_aviso.rs` | `cargo test` |
 | Oracle real / Telegram real (I/O) | none | build gate only; testes nunca tocam rede | - | build gate only |
 | Docs | none | DOC-01..02 | - | build gate only |
@@ -97,8 +97,8 @@ T4 → T5 → T6 → T7
 
 ### T3: Publicação dos avisos no ciclo
 
-**What**: `FonteOfertas::{avisos, marcar_aviso_site}` (fake); `avisos::publicacao::publicar_avisos` (índice `_estado/avisos.json`, só sobe o que mudou, remoção, data).
-**Where**: `apps/worker/src/fonte.rs`, `src/avisos/publicacao.rs`
+**What**: `FonteOfertas::{avisos, marcar_aviso_site}` (fake e Oracle: o trait exige os dois); `avisos::publicacao::publicar_avisos` (índice `_estado/avisos.json`, só sobe o que mudou, remoção, data).
+**Where**: `apps/worker/src/{fonte,oracle}.rs`, `src/avisos/publicacao.rs`
 **Depends on**: T2
 **Reuses**: `hash16`, padrão de `publicar_site`
 **Requirement**: PAG-01, PAG-02, PAG-07, PAG-08, REM-01..06, DTP-01, DTP-02
@@ -115,8 +115,8 @@ T4 → T5 → T6 → T7
 
 ### T4: Avisos no ciclo agendado
 
-**What**: SQL do Oracle (`OracleFonte`), chamada em `publicar_ciclo` (S3 marca datas; local não), `ConfigAvisos` (`BESAVE_AVISOS_DIR`, `BESAVE_CANAL_URL`), relatório (`avisos_*`, `t_avisos`).
-**Where**: `apps/worker/src/{oracle,ciclo,execucao,geracao}.rs`, `src/avisos/`
+**What**: Chamada em `publicar_ciclo` (S3 marca datas; local não), `ConfigAvisos` (`BESAVE_AVISOS_DIR`, `BESAVE_CANAL_URL`), relatório (`avisos_*`, `t_avisos`).
+**Where**: `apps/worker/src/{ciclo,execucao,geracao}.rs`, `src/avisos/`
 **Depends on**: T3
 **Reuses**: `marcar_publicacao_site`
 **Requirement**: DTP-03, REL-01, REL-02
@@ -133,16 +133,16 @@ T4 → T5 → T6 → T7
 
 ### T5: Aviso no envio: fonte, seleção, legenda, foto
 
-**What**: `FonteEnvio::{avisos_canal, reservar_aviso, confirmar_aviso, cancelar_aviso}` + fake; `envio::aviso::{devido, legenda_aviso, foto_aviso}`.
-**Where**: `apps/worker/src/envio/{fonte,aviso}.rs`
+**What**: `FonteEnvio::{avisos_canal, reservar_aviso, confirmar_aviso, cancelar_aviso}` + fake e Oracle (o trait exige os dois); `envio::aviso::{devido, legenda_aviso, foto_aviso}`.
+**Where**: `apps/worker/src/envio/{fonte,aviso,oracle}.rs`
 **Depends on**: T4
 **Reuses**: `escapar`, `tamanho`, `truncar`, `quadrado_jpeg`, `minuto_local`
 **Requirement**: ENV-05, ENV-06, ENV-07, ENV-14, LEG-01, LEG-02
 
 **Done when**:
 
-- [ ] Seleção, legenda e foto da spec
-- [ ] Gate quick passa
+- [x] Seleção, legenda e foto da spec
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
@@ -167,10 +167,10 @@ T4 → T5 → T6 → T7
 
 ---
 
-### T7: Oracle do envio, MANIFEST e README
+### T7: Binário do envio, MANIFEST e README
 
-**What**: SQL de `AVISO_CANAL`/`ENVIO_AVISO` em `OracleEnvio`; `BESAVE_AVISOS_DIR` no binário; MANIFEST §1/§4; README (cadastrar, pasta, pausar).
-**Where**: `apps/worker/src/envio/{oracle,binario}.rs`, `docs/MANIFEST.md`, `apps/worker/README.md`
+**What**: `BESAVE_AVISOS_DIR` no binário; MANIFEST §1/§4; README (cadastrar, pasta, pausar).
+**Where**: `apps/worker/src/envio/binario.rs`, `docs/MANIFEST.md`, `apps/worker/README.md`
 **Depends on**: T6
 **Reuses**: `OracleEnvio`
 **Requirement**: DOC-01, DOC-02
