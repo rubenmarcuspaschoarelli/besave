@@ -18,7 +18,7 @@
     Caminho do .env fora do repositório (pode ser o mesmo do ciclo, com TELEGRAM_CANAL_BOT_TOKEN).
 
 .EXAMPLE
-    .\registrar-tarefa-envio.ps1 -Executavel 'C:\besave\besave-envio.exe' -EnvFile 'C:\besave\worker.env'
+    .\registrar-tarefa-envio.ps1 -Executavel 'C:\besave\bin\besave-envio.exe' -EnvFile 'C:\besave\worker.env'
 #>
 [CmdletBinding()]
 param(

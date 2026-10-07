@@ -408,8 +408,8 @@ Sem as duas `TELEGRAM_*`, o alerta fica desligado (`INFO alerta desligado` no lo
 cd apps\worker
 cargo build --release
 # Copie o .exe para uma pasta estável: um build novo não sobrescreve o .exe enquanto a tarefa roda.
-Copy-Item "$env:CARGO_TARGET_DIR\release\besave-ciclo.exe" C:\besave\   # ou target\release\
-.\scripts\registrar-tarefa.ps1 -Executavel C:\besave\besave-ciclo.exe -EnvFile C:\besave\worker.env
+Copy-Item "$env:CARGO_TARGET_DIR\release\besave-ciclo.exe" C:\besave\bin\   # ou target\release\
+.\scripts\registrar-tarefa.ps1 -Executavel C:\besave\bin\besave-ciclo.exe -EnvFile C:\besave\worker.env
 ```
 
 A tarefa "Besave Worker" roda a cada 5 min, indefinidamente, e 1 min após o logon; não abre
@@ -555,7 +555,7 @@ upload (nada vai para o S3). O link é `https://besave.io/{id}?utm_source=telegr
 ### 4. Conferir antes com `--sim`
 
 ```powershell
-C:\besave\besave-envio.exe --env-file C:\besave\worker.env --sim | Out-Host
+C:\besave\bin\besave-envio.exe --env-file C:\besave\worker.env --sim | Out-Host
 ```
 
 Lê o Oracle, **não** chama o Telegram e **não** grava nada. Mostra enviados hoje, lote devido
@@ -568,8 +568,8 @@ mostrar nada: o executável não tem janela de console.
 
 ```powershell
 cargo build --release
-Copy-Item "$env:CARGO_TARGET_DIR\release\besave-envio.exe" C:\besave\
-.\scripts\registrar-tarefa-envio.ps1 -Executavel C:\besave\besave-envio.exe -EnvFile C:\besave\worker.env
+Copy-Item "$env:CARGO_TARGET_DIR\release\besave-envio.exe" C:\besave\bin\
+.\scripts\registrar-tarefa-envio.ps1 -Executavel C:\besave\bin\besave-envio.exe -EnvFile C:\besave\worker.env
 ```
 
 Tarefa "Besave Envio": a cada 5 min e 1 min após o logon, sem instância dupla, limite de 20 min, só
