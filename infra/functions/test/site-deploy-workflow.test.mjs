@@ -44,8 +44,8 @@ test('WF-05: commit pedido precisa ser SHA ancestral de main e só troca apps/si
   assert.match(yml, /COMMIT: \$\{\{ inputs\.commit \}\}/);
   assert.match(yml, /git merge-base --is-ancestor "\$COMMIT" HEAD/);
   assert.match(yml, /git checkout "\$COMMIT" -- apps\/site\n/);
-  // input nunca interpolado direto no shell (injeção)
-  assert.doesNotMatch(semComentarios, /run:[^\n]*\$\{\{ inputs\./);
+  // input nunca interpolado no shell (injeção): só aparece como valor de env
+  assert.deepEqual([...semComentarios.matchAll(/^.*\$\{\{\s*inputs\..*$/gm)].map((m) => m[0].trim()), ['COMMIT: ${{ inputs.commit }}']);
 });
 
 test('PUB: ensaio antes da credencial; publicação pelo script do repositório', () => {

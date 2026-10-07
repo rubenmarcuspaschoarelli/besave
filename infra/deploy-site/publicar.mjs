@@ -1,7 +1,7 @@
 // Publica o build do SvelteKit no bucket compartilhado com o worker (BSV-17).
 // Uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio]
 // Só toca os prefixos de prefixos.json (a mesma lista da policy do papel besave-site-deploy).
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { relative, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -89,6 +89,10 @@ function principal() {
   const a = argumentos(process.argv.slice(2));
   if (!a.build || !a.bucket || !a.distribuicao) {
     console.error('uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio]');
+    return 1;
+  }
+  if (!existsSync(a.build)) {
+    console.error(`build não encontrado: ${a.build}`);
     return 1;
   }
   const { erros, comandos } = planejar(listar(a.build), { build: a.build.replaceAll('\\', '/'), bucket: a.bucket, distribuicao: a.distribuicao });

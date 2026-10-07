@@ -125,12 +125,15 @@ test('PUB-06: assets/besave.css com 1 h + swr de 1 dia e text/css; charset=utf-8
   assert.equal(valor(c, '--content-type'), 'text/css; charset=utf-8');
 });
 
-test('PUB: fontes e favicon vão por arquivo com tipo explícito', () => {
+// Cache de fontes e favicon: a spec não define; spec.md (suposições) fixa o mesmo do CSS.
+test('PUB: fontes e favicon vão por arquivo com tipo explícito e cache do CSS', () => {
   const { comandos } = planejar(buildBom, opcoes);
   const fonte = comandos.find((x) => x[3] === 's3://besave-site/assets/fontes/lato-900.woff2');
   assert.equal(valor(fonte, '--content-type'), 'font/woff2');
+  assert.equal(valor(fonte, '--cache-control'), CSS_CC);
   const fav = comandos.find((x) => x[3] === 's3://besave-site/favicon.svg');
   assert.equal(valor(fav, '--content-type'), 'image/svg+xml');
+  assert.equal(valor(fav, '--cache-control'), CSS_CC);
 });
 
 test('PUB-07: invalidação só de HTML e /assets/*, nunca /*', () => {
@@ -184,6 +187,13 @@ test('PUB-01 (CLI): arquivo proibido no build sai 1, mesmo em ensaio, sem imprim
   assert.equal(r.status, 1);
   assert.match(r.stderr, /robots\.txt/);
   assert.doesNotMatch(r.stdout, /aws /);
+});
+
+test('PUB (CLI): diretório de build inexistente sai 1 com mensagem, sem stack trace', () => {
+  const r = spawnSync(process.execPath, [script, '--build', join(tmpdir(), 'nao-existe-besave'), '--bucket', 'b', '--distribuicao', 'D', '--ensaio'], { encoding: 'utf8' });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /build não encontrado/);
+  assert.doesNotMatch(r.stderr, /at .*publicar\.mjs/);
 });
 
 test('PUB (CLI): sem --bucket ou --distribuicao sai 1', () => {

@@ -308,7 +308,7 @@ há duas travas com a mesma lista de prefixos (`deploy-site/prefixos.json`):
    arquivo fora desses prefixos ou se faltar `index.html` ou `404.html` (MANIFEST §5).
 
 O papel só é assumido por `repo:rubenmarcuspaschoarelli/besave:ref:refs/heads/main`, com sessão de 1 h.
-Rodar o workflow em outro branch falha no STS.
+O job só roda em `main` (o `if` pula outros branches); fora dele o STS recusaria o token.
 
 O que o script faz, em ordem:
 
