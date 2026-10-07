@@ -10,7 +10,7 @@ use tracing::{debug, info, warn};
 use crate::avisos::publicacao::RelatorioAvisos;
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
 use crate::conversao::{
-    LinhaOferta, Rejeicao, data_publicacao, iso_utc, para_pagina, validar_card,
+    LinhaOferta, Rejeicao, data_publicacao, instante_ciclo, iso_utc, para_pagina, validar_card,
 };
 use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
@@ -80,6 +80,9 @@ pub struct Relatorio {
     pub tempos: Tempos,
     /// Ids do conjunto publicado (cards válidos, ativos e expirados).
     pub ids_publicados: Vec<i64>,
+    /// Instante do ciclo (`agora` truncado ao minuto): `dp` de quem foi ao ar agora e valor do
+    /// `UPDATE` de `DT_PUBLICACAO_SITE` (BSV-36).
+    pub instante_ciclo: i64,
     /// Linhas com `DT_PUBLICACAO_SITE` gravada neste ciclo (BSV-40; fora de `gerar`).
     pub publicacao_site_marcadas: u64,
     /// Lotes do `UPDATE` de `DT_PUBLICACAO_SITE` que falharam.
@@ -192,6 +195,7 @@ pub fn gerar(
     let mut rel = Relatorio {
         lidas: linhas.len() as u64,
         versao,
+        instante_ciclo: instante_ciclo(agora),
         ..Default::default()
     };
     let mut cards = Vec::with_capacity(linhas.len());

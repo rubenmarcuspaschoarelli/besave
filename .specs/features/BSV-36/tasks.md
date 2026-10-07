@@ -77,8 +77,8 @@ T1 → T2 → T3
 
 **Done when**:
 
-- [ ] Fonte fake confere o valor gravado = `dp`; segundo ciclo → mesmo `dp`, 0 chunks
-- [ ] Gate build (worker) passa
+- [x] Fonte fake confere o valor gravado = `dp`; segundo ciclo → mesmo `dp`, 0 chunks
+- [x] Gate build (worker) passa
 
 **Tests**: unit
 **Gate**: build

@@ -117,9 +117,9 @@ mas não está no card. O site precisa dela para ordenar e para a faixa "Maiores
 | DP-02 | P1: Worker | T1 | Implementing |
 | DP-03 | P1: Worker | T1 | Implementing |
 | DP-04 | P1: Worker | T1 | Implementing |
-| GRV-01 | P1: Worker | T2 | Pending |
-| GRV-02 | P1: Worker | T2 | Pending |
-| IDE-01 | P1: Worker | T2 | Pending |
+| GRV-01 | P1: Worker | T2 | Implementing |
+| GRV-02 | P1: Worker | T2 | Implementing |
+| IDE-01 | P1: Worker | T2 | Implementing |
 | ORC-01 | P1: Worker | T3 | Pending |
 | SIT-01 | P1: Site | T3 | Pending |
 | SIT-02 | P1: Site | T3 | Pending |

@@ -310,6 +310,8 @@ fn relatorio_com_contagens() {
             bytes_totais: m.chunks.iter().map(|c| c.bytes).sum(),
             maior_chunk: Some((maior.n, maior.bytes)),
             versao: 20_260_924_124_000,
+            // BSV-36: AGORA (2026-09-24T12:40:00Z) já cai no minuto cheio.
+            instante_ciclo: AGORA,
             // Maior `dt` publicado: o da oferta 5413 (2026-09-24T12:41:00Z).
             dt_mais_recente: Some(1_790_253_660),
             redirects: RelatorioRedirects {

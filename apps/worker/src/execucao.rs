@@ -125,11 +125,11 @@ pub fn rodar(
 }
 
 /// Depois do manifest (MANIFEST §6 passo 5): `DT_PUBLICACAO_SITE` nos ids publicados, em lotes de
-/// `BLOCO_IN` (BSV-40). Falha num lote → WARN e `publicacao_site_falhas`; o ciclo segue ok (o site já
+/// `BLOCO_IN` (BSV-40), com o mesmo instante do `dp` dos cards (BSV-36). Falha num lote → WARN e `publicacao_site_falhas`; o ciclo segue ok (o site já
 /// foi publicado; só atrasa o canal).
 pub fn marcar_publicacao_site(fonte: &dyn FonteOfertas, rel: &mut Relatorio) {
     for bloco in blocos_in(&rel.ids_publicados) {
-        match fonte.marcar_publicadas_site(&bloco) {
+        match fonte.marcar_publicadas_site(&bloco, rel.instante_ciclo) {
             Ok(n) => rel.publicacao_site_marcadas += n,
             Err(e) => {
                 warn!(erro = %e, ids = bloco.len(), "gravando DT_PUBLICACAO_SITE; o canal espera o próximo ciclo");
