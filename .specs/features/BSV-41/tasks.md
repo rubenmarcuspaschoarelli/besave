@@ -123,8 +123,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Relatório com as chaves novas; falha → WARN e código 0
-- [ ] Gate build passa (fim da fase 1)
+- [x] Relatório com as chaves novas; falha → WARN e código 0
+- [x] Gate build passa (fim da fase 1)
 
 **Tests**: unit
 **Gate**: build

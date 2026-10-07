@@ -347,6 +347,8 @@ fn relatorio_com_contagens() {
             ids_publicados: vec![5412, 5413, 5420, 1500, 1001],
             publicacao_site_marcadas: 0,
             publicacao_site_falhas: 0,
+            // BSV-41: a fase de avisos é fora de `gerar`.
+            avisos: Default::default(),
         }
     );
 }
