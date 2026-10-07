@@ -155,6 +155,25 @@ pub fn linhas_fixture() -> Vec<worker::conversao::LinhaOferta> {
     ]
 }
 
+/// Relógio em que `linhas_fixture_no_ar` reproduz `chunk-ok.json`: 2026-10-07T12:00:00Z.
+pub const AGORA_DP: i64 = 1_791_374_400;
+
+/// `linhas_fixture` já no ar em `AGORA_DP`: `DT_PUBLICACAO_SITE` = `dp` da fixture e 5420
+/// desativada há 1 dia.
+pub fn linhas_fixture_no_ar() -> Vec<worker::conversao::LinhaOferta> {
+    // 2026-10-06T15:02:00Z, 2026-10-07T11:30:00Z, 2026-10-06T15:02:00Z
+    let dps = [1_791_298_920, 1_791_372_600, 1_791_298_920];
+    linhas_fixture()
+        .into_iter()
+        .zip(dps)
+        .map(|(l, dp)| worker::conversao::LinhaOferta {
+            dt_publicacao_site: Some(dp),
+            dt_desativacao: l.dt_desativacao.map(|_| AGORA_DP - DIA),
+            ..l
+        })
+        .collect()
+}
+
 /// Texto pseudoaleatório (letras e espaços) de `n` caracteres: comprime mal.
 pub fn texto_aleatorio(semente: u64, n: usize) -> String {
     let mut x = semente

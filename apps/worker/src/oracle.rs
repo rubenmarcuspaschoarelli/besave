@@ -249,6 +249,7 @@ pub(crate) fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
         ativo: r.get::<_, i64>(12)? == 1,
         dt_desativacao: r.get(13)?,
         url_afiliado: r.get::<_, Option<String>>(14)?.unwrap_or_default(),
+        dt_publicacao_site: None,
     })
 }
 

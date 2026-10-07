@@ -4,7 +4,7 @@ mod comum;
 
 use std::collections::BTreeMap;
 
-use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
+use comum::{AGORA, dir_imagens_vazio, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
@@ -12,6 +12,14 @@ use worker::plano::{Operacao, Plano, Publicacao, publicar};
 use worker::publicador::{Meta, Publicador, PublicadorMemoria};
 use worker::redirects::{EstadoKvs, Redirects, RedirectsMemoria};
 use worker::site::ConfigSite;
+
+/// Linha já no ar (`DT_PUBLICACAO_SITE` gravada, BSV-36): o `dp` não muda entre os ciclos.
+fn linha(id: i64) -> worker::conversao::LinhaOferta {
+    worker::conversao::LinhaOferta {
+        dt_publicacao_site: Some(AGORA - 1800),
+        ..comum::linha(id)
+    }
+}
 
 /// Destino que conta cada chamada de escrita.
 #[derive(Default)]

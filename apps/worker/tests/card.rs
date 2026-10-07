@@ -10,6 +10,10 @@ use worker::modelo::{Area, Loja, Publico};
 const DT_5412: i64 = 1_790_253_600; // 2026-09-24T12:40:00Z
 const DT_5413: i64 = 1_790_253_660; // 2026-09-24T12:41:00Z
 const DT_5420: i64 = 1_790_150_400; // 2026-09-23T08:00:00Z
+const DP_5412: i64 = 1_791_298_920; // 2026-10-06T15:02:00Z (= 5420)
+const DP_5413: i64 = 1_791_372_600; // 2026-10-07T11:30:00Z
+/// Relógio dos testes de card: 2026-10-07T12:00:00Z.
+const AGORA_CARD: i64 = 1_791_374_400;
 
 fn m() -> Mapeamento {
     Mapeamento::carregar(comum::caminho_mapeamento()).unwrap()
@@ -31,6 +35,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             publico: Some("unisex".into()),
             ativo: true,
             url_afiliado: "https://loja.example/5412".into(),
+            dt_publicacao_site: Some(DP_5412),
             ..Default::default()
         },
         LinhaOferta {
@@ -44,6 +49,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             publico: Some("Mulher".into()),
             ativo: true,
             url_afiliado: "https://loja.example/5413".into(),
+            dt_publicacao_site: Some(DP_5413),
             ..Default::default()
         },
         LinhaOferta {
@@ -58,6 +64,7 @@ fn linhas_fixture() -> Vec<LinhaOferta> {
             ativo: false,
             dt_desativacao: Some(DT_5420),
             url_afiliado: "https://loja.example/5420".into(),
+            dt_publicacao_site: Some(DP_5412),
             ..Default::default()
         },
     ]
@@ -72,7 +79,7 @@ fn fixture_chunk_ok_byte_a_byte() {
     let m = m();
     let cards: Vec<_> = linhas_fixture()
         .iter()
-        .map(|l| para_card(l, &m).unwrap())
+        .map(|l| para_card(l, &m, AGORA_CARD).unwrap())
         .collect();
     assert_eq!(
         serde_json::to_string(&cards).unwrap(),
@@ -86,13 +93,13 @@ fn orcamento_de_bytes_do_card() {
     let tamanhos: Vec<usize> = linhas_fixture()
         .iter()
         .map(|l| {
-            serde_json::to_string(&para_card(l, &m).unwrap())
+            serde_json::to_string(&para_card(l, &m, AGORA_CARD).unwrap())
                 .unwrap()
                 .len()
         })
         .collect();
     let media = tamanhos.iter().sum::<usize>() as f64 / tamanhos.len() as f64;
-    assert!(media <= 200.0, "média {media}");
+    assert!(media <= 230.0, "média {media}"); // AD-074
 }
 
 /// AD-064: sem teto por card; título de 200 caracteres acentuados (> 220 B) é aceito inteiro.
@@ -103,7 +110,7 @@ fn card_com_titulo_longo_acentuado_e_aceito() {
         titulo: Some(titulo.clone()),
         ..valida()
     };
-    let c = para_card(&l, &m()).unwrap();
+    let c = para_card(&l, &m(), AGORA_CARD).unwrap();
     assert_eq!(c.titulo, titulo);
     let bytes = serde_json::to_string(&c).unwrap().len();
     assert!(bytes > 220, "card com {bytes} bytes");
@@ -111,7 +118,7 @@ fn card_com_titulo_longo_acentuado_e_aceito() {
 
 #[test]
 fn enum_via_sinonimo() {
-    let c = para_card(&linhas_fixture()[2], &m()).unwrap();
+    let c = para_card(&linhas_fixture()[2], &m(), AGORA_CARD).unwrap();
     assert_eq!(c.loja, Loja::MercadoLivre);
     assert_eq!(c.area, Area::Pets);
     assert_eq!(c.publico, Publico::Unissex);
@@ -126,7 +133,7 @@ fn rejeita_preco_por_ausente_zero_ou_negativo() {
             ..valida()
         };
         assert_eq!(
-            para_card(&l, &m),
+            para_card(&l, &m, AGORA_CARD),
             Err(Rejeicao::PrecoPorInvalido),
             "pp={pp:?}"
         );
@@ -141,7 +148,7 @@ fn rejeita_titulo_vazio() {
             titulo: t,
             ..valida()
         };
-        assert_eq!(para_card(&l, &m), Err(Rejeicao::TituloVazio));
+        assert_eq!(para_card(&l, &m, AGORA_CARD), Err(Rejeicao::TituloVazio));
     }
 }
 
@@ -151,12 +158,18 @@ fn rejeita_loja_sem_mapeamento() {
         loja: Some("Americanas".into()),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()), Err(Rejeicao::LojaSemMapeamento));
+    assert_eq!(
+        para_card(&l, &m(), AGORA_CARD),
+        Err(Rejeicao::LojaSemMapeamento)
+    );
     let l = LinhaOferta {
         loja: None,
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()), Err(Rejeicao::LojaSemMapeamento));
+    assert_eq!(
+        para_card(&l, &m(), AGORA_CARD),
+        Err(Rejeicao::LojaSemMapeamento)
+    );
 }
 
 /// AREA-02: contrato 1.3 acrescentou a área OUTROS; não é mais rejeição.
@@ -166,7 +179,7 @@ fn area_outros_nao_e_rejeitada() {
         area: Some("Outros".into()),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()).unwrap().area, Area::Outros);
+    assert_eq!(para_card(&l, &m(), AGORA_CARD).unwrap().area, Area::Outros);
 }
 
 #[test]
@@ -175,7 +188,10 @@ fn rejeita_area_sem_mapeamento() {
         area: Some("Moda".into()),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()), Err(Rejeicao::AreaSemMapeamento));
+    assert_eq!(
+        para_card(&l, &m(), AGORA_CARD),
+        Err(Rejeicao::AreaSemMapeamento)
+    );
 }
 
 #[test]
@@ -184,7 +200,10 @@ fn rejeita_publico_sem_mapeamento() {
         publico: Some("Adulto".into()),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()), Err(Rejeicao::PublicoSemMapeamento));
+    assert_eq!(
+        para_card(&l, &m(), AGORA_CARD),
+        Err(Rejeicao::PublicoSemMapeamento)
+    );
 }
 
 #[test]
@@ -193,7 +212,7 @@ fn rejeita_data_nula() {
         dt_oferta: None,
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()), Err(Rejeicao::DataNula));
+    assert_eq!(para_card(&l, &m(), AGORA_CARD), Err(Rejeicao::DataNula));
 }
 
 #[test]
@@ -204,7 +223,7 @@ fn preco_de_menor_ou_igual_vira_null_sem_rejeitar() {
             preco_de: Some(pd),
             ..valida()
         };
-        let c = para_card(&l, &m).unwrap();
+        let c = para_card(&l, &m, AGORA_CARD).unwrap();
         assert_eq!(c.preco_de, None, "pd={pd}");
         assert!(serde_json::to_string(&c).unwrap().contains("\"pd\":null"));
     }
@@ -212,7 +231,7 @@ fn preco_de_menor_ou_igual_vira_null_sem_rejeitar() {
         preco_de: Some(89.91),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m).unwrap().preco_de, Some(8991));
+    assert_eq!(para_card(&l, &m, AGORA_CARD).unwrap().preco_de, Some(8991));
 }
 
 #[test]
@@ -222,7 +241,7 @@ fn titulo_longo_cortado_em_197_na_fronteira_de_palavra() {
         titulo: Some(longo),
         ..valida()
     };
-    let t = para_card(&l, &m()).unwrap().titulo;
+    let t = para_card(&l, &m(), AGORA_CARD).unwrap().titulo;
     let esperado = format!("{}…", "abcdefghi ".repeat(19).trim_end());
     assert_eq!(t, esperado);
     assert!(t.chars().count() <= 200);
@@ -234,7 +253,7 @@ fn titulo_longo_sem_espaco_corta_seco_em_197() {
         titulo: Some("á".repeat(250)),
         ..valida()
     };
-    let t = para_card(&l, &m()).unwrap().titulo;
+    let t = para_card(&l, &m(), AGORA_CARD).unwrap().titulo;
     assert_eq!(t, format!("{}…", "á".repeat(197)));
 }
 
@@ -246,7 +265,7 @@ fn titulo_de_200_nao_e_cortado() {
         titulo: Some(t200.clone()),
         ..valida()
     };
-    assert_eq!(para_card(&l, &m()).unwrap().titulo, t200);
+    assert_eq!(para_card(&l, &m(), AGORA_CARD).unwrap().titulo, t200);
 }
 
 #[test]
@@ -265,11 +284,11 @@ fn inativa_tem_x_1_e_ativa_nao_tem_x() {
         ativo: false,
         ..valida()
     };
-    let c = para_card(&l, &m).unwrap();
+    let c = para_card(&l, &m, AGORA_CARD).unwrap();
     assert_eq!(c.x, Some(1));
     assert!(serde_json::to_string(&c).unwrap().ends_with(",\"x\":1}"));
 
-    let c = para_card(&valida(), &m).unwrap();
+    let c = para_card(&valida(), &m, AGORA_CARD).unwrap();
     assert_eq!(c.x, None);
     assert!(!serde_json::to_string(&c).unwrap().contains("\"x\""));
 }
@@ -280,7 +299,7 @@ fn cupom_so_espacos_fica_ausente() {
         cupom: Some("   ".into()),
         ..valida()
     };
-    let c = para_card(&l, &m()).unwrap();
+    let c = para_card(&l, &m(), AGORA_CARD).unwrap();
     assert_eq!(c.cupom, None);
     assert!(!serde_json::to_string(&c).unwrap().contains("\"c\""));
 }
@@ -303,7 +322,7 @@ fn url_afiliado_vazia_rejeita_card_e_pagina() {
             ..valida()
         };
         assert_eq!(
-            para_card(&l, &m),
+            para_card(&l, &m, AGORA_CARD),
             Err(Rejeicao::UrlAfiliadoAusente),
             "{url:?}"
         );
@@ -311,6 +330,106 @@ fn url_afiliado_vazia_rejeita_card_e_pagina() {
             worker::conversao::para_pagina(&l, None, &m),
             Err(Rejeicao::UrlAfiliadoAusente),
             "{url:?}"
+        );
+    }
+}
+
+// BSV-36 DP-01..04: `dp` = `DT_PUBLICACAO_SITE` na faixa `[2026-10-06, instante do ciclo]`;
+// nula ou fora → instante do ciclo (agora truncado ao minuto); fora → WARN, sem rejeitar.
+
+mod dp {
+    use super::*;
+    use std::io::Write;
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Default)]
+    struct Buffer(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Buffer {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    fn com_log<T>(f: impl FnOnce() -> T) -> (T, String) {
+        let buf = Buffer::default();
+        let saida = buf.clone();
+        let sub = tracing_subscriber::fmt()
+            .with_writer(move || saida.clone())
+            .with_ansi(false)
+            .finish();
+        let r = tracing::subscriber::with_default(sub, f);
+        let log = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        (r, log)
+    }
+
+    fn com_data(d: Option<i64>) -> LinhaOferta {
+        LinhaOferta {
+            dt_publicacao_site: d,
+            ..valida()
+        }
+    }
+
+    /// 2026-10-07T12:00:37Z: relógio fora do minuto cheio.
+    const AGORA_QUEBRADO: i64 = AGORA_CARD + 37;
+
+    #[test]
+    fn dp_01_data_da_coluna_em_utc() {
+        let c = para_card(&com_data(Some(DP_5413)), &m(), AGORA_QUEBRADO).unwrap();
+        assert_eq!(c.dt_publicacao, "2026-10-07T11:30:00Z");
+        let c = para_card(&com_data(Some(DP_5412 + 17)), &m(), AGORA_QUEBRADO).unwrap();
+        assert_eq!(c.dt_publicacao, "2026-10-06T15:02:17Z");
+    }
+
+    #[test]
+    fn dp_01_limites_da_faixa_sao_aceitos_sem_warn() {
+        let (c, log) = com_log(|| {
+            (
+                para_card(&com_data(Some(AGORA_CARD)), &m(), AGORA_QUEBRADO).unwrap(),
+                para_card(&com_data(Some(1_791_244_800)), &m(), AGORA_QUEBRADO).unwrap(),
+            )
+        });
+        assert_eq!(c.0.dt_publicacao, "2026-10-07T12:00:00Z");
+        assert_eq!(c.1.dt_publicacao, "2026-10-06T00:00:00Z");
+        assert!(!log.contains("WARN"), "{log}");
+    }
+
+    #[test]
+    fn dp_02_nula_vira_instante_do_ciclo_truncado_ao_minuto() {
+        let (c, log) = com_log(|| para_card(&com_data(None), &m(), AGORA_QUEBRADO).unwrap());
+        assert_eq!(c.dt_publicacao, "2026-10-07T12:00:00Z");
+        assert!(!log.contains("WARN"), "{log}");
+    }
+
+    #[test]
+    fn dp_03_futura_vira_instante_do_ciclo_com_warn() {
+        let (c, log) =
+            com_log(|| para_card(&com_data(Some(AGORA_CARD + 60)), &m(), AGORA_QUEBRADO));
+        let c = c.expect("data futura não rejeita a oferta");
+        assert_eq!(c.dt_publicacao, "2026-10-07T12:00:00Z");
+        assert!(
+            log.lines().any(|l| l.contains("WARN")
+                && l.contains("5413")
+                && l.contains("DT_PUBLICACAO_SITE")),
+            "{log}"
+        );
+    }
+
+    #[test]
+    fn dp_04_anterior_a_2026_10_06_vira_instante_do_ciclo_com_warn() {
+        let (c, log) =
+            com_log(|| para_card(&com_data(Some(1_791_244_800 - 1)), &m(), AGORA_QUEBRADO));
+        let c = c.expect("data antiga não rejeita a oferta");
+        assert_eq!(c.dt_publicacao, "2026-10-07T12:00:00Z");
+        assert!(
+            log.lines().any(|l| l.contains("WARN")
+                && l.contains("5413")
+                && l.contains("DT_PUBLICACAO_SITE")),
+            "{log}"
         );
     }
 }

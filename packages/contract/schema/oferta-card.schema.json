@@ -5,7 +5,7 @@
   "description": "Projeção compacta da oferta para chunks da lista e da busca. Ver docs/CONTRATO.md §3.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "l", "t", "pp", "dt", "a", "p"],
+  "required": ["id", "l", "t", "pp", "dt", "dp", "a", "p"],
   "properties": {
     "id": { "type": "integer", "minimum": 1 },
     "l":  { "$ref": "enums.schema.json#/$defs/Loja" },
@@ -14,6 +14,7 @@
     "pp": { "type": "integer", "minimum": 1 },
     "c":  { "type": "string", "minLength": 1, "maxLength": 30, "pattern": "^[A-Z0-9_-]+$" },
     "dt": { "$ref": "enums.schema.json#/$defs/DataHora" },
+    "dp": { "$ref": "enums.schema.json#/$defs/DataHora", "description": "publicação no site (DT_PUBLICACAO_SITE), ISO 8601 UTC" },
     "a":  { "$ref": "enums.schema.json#/$defs/Area" },
     "p":  { "$ref": "enums.schema.json#/$defs/Publico" },
     "x":  { "const": 1, "description": "expirada (ST_ATIVO=0); ausente quando ativa" }

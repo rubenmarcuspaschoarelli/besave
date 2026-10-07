@@ -43,7 +43,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.3.3",
+  "contrato": "1.5.0",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,
@@ -84,7 +84,7 @@ Regras:
    5 min enquanto a aba está visível.
 2. Para cada `chunks[]`: se `arquivo` ≠ o que tenho em memória para aquele `n`, baixar.
    Chunks não listados no novo manifest são descartados.
-3. Ordenar/filtrar localmente por `dt`, `a`, `p`; busca sobre os títulos já carregados (AD-061).
+3. Ordenar/filtrar localmente por `dp` (sem `dp`, `dt`), `a`, `p`; busca sobre os títulos já carregados (AD-061).
 4. Se houve chunk novo com ids nunca exibidos e não expirados → toast "N novas ofertas" (não
    insere no topo; o usuário clica). Nova = id nunca exibido, não `dt` maior: oferta antiga pode
    ser publicada depois, quando ganha a URL de afiliado (AD-063).
@@ -168,7 +168,7 @@ objeto além dos dois manifests. Ciclo em regime medido em 01–02/10/2026: ~20 
 | item | limite |
 |---|---|
 | chunk comprimido | ≤ 60 KB |
-| `OfertaCard` bruto | média ≤ 200 B, sem teto por card; o gate é o chunk comprimido (AD-064) |
+| `OfertaCard` bruto | média ≤ 230 B, sem teto por card; o gate é o chunk comprimido (AD-064, AD-074) |
 | índice de busca | não existe; busca no cliente (AD-061) |
 | HTML de oferta (sem imagens) | ≤ 30 KB |
 | imagem `-small` | ≤ 25 KB |
