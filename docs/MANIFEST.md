@@ -16,18 +16,21 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /data/chunks/{n}-{hash}.json.br     ← OfertaCard[] (imutável)
 /data/busca/{hash}.json.br          ← reservado, não gerado: a busca é no cliente (AD-061)
 /oferta/{id}/index.html             ← página estática da oferta (OfertaPagina)
+/avisos/{id}/index.html             ← página do aviso programado (BSV-41; noindex)
 /{area}/index.html                  ← página de área, prerender (ex.: /elas/)
 /{area}/{publico}/index.html        ← ex.: /elas/feminino/
 /img/ofertas/{id}.webp
 /img/ofertas/{id}-small.webp
 /img/produtos/{id_produto}.webp
 /img/placeholder/{slug}.webp
+/img/avisos/{id}.{webp,jpg}         ← imagem do aviso, na extensão do arquivo cadastrado (BSV-41)
 /assets/besave.css                  ← CSS da página de oferta (BSV-21; BSV-30 passa a gerá-lo)
 /sitemap.xml                        ← sitemap index (só ofertas ATIVAS)
 /sitemap-{n}.xml                    ← ≤ 45.000 URLs cada
 /robots.txt                         ← Disallow: / até a virada de DNS (BESAVE_INDEXAVEL)
 /_estado/paginas.json               ← índice id → hash do HTML (worker, BSV-21)
 /_estado/redirects.json             ← índice id → hash da URL + ItemCount/ETag da KVS (BSV-12c)
+/_estado/avisos.json                ← índice id → hash da página e chave/hash da imagem (BSV-41)
 /_estado/vigia.json                 ← estado de aviso do vigia (Lambda, BSV-15)
 ```
 
@@ -96,9 +99,10 @@ Regras:
 |---|---|---|---|
 | `manifest.json` | `public, max-age=300, stale-while-revalidate=60` | `application/json` | — (CloudFront comprime) |
 | `data/chunks/*`, `data/busca/*` | `public, max-age=31536000, immutable` | `application/json` | `br` (pré-comprimido) |
-| `oferta/*/index.html` | `public, max-age=600, stale-while-revalidate=300` | `text/html; charset=utf-8` | — (CloudFront comprime) |
+| `oferta/*/index.html`, `avisos/*/index.html` | `public, max-age=600, stale-while-revalidate=300` | `text/html; charset=utf-8` | — (CloudFront comprime) |
 | `{area}/**/index.html` | `public, max-age=300` | `text/html; charset=utf-8` | — |
 | `img/**` | `public, max-age=31536000, immutable` | `image/webp` | — |
+| `img/avisos/*` | `public, max-age=3600` (a imagem do aviso pode ser trocada no mesmo nome) | `image/webp` ou `image/jpeg` (`.jpg`) | — |
 | `_app/**` (build Svelte, nomes com hash) | `public, max-age=31536000, immutable` | conforme | — |
 | `index.html`, `sitemap*.xml`, `robots.txt` | `public, max-age=300` | conforme | — |
 | `assets/*.css` | `public, max-age=3600, stale-while-revalidate=86400` | `text/css; charset=utf-8` | — |

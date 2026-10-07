@@ -3,6 +3,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 
+use crate::avisos::modelo::LinhaAviso;
 use crate::conversao::{LinhaOferta, LinhaProduto};
 
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +31,10 @@ pub trait FonteOfertas {
     /// `DT_PUBLICACAO_SITE = SYSDATE` nos ids com a data nula (BSV-40), num statement só e com
     /// commit; até `BLOCO_IN` ids. Devolve as linhas alteradas.
     fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64>;
+    /// Todas as linhas de `AVISO` (BSV-41); o ciclo decide o que publica.
+    fn avisos(&self) -> Result<Vec<LinhaAviso>>;
+    /// `AVISO.DT_PUBLICACAO_SITE = SYSDATE` (só se nula) ou nula, com commit.
+    fn marcar_aviso_site(&self, id: i64, publicado: bool) -> Result<()>;
 }
 
 /// Fonte em memória para testes. `agora` em segundos Unix UTC. Conta as chamadas de produto.
@@ -44,6 +49,8 @@ pub struct FakeFonte {
     publicadas_site: RefCell<BTreeMap<i64, i64>>,
     lotes_publicacao_site: Cell<u64>,
     falhar_publicacao_site: bool,
+    avisos: RefCell<Vec<LinhaAviso>>,
+    falhar_avisos: bool,
 }
 
 impl FakeFonte {
@@ -71,6 +78,43 @@ impl FakeFonte {
     pub fn com_falha_publicacao_site(mut self) -> Self {
         self.falhar_publicacao_site = true;
         self
+    }
+
+    /// Linhas de `AVISO` (BSV-41).
+    #[must_use]
+    pub fn com_avisos(self, avisos: Vec<LinhaAviso>) -> Self {
+        *self.avisos.borrow_mut() = avisos;
+        self
+    }
+
+    /// `avisos` passa a falhar (falha injetada).
+    #[must_use]
+    pub fn com_falha_avisos(mut self) -> Self {
+        self.falhar_avisos = true;
+        self
+    }
+
+    /// Troca as linhas de `AVISO`, mantendo `DT_PUBLICACAO_SITE` de cada id.
+    pub fn definir_avisos(&self, avisos: Vec<LinhaAviso>) {
+        let mut atuais = self.avisos.borrow_mut();
+        let datas: BTreeMap<i64, Option<i64>> = atuais
+            .iter()
+            .map(|a| (a.id, a.dt_publicacao_site))
+            .collect();
+        *atuais = avisos
+            .into_iter()
+            .map(|mut a| {
+                if let Some(d) = datas.get(&a.id) {
+                    a.dt_publicacao_site = *d;
+                }
+                a
+            })
+            .collect();
+    }
+
+    /// Linhas de `AVISO` como estão (com `DT_PUBLICACAO_SITE`).
+    pub fn avisos_atuais(&self) -> Vec<LinhaAviso> {
+        self.avisos.borrow().clone()
     }
 
     /// `DT_PUBLICACAO_SITE` gravada por id.
@@ -133,10 +177,28 @@ impl FonteOfertas for FakeFonte {
         }
         Ok(n)
     }
+
+    fn avisos(&self) -> Result<Vec<LinhaAviso>> {
+        if self.falhar_avisos {
+            return Err(ErroFonte::ConfigInvalida("AVISO", "falha injetada".into()));
+        }
+        Ok(self.avisos.borrow().clone())
+    }
+
+    fn marcar_aviso_site(&self, id: i64, publicado: bool) -> Result<()> {
+        for a in self.avisos.borrow_mut().iter_mut().filter(|a| a.id == id) {
+            a.dt_publicacao_site = if publicado {
+                a.dt_publicacao_site.or(Some(self.agora))
+            } else {
+                None
+            };
+        }
+        Ok(())
+    }
 }
 
-/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição
-/// e uma inativa há 8 dias (fora da fonte).
+/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição,
+/// uma inativa há 8 dias (fora da fonte) e um aviso vigente sem imagem (BSV-41).
 pub fn fake_demo(agora: i64) -> FakeFonte {
     const DIA: i64 = 86_400;
     let ok = |id, id_produto, loja: &str, titulo: &str, de, por, area: &str, publico: &str| {
@@ -246,5 +308,13 @@ pub fn fake_demo(agora: i64) -> FakeFonte {
         preco_max: Some(349.9),
         ..Default::default()
     }];
-    FakeFonte::new(ofertas, produtos, agora)
+    FakeFonte::new(ofertas, produtos, agora).com_avisos(vec![LinhaAviso {
+        id: 1,
+        titulo: "Como o Besave funciona".into(),
+        texto: "Os links deste canal são de afiliado.".into(),
+        link_interno: Some("/".into()),
+        ativo: true,
+        dt_inicio: agora - DIA,
+        ..Default::default()
+    }])
 }

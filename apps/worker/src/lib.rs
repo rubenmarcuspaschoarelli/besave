@@ -2,6 +2,7 @@
 //! e página HTML da oferta (BSV-20).
 
 pub mod alerta;
+pub mod avisos;
 pub mod aws;
 pub mod chunks;
 pub mod ciclo;

@@ -1,0 +1,46 @@
+{#- Página do aviso (BSV-41). Provisória: o template definitivo vem depois. -#}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{ titulo }} | Besave</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="{{ url }}">
+<link rel="stylesheet" href="/assets/besave.css">
+</head>
+<body>
+<header class="topo">
+<a class="logo" href="/">Besave</a>
+<nav class="menu" aria-label="Áreas">
+<ul>
+{% for a in tabela.areas %}
+<li><a href="/{{ a.slug }}/">{{ a.rotulo }}</a></li>
+{% endfor %}
+</ul>
+</nav>
+</header>
+<main class="oferta aviso">
+<h1 class="titulo">{{ titulo }}</h1>
+{% if imagem is not none %}
+<div class="foto">
+<img src="{{ imagem }}" width="600" height="600" loading="eager" alt="{{ titulo }}">
+</div>
+{% endif %}
+<section class="detalhes">
+{% for p in paragrafos %}
+<p>{% for l in p %}{{ l }}{% if not loop.last %}<br>{% endif %}{% endfor %}</p>
+{% endfor %}
+</section>
+{% if link is not none %}
+<a class="cta" href="{{ link }}">Ver no Besave</a>
+{% endif %}
+<p class="canal"><a href="{{ canal }}" rel="noopener">Siga o canal do Besave no Telegram</a></p>
+</main>
+<footer class="rodape">
+<nav aria-label="Mais ofertas">
+<a href="/">Página inicial</a>
+</nav>
+</footer>
+</body>
+</html>

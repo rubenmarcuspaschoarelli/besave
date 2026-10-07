@@ -7,6 +7,7 @@ use std::path::Path;
 use tracing::{error, info, warn};
 
 use crate::alerta::{Alertas, horas_sem_novas};
+use crate::avisos::publicacao::{ConfigAvisos, publicar_avisos};
 use crate::fonte::FonteOfertas;
 use crate::geracao::{ErroGeracao, Relatorio};
 use crate::logs::iso_brasilia;
@@ -138,6 +139,26 @@ pub fn marcar_publicacao_site(fonte: &dyn FonteOfertas, rel: &mut Relatorio) {
     }
 }
 
+/// Avisos (BSV-41), depois do manifest e das datas das ofertas. `marcar`: grava/anula
+/// `AVISO.DT_PUBLICACAO_SITE` (falso com `BESAVE_DESTINO_LOCAL`). Falha → WARN e `avisos_falhas=1`;
+/// o ciclo segue ok (o site de ofertas já foi publicado).
+pub fn publicar_avisos_ciclo(
+    fonte: &dyn FonteOfertas,
+    pub_: &mut dyn Publicador,
+    cfg: &ConfigAvisos,
+    agora: i64,
+    marcar: bool,
+    rel: &mut Relatorio,
+) {
+    match publicar_avisos(fonte, pub_, cfg, agora, marcar) {
+        Ok(r) => rel.avisos = r,
+        Err(e) => {
+            warn!(erro = %e, "fase de avisos falhou; ofertas publicadas, avisos ficam para o próximo ciclo");
+            rel.avisos.falhas = 1;
+        }
+    }
+}
+
 /// `dt` mais recente em ISO 8601 com offset -03:00; `-` se o conjunto é vazio.
 pub fn dt_max_texto(dt: Option<i64>) -> String {
     dt.map_or_else(|| "-".to_owned(), |d| format!("{}-03:00", iso_brasilia(d)))
@@ -147,7 +168,7 @@ pub fn dt_max_texto(dt: Option<i64>) -> String {
 pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 30] = [
+    let pares: [(&str, String); 35] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -185,6 +206,13 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
             "publicacao_site_falhas",
             rel.publicacao_site_falhas.to_string(),
         ),
+        ("avisos_publicados", rel.avisos.publicados.to_string()),
+        ("avisos_removidos", rel.avisos.removidos.to_string()),
+        ("avisos_falhas", rel.avisos.falhas.to_string()),
+        (
+            "avisos_datas_gravadas",
+            rel.avisos.datas_gravadas.to_string(),
+        ),
         ("t_leitura_fonte", t.leitura_fonte.to_string()),
         ("t_imagens", t.imagens.to_string()),
         ("t_chunks", t.chunks.to_string()),
@@ -193,6 +221,7 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("t_redirects_listagem", t.redirects_listagem.to_string()),
         ("t_manifest", t.manifest.to_string()),
         ("t_orfaos", t.orfaos.to_string()),
+        ("t_avisos", rel.avisos.tempo_ms.to_string()),
         ("tempo_ms", tempo_ms.to_string()),
     ];
     pares

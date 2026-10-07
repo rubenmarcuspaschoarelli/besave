@@ -6,10 +6,10 @@ use std::collections::{HashMap, HashSet};
 use oracle::Connection;
 use oracle::sql_type::ToSql;
 
-use crate::envio::fonte::{Expirada, FonteEnvio, UltimoEnvio};
+use crate::envio::fonte::{AvisoCanal, Expirada, FonteEnvio, UltimoEnvio};
 use crate::envio::modelo::{Canal, LinhaCanal, OfertaCanal, Parametros};
 use crate::fonte::Result;
-use crate::oracle::{ConfigOracle, blocos_in, conectar, linha_oferta};
+use crate::oracle::{ConfigOracle, blocos_in, conectar, linha_aviso, linha_oferta};
 
 /// Colunas de OFERTA para o canal: as 15 de `SQL_OFERTAS` (lidas por `linha_oferta`) + destaque,
 /// recorrência e `DT_PUBLICACAO_SITE`. Datas em segundos Unix UTC (`:desloc` = offset local).
@@ -77,6 +77,15 @@ const SQL_CONFIRMAR: &str = "UPDATE ENVIO_TELEGRAM SET NR_MESSAGE_ID = :1 WHERE 
 const SQL_CANCELAR: &str = "DELETE FROM ENVIO_TELEGRAM WHERE ID_ENVIO = :1";
 const SQL_EDITADA: &str = "UPDATE ENVIO_TELEGRAM SET DT_EDICAO = DATE '1970-01-01' + :1 / 86400 \
      WHERE ID_ENVIO = :2";
+
+/// Ligações ativas do canal com aviso ativo e no ar (BSV-41). As 9 primeiras colunas na ordem de
+/// `oracle::SQL_AVISOS` (lidas por `linha_aviso`); depois intervalo, ligação ativa e último envio.
+pub const SQL_AVISOS_CANAL: &str = "SELECT a.ID_AVISO, a.DS_TITULO, a.DS_TEXTO, a.DS_IMAGEM,      a.DS_LINK_INTERNO, CASE WHEN a.ST_ATIVO = 1 THEN 1 ELSE 0 END,      ROUND((a.DT_INICIO - DATE '1970-01-01') * 86400) - :desloc,      ROUND((a.DT_FIM - DATE '1970-01-01') * 86400) - :desloc,      ROUND((a.DT_PUBLICACAO_SITE - DATE '1970-01-01') * 86400) - :desloc,      ac.NR_INTERVALO_MIN, CASE WHEN ac.ST_ATIVO = 1 THEN 1 ELSE 0 END,      (SELECT ROUND((MAX(e.DT_ENVIO) - DATE '1970-01-01') * 86400) - :desloc FROM ENVIO_AVISO e       WHERE e.ID_AVISO = a.ID_AVISO AND e.ID_CANAL = ac.ID_CANAL)      FROM AVISO_CANAL ac JOIN AVISO a ON a.ID_AVISO = ac.ID_AVISO      WHERE ac.ID_CANAL = :canal AND ac.ST_ATIVO = 1 AND a.ST_ATIVO = 1      AND a.DT_PUBLICACAO_SITE IS NOT NULL";
+const SQL_SEQUENCIA_AVISO: &str = "SELECT SQ_ENVIO_AVISO.NEXTVAL FROM DUAL";
+const SQL_RESERVAR_AVISO: &str = "INSERT INTO ENVIO_AVISO (ID_ENVIO_AVISO, ID_AVISO, ID_CANAL, DT_ENVIO)      VALUES (:1, :2, :3, DATE '1970-01-01' + :4 / 86400)";
+const SQL_CONFIRMAR_AVISO: &str =
+    "UPDATE ENVIO_AVISO SET NR_MESSAGE_ID = :1 WHERE ID_ENVIO_AVISO = :2";
+const SQL_CANCELAR_AVISO: &str = "DELETE FROM ENVIO_AVISO WHERE ID_ENVIO_AVISO = :1";
 
 pub struct OracleEnvio {
     conn: Connection,
@@ -260,6 +269,45 @@ impl FonteEnvio for OracleEnvio {
     fn marcar_editada(&self, id_envio: i64, agora: i64) -> Result<()> {
         self.conn
             .execute(SQL_EDITADA, &[&self.local(agora), &id_envio])?;
+        Ok(self.conn.commit()?)
+    }
+
+    fn avisos_canal(&self, canal: i64) -> Result<Vec<AvisoCanal>> {
+        let linhas = self.conn.query_named(
+            SQL_AVISOS_CANAL,
+            &[("desloc", &self.fuso_segundos), ("canal", &canal)],
+        )?;
+        linhas
+            .map(|r| {
+                let r = r?;
+                Ok(AvisoCanal {
+                    aviso: linha_aviso(&r)?,
+                    intervalo_min: r.get(9)?,
+                    ativo: r.get::<_, i64>(10)? == 1,
+                    ultimo_envio: r.get(11)?,
+                })
+            })
+            .collect()
+    }
+
+    fn reservar_aviso(&self, aviso: i64, canal: i64, agora: i64) -> Result<i64> {
+        let id: i64 = self.conn.query_row_as(SQL_SEQUENCIA_AVISO, &[])?;
+        self.conn.execute(
+            SQL_RESERVAR_AVISO,
+            &[&id, &aviso, &canal, &self.local(agora)],
+        )?;
+        self.conn.commit()?;
+        Ok(id)
+    }
+
+    fn confirmar_aviso(&self, id_envio: i64, message_id: i64) -> Result<()> {
+        self.conn
+            .execute(SQL_CONFIRMAR_AVISO, &[&message_id, &id_envio])?;
+        Ok(self.conn.commit()?)
+    }
+
+    fn cancelar_aviso(&self, id_envio: i64) -> Result<()> {
+        self.conn.execute(SQL_CANCELAR_AVISO, &[&id_envio])?;
         Ok(self.conn.commit()?)
     }
 }
