@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 use oracle::sql_type::ToSql;
 use oracle::{Connection, InitParams, Row};
 
+use crate::avisos::modelo::LinhaAviso;
 use crate::conversao::{LinhaOferta, LinhaProduto};
 use crate::fonte::{ErroFonte, FonteOfertas, Result};
 
@@ -139,6 +140,35 @@ pub fn sql_publicacao_site(n: usize) -> String {
     )
 }
 
+/// Todas as linhas de `AVISO` (`sql/bsv-41.sql`); datas em segundos Unix UTC.
+pub const SQL_AVISOS: &str = concat!(
+    "SELECT ID_AVISO, DS_TITULO, DS_TEXTO, DS_IMAGEM, DS_LINK_INTERNO, ",
+    "CASE WHEN ST_ATIVO = 1 THEN 1 ELSE 0 END, ",
+    epoch_utc!("DT_INICIO"),
+    ", ",
+    epoch_utc!("DT_FIM"),
+    ", ",
+    epoch_utc!("DT_PUBLICACAO_SITE"),
+    " FROM AVISO ORDER BY ID_AVISO"
+);
+const SQL_AVISO_PUBLICADO: &str = "UPDATE AVISO SET DT_PUBLICACAO_SITE = SYSDATE      WHERE ID_AVISO = :1 AND DT_PUBLICACAO_SITE IS NULL";
+const SQL_AVISO_FORA: &str = "UPDATE AVISO SET DT_PUBLICACAO_SITE = NULL WHERE ID_AVISO = :1";
+
+/// Colunas de `SQL_AVISOS`.
+pub(crate) fn linha_aviso(r: &Row) -> Result<LinhaAviso> {
+    Ok(LinhaAviso {
+        id: r.get(0)?,
+        titulo: r.get(1)?,
+        texto: r.get(2)?,
+        imagem: r.get(3)?,
+        link_interno: r.get(4)?,
+        ativo: r.get::<_, i64>(5)? == 1,
+        dt_inicio: r.get(6)?,
+        dt_fim: r.get(7)?,
+        dt_publicacao_site: r.get(8)?,
+    })
+}
+
 impl FonteOfertas for OracleFonte {
     fn ofertas(&self) -> Result<Vec<LinhaOferta>> {
         let linhas = self
@@ -181,6 +211,23 @@ impl FonteOfertas for OracleFonte {
             .row_count()?;
         self.conn.commit()?;
         Ok(n)
+    }
+
+    fn avisos(&self) -> Result<Vec<LinhaAviso>> {
+        let linhas = self
+            .conn
+            .query_named(SQL_AVISOS, &[("desloc", &self.fuso_segundos)])?;
+        linhas.map(|r| linha_aviso(&r?)).collect()
+    }
+
+    fn marcar_aviso_site(&self, id: i64, publicado: bool) -> Result<()> {
+        let sql = if publicado {
+            SQL_AVISO_PUBLICADO
+        } else {
+            SQL_AVISO_FORA
+        };
+        self.conn.execute(sql, &[&id])?;
+        Ok(self.conn.commit()?)
     }
 }
 

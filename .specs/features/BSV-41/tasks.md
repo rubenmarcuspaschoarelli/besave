@@ -105,8 +105,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Todos os casos de ciclo da spec com fakes
-- [ ] Gate quick passa
+- [x] Todos os casos de ciclo da spec com fakes
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick

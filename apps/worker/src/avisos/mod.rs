@@ -2,3 +2,4 @@
 
 pub mod modelo;
 pub mod pagina;
+pub mod publicacao;
