@@ -1,0 +1,88 @@
+# Publica apps/site no bucket compartilhado com o worker (BSV-17, AD-078). Sem segredo: OIDC no papel
+# besave-site-deploy, que só alcança os prefixos de infra/deploy-site/prefixos.json. Roteiro em infra/README.md.
+name: site-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "SHA de um commit de main cujo apps/site será publicado (vazio = HEAD). Serve para reverter."
+        required: false
+        default: ""
+  push:
+    branches: [main]
+    paths: ['apps/site/**']
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: site-deploy
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    # push só publica com SITE_DEPLOY_ATIVO = true; a confiança do papel é só refs/heads/main.
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.SITE_DEPLOY_ATIVO == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUCKET: besave-site
+      DISTRIBUICAO: ${{ vars.CF_DISTRIBUICAO_SITE }}
+    steps:
+      - name: Variáveis do repositório
+        env:
+          ROLE: ${{ vars.AWS_ROLE_SITE }}
+        run: |
+          if [ -z "$ROLE" ] || [ -z "$DISTRIBUICAO" ]; then
+            echo "::error::defina AWS_ROLE_SITE e CF_DISTRIBUICAO_SITE (Settings → Variables → Actions)"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Script e workflow ficam do HEAD de main; só apps/site vem do commit pedido.
+      - name: Site de um commit anterior
+        if: github.event_name == 'workflow_dispatch' && inputs.commit != ''
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          if ! [[ "$COMMIT" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "::error::commit deve ser um SHA"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$COMMIT" HEAD; then
+            echo "::error::$COMMIT não é ancestral de main"
+            exit 1
+          fi
+          rm -rf apps/site
+          git checkout "$COMMIT" -- apps/site
+          echo "publicando apps/site de $COMMIT"
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: apps/site/pnpm-lock.yaml }
+
+      - name: Build
+        working-directory: apps/site
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      # Falha antes de pedir credencial se o build tiver arquivo fora dos prefixos do site.
+      - name: Ensaio
+        run: node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_SITE }}
+          role-session-name: besave-site-deploy-${{ github.run_id }}
+          role-duration-seconds: 3600
+          aws-region: us-east-1
+
+      - name: Publicar
+        run: node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO"

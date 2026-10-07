@@ -114,12 +114,12 @@ guardada no GitHub.
 | PUB-06 | P1: Publicação | Execute | Implemented |
 | PUB-07 | P1: Publicação | Execute | Implemented |
 | PUB-08 | P1: Publicação | Execute | Implemented |
-| WF-01 | P1: Workflow | Execute | Pending |
-| WF-02 | P1: Workflow | Execute | Pending |
-| WF-03 | P1: Workflow | Execute | Pending |
-| WF-04 | P1: Workflow | Execute | Pending |
-| WF-05 | P1: Workflow | Execute | Pending |
-| WF-06 | P1: Workflow | Execute | Pending |
+| WF-01 | P1: Workflow | Execute | Implemented |
+| WF-02 | P1: Workflow | Execute | Implemented |
+| WF-03 | P1: Workflow | Execute | Implemented |
+| WF-04 | P1: Workflow | Execute | Implemented |
+| WF-05 | P1: Workflow | Execute | Implemented |
+| WF-06 | P1: Workflow | Execute | Implemented |
 | OPS-01 | P2: README | Execute | Pending |
 
 **Coverage:** 22 total, 22 mapped, 0 unmapped
