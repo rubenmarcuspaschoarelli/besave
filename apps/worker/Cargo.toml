@@ -31,7 +31,8 @@ hyper = { version = "1.11.1", default-features = false, features = ["client", "h
 hyper-rustls = { version = "0.27.10", default-features = false, features = ["aws-lc-rs", "http1", "native-tokio", "tls12"] }
 hyper-util = { version = "0.1.21", default-features = false, features = ["client-legacy", "http1", "tokio"] }
 minijinja = { version = "2.24.0", default-features = false, features = ["builtins", "json", "serde"] }
-image = { version = "0.25.10", default-features = false, features = ["webp"] }
+# `jpeg` (BSV-40): a foto do canal é JPEG 800×800 (`sendPhoto`); puro Rust (`zune-jpeg`), sem libjpeg.
+image = { version = "0.25.10", default-features = false, features = ["webp", "jpeg"] }
 oracle = "0.6.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -51,4 +52,15 @@ roxmltree = "0.21.1"
 opt-level = 3
 
 [profile.dev.package.sha2]
+opt-level = 3
+
+# Foto 800×800 do canal (BSV-40): redimensionar e codificar JPEG sem otimização leva segundos por
+# foto; o dia simulado do envio gera 180.
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.image-webp]
 opt-level = 3

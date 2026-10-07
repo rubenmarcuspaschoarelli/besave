@@ -294,6 +294,9 @@ fn besave_ciclo_e_ciclo_dao_o_mesmo_relatorio() {
     assert!(rel_w.contains("lidas=10 validas=3 rejeitadas=7"), "{rel_w}");
     assert_eq!(relatorio_estavel(&local_c), rel_w);
     assert!(local_c.join("saida").join("manifest.json").exists());
+    // BSV-40 CIC-04: ensaio local não grava DT_PUBLICACAO_SITE.
+    assert!(log_c.contains("DT_PUBLICACAO_SITE não gravada"), "{log_c}");
+    assert!(rel_w.contains("publicacao_site_marcadas=0"), "{rel_w}");
 }
 
 /// CIC-06: argumento desconhecido no `besave-ciclo` → código 2, registrado só no log. Vale

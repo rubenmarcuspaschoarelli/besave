@@ -4,13 +4,14 @@
 use std::fmt;
 use std::path::Path;
 
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::alerta::{Alertas, horas_sem_novas};
 use crate::fonte::FonteOfertas;
 use crate::geracao::{ErroGeracao, Relatorio};
 use crate::logs::iso_brasilia;
 use crate::mapeamento::Mapeamento;
+use crate::oracle::blocos_in;
 use crate::plano::publicar;
 use crate::publicador::Publicador;
 use crate::redirects::Redirects;
@@ -122,6 +123,21 @@ pub fn rodar(
         .map_err(|e| Falha::de_geracao(&e))
 }
 
+/// Depois do manifest (MANIFEST §6 passo 5): `DT_PUBLICACAO_SITE` nos ids publicados, em lotes de
+/// `BLOCO_IN` (BSV-40). Falha num lote → WARN e `publicacao_site_falhas`; o ciclo segue ok (o site já
+/// foi publicado; só atrasa o canal).
+pub fn marcar_publicacao_site(fonte: &dyn FonteOfertas, rel: &mut Relatorio) {
+    for bloco in blocos_in(&rel.ids_publicados) {
+        match fonte.marcar_publicadas_site(&bloco) {
+            Ok(n) => rel.publicacao_site_marcadas += n,
+            Err(e) => {
+                warn!(erro = %e, ids = bloco.len(), "gravando DT_PUBLICACAO_SITE; o canal espera o próximo ciclo");
+                rel.publicacao_site_falhas += 1;
+            }
+        }
+    }
+}
+
 /// `dt` mais recente em ISO 8601 com offset -03:00; `-` se o conjunto é vazio.
 pub fn dt_max_texto(dt: Option<i64>) -> String {
     dt.map_or_else(|| "-".to_owned(), |d| format!("{}-03:00", iso_brasilia(d)))
@@ -131,7 +147,7 @@ pub fn dt_max_texto(dt: Option<i64>) -> String {
 pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 28] = [
+    let pares: [(&str, String); 30] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -161,6 +177,14 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("paginas_publicadas", pag.publicadas.to_string()),
         ("paginas_removidas", pag.removidas.to_string()),
         ("paginas_falhas", pag.falhas.len().to_string()),
+        (
+            "publicacao_site_marcadas",
+            rel.publicacao_site_marcadas.to_string(),
+        ),
+        (
+            "publicacao_site_falhas",
+            rel.publicacao_site_falhas.to_string(),
+        ),
         ("t_leitura_fonte", t.leitura_fonte.to_string()),
         ("t_imagens", t.imagens.to_string()),
         ("t_chunks", t.chunks.to_string()),

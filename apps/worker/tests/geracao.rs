@@ -343,6 +343,10 @@ fn relatorio_com_contagens() {
                 robots_publicado: true,
                 indice_gravado: true,
             },
+            // BSV-40: ids válidos na ordem da fonte; a marcação é fora de `gerar`.
+            ids_publicados: vec![5412, 5413, 5420, 1500, 1001],
+            publicacao_site_marcadas: 0,
+            publicacao_site_falhas: 0,
         }
     );
 }

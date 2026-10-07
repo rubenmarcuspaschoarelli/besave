@@ -15,6 +15,8 @@ use crate::pagina_html::OFFSET_BRASILIA_MIN;
 pub const FUSO_BRASILIA: i64 = OFFSET_BRASILIA_MIN * 60;
 pub const RETENCAO_DIAS: i64 = 14;
 const PREFIXO: &str = "besave-worker.";
+/// Log do `besave-envio` (BSV-40).
+pub const PREFIXO_ENVIO: &str = "besave-envio.";
 const SUFIXO: &str = ".log";
 
 /// `AAAA-MM-DDTHH:MM:SS` no horário de Brasília.
@@ -67,12 +69,17 @@ fn data_brasilia(agora: i64) -> String {
 
 /// `{dir}/besave-worker.AAAA-MM-DD.log` do dia de Brasília.
 pub fn arquivo_do_dia(dir: &Path, agora: i64) -> PathBuf {
-    dir.join(format!("{PREFIXO}{}{SUFIXO}", data_brasilia(agora)))
+    arquivo_do_dia_de(dir, PREFIXO, agora)
 }
 
-/// `AAAA-MM-DD` do nome de um log do worker; `None` para outros arquivos.
-fn data_do_nome(nome: &str) -> Option<&str> {
-    let d = nome.strip_prefix(PREFIXO)?.strip_suffix(SUFIXO)?;
+/// `{dir}/{prefixo}AAAA-MM-DD.log` do dia de Brasília.
+pub fn arquivo_do_dia_de(dir: &Path, prefixo: &str, agora: i64) -> PathBuf {
+    dir.join(format!("{prefixo}{}{SUFIXO}", data_brasilia(agora)))
+}
+
+/// `AAAA-MM-DD` do nome de um log com `prefixo`; `None` para outros arquivos.
+fn data_do_nome<'a>(nome: &'a str, prefixo: &str) -> Option<&'a str> {
+    let d = nome.strip_prefix(prefixo)?.strip_suffix(SUFIXO)?;
     let b = d.as_bytes();
     let formato = b.len() == 10
         && b.iter().enumerate().all(|(i, c)| {
@@ -88,12 +95,17 @@ fn data_do_nome(nome: &str) -> Option<&str> {
 /// Remove os logs do worker com mais de `RETENCAO_DIAS` dias (data do nome < hoje − 14, em
 /// Brasília) e devolve os caminhos removidos.
 pub fn limpar_antigos(dir: &Path, agora: i64) -> std::io::Result<Vec<PathBuf>> {
+    limpar_antigos_de(dir, PREFIXO, agora)
+}
+
+/// Como `limpar_antigos`, para os logs com `prefixo` (os outros não são tocados).
+pub fn limpar_antigos_de(dir: &Path, prefixo: &str, agora: i64) -> std::io::Result<Vec<PathBuf>> {
     let limite = data_brasilia(agora - RETENCAO_DIAS * 86_400);
     let mut removidos = Vec::new();
     for e in std::fs::read_dir(dir)? {
         let e = e?;
         let nome = e.file_name();
-        let Some(data) = nome.to_str().and_then(data_do_nome) else {
+        let Some(data) = nome.to_str().and_then(|n| data_do_nome(n, prefixo)) else {
             continue;
         };
         // `AAAA-MM-DD` ordena como data.

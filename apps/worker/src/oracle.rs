@@ -69,12 +69,17 @@ pub struct OracleFonte {
     fuso_segundos: i64,
 }
 
+/// Conexão com o Instant Client de `BESAVE_ORACLE_CLIENT_DIR`, se definida.
+pub(crate) fn conectar(cfg: &ConfigOracle) -> Result<Connection> {
+    if let Some(dir) = &cfg.client_dir {
+        InitParams::new().oracle_client_lib_dir(dir)?.init()?;
+    }
+    Ok(Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?)
+}
+
 impl OracleFonte {
     pub fn conectar(cfg: &ConfigOracle) -> Result<Self> {
-        if let Some(dir) = &cfg.client_dir {
-            InitParams::new().oracle_client_lib_dir(dir)?.init()?;
-        }
-        let conn = Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?;
+        let conn = conectar(cfg)?;
         Ok(Self {
             conn,
             fuso_segundos: cfg.fuso_segundos,
@@ -125,6 +130,15 @@ pub fn sql_produtos(n: usize) -> String {
     format!("{COLUNAS_PRODUTO} IN ({})", binds.join(", "))
 }
 
+/// `UPDATE` de `DT_PUBLICACAO_SITE` com `n` binds posicionais (BSV-40): só datas nulas.
+pub fn sql_publicacao_site(n: usize) -> String {
+    let binds: Vec<String> = (1..=n).map(|i| format!(":{i}")).collect();
+    format!(
+        "UPDATE OFERTA SET DT_PUBLICACAO_SITE = SYSDATE          WHERE DT_PUBLICACAO_SITE IS NULL AND ID_OFERTA IN ({})",
+        binds.join(", ")
+    )
+}
+
 impl FonteOfertas for OracleFonte {
     fn ofertas(&self) -> Result<Vec<LinhaOferta>> {
         let linhas = self
@@ -155,9 +169,23 @@ impl FonteOfertas for OracleFonte {
         }
         Ok(out)
     }
+
+    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let params: Vec<&dyn ToSql> = ids.iter().map(|id| id as &dyn ToSql).collect();
+        let n = self
+            .conn
+            .execute(&sql_publicacao_site(ids.len()), &params)?
+            .row_count()?;
+        self.conn.commit()?;
+        Ok(n)
+    }
 }
 
-fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
+/// As 15 primeiras colunas de `SQL_OFERTAS` (mesma ordem em `envio::oracle`).
+pub(crate) fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
     Ok(LinhaOferta {
         id: r.get(0)?,
         id_produto: r.get(1)?,

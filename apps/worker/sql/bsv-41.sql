@@ -1,0 +1,77 @@
+-- BSV-41 · Avisos programados no canal — DDL (Oracle XE 11.2)
+-- Rodar como BESAVE, depois do bsv-40.sql (usa CANAL_ENVIO). Um bloco por vez. Desfazer: bloco 4.
+-- CANAL_ENVIO não é criada aqui: ela vem do bsv-40.sql (bloco 2), junto com PARAMETROS_ENVIO.
+
+-- 0. CHECAGEM: precisa devolver CANAL_ENVIO e PARAMETROS_ENVIO. Se vier vazio, rode antes o bsv-40.sql.
+SELECT TABLE_NAME FROM USER_TABLES WHERE TABLE_NAME IN ('CANAL_ENVIO', 'PARAMETROS_ENVIO');
+
+-- 1. AVISOS ---------------------------------------------------------------------------------
+CREATE SEQUENCE SQ_AVISO START WITH 1 INCREMENT BY 1 NOCACHE;
+
+CREATE TABLE AVISO (
+  ID_AVISO         NUMBER(10)     NOT NULL,
+  DS_TITULO        VARCHAR2(120)  NOT NULL,
+  DS_TEXTO         VARCHAR2(800)  NOT NULL,   -- texto puro; linhas em branco viram parágrafos
+  DS_IMAGEM        VARCHAR2(200),             -- nome do arquivo em BESAVE_AVISOS_DIR (.webp ou .jpg)
+  DS_LINK_INTERNO  VARCHAR2(200),             -- caminho do site, ex.: /elas/ ou /oferta/12345/
+  ST_ATIVO         NUMBER(1)      DEFAULT 1 NOT NULL,
+  DT_INICIO        DATE           DEFAULT SYSDATE NOT NULL,
+  DT_FIM           DATE,                      -- nulo = sem fim
+  DT_PUBLICACAO_SITE DATE,                    -- gravada pelo besave-ciclo quando a página vai ao ar; nula quando sai
+  DT_CADASTRO      DATE           DEFAULT SYSDATE NOT NULL,
+  DT_ATUALIZACAO   DATE           DEFAULT SYSDATE NOT NULL,
+  CONSTRAINT PK_AVISO PRIMARY KEY (ID_AVISO),
+  CONSTRAINT CK_AVISO_ATIVO CHECK (ST_ATIVO IN (0, 1)),
+  CONSTRAINT CK_AVISO_DATAS CHECK (DT_FIM IS NULL OR DT_FIM > DT_INICIO),
+  CONSTRAINT CK_AVISO_LINK CHECK (DS_LINK_INTERNO IS NULL OR DS_LINK_INTERNO LIKE '/%')
+);
+
+-- 2. EM QUAIS CANAIS E COM QUE FREQUÊNCIA -----------------------------------------------------
+CREATE TABLE AVISO_CANAL (
+  ID_AVISO          NUMBER(10) NOT NULL,
+  ID_CANAL          NUMBER(10) NOT NULL,
+  NR_INTERVALO_MIN  NUMBER(5)  DEFAULT 120 NOT NULL,
+  ST_ATIVO          NUMBER(1)  DEFAULT 1 NOT NULL,
+  CONSTRAINT PK_AVISO_CANAL PRIMARY KEY (ID_AVISO, ID_CANAL),
+  CONSTRAINT FK_AVISO_CANAL_AVISO FOREIGN KEY (ID_AVISO) REFERENCES AVISO (ID_AVISO),
+  CONSTRAINT FK_AVISO_CANAL_CANAL FOREIGN KEY (ID_CANAL) REFERENCES CANAL_ENVIO (ID_CANAL),
+  CONSTRAINT CK_AVISO_CANAL_INTERVALO CHECK (NR_INTERVALO_MIN >= 30),
+  CONSTRAINT CK_AVISO_CANAL_ATIVO CHECK (ST_ATIVO IN (0, 1))
+);
+
+-- 3. REGISTRO DE CADA POST DE AVISO -------------------------------------------------------------
+CREATE SEQUENCE SQ_ENVIO_AVISO START WITH 1 INCREMENT BY 1 NOCACHE;
+
+CREATE TABLE ENVIO_AVISO (
+  ID_ENVIO_AVISO  NUMBER(12) NOT NULL,
+  ID_AVISO        NUMBER(10) NOT NULL,
+  ID_CANAL        NUMBER(10) NOT NULL,
+  NR_MESSAGE_ID   NUMBER(12),               -- nulo até o Telegram confirmar
+  DT_ENVIO        DATE DEFAULT SYSDATE NOT NULL,
+  CONSTRAINT PK_ENVIO_AVISO PRIMARY KEY (ID_ENVIO_AVISO),
+  CONSTRAINT FK_ENVIO_AVISO_AVISO FOREIGN KEY (ID_AVISO) REFERENCES AVISO (ID_AVISO),
+  CONSTRAINT FK_ENVIO_AVISO_CANAL FOREIGN KEY (ID_CANAL) REFERENCES CANAL_ENVIO (ID_CANAL)
+);
+
+CREATE INDEX IX_ENVIO_AVISO_ULTIMO ON ENVIO_AVISO (ID_AVISO, ID_CANAL, DT_ENVIO);
+
+-- Exemplo (ajuste o texto e o arquivo; o arquivo vai em BESAVE_AVISOS_DIR):
+-- INSERT INTO AVISO (ID_AVISO, DS_TITULO, DS_TEXTO, DS_IMAGEM, DS_LINK_INTERNO)
+-- VALUES (SQ_AVISO.NEXTVAL, 'Como o Besave funciona',
+--         'Os links deste canal são de afiliado: quando você compra por eles, o Besave pode receber uma comissão, sem custo extra para você.',
+--         'aviso-afiliado.jpg', '/');
+-- INSERT INTO AVISO_CANAL (ID_AVISO, ID_CANAL, NR_INTERVALO_MIN) VALUES (SQ_AVISO.CURRVAL, 1, 120);
+-- COMMIT;
+
+-- Se o worker conectar com outro usuário (trocar <USUARIO>):
+-- GRANT SELECT, UPDATE (DT_PUBLICACAO_SITE) ON AVISO TO <USUARIO>;
+-- GRANT SELECT ON AVISO_CANAL TO <USUARIO>;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON ENVIO_AVISO TO <USUARIO>;
+-- GRANT SELECT ON SQ_ENVIO_AVISO TO <USUARIO>;
+
+-- 4. DESFAZER -----------------------------------------------------------------------------------
+-- DROP TABLE ENVIO_AVISO;
+-- DROP SEQUENCE SQ_ENVIO_AVISO;
+-- DROP TABLE AVISO_CANAL;
+-- DROP TABLE AVISO;
+-- DROP SEQUENCE SQ_AVISO;

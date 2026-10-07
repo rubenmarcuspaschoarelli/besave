@@ -167,7 +167,7 @@ pub fn para_pagina(
 }
 
 /// `round((1 - pp/pd) * 100)` meia para cima, em inteiros, limitado a 0..=99. Exige `pd > pp > 0`.
-fn desconto_pct(pd: i64, pp: i64) -> i64 {
+pub fn desconto_pct(pd: i64, pp: i64) -> i64 {
     let pct = (200 * (pd - pp) + pd) / (2 * pd);
     pct.clamp(0, 99)
 }
