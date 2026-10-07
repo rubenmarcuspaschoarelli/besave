@@ -120,13 +120,13 @@ mas não está no card. O site precisa dela para ordenar e para a faixa "Maiores
 | GRV-01 | P1: Worker | T2 | Implementing |
 | GRV-02 | P1: Worker | T2 | Implementing |
 | IDE-01 | P1: Worker | T2 | Implementing |
-| ORC-01 | P1: Worker | T3 | Pending |
-| SIT-01 | P1: Site | T3 | Pending |
-| SIT-02 | P1: Site | T3 | Pending |
-| SIT-03 | P1: Site | T3 | Pending |
-| SIT-04 | P1: Site | T3 | Pending |
-| SIT-05 | P1: Site | T3 | Pending |
-| SIT-06 | P1: Site | T3 | Pending |
+| ORC-01 | P1: Worker | T3 | Implementing |
+| SIT-01 | P1: Site | T3 | Implementing |
+| SIT-02 | P1: Site | T3 | Implementing |
+| SIT-03 | P1: Site | T3 | Implementing |
+| SIT-04 | P1: Site | T3 | Implementing |
+| SIT-05 | P1: Site | T3 | Implementing |
+| SIT-06 | P1: Site | T3 | Implementing |
 
 **Coverage:** 18 total, 18 mapped to tasks, 0 unmapped.
 

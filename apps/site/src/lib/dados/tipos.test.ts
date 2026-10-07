@@ -32,7 +32,7 @@ describe('tipos do contrato', () => {
 		const m = ler('fixtures/manifest-ok.json');
 		expect(ehManifest(m)).toBe(true);
 		if (!ehManifest(m)) return;
-		expect(m.contrato).toBe('1.3.3');
+		expect(m.contrato).toBe('1.5.0');
 		expect(m.chunks[0]).toEqual({
 			n: 5,
 			arquivo: 'data/chunks/5-9f2a1c3b4d5e6f70.json.br',

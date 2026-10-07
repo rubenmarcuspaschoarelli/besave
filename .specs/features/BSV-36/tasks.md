@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; decisões em `spec.md` → Assumptions)
-**Status**: In progress
+**Status**: Done (aguarda Verifier)
 
 ---
 
@@ -95,8 +95,8 @@ T1 → T2 → T3
 
 **Done when**:
 
-- [ ] Testes SIT-01..06 e ORC-01 verdes
-- [ ] Gate build (site) passa
+- [x] Testes SIT-01..06 e ORC-01 verdes
+- [x] Gate build (site) passa
 
 **Tests**: unit
 **Gate**: build
