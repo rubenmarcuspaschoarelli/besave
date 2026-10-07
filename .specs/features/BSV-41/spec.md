@@ -25,7 +25,7 @@ cadastrado no Oracle (`AVISO`, `AVISO_CANAL`); hoje nada publica nem envia essas
 | Agendamento por dia da semana | spec: fora de escopo |
 | Formatos de imagem além de `.webp`/`.jpg` | spec: fora de escopo |
 | Avisos no `--publicar` (plano sem `--sim`) e no `--dry-run` | a fase roda só no ciclo agendado (`--ciclo`/`besave-ciclo`); o plano continua cobrindo só ofertas |
-| Behavior do CloudFront para `img/avisos/*` | `/img/*` tem TTL de 1 ano na política (BSV-4); respeitar `max-age=3600` exige mudança de infra, relatada no PR |
+| Mudança no CloudFront | `/img/*` (política `imutavel`, `min_ttl = 0`) e o behavior padrão (`/avisos/*`) respeitam o `Cache-Control` da origem; nada muda em `infra/` |
 
 ---
 
