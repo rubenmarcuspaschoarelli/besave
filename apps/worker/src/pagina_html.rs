@@ -97,7 +97,11 @@ impl TemplateOferta {
 
 /// Escape HTML só de `& < > " '`: o padrão do minijinja também troca `/` por `&#x2f;`, o que
 /// deixaria URLs e datas ilegíveis no HTML sem ganho de segurança.
-fn formatar(out: &mut Output, state: &State, value: &Value) -> Result<(), minijinja::Error> {
+pub(crate) fn formatar(
+    out: &mut Output,
+    state: &State,
+    value: &Value,
+) -> Result<(), minijinja::Error> {
     match (state.auto_escape(), value.as_str()) {
         (AutoEscape::Html, Some(s)) if !value.is_safe() => {
             for c in s.chars() {

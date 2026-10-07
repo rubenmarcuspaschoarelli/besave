@@ -87,8 +87,8 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Casos de título/texto com `<script>`, link válido e externo
-- [ ] Gate quick passa
+- [x] Casos de título/texto com `<script>`, link válido e externo
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
