@@ -1,0 +1,19 @@
+[
+  "_app/*",
+  "index.html",
+  "404.html",
+  "favicon.*",
+  "desejos/*",
+  "assets/besave.css",
+  "assets/fontes/*",
+  "tech/*",
+  "players/*",
+  "meu-lar/*",
+  "elas/*",
+  "eles/*",
+  "cultura/*",
+  "familia/*",
+  "pets/*",
+  "esporte-vida/*",
+  "outros/*"
+]
