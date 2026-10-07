@@ -130,6 +130,7 @@ fn simulacao_so_le() {
         relogio: &r,
         m: &m,
         dir_imagens: None,
+        dir_avisos: None,
         foto,
         canal: 1,
         pausa_ate: None,

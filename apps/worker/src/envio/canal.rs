@@ -35,6 +35,13 @@ pub trait CanalTelegram {
         message_id: i64,
         legenda: &str,
     ) -> Result<(), ErroCanal>;
+    /// `sendMessage` com prévia do link (aviso sem foto, BSV-41); devolve o `message_id`.
+    fn enviar_mensagem(
+        &self,
+        chat_id: &str,
+        texto: &str,
+        silencioso: bool,
+    ) -> Result<i64, ErroCanal>;
 }
 
 pub trait Relogio {
@@ -94,7 +101,7 @@ impl Relogio for RelogioFake {
 /// Uma chamada ao fake do Telegram.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Chamada {
-    /// `sendPhoto` ou `editMessageCaption`.
+    /// `sendPhoto`, `sendMessage` ou `editMessageCaption`.
     pub metodo: &'static str,
     pub chat_id: String,
     pub legenda: String,
@@ -145,7 +152,7 @@ impl<'a> FakeCanal<'a> {
     fn registrar(&self, mut c: Chamada) -> Result<i64, ErroCanal> {
         c.ms = self.relogio.agora_ms();
         let resposta = self.roteiro.borrow_mut().pop_front().unwrap_or(Ok(()));
-        if c.metodo == "sendPhoto" && resposta.is_ok() {
+        if c.metodo != "editMessageCaption" && resposta.is_ok() {
             c.message_id = self.proximo_id.get();
             self.proximo_id.set(c.message_id + 1);
         }
@@ -190,5 +197,22 @@ impl CanalTelegram for FakeCanal<'_> {
             ms: 0,
         })
         .map(|_| ())
+    }
+
+    fn enviar_mensagem(
+        &self,
+        chat_id: &str,
+        texto: &str,
+        silencioso: bool,
+    ) -> Result<i64, ErroCanal> {
+        self.registrar(Chamada {
+            metodo: "sendMessage",
+            chat_id: chat_id.to_owned(),
+            legenda: texto.to_owned(),
+            silencioso,
+            message_id: 0,
+            jpeg: Vec::new(),
+            ms: 0,
+        })
     }
 }

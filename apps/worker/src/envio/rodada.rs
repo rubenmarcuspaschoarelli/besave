@@ -7,10 +7,11 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
+use crate::envio::aviso::{devido, foto_aviso, legenda_aviso};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio};
 use crate::envio::fonte::FonteEnvio;
 use crate::envio::foto::OrigemFoto;
-use crate::envio::janela::{inicio_do_dia, lote_devido, silencioso};
+use crate::envio::janela::{esperado, inicio_do_dia, lote_devido, silencioso};
 use crate::envio::legenda::{legenda, legenda_encerrada};
 use crate::envio::modelo::para_canal;
 use crate::envio::selecao::selecionar;
@@ -51,6 +52,10 @@ pub struct RelatorioEnvio {
     /// `retry_after` de um 429: a execução parou aqui.
     pub retry_after: Option<u64>,
     pub parada: Option<Parada>,
+    /// Id do aviso postado nesta execução (BSV-41).
+    pub aviso: Option<i64>,
+    /// O aviso falhou (Oracle ou Telegram ≠ 429); o lote de ofertas seguiu.
+    pub aviso_falhou: bool,
 }
 
 impl RelatorioEnvio {
@@ -63,13 +68,16 @@ impl RelatorioEnvio {
             Some(Parada::Pausa) => "pausa",
         };
         format!(
-            "canal={} enviados_hoje={} devido={} enviados={} editadas={} edicoes_descartadas={} retry_after={} parada={parada} tempo_ms={tempo_ms}",
+            "canal={} enviados_hoje={} devido={} enviados={} editadas={} edicoes_descartadas={} aviso={} aviso_falhou={} retry_after={} parada={parada} tempo_ms={tempo_ms}",
             self.canal,
             self.enviados_hoje,
             self.devido,
             self.enviados,
             self.editadas,
             self.edicoes_descartadas,
+            self.aviso
+                .map_or_else(|| "-".to_owned(), |id| id.to_string()),
+            u8::from(self.aviso_falhou),
             self.retry_after
                 .map_or_else(|| "-".to_owned(), |s| s.to_string()),
         )
@@ -86,6 +94,8 @@ pub struct Contexto<'a> {
     pub m: &'a Mapeamento,
     /// `BESAVE_IMAGENS_DIR`; `None` → placeholder.
     pub dir_imagens: Option<&'a Path>,
+    /// `BESAVE_AVISOS_DIR`; `None` → avisos vão sem foto.
+    pub dir_avisos: Option<&'a Path>,
     pub foto: Fotografo,
     pub canal: i64,
     /// Fim da espera de um 429 anterior (segundos Unix).
@@ -151,13 +161,25 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
         ultima: None,
     };
 
+    let mudo = silencioso(&p, agora);
+    // BSV-41: no máximo 1 aviso, antes do lote, na janela do canal; fora da cota de ofertas.
+    if esperado(&p, agora).is_some()
+        && let Some(s) = enviar_aviso(ctx, &canal.chat_id, mudo, &mut ritmo, &mut rel)
+    {
+        warn!(
+            retry_after = s,
+            "Telegram pediu espera (429); continua na próxima"
+        );
+        rel.retry_after = Some(s);
+        return Ok(rel);
+    }
+
     rel.enviados_hoje = fonte
         .enviados_desde(ctx.canal, inicio_do_dia(agora))
         .map_err(ler)?;
     rel.devido = lote_devido(&p, agora, rel.enviados_hoje);
     let candidatas =
         selecionar(fonte, ctx.m, &p, ctx.canal, agora, rel.devido as usize).map_err(ler)?;
-    let mudo = silencioso(&p, agora);
     for c in candidatas {
         let texto = legenda(&c.oferta, c.caiu, &p);
         let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
@@ -233,6 +255,72 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
     Ok(rel)
 }
 
+/// Posta o aviso devido (reserva → envia → confirma). Falha (Oracle ou Telegram ≠ 429) → WARN,
+/// linha apagada e `aviso_falhou`; devolve o `retry_after` de um 429.
+fn enviar_aviso(
+    ctx: &Contexto,
+    chat_id: &str,
+    mudo: bool,
+    ritmo: &mut Ritmo,
+    rel: &mut RelatorioEnvio,
+) -> Option<u64> {
+    let fonte = ctx.fonte;
+    let avisos = match fonte.avisos_canal(ctx.canal) {
+        Ok(v) => v,
+        Err(e) => {
+            warn!(erro = %e, "lendo avisos do canal; segue sem aviso");
+            rel.aviso_falhou = true;
+            return None;
+        }
+    };
+    let a = devido(&avisos, ctx.relogio.agora())?;
+    let id = a.aviso.id;
+    let texto = legenda_aviso(a);
+    let foto = foto_aviso(ctx.dir_avisos, id, a.aviso.imagem.as_deref());
+    // Regra 4: a linha existe antes do envio; sem ela, nada vai ao Telegram.
+    let id_envio = match fonte.reservar_aviso(id, ctx.canal, ctx.relogio.agora()) {
+        Ok(i) => i,
+        Err(e) => {
+            warn!(id, erro = %e, "reservando ENVIO_AVISO; aviso não enviado");
+            rel.aviso_falhou = true;
+            return None;
+        }
+    };
+    ritmo.esperar();
+    let r = match &foto {
+        Some(jpeg) => ctx.telegram.enviar_foto(chat_id, jpeg, &texto, mudo),
+        None => ctx.telegram.enviar_mensagem(chat_id, &texto, mudo),
+    };
+    match r {
+        Ok(message_id) => {
+            if let Err(e) = fonte.confirmar_aviso(id_envio, message_id) {
+                // A linha fica sem `message_id`: conta como envio, sem duplicata.
+                warn!(id, id_envio, erro = %e, "confirmando ENVIO_AVISO");
+            }
+            rel.aviso = Some(id);
+            info!(
+                id,
+                message_id,
+                silencioso = mudo,
+                foto = foto.is_some(),
+                "aviso enviado ao canal"
+            );
+            None
+        }
+        Err(e) => {
+            if let Err(e) = fonte.cancelar_aviso(id_envio) {
+                warn!(id, id_envio, erro = %e, "apagando a linha de um aviso que falhou");
+            }
+            if let ErroCanal::Limite(s) = e {
+                return Some(s);
+            }
+            warn!(id, erro = %e, "aviso recusado pelo Telegram; segue o lote de ofertas");
+            rel.aviso_falhou = true;
+            None
+        }
+    }
+}
+
 /// Apaga a linha de um envio que falhou. Se o Oracle também falhar, a linha fica sem
 /// `message_id`: a oferta não é reenviada (sem duplicata), só não ganha edição.
 fn cancelar(fonte: &dyn FonteEnvio, id_envio: i64, id: i64) {
@@ -293,6 +381,15 @@ pub struct Previa {
     pub origem: OrigemFoto,
 }
 
+/// O aviso que o `--sim` postaria.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreviaAviso {
+    pub id: i64,
+    pub legenda: String,
+    /// `None`: vai como `sendMessage`.
+    pub jpeg: Option<Vec<u8>>,
+}
+
 /// O que a execução faria agora, sem Telegram e sem escrita no Oracle.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Simulacao {
@@ -304,6 +401,9 @@ pub struct Simulacao {
     /// Posts que seriam editados como "Oferta encerrada" (até `MAX_EDICOES`).
     pub expiradas: usize,
     pub parada: Option<Parada>,
+    /// Aviso devido agora pelo intervalo (mesmo fora da janela).
+    pub aviso: Option<PreviaAviso>,
+    pub na_janela: bool,
 }
 
 /// `--sim`: só leituras.
@@ -326,6 +426,13 @@ pub fn simular(ctx: &Contexto) -> Result<Simulacao, Falha> {
         .map_err(ler)?;
     sim.devido = lote_devido(&p, agora, sim.enviados_hoje);
     sim.silencioso = silencioso(&p, agora);
+    sim.na_janela = esperado(&p, agora).is_some();
+    let avisos = fonte.avisos_canal(ctx.canal).map_err(ler)?;
+    sim.aviso = devido(&avisos, agora).map(|a| PreviaAviso {
+        id: a.aviso.id,
+        legenda: legenda_aviso(a),
+        jpeg: foto_aviso(ctx.dir_avisos, a.aviso.id, a.aviso.imagem.as_deref()),
+    });
     let n = sim.devido.max(p.qt_por_execucao) as usize;
     for c in selecionar(fonte, ctx.m, &p, ctx.canal, agora, n).map_err(ler)? {
         let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)

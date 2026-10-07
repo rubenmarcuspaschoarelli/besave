@@ -24,7 +24,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | Ciclo: publicação, índice, remoção, data | unit | PAG-01..02, PAG-07..08, REM-01..06, DTP-01..02 | `apps/worker/tests/aviso_ciclo.rs` | `cargo test` |
 | Ciclo: integração e relatório | unit | DTP-03, REL-01..02 | `apps/worker/tests/aviso_relatorio.rs` | `cargo test` |
 | Envio: seleção, legenda, foto (puro + fake Oracle) | unit | ENV-05..07, ENV-14, LEG-01..02 | `apps/worker/tests/envio_aviso_selecao.rs` | `cargo test` |
-| Envio: orquestração (fakes Oracle/Telegram/relógio) | unit | ENV-01..04, ENV-08..13, ENV-15..16 | `apps/worker/tests/envio_aviso.rs` | `cargo test` |
+| Envio: orquestração (fakes Oracle/Telegram/relógio) | unit | ENV-01..04, ENV-08..16 | `apps/worker/tests/envio_aviso.rs` | `cargo test` |
 | Oracle real / Telegram real (I/O) | none | build gate only; testes nunca tocam rede | - | build gate only |
 | Docs | none | DOC-01..02 | - | build gate only |
 
@@ -151,7 +151,7 @@ T4 → T5 → T6 → T7
 
 ### T6: Orquestração do aviso no envio
 
-**What**: `CanalTelegram::enviar_mensagem` (fake, HTTP, `--sim`); `rodar` posta o aviso antes do lote (reserva → envia → confirma/cancela, 429); `simular` mostra o aviso; `Contexto.dir_avisos`.
+**What**: `CanalTelegram::enviar_mensagem` (fake, HTTP, `--sim`); `rodar` posta o aviso antes do lote (reserva → envia → confirma/cancela, 429); `simular` mostra o aviso; `Contexto.dir_avisos` e `BESAVE_AVISOS_DIR` no binário.
 **Where**: `apps/worker/src/envio/{canal,http,rodada,binario}.rs`
 **Depends on**: T5
 **Reuses**: `Ritmo`, `cancelar`
@@ -159,20 +159,20 @@ T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] 08:00/09:55/10:00; janela; cota; falha; 429; sem imagem; `--sim`
-- [ ] Gate quick passa
+- [x] 08:00/09:55/10:00; janela; cota; falha; 429; sem imagem; `--sim`
+- [x] Gate quick passa
 
 **Tests**: unit
 **Gate**: quick
 
 ---
 
-### T7: Binário do envio, MANIFEST e README
+### T7: MANIFEST e README
 
-**What**: `BESAVE_AVISOS_DIR` no binário; MANIFEST §1/§4; README (cadastrar, pasta, pausar).
-**Where**: `apps/worker/src/envio/binario.rs`, `docs/MANIFEST.md`, `apps/worker/README.md`
+**What**: MANIFEST §1/§4; README (cadastrar, pasta, pausar).
+**Where**: `docs/MANIFEST.md`, `apps/worker/README.md`
 **Depends on**: T6
-**Reuses**: `OracleEnvio`
+**Reuses**: README da BSV-40
 **Requirement**: DOC-01, DOC-02
 
 **Done when**:
