@@ -120,7 +120,7 @@ guardada no GitHub.
 | WF-04 | P1: Workflow | Execute | Implemented |
 | WF-05 | P1: Workflow | Execute | Implemented |
 | WF-06 | P1: Workflow | Execute | Implemented |
-| OPS-01 | P2: README | Execute | Pending |
+| OPS-01 | P2: README | Execute | Implemented |
 
 **Coverage:** 22 total, 22 mapped, 0 unmapped
 
