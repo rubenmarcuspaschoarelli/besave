@@ -147,6 +147,18 @@ pub fn sql_publicacao_site(n: usize) -> String {
     )
 }
 
+/// `[:1, :2, :3]` de `sql_publicacao_site`, em segundos locais (UTC + `fuso_segundos`): instante do
+/// ciclo, início e fim da faixa válida. Sem limite inferior (relógio antigo) = desde 1970: DATE não
+/// representa `i64::MIN`.
+pub fn binds_publicacao_site(agora: i64, fuso_segundos: i64) -> [i64; 3] {
+    let (min, instante) = faixa_publicacao(agora);
+    let instante = instante + fuso_segundos;
+    [instante, min.max(0) + fuso_segundos, instante]
+}
+
+/// Posição de `DT_PUBLICACAO_SITE` em `SQL_OFERTAS` (depois das 15 de `linha_oferta`).
+pub const COL_DT_PUBLICACAO_SITE: usize = 15;
+
 /// Todas as linhas de `AVISO` (`sql/bsv-41.sql`); datas em segundos Unix UTC.
 pub const SQL_AVISOS: &str = concat!(
     "SELECT ID_AVISO, DS_TITULO, DS_TEXTO, DS_IMAGEM, DS_LINK_INTERNO, ",
@@ -185,7 +197,7 @@ impl FonteOfertas for OracleFonte {
             .map(|r| {
                 let r = r?;
                 Ok(LinhaOferta {
-                    dt_publicacao_site: r.get(15)?,
+                    dt_publicacao_site: r.get(COL_DT_PUBLICACAO_SITE)?,
                     ..linha_oferta(&r)?
                 })
             })
@@ -219,11 +231,8 @@ impl FonteOfertas for OracleFonte {
         if ids.is_empty() {
             return Ok(0);
         }
-        let (min, instante) = faixa_publicacao(agora);
-        // Sem limite inferior (relógio antigo) = desde 1970: DATE não representa `i64::MIN`.
-        let instante = instante + self.fuso_segundos;
-        let min = min.max(0) + self.fuso_segundos;
-        let mut params: Vec<&dyn ToSql> = vec![&instante, &min, &instante];
+        let binds = binds_publicacao_site(agora, self.fuso_segundos);
+        let mut params: Vec<&dyn ToSql> = binds.iter().map(|b| b as &dyn ToSql).collect();
         params.extend(ids.iter().map(|id| id as &dyn ToSql));
         let n = self
             .conn

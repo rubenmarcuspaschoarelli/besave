@@ -3,7 +3,10 @@
 use std::collections::HashMap;
 
 use worker::fonte::ErroFonte;
-use worker::oracle::{BLOCO_IN, ConfigOracle, SQL_OFERTAS, blocos_in, sql_produtos};
+use worker::oracle::{
+    BLOCO_IN, COL_DT_PUBLICACAO_SITE, ConfigOracle, SQL_OFERTAS, binds_publicacao_site, blocos_in,
+    sql_produtos,
+};
 
 fn env(pares: &[(&str, &str)]) -> impl Fn(&str) -> Option<String> {
     let m: HashMap<String, String> = pares
@@ -165,4 +168,57 @@ fn ids_de_produto_em_blocos_de_mil_sem_repetir() {
     assert_eq!(blocos[0][0], 1);
     assert_eq!(blocos[2][499], 2_500);
     assert!(blocos_in(&[]).is_empty());
+}
+
+// BSV-36 (correção do Verifier): leitura e binds de `DT_PUBLICACAO_SITE` no Oracle real.
+
+/// Expressões do SELECT de `SQL_OFERTAS`, separadas nas vírgulas de nível 0.
+fn colunas_select(sql: &str) -> Vec<String> {
+    let lista = &sql["SELECT ".len()..sql.find(" FROM OFERTA").unwrap()];
+    let (mut out, mut atual, mut nivel) = (Vec::new(), String::new(), 0);
+    for ch in lista.chars() {
+        match ch {
+            '(' => nivel += 1,
+            ')' => nivel -= 1,
+            ',' if nivel == 0 => {
+                out.push(atual.trim().to_owned());
+                atual.clear();
+                continue;
+            }
+            _ => {}
+        }
+        atual.push(ch);
+    }
+    out.push(atual.trim().to_owned());
+    out
+}
+
+#[test]
+fn dp_01_sql_ofertas_le_dt_publicacao_site_em_utc_na_coluna_lida() {
+    let cols = colunas_select(SQL_OFERTAS);
+    assert_eq!(cols.len(), 16, "{cols:?}");
+    assert_eq!(cols[14], "DS_URL_AFILIADO");
+    assert_eq!(
+        cols[COL_DT_PUBLICACAO_SITE],
+        "ROUND((DT_PUBLICACAO_SITE - DATE '1970-01-01') * 86400) - :desloc"
+    );
+}
+
+#[test]
+fn grv_01_binds_do_update_sao_instante_e_faixa_em_hora_local() {
+    const FUSO: i64 = -10_800; // -03:00
+    // 2026-10-07T12:00:37Z → instante 12:00:00Z = 1_791_374_400; limite 2026-10-06T00:00:00Z.
+    assert_eq!(
+        binds_publicacao_site(1_791_374_437, FUSO),
+        [
+            1_791_374_400 - 10_800,
+            1_791_244_800 - 10_800,
+            1_791_374_400 - 10_800
+        ]
+    );
+    // Relógio antes do limite: sem limite inferior → desde 1970 (local).
+    assert_eq!(
+        binds_publicacao_site(1_790_253_630, FUSO),
+        [1_790_253_600 - 10_800, -10_800, 1_790_253_600 - 10_800]
+    );
 }
