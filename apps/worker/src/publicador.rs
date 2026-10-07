@@ -64,6 +64,10 @@ pub const META_ROBOTS: Meta = meta("text/plain; charset=utf-8", CURTO);
 /// `oferta/*/index.html` (MANIFEST §4).
 pub const META_PAGINA: Meta = meta(HTML, "public, max-age=600, stale-while-revalidate=300");
 
+/// `img/avisos/*` (BSV-41): a imagem do aviso pode ser trocada no mesmo nome, então não é imutável.
+pub const META_AVISO_JPG: Meta = meta("image/jpeg", AVISO_IMAGEM);
+pub const META_AVISO_WEBP: Meta = meta("image/webp", AVISO_IMAGEM);
+
 /// `assets/*.css` (BSV-21): nome sem hash, então cache curto; BSV-30 pode versionar.
 pub const META_CSS: Meta = meta(
     "text/css; charset=utf-8",
@@ -76,6 +80,7 @@ pub const META_ESTADO: Meta = meta("application/json", "no-store");
 const IMUTAVEL: &str = "public, max-age=31536000, immutable";
 const HTML: &str = "text/html; charset=utf-8";
 const CURTO: &str = "public, max-age=300";
+const AVISO_IMAGEM: &str = "public, max-age=3600";
 
 const fn meta(content_type: &'static str, cache_control: &'static str) -> Meta {
     Meta {
@@ -99,6 +104,12 @@ pub fn meta_para(chave: &str) -> Option<Meta> {
             Some(META_CHUNK)
         }
         _ if chave.starts_with("oferta/") => chave.ends_with("/index.html").then_some(META_PAGINA),
+        _ if chave.starts_with("avisos/") => chave.ends_with("/index.html").then_some(META_PAGINA),
+        _ if chave.starts_with("img/avisos/") => match ext {
+            Some("jpg") => Some(META_AVISO_JPG),
+            Some("webp") => Some(META_AVISO_WEBP),
+            _ => None,
+        },
         _ if chave.starts_with("img/") => {
             (ext == Some("webp")).then_some(meta("image/webp", IMUTAVEL))
         }
