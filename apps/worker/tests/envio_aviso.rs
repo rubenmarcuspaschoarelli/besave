@@ -216,6 +216,34 @@ fn aviso_nao_reduz_a_cota() {
     );
 }
 
+/// ENV-08 no teto: 178 de 180 enviados hoje, 21:55 (esperado = 180) → o lote de 2 sai mesmo com o aviso enviado
+/// antes dele (se o aviso contasse, sobraria 1 < L e o lote seria 0).
+#[test]
+fn aviso_nao_conta_perto_do_teto() {
+    let f = fonte(10);
+    for i in 0..178 {
+        f.registrar(worker::envio::fonte::RegistroEnvio {
+            id_envio: i + 1,
+            canal: 1,
+            id_oferta: 5000 + i,
+            id_produto: Some(5000 + i),
+            preco_por: 100,
+            message_id: Some(i + 1),
+            dt_envio: hora(8, 0) + i * 60,
+            dt_edicao: None,
+        });
+    }
+    let r = RelogioFake::em(hora(21, 55));
+    let tg = FakeCanal::new(&r);
+    let rel = rodar_em(&f, &tg, &r, hora(21, 55)).unwrap();
+    assert_eq!(rel.aviso, Some(1));
+    assert_eq!(rel.enviados_hoje, 178);
+    assert_eq!(rel.devido, 2);
+    assert_eq!(rel.enviados, 2);
+    assert_eq!(de(&tg, "sendPhoto").len(), 2);
+    assert_eq!(de(&tg, "sendMessage").len(), 1);
+}
+
 /// Telegram que, a cada envio, guarda o `ENVIO_AVISO` do fake naquele instante.
 struct Espiao<'a> {
     f: &'a FakeEnvio,

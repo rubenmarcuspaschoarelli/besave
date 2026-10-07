@@ -168,7 +168,7 @@ pub fn dt_max_texto(dt: Option<i64>) -> String {
 pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 34] = [
+    let pares: [(&str, String); 35] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -209,6 +209,10 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("avisos_publicados", rel.avisos.publicados.to_string()),
         ("avisos_removidos", rel.avisos.removidos.to_string()),
         ("avisos_falhas", rel.avisos.falhas.to_string()),
+        (
+            "avisos_datas_gravadas",
+            rel.avisos.datas_gravadas.to_string(),
+        ),
         ("t_leitura_fonte", t.leitura_fonte.to_string()),
         ("t_imagens", t.imagens.to_string()),
         ("t_chunks", t.chunks.to_string()),

@@ -197,8 +197,8 @@ impl FonteOfertas for FakeFonte {
     }
 }
 
-/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição
-/// e uma inativa há 8 dias (fora da fonte).
+/// Dados de demonstração: as 3 ofertas das fixtures, uma por motivo de rejeição,
+/// uma inativa há 8 dias (fora da fonte) e um aviso vigente sem imagem (BSV-41).
 pub fn fake_demo(agora: i64) -> FakeFonte {
     const DIA: i64 = 86_400;
     let ok = |id, id_produto, loja: &str, titulo: &str, de, por, area: &str, publico: &str| {
@@ -308,5 +308,13 @@ pub fn fake_demo(agora: i64) -> FakeFonte {
         preco_max: Some(349.9),
         ..Default::default()
     }];
-    FakeFonte::new(ofertas, produtos, agora)
+    FakeFonte::new(ofertas, produtos, agora).com_avisos(vec![LinhaAviso {
+        id: 1,
+        titulo: "Como o Besave funciona".into(),
+        texto: "Os links deste canal são de afiliado.".into(),
+        link_interno: Some("/".into()),
+        ativo: true,
+        dt_inicio: agora - DIA,
+        ..Default::default()
+    }])
 }

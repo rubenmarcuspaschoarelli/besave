@@ -650,7 +650,7 @@ só o que mudou (índice `_estado/avisos.json`), e remove página e imagem do av
 ou apagado. Grava `AVISO.DT_PUBLICACAO_SITE` quando a página vai ao ar e a anula quando sai; o envio
 só posta aviso com a data preenchida. Falha na fase (Oracle, S3) vira `WARN` e `avisos_falhas=1`,
 sem mudar o código de saída. A linha `relatorio` ganha `avisos_publicados`, `avisos_removidos`,
-`avisos_falhas` e `t_avisos`. Com `BESAVE_DESTINO_LOCAL` as páginas vão para a pasta e a data não é
+`avisos_falhas`, `avisos_datas_gravadas` e `t_avisos`. Com `BESAVE_DESTINO_LOCAL` as páginas vão para a pasta e a data não é
 gravada.
 
 ### Envio

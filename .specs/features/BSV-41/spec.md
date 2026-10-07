@@ -93,7 +93,7 @@ cadastrado no Oracle (`AVISO`, `AVISO_CANAL`); hoje nada publica nem envia essas
 7. DTP-01: WHEN a página de um aviso com `DT_PUBLICACAO_SITE` nula está no ar ao fim da fase THEN o ciclo SHALL gravar `DT_PUBLICACAO_SITE = SYSDATE` nele.
 8. DTP-02: WHEN um aviso com `DT_PUBLICACAO_SITE` preenchida sai do conjunto publicado THEN o ciclo SHALL anular a data.
 9. DTP-03: WHILE `BESAVE_DESTINO_LOCAL` está definida o ciclo SHALL não gravar nem anular `DT_PUBLICACAO_SITE` de aviso.
-10. REL-01: The linha `relatorio` do ciclo SHALL ter `avisos_publicados`, `avisos_removidos`, `avisos_falhas` e `t_avisos`.
+10. REL-01: The linha `relatorio` do ciclo SHALL ter `avisos_publicados`, `avisos_removidos`, `avisos_falhas`, `avisos_datas_gravadas` e `t_avisos`.
 11. REL-02: IF a fase de avisos falha (Oracle, S3) THEN o ciclo SHALL logar WARN, contar `avisos_falhas=1` e terminar com código 0.
 
 **Independent Test**: fakes do ciclo; `linha_relatorio`.

@@ -74,6 +74,7 @@ fn relatorio_com_a_fase_de_avisos() {
     assert_eq!(par(&l, "avisos_publicados"), "2");
     assert_eq!(par(&l, "avisos_removidos"), "0");
     assert_eq!(par(&l, "avisos_falhas"), "0");
+    assert_eq!(par(&l, "avisos_datas_gravadas"), "2");
     assert!(par(&l, "t_avisos").parse::<u64>().is_ok(), "{l}");
 
     fonte.definir_avisos(vec![aviso(2)]);
