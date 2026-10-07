@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.3.3** (SemVer; mudança incompatível = major).
-Histórico: 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.4.0** (SemVer; mudança incompatível = major).
+Histórico: 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -239,3 +239,29 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
 5. Domínio curto: `besave.io` ou `besave.me`?
 6. Ordenação da home: `dt` da oferta ou data de publicação no Besave (campo novo, derivável do
    índice de `_estado/`)? Decidir na sessão de design (BSV-30); afeta AD-063 e o toast de novas.
+
+---
+
+## 11. `OfertaCanal` — projeção do envio ao canal (BSV-40)
+
+Consumida só pelo `besave-envio` para montar a legenda do post; não vira JSON publicado (sem schema).
+Mesmas regras de rejeição do §9, mais URL de afiliado e `id_produto` obrigatórios (só vai ao canal o
+que tem página no ar).
+
+| campo | tipo | origem | regra |
+|---|---|---|---|
+| `id` | integer ≥ 1 | `ID_OFERTA` | link `https://besave.io/{id}?utm_source=telegram` |
+| `id_produto` | integer ≥ 1 | `ID_PRODUTO` | regra de repetição por produto |
+| `loja` | `Loja` | `DS_LOJA` | exibida como Amazon, Mercado Livre, Shopee |
+| `titulo` | string 1.. | `DS_TITULO` | trim, integral; cortado só se a legenda passar de 1024 caracteres |
+| `destaque` | string 1..200 \| null | `DS_OFERTA_DESTAQUE` | trim; vazio → null; > 200 → corte com `…` |
+| `preco_de` | integer \| null | `VL_PRECO_DE` | centavos; `null` se ausente ou ≤ `preco_por` |
+| `preco_por` | integer ≥ 1 | `VL_PRECO_POR` | centavos |
+| `desconto_pct` | integer 0..99 \| null | derivado | mesma conta de `OfertaPagina.desconto_pct` |
+| `cupom` | string 1..30 \| null | `DS_CUPOM` | mesma regra do card |
+| `recorrencia` | boolean | `ST_RECORRENCIA = 1` | preço do Programe e Poupe |
+| `dt_oferta` | date-time | `DT_OFERTA` | ISO 8601 UTC |
+
+`OFERTA.DT_PUBLICACAO_SITE` (DATE, hora local): gravada pelo `besave-ciclo` depois do manifest, uma vez
+por oferta (só quando nula). O envio só considera ofertas com ela preenchida. Critérios de envio
+(janela, cota, desconto mínimo, repetição) vivem em `PARAMETROS_ENVIO` (`apps/worker/sql/bsv-40.sql`).

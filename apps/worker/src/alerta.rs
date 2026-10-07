@@ -124,8 +124,23 @@ fn hora(agora: i64) -> String {
 }
 
 pub fn mensagem_falha(variante: &str, fase: &str, agora: i64, host: &str) -> String {
+    mensagem_falha_de(TITULO_CICLO, variante, fase, agora, host)
+}
+
+/// Título do alerta de falha do `besave-ciclo`.
+pub const TITULO_CICLO: &str = "Besave worker: falha no ciclo";
+/// Título do alerta de falha do `besave-envio` (BSV-40).
+pub const TITULO_ENVIO: &str = "Besave envio: falha no envio ao canal";
+
+pub fn mensagem_falha_de(
+    titulo: &str,
+    variante: &str,
+    fase: &str,
+    agora: i64,
+    host: &str,
+) -> String {
     format!(
-        "⚠️ Besave worker: falha no ciclo\nerro: {variante}\nfase: {fase}\nhorário: {} (-03:00)\nhost: {host}",
+        "⚠️ {titulo}\nerro: {variante}\nfase: {fase}\nhorário: {} (-03:00)\nhost: {host}",
         data_hora(agora)
     )
 }
@@ -236,6 +251,7 @@ pub struct Alertas<'a> {
     estado: PathBuf,
     host: String,
     sem_novas: ConfigSemNovas,
+    titulo: &'static str,
 }
 
 impl<'a> Alertas<'a> {
@@ -249,7 +265,15 @@ impl<'a> Alertas<'a> {
                 limiar_horas: 0,
                 ..ConfigSemNovas::default()
             },
+            titulo: TITULO_CICLO,
         }
+    }
+
+    /// Título da mensagem de falha (padrão: `TITULO_CICLO`).
+    #[must_use]
+    pub fn com_titulo(mut self, titulo: &'static str) -> Self {
+        self.titulo = titulo;
+        self
     }
 
     /// Liga o aviso de "nenhuma oferta nova" com este limiar e lembrete.
@@ -299,10 +323,13 @@ impl<'a> Alertas<'a> {
         if na_janela {
             info!(variante, "alerta já enviado nas últimas 2 h; não reenviado");
         } else {
-            match self
-                .telegram
-                .enviar(&mensagem_falha(variante, fase, agora, &self.host))
-            {
+            match self.telegram.enviar(&mensagem_falha_de(
+                self.titulo,
+                variante,
+                fase,
+                agora,
+                &self.host,
+            )) {
                 Ok(()) => {
                     e.envios.insert(variante.to_owned(), agora);
                     info!(variante, "alerta de falha enviado ao Telegram");

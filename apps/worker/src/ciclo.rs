@@ -16,7 +16,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::alerta::{Alertas, ConfigSemNovas, ConfigTelegram, host_do_env};
 use crate::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
-use crate::execucao::{Codigo, Falha, concluir, rodar};
+use crate::execucao::{Codigo, Falha, concluir, marcar_publicacao_site, rodar};
 use crate::fonte::{FonteOfertas, fake_demo};
 use crate::geracao::Relatorio;
 use crate::logs::{HoraBrasilia, arquivo_do_dia, limpar_antigos};
@@ -149,19 +149,24 @@ fn pastas() -> Result<Pastas, ErroCiclo> {
 
 /// Arquivo do dia (sem ANSI) e, se `stderr`, também o stderr. Devolve o erro de abertura do
 /// arquivo, se houve.
-fn iniciar_log(
+pub fn iniciar_log(
     dir: Option<&Path>,
     agora: i64,
     stderr: bool,
     hora: HoraBrasilia,
 ) -> Option<std::io::Error> {
-    let arquivo = dir.map(|d| {
-        std::fs::create_dir_all(d).and_then(|()| {
-            File::options()
-                .create(true)
-                .append(true)
-                .open(arquivo_do_dia(d, agora))
-        })
+    iniciar_log_em(dir.map(|d| (d, arquivo_do_dia(d, agora))), stderr, hora)
+}
+
+/// Como `iniciar_log`, com o arquivo já escolhido: `(pasta, arquivo)`.
+pub fn iniciar_log_em(
+    arquivo: Option<(&Path, PathBuf)>,
+    stderr: bool,
+    hora: HoraBrasilia,
+) -> Option<std::io::Error> {
+    let arquivo = arquivo.map(|(d, caminho)| {
+        std::fs::create_dir_all(d)
+            .and_then(|()| File::options().create(true).append(true).open(caminho))
     });
     let (camada, erro) = match arquivo {
         Some(Ok(f)) => (
@@ -327,7 +332,10 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             warn!(pasta = %dir.display(), "BESAVE_DESTINO_LOCAL definida: publicando na pasta, não no S3");
             let mut pub_ = PublicadorLocal::new(&dir);
             let mut kvs = RedirectsMemoria::new();
-            rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)
+            let rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
+            // O site não foi publicado de verdade: o canal não pode achar que a página existe.
+            info!("BESAVE_DESTINO_LOCAL definida: DT_PUBLICACAO_SITE não gravada");
+            Ok(rel)
         }
         Destino::Aws(aws) => {
             let ctx = ContextoAws::carregar().map_err(|e| match e {
@@ -338,7 +346,9 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             })?;
             let mut pub_ = PublicadorS3::new(&ctx, &aws.bucket);
             let mut kvs = RedirectsKvs::new(&ctx, &aws.kvs_arn);
-            rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)
+            let mut rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
+            marcar_publicacao_site(fonte, &mut rel);
+            Ok(rel)
         }
     }
 }

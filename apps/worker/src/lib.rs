@@ -6,6 +6,7 @@ pub mod aws;
 pub mod chunks;
 pub mod ciclo;
 pub mod conversao;
+pub mod envio;
 pub mod execucao;
 pub mod fonte;
 pub mod geracao;

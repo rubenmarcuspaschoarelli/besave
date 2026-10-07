@@ -15,7 +15,7 @@ use tokio::runtime::Runtime;
 
 use crate::alerta::{ConfigTelegram, ErroTelegram, Telegram};
 
-const HOST: &str = "api.telegram.org";
+pub(crate) const HOST: &str = "api.telegram.org";
 const TIMEOUT: Duration = Duration::from_secs(10);
 
 /// POST `https://api.telegram.org/bot{token}/sendMessage` com `{"chat_id", "text"}`.
@@ -28,10 +28,27 @@ pub fn pedido(cfg: &ConfigTelegram, texto: &str) -> Result<http::Request<String>
         .map_err(|_| ErroTelegram::Conexao("pedido inválido".to_owned()))
 }
 
+/// Cliente HTTPS (só HTTP/1.1) e runtime `current_thread` próprios; erro em texto sem URL.
+pub(crate) type ClienteHttps = Client<HttpsConnector<HttpConnector>, Full<Bytes>>;
+
+pub(crate) fn cliente_https() -> Result<(Runtime, ClienteHttps), String> {
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("runtime: {e}"))?;
+    let https = hyper_rustls::HttpsConnectorBuilder::new()
+        .with_native_roots()
+        .map_err(|e| format!("certificados do sistema: {e}"))?
+        .https_only()
+        .enable_http1()
+        .build();
+    Ok((rt, Client::builder(TokioExecutor::new()).build(https)))
+}
+
 pub struct TelegramHttp {
     cfg: ConfigTelegram,
     rt: Runtime,
-    cliente: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
+    cliente: ClienteHttps,
 }
 
 impl fmt::Debug for TelegramHttp {
@@ -45,17 +62,7 @@ impl fmt::Debug for TelegramHttp {
 impl TelegramHttp {
     /// Raízes de certificado do sistema (no Windows, o repositório do usuário/máquina).
     pub fn new(cfg: ConfigTelegram) -> Result<Self, ErroTelegram> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(|e| ErroTelegram::Conexao(format!("runtime: {e}")))?;
-        let https = hyper_rustls::HttpsConnectorBuilder::new()
-            .with_native_roots()
-            .map_err(|e| ErroTelegram::Conexao(format!("certificados do sistema: {e}")))?
-            .https_only()
-            .enable_http1()
-            .build();
-        let cliente = Client::builder(TokioExecutor::new()).build(https);
+        let (rt, cliente) = cliente_https().map_err(ErroTelegram::Conexao)?;
         Ok(Self { cfg, rt, cliente })
     }
 

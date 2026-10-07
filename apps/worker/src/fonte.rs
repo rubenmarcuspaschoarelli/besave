@@ -1,7 +1,7 @@
 //! Fronteira com o Oracle: tudo que o worker lê passa por `FonteOfertas`.
 
-use std::cell::Cell;
-use std::collections::HashMap;
+use std::cell::{Cell, RefCell};
+use std::collections::{BTreeMap, HashMap};
 
 use crate::conversao::{LinhaOferta, LinhaProduto};
 
@@ -27,6 +27,9 @@ pub trait FonteOfertas {
     fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>>;
     /// Produtos dos ids pedidos, em lote; ids sem linha em PRODUTO ficam de fora.
     fn produtos(&self, ids: &[i64]) -> Result<HashMap<i64, LinhaProduto>>;
+    /// `DT_PUBLICACAO_SITE = SYSDATE` nos ids com a data nula (BSV-40), num statement só e com
+    /// commit; até `BLOCO_IN` ids. Devolve as linhas alteradas.
+    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64>;
 }
 
 /// Fonte em memória para testes. `agora` em segundos Unix UTC. Conta as chamadas de produto.
@@ -37,6 +40,10 @@ pub struct FakeFonte {
     agora: i64,
     chamadas_produto: Cell<u64>,
     chamadas_produtos: Cell<u64>,
+    /// id → `DT_PUBLICACAO_SITE` (o `agora` do fake faz o papel de `SYSDATE`).
+    publicadas_site: RefCell<BTreeMap<i64, i64>>,
+    lotes_publicacao_site: Cell<u64>,
+    falhar_publicacao_site: bool,
 }
 
 impl FakeFonte {
@@ -57,6 +64,23 @@ impl FakeFonte {
     /// Chamadas de `produtos` (lote) desde a criação.
     pub fn chamadas_produtos(&self) -> u64 {
         self.chamadas_produtos.get()
+    }
+
+    /// `marcar_publicadas_site` passa a falhar (falha injetada).
+    #[must_use]
+    pub fn com_falha_publicacao_site(mut self) -> Self {
+        self.falhar_publicacao_site = true;
+        self
+    }
+
+    /// `DT_PUBLICACAO_SITE` gravada por id.
+    pub fn publicadas_site(&self) -> BTreeMap<i64, i64> {
+        self.publicadas_site.borrow().clone()
+    }
+
+    /// Chamadas de `marcar_publicadas_site` (um statement cada).
+    pub fn lotes_publicacao_site(&self) -> u64 {
+        self.lotes_publicacao_site.get()
     }
 }
 
@@ -88,6 +112,26 @@ impl FonteOfertas for FakeFonte {
             .filter(|p| ids.contains(&p.id_produto))
             .map(|p| (p.id_produto, p.clone()))
             .collect())
+    }
+
+    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64> {
+        self.lotes_publicacao_site
+            .set(self.lotes_publicacao_site.get() + 1);
+        if self.falhar_publicacao_site {
+            return Err(ErroFonte::ConfigInvalida(
+                "DT_PUBLICACAO_SITE",
+                "falha injetada".into(),
+            ));
+        }
+        let mut datas = self.publicadas_site.borrow_mut();
+        let mut n = 0;
+        for l in self.ofertas.iter().filter(|l| ids.contains(&l.id)) {
+            if let std::collections::btree_map::Entry::Vacant(e) = datas.entry(l.id) {
+                e.insert(self.agora);
+                n += 1;
+            }
+        }
+        Ok(n)
     }
 }
 

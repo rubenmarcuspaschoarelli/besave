@@ -75,6 +75,12 @@ pub struct Relatorio {
     /// CSS, páginas, sitemaps, robots e índice `_estado/` (BSV-21).
     pub site: RelatorioSite,
     pub tempos: Tempos,
+    /// Ids do conjunto publicado (cards válidos, ativos e expirados).
+    pub ids_publicados: Vec<i64>,
+    /// Linhas com `DT_PUBLICACAO_SITE` gravada neste ciclo (BSV-40; fora de `gerar`).
+    pub publicacao_site_marcadas: u64,
+    /// Lotes do `UPDATE` de `DT_PUBLICACAO_SITE` que falharam.
+    pub publicacao_site_falhas: u64,
 }
 
 /// Tempo de cada fase de `gerar()`, em ms (BSV-13b). `*_listagem` é parte da fase acima dela.
@@ -200,6 +206,7 @@ pub fn gerar(
         }
     }
     rel.validas = cards.len() as u64;
+    rel.ids_publicados = cards.iter().map(|c| c.id).collect();
     rel.dt_mais_recente = validas.iter().filter_map(|l| l.dt_oferta).max();
 
     // Produtos em lote, antes de qualquer escrita (sem N+1 no Oracle). `para_pagina` valida o
