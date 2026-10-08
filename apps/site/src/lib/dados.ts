@@ -10,7 +10,7 @@ export type {
 	Ordem,
 	Publico
 } from './dados/tipos.ts';
-export { Catalogo, normalizar } from './dados/catalogo.ts';
+export { Catalogo, descontoPct, maioresDescontos, normalizar } from './dados/catalogo.ts';
 export { buscar } from './dados/busca.ts';
 export type { ResultadoBusca } from './dados/busca.ts';
 export { INTERVALO_MS, criarSincronizador, diferenca } from './dados/sincronizador.ts';

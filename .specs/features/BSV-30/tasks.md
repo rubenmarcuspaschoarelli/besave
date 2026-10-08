@@ -115,7 +115,7 @@ T8
 
 ---
 
-### T4: Card, CardMini e BotaoFavorito [ ]
+### T4: Card, CardMini e BotaoFavorito [x]
 
 **What**: componentes do card conforme o modelo A.
 **Where**: `apps/site/src/lib/componentes/Card.svelte`
