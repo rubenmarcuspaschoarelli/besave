@@ -89,8 +89,8 @@ T5 → T6
 
 **Done when**:
 
-- [ ] Unit (render SSR de `Grade`) e e2e na home: imgs 1–4 sem `lazy`, só a 1ª com `fetchpriority="high"`, 5ª em diante e faixa `lazy`
-- [ ] Gate build passa
+- [x] Unit (render SSR de `Grade`) e e2e na home: imgs 1–4 sem `lazy`, só a 1ª com `fetchpriority="high"`, 5ª em diante e faixa `lazy`
+- [x] Gate build passa
 
 **Tests**: e2e
 **Gate**: build

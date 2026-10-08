@@ -192,3 +192,26 @@ test('imagem ausente vira o placeholder da área', async ({ page }) => {
 		await expect(card.locator('img')).toHaveAttribute('src', `/img/placeholder/${slug[area]}.webp`);
 	}
 });
+
+// IMG-01, IMG-02: primeira dobra da grade sem lazy; faixa e o resto lazy.
+test('prioridade das fotos da grade', async ({ page }) => {
+	const fotos = page.locator(`${GRADE} img`);
+	await expect(fotos).toHaveCount(40);
+	const attrs = await fotos.evaluateAll((els) =>
+		els.map((e) => [e.getAttribute('loading'), e.getAttribute('fetchpriority')])
+	);
+	expect(attrs.slice(0, 4)).toEqual([
+		[null, 'high'],
+		[null, null],
+		[null, null],
+		[null, null]
+	]);
+	for (const a of attrs.slice(4)) expect(a).toEqual(['lazy', null]);
+	const faixa = await page
+		.locator('[data-faixa] img')
+		.evaluateAll((els) =>
+			els.map((e) => [e.getAttribute('loading'), e.getAttribute('fetchpriority')])
+		);
+	expect(faixa).toHaveLength(8);
+	for (const a of faixa) expect(a).toEqual(['lazy', null]);
+});
