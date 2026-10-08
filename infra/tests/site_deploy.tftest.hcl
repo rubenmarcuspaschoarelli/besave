@@ -36,7 +36,7 @@ run "site_deploy" {
         Condition = {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-            "token.actions.githubusercontent.com:sub" = "repo:rubenmarcuspaschoarelli/besave:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:rubenmarcuspaschoarelli@51489817/besave@1371919473:ref:refs/heads/main"
           }
         }
       }]
