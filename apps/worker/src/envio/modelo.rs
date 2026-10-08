@@ -1,7 +1,7 @@
 //! `OfertaCanal` (CONTRATO §11), a linha do Oracle que a alimenta e os parâmetros por canal
 //! (`PARAMETROS_ENVIO`, `sql/bsv-40.sql`).
 
-use crate::conversao::{LinhaOferta, Rejeicao, desconto_pct, para_card, truncar};
+use crate::conversao::{LinhaOferta, Rejeicao, desconto_pct, truncar, validar_card};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::Loja;
 
@@ -39,7 +39,7 @@ pub struct OfertaCanal {
 
 /// Regras do §9 + URL de afiliado + `id_produto` (só vai ao canal o que tem página).
 pub fn para_canal(l: &LinhaCanal, m: &Mapeamento) -> Result<OfertaCanal, Rejeicao> {
-    let card = para_card(&l.oferta, m)?;
+    let card = validar_card(&l.oferta, m)?;
     let id_produto = l
         .oferta
         .id_produto

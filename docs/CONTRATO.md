@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.4.0** (SemVer; mudança incompatível = major).
-Histórico: 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.5.0** (SemVer; mudança incompatível = major).
+Histórico: 1.5.0 — `OfertaCard.dp` (data de publicação no site), orçamento do card média ≤ 230 B (AD-074), §10.6 respondida (BSV-36). 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -69,8 +69,8 @@ A tabela de mapeamento texto → enum vive em `packages/contract/mapeamento.json
 
 ## 3. `OfertaCard` — projeção compacta (chunks da lista e da busca)
 
-Orçamento: **média ≤ 200 bytes por registro em JSON bruto**, sem teto por card; o gate é o chunk
-comprimido ≤ 60 KB (MANIFEST §7, AD-064). Chaves curtas por isso. O título não é cortado além da regra de `t`: a busca depende dele.
+Orçamento: **média ≤ 230 bytes por registro em JSON bruto**, sem teto por card; o gate é o chunk
+comprimido ≤ 60 KB (MANIFEST §7, AD-064, AD-074). Chaves curtas por isso. O título não é cortado além da regra de `t`: a busca depende dele.
 
 | campo | tipo | origem | regra |
 |---|---|---|---|
@@ -81,6 +81,7 @@ comprimido ≤ 60 KB (MANIFEST §7, AD-064). Chaves curtas por isso. O título n
 | `pp` | integer ≥ 1 | `VL_PRECO_POR` | centavos; obrigatório |
 | `c` | string 1..30 \| ausente | `DS_CUPOM` | só presente se houver cupom; trim, maiúsculas |
 | `dt` | string date-time | `DT_OFERTA` | ISO 8601 UTC |
+| `dp` | string date-time | `DT_PUBLICACAO_SITE` | ISO 8601 UTC; nula → instante do ciclo truncado ao minuto, gravado no Oracle depois do manifest (§11); fora de `[2026-10-06T00:00:00Z, instante]` → instante do ciclo + WARN, sem rejeitar |
 | `a` | `Area` | `DS_COMUNIDADE` | enum |
 | `p` | `Publico` | `DS_PUBLICO` | enum |
 | `x` | `1` \| ausente | `ST_ATIVO = 0` | **expirada**; só presente quando inativa (custa 6 bytes só nelas) |
@@ -94,7 +95,7 @@ Desconto (%) **não é campo**: o cliente calcula `round((1 - pp/pd) * 100)` qua
 
 Exemplo:
 ```json
-{"id":5412,"l":"AMAZON","t":"Fone Bluetooth XYZ com ANC","pd":29990,"pp":19990,"c":"BESAVE10","dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"}
+{"id":5412,"l":"AMAZON","t":"Fone Bluetooth XYZ com ANC","pd":29990,"pp":19990,"c":"BESAVE10","dt":"2026-09-24T12:40:00Z","dp":"2026-10-06T15:02:00Z","a":"TECH","p":"UNISSEX"}
 ```
 
 ---
@@ -237,8 +238,8 @@ Não é consumido em F1/F2. Definido aqui para o schema não mudar quando entrar
 3. Cupons da tabela `CUPOM` aparecem na home (F3) ou só em página própria (F4)?
 4. ~~`DT_ULT_ATUALIZACAO`: criar ou não?~~ **Respondido:** não será criada; os índices de `_estado/` resolveram o custo (AD-058).
 5. Domínio curto: `besave.io` ou `besave.me`?
-6. Ordenação da home: `dt` da oferta ou data de publicação no Besave (campo novo, derivável do
-   índice de `_estado/`)? Decidir na sessão de design (BSV-30); afeta AD-063 e o toast de novas.
+6. ~~Ordenação da home: `dt` ou data de publicação no Besave?~~ **Respondido:** ordenação por `dp`
+   (data de publicação no site, `DT_PUBLICACAO_SITE`); card sem `dp` (chunk antigo) usa `dt` (AD-074, BSV-36).
 
 ---
 
@@ -262,6 +263,6 @@ que tem página no ar).
 | `recorrencia` | boolean | `ST_RECORRENCIA = 1` | preço do Programe e Poupe |
 | `dt_oferta` | date-time | `DT_OFERTA` | ISO 8601 UTC |
 
-`OFERTA.DT_PUBLICACAO_SITE` (DATE, hora local): gravada pelo `besave-ciclo` depois do manifest, uma vez
-por oferta (só quando nula). O envio só considera ofertas com ela preenchida. Critérios de envio
+`OFERTA.DT_PUBLICACAO_SITE` (DATE, hora local): gravada pelo `besave-ciclo` depois do manifest com o
+instante do ciclo (o mesmo `dp` do card, §3), só quando nula ou fora da faixa válida. O envio só considera ofertas com ela preenchida. Critérios de envio
 (janela, cota, desconto mínimo, repetição) vivem em `PARAMETROS_ENVIO` (`apps/worker/sql/bsv-40.sql`).

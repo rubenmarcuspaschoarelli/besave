@@ -180,8 +180,10 @@ export function gerarCards(qtd: number, semente: number): OfertaCard[] {
 		const pp = centavos90(6990 * Math.exp(0.8 * normal(r)));
 		const pd = r() < 0.17 ? null : centavos90(pp * (1.1 + r() * 1.4));
 		const c = r() < 0.32 ? item(r, CUPONS) : undefined;
-		const dt =
-			new Date(BASE_DT - Math.floor(r() * JANELA_S) * 1000).toISOString().slice(0, 19) + 'Z';
+		const tdt = BASE_DT - Math.floor(r() * JANELA_S) * 1000;
+		const dt = new Date(tdt).toISOString().slice(0, 19) + 'Z';
+		// dp ≥ dt, até 2 dias depois; derivado do id para não mudar a sequência do PRNG.
+		const dp = new Date(tdt + ((id * 7919) % 172_800) * 1000).toISOString().slice(0, 19) + 'Z';
 		const a = escolher(r, AREA);
 		const p = escolher(r, PUBLICO);
 		const x = r() < 0.05;
@@ -194,6 +196,7 @@ export function gerarCards(qtd: number, semente: number): OfertaCard[] {
 			pp,
 			...(c ? { c } : {}),
 			dt,
+			dp,
 			a,
 			p,
 			...(x ? { x: 1 as const } : {})
@@ -241,7 +244,7 @@ export function gerarManifest(cards: OfertaCard[], versao = 20261002120000): Pub
 	const gerado_em = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}T${s.slice(8, 10)}:${s.slice(10, 12)}:${s.slice(12, 14)}Z`;
 	return {
 		manifest: {
-			contrato: '1.3.3',
+			contrato: '1.5.0',
 			versao,
 			gerado_em,
 			total_ofertas: cards.length,

@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import { describe, expect, it } from 'vitest';
+import { brotliCompressSync, constants } from 'node:zlib';
 import { gerarCards, gerarManifest } from './gerador.ts';
 import type { OfertaCard } from './tipos.ts';
 
@@ -84,5 +85,25 @@ describe('gerador sintético', () => {
 		const min = Math.min(...ts);
 		expect(max - min).toBeLessThanOrEqual(45 * 86400_000);
 		expect(max - min).toBeGreaterThan(40 * 86400_000);
+	});
+});
+
+// BSV-36 SIT-06 e ORC-01 (AD-074).
+describe('gerador sintético: dp', () => {
+	it('SIT-06: todo card tem dp ≥ dt', () => {
+		expect(cards.every((c) => typeof c.dp === 'string')).toBe(true);
+		expect(cards.every((c) => Date.parse(c.dp!) >= Date.parse(c.dt))).toBe(true);
+	});
+
+	it('ORC-01: 1 000 cards realistas → média ≤ 230 B e chunk comprimido ≤ 60 KB', () => {
+		for (const semente of [1, 2, 3]) {
+			const mil = gerarCards(1000, semente);
+			const bytes = mil.reduce((s, c) => s + Buffer.byteLength(JSON.stringify(c)), 0);
+			expect(bytes / 1000).toBeLessThanOrEqual(230);
+			const br = brotliCompressSync(Buffer.from(JSON.stringify(mil)), {
+				params: { [constants.BROTLI_PARAM_QUALITY]: 9 }
+			});
+			expect(br.length).toBeLessThanOrEqual(60 * 1024);
+		}
 	});
 });

@@ -22,7 +22,7 @@ export interface Trecho {
 	segmentos: string[];
 	texto: string;
 	inicios: Int32Array;
-	/** `dt` em ms, para ordenar sem comparar strings. */
+	/** `dp` em ms (sem `dp`, `dt`), para ordenar sem comparar strings. */
 	tempos: Float64Array;
 }
 
@@ -35,7 +35,7 @@ function razao(c: OfertaCard): number {
 	return c.pd ? c.pp / c.pd : Infinity;
 }
 
-/** Cards selecionados com o `dt` numérico de cada um. */
+/** Cards selecionados com o `dp` (ou `dt`) numérico de cada um. */
 export class Selecao {
 	cards: OfertaCard[] = [];
 	tempos: number[] = [];
@@ -45,7 +45,7 @@ export class Selecao {
 		this.tempos.push(tempo);
 	}
 
-	/** recentes: dt desc, id desc; desconto e preço desempatam por recentes. */
+	/** recentes: dp desc, id desc; desconto e preço desempatam por recentes. */
 	ordenar(ordem: Ordem = 'recentes'): OfertaCard[] {
 		const { cards, tempos } = this;
 		const n = cards.length;
@@ -63,6 +63,32 @@ export class Selecao {
 		);
 		return Array.from(idx, (i) => cards[i]);
 	}
+}
+
+const DIA_MS = 86_400_000;
+
+/** Desconto inteiro do contrato (CONTRATO §3), meia para cima como no worker; `null` sem `pd`. */
+export function descontoPct(c: OfertaCard): number | null {
+	if (!c.pd || c.pd <= c.pp) return null;
+	return Math.min(99, Math.floor((200 * (c.pd - c.pp) + c.pd) / (2 * c.pd)));
+}
+
+/**
+ * "Maiores descontos de hoje": cards da lista padrão (ativos, sem pendentes do toast) com `dp`
+ * (ou `dt`) nas últimas 24 h, por desconto desc, desempate `dp` desc e `id` desc. `agora` em ms.
+ */
+export function maioresDescontos(cat: Catalogo, agora: number, n: number): OfertaCard[] {
+	const desde = agora - DIA_MS;
+	const r: { c: OfertaCard; pct: number }[] = [];
+	// `lista()` vem em recentes (dp desc, id desc): para no primeiro fora da janela.
+	for (const c of cat.lista()) {
+		if (Date.parse(c.dp ?? c.dt) < desde) break;
+		const pct = descontoPct(c);
+		if (pct !== null) r.push({ c, pct });
+	}
+	// Sort estável: empate de desconto mantém dp desc, id desc.
+	r.sort((a, b) => b.pct - a.pct);
+	return r.slice(0, n).map((x) => x.c);
 }
 
 export function casaFiltro(c: OfertaCard, f: Filtro): boolean {
@@ -104,7 +130,7 @@ export class Catalogo {
 					: textoDe(card);
 			anterior.delete(card.id);
 			inicios[i] = pos;
-			tempos[i] = Date.parse(card.dt);
+			tempos[i] = Date.parse(card.dp ?? card.dt);
 			pos += segmentos[i].length + 1;
 			if (this.#base && !this.#base.has(card.id)) {
 				if (card.x) {

@@ -6,7 +6,7 @@ use oracle::sql_type::ToSql;
 use oracle::{Connection, InitParams, Row};
 
 use crate::avisos::modelo::LinhaAviso;
-use crate::conversao::{LinhaOferta, LinhaProduto};
+use crate::conversao::{LinhaOferta, LinhaProduto, faixa_publicacao};
 use crate::fonte::{ErroFonte, FonteOfertas, Result};
 
 /// Fuso das colunas DATE (os robôs gravam hora local). Offset fixo: o arquivo de fuso do
@@ -96,14 +96,16 @@ macro_rules! epoch_utc {
     };
 }
 
-/// Query de publicação (CONTRATO §7). `DT_ULT_ATUALIZACAO` não é lida.
+/// Query de publicação (CONTRATO §7). `DT_ULT_ATUALIZACAO` não é lida. As 15 primeiras colunas são
+/// as de `linha_oferta`; a 16ª é `DT_PUBLICACAO_SITE` (BSV-36).
 pub const SQL_OFERTAS: &str = concat!(
     "SELECT ID_OFERTA, ID_PRODUTO, DS_LOJA, DS_TITULO, VL_PRECO_DE, VL_PRECO_POR, DS_CUPOM, ",
     "NR_NOTA_AVALIACAO, QT_AVALIACAO, ",
     epoch_utc!("DT_OFERTA"),
     ", DS_COMUNIDADE, DS_PUBLICO, CASE WHEN ST_ATIVO = 1 THEN 1 ELSE 0 END, ",
     epoch_utc!("DT_DESATIVACAO"),
-    ", DS_URL_AFILIADO",
+    ", DS_URL_AFILIADO, ",
+    epoch_utc!("DT_PUBLICACAO_SITE"),
     " FROM OFERTA WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7 ORDER BY ID_OFERTA"
 );
 
@@ -131,14 +133,31 @@ pub fn sql_produtos(n: usize) -> String {
     format!("{COLUNAS_PRODUTO} IN ({})", binds.join(", "))
 }
 
-/// `UPDATE` de `DT_PUBLICACAO_SITE` com `n` binds posicionais (BSV-40): só datas nulas.
+/// `UPDATE` de `DT_PUBLICACAO_SITE` (BSV-40, BSV-36): `:1` instante do ciclo, `:2..:3` faixa válida
+/// (segundos locais), `:4..` ids. Grava o mesmo `dp` do card, só em data nula ou fora da faixa.
 pub fn sql_publicacao_site(n: usize) -> String {
-    let binds: Vec<String> = (1..=n).map(|i| format!(":{i}")).collect();
+    let binds: Vec<String> = (4..n + 4).map(|i| format!(":{i}")).collect();
     format!(
-        "UPDATE OFERTA SET DT_PUBLICACAO_SITE = SYSDATE          WHERE DT_PUBLICACAO_SITE IS NULL AND ID_OFERTA IN ({})",
+        "UPDATE OFERTA SET DT_PUBLICACAO_SITE = DATE '1970-01-01' + :1 / 86400 \
+         WHERE (DT_PUBLICACAO_SITE IS NULL \
+         OR DT_PUBLICACAO_SITE < DATE '1970-01-01' + :2 / 86400 \
+         OR DT_PUBLICACAO_SITE > DATE '1970-01-01' + :3 / 86400) \
+         AND ID_OFERTA IN ({})",
         binds.join(", ")
     )
 }
+
+/// `[:1, :2, :3]` de `sql_publicacao_site`, em segundos locais (UTC + `fuso_segundos`): instante do
+/// ciclo, início e fim da faixa válida. Sem limite inferior (relógio antigo) = desde 1970: DATE não
+/// representa `i64::MIN`.
+pub fn binds_publicacao_site(agora: i64, fuso_segundos: i64) -> [i64; 3] {
+    let (min, instante) = faixa_publicacao(agora);
+    let instante = instante + fuso_segundos;
+    [instante, min.max(0) + fuso_segundos, instante]
+}
+
+/// Posição de `DT_PUBLICACAO_SITE` em `SQL_OFERTAS` (depois das 15 de `linha_oferta`).
+pub const COL_DT_PUBLICACAO_SITE: usize = 15;
 
 /// Todas as linhas de `AVISO` (`sql/bsv-41.sql`); datas em segundos Unix UTC.
 pub const SQL_AVISOS: &str = concat!(
@@ -174,7 +193,15 @@ impl FonteOfertas for OracleFonte {
         let linhas = self
             .conn
             .query_named(SQL_OFERTAS, &[("desloc", &self.fuso_segundos)])?;
-        linhas.map(|r| linha_oferta(&r?)).collect()
+        linhas
+            .map(|r| {
+                let r = r?;
+                Ok(LinhaOferta {
+                    dt_publicacao_site: r.get(COL_DT_PUBLICACAO_SITE)?,
+                    ..linha_oferta(&r)?
+                })
+            })
+            .collect()
     }
 
     fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>> {
@@ -200,11 +227,13 @@ impl FonteOfertas for OracleFonte {
         Ok(out)
     }
 
-    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64> {
+    fn marcar_publicadas_site(&self, ids: &[i64], agora: i64) -> Result<u64> {
         if ids.is_empty() {
             return Ok(0);
         }
-        let params: Vec<&dyn ToSql> = ids.iter().map(|id| id as &dyn ToSql).collect();
+        let binds = binds_publicacao_site(agora, self.fuso_segundos);
+        let mut params: Vec<&dyn ToSql> = binds.iter().map(|b| b as &dyn ToSql).collect();
+        params.extend(ids.iter().map(|id| id as &dyn ToSql));
         let n = self
             .conn
             .execute(&sql_publicacao_site(ids.len()), &params)?
@@ -249,6 +278,8 @@ pub(crate) fn linha_oferta(r: &Row) -> Result<LinhaOferta> {
         ativo: r.get::<_, i64>(12)? == 1,
         dt_desativacao: r.get(13)?,
         url_afiliado: r.get::<_, Option<String>>(14)?.unwrap_or_default(),
+        // 16ª coluna, só em `SQL_OFERTAS` (lida em `ofertas`).
+        dt_publicacao_site: None,
     })
 }
 

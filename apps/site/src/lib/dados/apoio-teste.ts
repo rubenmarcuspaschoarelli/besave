@@ -27,7 +27,7 @@ export function ref(n: number, tag = 'a'): ChunkRef {
 
 export function manifest(chunks: ChunkRef[], versao = 20261001000000): Manifest {
 	return {
-		contrato: '1.3.3',
+		contrato: '1.5.0',
 		versao,
 		gerado_em: '2026-10-01T00:00:00Z',
 		total_ofertas: 0,

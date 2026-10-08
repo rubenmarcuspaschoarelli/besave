@@ -132,12 +132,19 @@ fn manifest_chunks_com_ids_reais_e_bytes_comprimidos() {
 #[test]
 fn fixture_vira_um_chunk_com_hash_deterministico() {
     let mut p = PublicadorMemoria::new();
-    rodar(linhas_fixture(), &mut p).unwrap();
+    rodar_com_imagens(
+        comum::linhas_fixture_no_ar(),
+        &mut p,
+        &mut RedirectsMemoria::new(),
+        &dir_imagens_vazio(),
+        comum::AGORA_DP,
+    )
+    .unwrap();
     let m = manifest(&p);
     assert_eq!(m.chunks.len(), 1);
     assert_eq!(
         m.chunks[0].arquivo,
-        "data/chunks/5-89590e56ef6361dc.json.br"
+        "data/chunks/5-178a129b470c155b.json.br"
     );
     let bruto = descomprimir(&p.ler(&m.chunks[0].arquivo).unwrap().unwrap());
     assert_eq!(
@@ -303,6 +310,8 @@ fn relatorio_com_contagens() {
             bytes_totais: m.chunks.iter().map(|c| c.bytes).sum(),
             maior_chunk: Some((maior.n, maior.bytes)),
             versao: 20_260_924_124_000,
+            // BSV-36: AGORA (2026-09-24T12:40:00Z) já cai no minuto cheio.
+            instante_ciclo: AGORA,
             // Maior `dt` publicado: o da oferta 5413 (2026-09-24T12:41:00Z).
             dt_mais_recente: Some(1_790_253_660),
             redirects: RelatorioRedirects {

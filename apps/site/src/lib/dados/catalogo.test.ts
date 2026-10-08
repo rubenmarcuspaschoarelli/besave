@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Catalogo } from './catalogo.ts';
+import { Catalogo, maioresDescontos } from './catalogo.ts';
 import { card, manifest, ref } from './apoio-teste.ts';
 import type { OfertaCard } from './tipos.ts';
 
@@ -131,5 +131,60 @@ describe('Catalogo: progresso', () => {
 		cat.alvo(manifest([]));
 		expect(cat.completo).toBe(true);
 		expect(cat.lista()).toEqual([]);
+	});
+});
+
+// BSV-36: `recentes` por `dp` (sem `dp`, `dt`); "Maiores descontos de hoje".
+describe('dp: data de publicação no site', () => {
+	it('SIT-01: recentes segue dp desc mesmo contra a ordem de dt; empate de dp por id desc', () => {
+		const cat = completo([
+			card(1, { dt: '2026-09-30T10:00:00Z', dp: '2026-10-06T10:00:00Z' }),
+			card(2, { dt: '2026-10-05T10:00:00Z', dp: '2026-10-06T09:00:00Z' }),
+			card(3, { dt: '2026-09-01T10:00:00Z', dp: '2026-10-07T08:00:00Z' }),
+			card(5, { dt: '2026-10-06T23:00:00Z', dp: '2026-10-06T09:00:00Z' })
+		]);
+		// Por dt seria [5, 2, 1, 3].
+		expect(ids(cat.lista({ ordem: 'recentes' }))).toEqual([3, 1, 5, 2]);
+	});
+
+	it('SIT-02: card sem dp (chunk antigo) entra na ordem pelo dt', () => {
+		const cat = completo([
+			card(1, { dt: '2026-09-30T10:00:00Z', dp: '2026-10-06T10:00:00Z' }),
+			card(2, { dt: '2026-10-05T10:00:00Z', dp: '2026-10-06T09:00:00Z' }),
+			card(4, { dt: '2026-10-06T09:30:00Z' })
+		]);
+		expect(ids(cat.lista())).toEqual([1, 4, 2]);
+	});
+
+	describe('maioresDescontos', () => {
+		const agora = Date.parse('2026-10-07T12:00:00Z');
+		const promo = (id: number, dp: string | undefined, pp: number, o: Partial<OfertaCard> = {}) =>
+			card(id, { dt: '2026-10-01T00:00:00Z', ...(dp ? { dp } : {}), pd: 10000, pp, ...o });
+		const cat = completo([
+			promo(10, '2026-10-07T11:00:00Z', 5000), // 50%
+			promo(11, '2026-10-07T10:00:00Z', 2000), // 80%
+			promo(12, '2026-10-06T11:00:00Z', 1000), // 90%, dp de 25 h
+			promo(13, '2026-10-07T09:00:00Z', 500, { x: 1 }), // 95%, expirada
+			promo(14, '2026-10-07T08:00:00Z', 5000), // 50%, dp mais antigo que o de 10
+			promo(9, '2026-10-07T11:30:00Z', 5000, { pd: null }), // sem desconto
+			promo(15, '2026-10-06T12:00:00Z', 4000), // 60%, exatamente 24 h
+			promo(16, undefined, 3000, { dt: '2026-10-07T07:00:00Z' }) // 70%, sem dp: usa dt
+		]);
+
+		it('SIT-03: ativas das últimas 24 h por desconto desc, empate por dp desc', () => {
+			expect(ids(maioresDescontos(cat, agora, 10))).toEqual([11, 16, 15, 10, 14]);
+		});
+
+		it('SIT-03: devolve no máximo n', () => {
+			expect(ids(maioresDescontos(cat, agora, 2))).toEqual([11, 16]);
+		});
+
+		it('SIT-04: dp de 25 h fica de fora', () => {
+			expect(ids(maioresDescontos(cat, agora, 10))).not.toContain(12);
+		});
+
+		it('SIT-05: expirada fica de fora', () => {
+			expect(ids(maioresDescontos(cat, agora, 10))).not.toContain(13);
+		});
 	});
 });

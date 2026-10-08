@@ -27,6 +27,13 @@ for (const [fixture, schemaId, esperado] of casos) {
   const passou = ok === esperado;
   console.log(`${passou ? "PASS" : "FAIL"}  ${fixture}  (válido=${ok}, esperado=${esperado})`);
   if (!passou) { falhas++; if (!ok) console.log(validate.errors); }
+  // Fixture inválida de chunk: cada registro precisa falhar sozinho (um defeito por registro).
+  if (!esperado && fixture.includes("chunk")) {
+    const card = ajv.getSchema("https://besave.com.br/contract/oferta-card.schema.json");
+    load(fixture).forEach((r, i) => {
+      if (card(r)) { console.log(`FAIL  ${fixture}[${i}] (id ${r.id}) é válido sozinho`); falhas++; }
+    });
+  }
   if (!ok && !esperado) console.log(`      rejeitado como esperado: ${validate.errors.length} erro(s) em ${new Set(validate.errors.map(e=>e.instancePath.split("/")[1])).size} registro(s)`);
 }
 

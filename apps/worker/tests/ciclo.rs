@@ -49,11 +49,22 @@ fn arquivo(m: &Manifest, n: u64) -> String {
     m.chunks.iter().find(|c| c.n == n).unwrap().arquivo.clone()
 }
 
+/// Ofertas já no ar: `DT_PUBLICACAO_SITE` gravada (BSV-36). "Sem mudança no Oracle" inclui a coluna;
+/// com ela nula, o `dp` acompanharia o relógio de cada execução (o `UPDATE` não roda em `gerar`).
+fn no_ar(v: Vec<LinhaOferta>) -> Vec<LinhaOferta> {
+    v.into_iter()
+        .map(|l| LinhaOferta {
+            dt_publicacao_site: Some(AGORA - 1800),
+            ..l
+        })
+        .collect()
+}
+
 /// Chunks 1, 5 (fixture) e 7.
 fn fonte() -> Vec<LinhaOferta> {
     let mut v = linhas_fixture();
     v.extend([linha(1001), linha(7001)]);
-    v
+    no_ar(v)
 }
 
 /// Chaves gravadas a partir do índice `desde` do histórico.
@@ -326,9 +337,9 @@ fn primeira_execucao_publica_paginas_css_sitemap_robots_e_indice() {
 fn segunda_execucao_sem_mudanca_nao_sobe_nada_do_site() {
     let m = mapeamento();
     let mut p = PublicadorMemoria::new();
-    rodar(&linhas_fixture(), &mut p, &m, AGORA).unwrap();
+    rodar(&no_ar(linhas_fixture()), &mut p, &m, AGORA).unwrap();
     let marca = p.gravacoes().len();
-    let r2 = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
+    let r2 = rodar(&no_ar(linhas_fixture()), &mut p, &m, AGORA + 600).unwrap();
     assert_eq!(gravadas(&p, marca), ["manifest.prev.json", "manifest.json"]);
     assert_eq!(r2.site.paginas.publicadas, 0);
     assert_eq!(r2.site.paginas.inalteradas, 3);
