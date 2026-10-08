@@ -10,7 +10,7 @@
 
 <a
 	href="/oferta/{card.id}/"
-	class="grid w-32 flex-none gap-1.5 rounded-cartao border border-borda bg-fundo p-2 sm:w-37"
+	class="relative grid w-32 flex-none gap-1.5 rounded-cartao border border-borda bg-fundo p-2 sm:w-37"
 	data-id={card.id}
 >
 	<span class="overflow-hidden rounded-md"><FotoOferta {card} {pct} tamanho={160} /></span>

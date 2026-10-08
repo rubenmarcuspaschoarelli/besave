@@ -133,7 +133,7 @@ T8
 
 ---
 
-### T5: Home [ ]
+### T5: Home [x]
 
 **What**: Topo, BarraCanal, Busca, Areas, FaixaDescontos, Grade, Rodape e `routes/+page.svelte` ligados ao catálogo; Playwright configurado.
 **Where**: `apps/site/src/routes/+page.svelte`

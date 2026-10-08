@@ -1,7 +1,9 @@
 // Links e funções futuras do site (AD-077): ícone ou botão só aparece com link ou flag ligada.
 export type Rede = 'x' | 'facebook' | 'instagram' | 'youtube' | 'discord';
 export type App = 'android' | 'ios';
-export type Flag = 'postar' | 'notificacoes' | 'entrar' | 'social';
+export type BotaoTopo = 'postar' | 'notificacoes' | 'entrar';
+/** `social`: likes e comentários no card (fase com login). */
+export type Flag = BotaoTopo | 'social';
 
 export interface Config {
 	canal: string;
@@ -27,6 +29,6 @@ export function comLink<K extends string>(
 }
 
 /** Botões do topo com flag ligada, na ordem de exibição. */
-export function botoesLigados(flags: Record<Flag, boolean>): Flag[] {
+export function botoesLigados(flags: Record<Flag, boolean>): BotaoTopo[] {
 	return (['postar', 'notificacoes', 'entrar'] as const).filter((f) => flags[f]);
 }
