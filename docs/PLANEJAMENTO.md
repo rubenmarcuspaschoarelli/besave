@@ -89,19 +89,25 @@ Feito e no ar:
 - Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom e botão `/ir/{id}`.
 - Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
 - Alertas no Telegram: ciclo que falha, site parado (vigia na AWS) e nenhuma oferta nova em 24 h.
+- Canal `@besaveofertas` no ar: até 180 ofertas por dia em lotes de 2 (8–22 h), "Oferta encerrada" na
+  expiração e avisos programados com página `/avisos/{id}/` (BSV-40, BSV-41).
+- Cards com data de publicação no site (`dp`, contrato 1.5.0, BSV-36).
 - Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
   medida em produção: 25 mil cards, busca p95 ~8 ms.
-- Contrato 1.3.3, 73 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
+- Contrato 1.5.0, 84 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
 
 Próximos, nesta ordem:
-- **Canal do Telegram** (BSV-40, envio de ofertas) e **avisos programados** (BSV-41).
-- **Direção visual** (sessão com o dono) → BSV-30..34: site SvelteKit (shell e design system,
-  lista com carga progressiva, novas ofertas, páginas de área, busca).
-- Desligar o protótipo (bucket `besave.com.br` e distribuição antiga) depois de 2 semanas estável (~20/10).
+- **Site** (BSV-30 em andamento): shell, design system do modelo A, home básica, favoritos locais, 404 e
+  CSS compartilhado; depois BSV-31 (filtros, ordens, faixa de preço, virtualização), BSV-32 (toast de
+  novas), BSV-33 (páginas de área) e BSV-34 (busca). Deploy pelo GitHub Actions já pronto (BSV-17).
+- Desligar o protótipo (bucket `besave.com.br` e distribuição antiga): liberado pelo dono.
+- Tickets pequenos: DES-02 com aquecimento e mediana (BSV-35); limpeza do worker (literal de caminho de
+  usuário em `tests/alerta.rs`, avisos no `--publicar`/`--dry-run`, MANIFEST §6 com a fase de avisos);
+  atualizar as actions do `site-deploy.yml` para as versões maiores.
 - Robô: um cupom por oferta, URL de afiliado nas antigas, marcar expiradas (`ST_ATIVO = 0`).
 - Depois: usuários (F5), app (F6), admin (F7).
 
-Em aberto: ordenação padrão da home (CONTRATO §10.6), tamanho da imagem `-small` (200 px hoje; subir
+Em aberto: tamanho da imagem `-small` (200 px hoje; subir
 até 320 px, o teto do contrato — AD-059), cupons da tabela CUPOM no site, e quando tirar o worker do
 PC do dono.
 
