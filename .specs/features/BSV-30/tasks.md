@@ -97,7 +97,7 @@ T8
 
 ---
 
-### T3: Favoritos [ ]
+### T3: Favoritos [x]
 
 **What**: `lib/favoritos.svelte.ts`: favoritos reativos persistidos no `localStorage`.
 **Where**: `apps/site/src/lib/favoritos.svelte.ts`
