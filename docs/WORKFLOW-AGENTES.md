@@ -73,7 +73,8 @@ pare e avise (o worktree não nasceu de develop). Leia CLAUDE.md e docs/specs/BS
 docs/CONTRATO.md / docs/MANIFEST.md que a spec aponta.
 Use a skill tlc-spec-driven: specify → execute (design/tasks só se necessário).
 Pedido explícito do dono: ao fim, lance o Verifier como sub-agente independente (autor ≠ verificador),
-com sensor de discriminação; auto-verificação não conta como PASS.
+com sensor de discriminação; auto-verificação não conta como PASS. Não pergunte se pode lançar o
+Verifier: lance. Entregar sem validation.md é entrega incompleta. Antes da PR, tire e olhe os prints.
 Escopo = a pasta indicada na spec. Não faça push. Não grave em .specs/STATE.md nem LESSONS.md.
 Ao terminar, cole o veredito do validation.md e liste: feito / como testar / fora de escopo /
 decisões que propõe / bloqueia o merge (execução real do dono).
@@ -126,3 +127,5 @@ Só PASS libera a PR.
 | 16 | **Teste que grava em produção usa prefixo de teste e apaga o que criou.** | Três arquivos de 1 byte ("x") em `elas/` e `esporte-vida/` ficaram no bucket depois de um teste de permissão e quebraram `/elas/` por horas; sem `Cache-Control`, o navegador guardou o "x" por conta própria. |
 | 17 | **Não rodar teste de tempo enquanto outro worktree compila ou roda mutantes**; o Verifier roda os de tempo por último, sem carga. | DES-01/02 falharam só com a máquina ocupada (BSV-30b), sem regressão. |
 | 18 | **Mutante em rota/`entries` de site estático costuma ser equivalente** (o build segue os links); registrar como equivalente, não forçar teste. | BSV-30b: matcher e `entries` redundantes não mudavam o build. |
+| 19 | **Print é evidência, não enfeite: o autor olha os prints antes de abrir a PR.** | BSV-32: o botão de novas ofertas saía com altura zero; testes e mutantes passavam porque só mediam posição. O print mostrou, e o e2e passou a exigir altura mínima. |
+| 20 | **Em Sonnet, o prompt manda lançar o Verifier, sem pedir confirmação.** | BSV-14b e BSV-32 (Sonnet) entregaram sem Verifier e perguntaram se podiam lançá-lo, mesmo com "pedido explícito do dono" no prompt. |
