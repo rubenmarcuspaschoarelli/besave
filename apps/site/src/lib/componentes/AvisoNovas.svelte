@@ -40,7 +40,7 @@
 </script>
 
 <div
-	class="pointer-events-none sticky z-10 flex h-0 justify-center"
+	class="pointer-events-none sticky z-10 flex h-0 items-start justify-center"
 	style:top="{topo}px"
 	aria-live="polite"
 	data-aviso-novas

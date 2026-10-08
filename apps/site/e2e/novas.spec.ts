@@ -76,6 +76,9 @@ test('home: sem aviso na primeira carga; 2 novas após o polling; tocar põe no 
 	const topo = await page.locator('[data-topo]').boundingBox();
 	const caixa = await aviso.boundingBox();
 	expect((caixa?.y ?? 0) >= (topo?.y ?? 0) + (topo?.height ?? 0)).toBe(true);
+	// Botão com corpo de verdade (não achatado pelo contêiner de altura 0).
+	expect(caixa?.height ?? 0).toBeGreaterThanOrEqual(32);
+	await expect(aviso).toBeInViewport({ ratio: 1 });
 	// Nenhuma entrou na lista sozinha.
 	await expect(page.locator(`${GRADE}[data-id="1010"]`)).toHaveCount(0);
 
