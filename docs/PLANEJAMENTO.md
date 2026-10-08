@@ -94,12 +94,13 @@ Feito e no ar:
 - Cards com data de publicação no site (`dp`, contrato 1.5.0, BSV-36).
 - Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
   medida em produção: 25 mil cards, busca p95 ~8 ms.
-- Contrato 1.5.0, 84 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
+- Contrato 1.5.0, 89 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
 
 Próximos, nesta ordem:
 - **Site** (BSV-30 em andamento): shell, design system do modelo A, home básica, favoritos locais, 404 e
   CSS compartilhado; depois BSV-31 (filtros, ordens, faixa de preço, virtualização), BSV-32 (toast de
   novas), BSV-33 (páginas de área) e BSV-34 (busca). Deploy pelo GitHub Actions já pronto (BSV-17).
+- **Antes de divulgar o site:** `assets/besave.css` com cache de 5 min (AD-087).
 - Desligar o protótipo (bucket `besave.com.br` e distribuição antiga): liberado pelo dono.
 - Tickets pequenos: DES-02 com aquecimento e mediana (BSV-35); limpeza do worker (literal de caminho de
   usuário em `tests/alerta.rs`, avisos no `--publicar`/`--dry-run`, MANIFEST §6 com a fase de avisos);
