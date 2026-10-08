@@ -1,0 +1,19 @@
+/* Tokens do modelo A (AD-075). Fonte única: tema do Tailwind (app.css) e besave.css (página de oferta).
+   Modo escuro fica para depois: basta redefinir estas variáveis. */
+:root {
+	--cor-fundo: #ffffff;
+	--cor-superficie: #f4f6f5;
+	--cor-borda: #e1e6e3;
+	--cor-texto: #17201c;
+	--cor-suave: #56615b;
+	--cor-marca: #0b6e4f;
+	--cor-marca-escura: #084c37;
+	--cor-destaque: #c2410c;
+	--cor-sobre-destaque: #ffffff;
+	--cor-rodape: #084c37;
+	--cor-rodape-texto: #e3efe9;
+	--cor-foco: #1d4ed8;
+	--raio: 10px;
+	--fonte-corpo: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--fonte-titulo: 'Lato', var(--fonte-corpo);
+}
