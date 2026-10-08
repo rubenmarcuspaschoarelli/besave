@@ -314,14 +314,15 @@ O que o script faz, em ordem:
 
 | passo | comando | headers |
 |---|---|---|
-| 1 | `aws s3 sync _app/` (sem `--delete`, `--size-only`: o `LastModified` fica o do 1º upload) | `public, max-age=31536000, immutable` |
+| 1 | `aws s3 sync _app/` (sem `--delete` e sem `--size-only`: reenvia o `_app/` do build, e o `LastModified` fica o do último deploy que tinha o arquivo) | `public, max-age=31536000, immutable` |
 | 2 | `_app/version.json` (nome fixo do SvelteKit) | `public, max-age=300`, `application/json` |
 | 3 | `assets/besave.css`, `assets/fontes/*`, `favicon.*`, um `cp` por arquivo | `public, max-age=3600, stale-while-revalidate=86400` |
 | 4 | cada HTML, um `cp` por arquivo; `404.html` e `index.html` por último | `public, max-age=300`, `text/html; charset=utf-8` |
 | 5 | invalidação: `/index.html`, `/404.html`, `/{dir}/*` de cada diretório com HTML, `/assets/*` (nunca `/*`) | — |
 | 6 | limpeza de `_app/` com carência: lista `_app/` (`s3api list-objects-v2`) e apaga (`s3 rm`, um por arquivo) só o que **não está no build atual e subiu há mais de 7 dias**; arquivo do build nunca sai, mesmo antigo | — |
 
-A carência deixa uma página antiga ainda em cache (navegador ou borda) achar os chunks dela por uma semana.
+A carência conta de quando o arquivo saiu do build e deixa uma página antiga ainda em cache (navegador ou borda) achar
+os chunks dela por uma semana. Reenviar o `_app/` a cada deploy custa pouco (hoje 12 arquivos, ~100 KB).
 Nunca há `--delete`. O `--ensaio` também lista `_app/` (só leitura) e mostra o que seria apagado
 (`apagaria N arquivo(s)` e as linhas `aws s3 rm`), por isso no workflow ele roda depois da credencial.
 

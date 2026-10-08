@@ -48,7 +48,7 @@ export function planejar(arquivos, { build, bucket, distribuicao, prefixos = PRE
   const app = chaves.filter((c) => c.startsWith('_app/'));
   const html = chaves.filter((c) => c.endsWith('.html'));
   const outros = chaves.filter((c) => !c.startsWith('_app/') && !c.endsWith('.html'));
-  const sync = ['s3', 'sync', `${build}/_app`, `s3://${bucket}/_app/`, '--exclude', 'version.json', '--size-only', '--cache-control', IMUTAVEL];
+  const sync = ['s3', 'sync', `${build}/_app`, `s3://${bucket}/_app/`, '--exclude', 'version.json', '--cache-control', IMUTAVEL];
 
   // Na raiz só cabem os OBRIGATORIOS (prefixos.json); vão por último, depois das páginas que linkam.
   const internos = html.filter((c) => c.includes('/'));
@@ -69,7 +69,8 @@ export function planejar(arquivos, { build, bucket, distribuicao, prefixos = PRE
 
 /**
  * Limpeza de _app/ com carência: só sai o que (a) não está no build atual e (b) subiu há mais de
- * `dias`. Arquivo do build nunca sai, mesmo antigo (--size-only mantém o LastModified do 1º upload).
+ * `dias`. Arquivo do build nunca sai. Sem --size-only, todo deploy reenvia o _app/ do build, então o
+ * LastModified é o do último deploy que tinha o arquivo: a carência conta de quando ele saiu do build.
  * Página antiga em cache ainda acha seus chunks durante a carência.
  */
 export function expurgar(remotos, arquivosBuild, agora, dias = CARENCIA_DIAS) {

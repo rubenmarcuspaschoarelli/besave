@@ -36,7 +36,7 @@ guardada no GitHub.
 | `_app/version.json` (SvelteKit, nome fixo) | fora do sync imutável; `public, max-age=300`, `application/json` | nome sem hash com `immutable` congelaria a versão por 1 ano | n |
 | Limpeza de `_app/` | **revisão do dono (07/10):** sem `--delete`; por último, apaga só o que não está no build atual e tem `LastModified` há mais de 7 dias (estrito); ensaio mostra a lista | página antiga em cache acha seus chunks durante a carência | s |
 | Ensaio no workflow | depois da credencial | precisa listar `_app/` (só leitura) para mostrar o que seria apagado | n |
-| `--size-only` no sync de `_app/` | sim | nomes com hash: mesmo nome = mesmo conteúdo; evita reenviar tudo a cada build | n |
+| `--size-only` no sync de `_app/` | **não** (decisão do dono, 08/10) | com ele o `LastModified` ficava o do 1º upload e um chunk estável saía sem carência; sem ele, a carência conta do último deploy que tinha o arquivo | s |
 | Cache de `favicon.*` e `assets/fontes/*` | `public, max-age=3600, stale-while-revalidate=86400` (igual ao CSS) | spec não define; nomes sem hash | n |
 | Arquivo do build fora dos prefixos | o script falha antes de qualquer upload | a policy negaria no meio do deploy, deixando-o pela metade | n |
 | `index.html` e `404.html` ausentes no build | falha | MANIFEST §5: o deploy sempre publica `/404.html` | n |
@@ -68,12 +68,12 @@ guardada no GitHub.
 1. PUB-01: IF algum arquivo do build está fora dos prefixos THEN o script SHALL falhar sem nenhum comando AWS
 2. PUB-02: IF `index.html` ou `404.html` faltam no build THEN o script SHALL falhar sem nenhum comando AWS
 3. PUB-03: The script SHALL nunca usar `--delete`; o `_app/` novo sobe antes do HTML
-4. PUB-04: The script SHALL enviar `_app/` com `public, max-age=31536000, immutable` (exceto `_app/version.json`: `public, max-age=300`)
+4. PUB-04: The script SHALL enviar `_app/` com `public, max-age=31536000, immutable` (exceto `_app/version.json`: `public, max-age=300`), sem `--size-only` (todo deploy reenvia o `_app/` do build)
 5. PUB-05: The script SHALL enviar cada HTML com `public, max-age=300` e `text/html; charset=utf-8`, por arquivo
 6. PUB-06: The script SHALL enviar `assets/besave.css` com `public, max-age=3600, stale-while-revalidate=86400` e `text/css; charset=utf-8`
 7. PUB-07: The script SHALL criar uma invalidação só com caminhos de HTML e `/assets/*`, nunca `/*`
 8. PUB-08: WHEN `--ensaio` the script SHALL imprimir os comandos sem executá-los; a única chamada ao aws é a listagem de `_app/` (só leitura), e `--remotos` (listagem de arquivo) só é aceito com `--ensaio`
-9. PUB-09: WHEN publicação e invalidação terminaram the script SHALL apagar de `_app/` só os arquivos que não estão no build atual AND têm `LastModified` há mais de 7 dias; arquivo do build nunca é apagado; WHEN `--ensaio` SHALL mostrar essa lista sem apagar
+9. PUB-09: WHEN publicação e invalidação terminaram the script SHALL apagar de `_app/` só os arquivos que não estão no build atual AND têm `LastModified` há mais de 7 dias; arquivo do build nunca é apagado; arquivo que estava no deploy anterior e saiu agora não é apagado, mesmo com 1º upload antigo; WHEN `--ensaio` SHALL mostrar essa lista sem apagar
 
 ### P1: Workflow ⭐ MVP
 

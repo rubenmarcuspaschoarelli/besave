@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { planejar, expurgar, lerListagem, listagem, principal } from '../../deploy-site/publicar.mjs';
 
@@ -123,7 +123,7 @@ test('PUB-09: caminhos do build no formato do Windows também protegem', () => {
   assert.deepEqual(expurgar(remotos, buildBom.map((f) => f.replaceAll('/', '\\')), AGORA), []);
 });
 
-test('PUB-04: _app/ é imutável por 1 ano; version.json (nome fixo) tem 300 s', () => {
+test('PUB-04: _app/ é imutável por 1 ano, reenviado a cada deploy (sem --size-only); version.json tem 300 s', () => {
   const { comandos } = planejar(buildBom, opcoes);
   const syncs = comandos.filter((c) => c[1] === 'sync');
   assert.ok(syncs.length >= 1);
@@ -131,6 +131,8 @@ test('PUB-04: _app/ é imutável por 1 ano; version.json (nome fixo) tem 300 s',
     assert.equal(s[2], 'build/_app');
     assert.equal(valor(s, '--cache-control'), IMUTAVEL);
     assert.equal(valor(s, '--exclude'), 'version.json');
+    // decisão do dono (08/10): LastModified = último deploy que tinha o arquivo; a carência conta daí
+    assert.ok(!s.includes('--size-only'));
   }
   const v = comandos.find((c) => c[1] === 'cp' && c[3] === 's3://besave-site/_app/version.json');
   assert.ok(v, 'version.json enviado à parte');
@@ -354,4 +356,66 @@ test('PUB-09: --remotos sem --ensaio é recusado (a limpeza real usa a listagem 
   const status = comRemotos([], (arq) => comBuild((dir) => principal([...argsReais(dir), '--remotos', arq], aws, AGORA)));
   assert.equal(status, 1);
   assert.deepEqual(chamadas, []);
+});
+
+// PUB-04/09 entre deploys: S3 simulado guarda LastModified por chave e imita o aws s3 sync
+// (com --size-only, chave existente de mesmo nome não é reenviada; sem ele, todo arquivo do build é).
+function s3Simulado() {
+  const objetos = new Map();
+  let relogio = 0;
+  const aws = (args) => {
+    if (args[1] === 'sync') {
+      const origem = args[2];
+      for (const rel of readdirSync(origem, { recursive: true, withFileTypes: true })
+        .filter((e) => e.isFile())
+        .map((e) => relative(origem, join(e.parentPath, e.name)).replaceAll('\\', '/'))) {
+        if (rel === valor(args, '--exclude')) continue;
+        const chave = `_app/${rel}`;
+        if (!(args.includes('--size-only') && objetos.has(chave))) objetos.set(chave, relogio);
+      }
+    } else if (args[1] === 'cp') {
+      objetos.set(args[3].replace('s3://besave-site/', ''), relogio);
+    } else if (args[1] === 'rm') {
+      objetos.delete(args[2].replace('s3://besave-site/', ''));
+    } else if (args[1] === 'list-objects-v2') {
+      const lista = [...objetos].filter(([k]) => k.startsWith('_app/'))
+        .map(([Key, t]) => ({ Key, LastModified: new Date(t).toISOString().replace('Z', '+00:00') }));
+      return { status: 0, stdout: JSON.stringify(lista.length ? lista : null) };
+    }
+    return { status: 0 };
+  };
+  const deploy = (arquivos, quando) => {
+    relogio = quando;
+    const dir = mkdtempSync(join(tmpdir(), 'deploy-site-sim-'));
+    try {
+      for (const f of arquivos) {
+        mkdirSync(dirname(join(dir, f)), { recursive: true });
+        writeFileSync(join(dir, f), 'x');
+      }
+      return principal(['--build', dir, '--bucket', 'besave-site', '--distribuicao', 'EDIST0000'], aws, quando);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  return { objetos, deploy };
+}
+
+const SAIU = '_app/immutable/chunks/saiu.js';
+
+test('PUB-09: arquivo do build anterior que saiu agora, com 1º upload há 30 dias, NÃO é apagado (LastModified = deploy anterior)', () => {
+  const s3 = s3Simulado();
+  assert.equal(s3.deploy([...buildBom, SAIU], AGORA - 30 * DIA), 0); // 1º upload
+  assert.equal(s3.deploy([...buildBom, SAIU], AGORA - 1 * DIA), 0);  // deploy anterior, ainda com o arquivo
+  assert.equal(s3.deploy(buildBom, AGORA), 0);                       // saiu do build agora
+  assert.ok(s3.objetos.has(SAIU), 'a carência conta do último deploy que tinha o arquivo');
+  assert.equal(s3.objetos.get(SAIU), AGORA - 1 * DIA);
+});
+
+test('PUB-09: arquivo que saiu do build há mais de 7 dias é apagado no deploy seguinte', () => {
+  const s3 = s3Simulado();
+  assert.equal(s3.deploy([...buildBom, SAIU], AGORA - 30 * DIA), 0);
+  assert.equal(s3.deploy([...buildBom, SAIU], AGORA - 8 * DIA), 0);
+  assert.equal(s3.deploy(buildBom, AGORA), 0);
+  assert.ok(!s3.objetos.has(SAIU));
+  for (const f of buildBom.filter((x) => x.startsWith('_app/'))) assert.ok(s3.objetos.has(f), f);
 });
