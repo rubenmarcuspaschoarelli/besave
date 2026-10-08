@@ -10,7 +10,7 @@
 </script>
 
 <article
-	class="relative grid grid-rows-[auto_1fr] overflow-hidden rounded-cartao border border-borda bg-fundo focus-within:ring-2 focus-within:ring-foco"
+	class="relative grid grid-rows-[auto_1fr] overflow-hidden rounded-cartao border border-borda bg-fundo has-focus-visible:ring-2 has-focus-visible:ring-foco"
 	data-id={card.id}
 	data-area={card.a}
 >
