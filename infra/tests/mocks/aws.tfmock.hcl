@@ -88,3 +88,12 @@ override_resource {
   target = aws_cloudfront_function.link_curto
   values = { arn = "arn:aws:cloudfront::111111111111:function/link-curto" }
 }
+# Deploy do site (BSV-17)
+override_resource {
+  target = aws_iam_openid_connect_provider.github
+  values = { arn = "arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com" }
+}
+override_resource {
+  target = aws_iam_role.site_deploy
+  values = { arn = "arn:aws:iam::111111111111:role/besave-site-deploy", id = "besave-site-deploy" }
+}

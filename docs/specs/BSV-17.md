@@ -22,7 +22,8 @@ arquivos do site, com credencial temporária (OIDC) e permissão restrita aos pr
    - `s3:ListBucket` com condição `s3:prefix` nesses mesmos prefixos.
    - `cloudfront:CreateInvalidation` só na distribuição do site.
    - Nada em `data/`, `oferta/`, `img/`, `manifest*.json`, `sitemap*`, `robots.txt`, `_estado/`.
-3. **Workflow `site-deploy.yml`:** `pnpm install --frozen-lockfile && pnpm build` em `apps/site`; depois:
+3. **[Nota 2026-10-08: o `sync --delete` do `_app/` foi substituído por limpeza com carência de 7 dias,
+   sem `--size-only` — ver AD-079.]** **Workflow `site-deploy.yml`:** `pnpm install --frozen-lockfile && pnpm build` em `apps/site`; depois:
    - `_app/` → `aws s3 sync --delete`, `public, max-age=31536000, immutable`;
    - HTML (`index.html`, `404.html`, `desejos/`, páginas de área) → `public, max-age=300`,
      `text/html; charset=utf-8`;
