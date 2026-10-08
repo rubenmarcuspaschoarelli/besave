@@ -133,6 +133,8 @@ test('PUB-04: _app/ é imutável por 1 ano, reenviado a cada deploy (sem --size-
     assert.equal(valor(s, '--exclude'), 'version.json');
     // decisão do dono (08/10): LastModified = último deploy que tinha o arquivo; a carência conta daí
     assert.ok(!s.includes('--size-only'));
+    // comando inteiro: nenhum flag que deixe de reenviar (--no-overwrite) ou exclua mais do _app/
+    assert.deepEqual(s, ['s3', 'sync', 'build/_app', 's3://besave-site/_app/', '--exclude', 'version.json', '--cache-control', IMUTAVEL]);
   }
   const v = comandos.find((c) => c[1] === 'cp' && c[3] === 's3://besave-site/_app/version.json');
   assert.ok(v, 'version.json enviado à parte');
