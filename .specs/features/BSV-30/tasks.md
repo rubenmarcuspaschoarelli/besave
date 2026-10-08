@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-30/spec.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 

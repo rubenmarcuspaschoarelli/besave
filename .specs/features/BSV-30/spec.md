@@ -207,50 +207,50 @@ da identidade escolhida (modelo A) e que o worker publica, embora o dono agora s
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| TOK-01 | P1: Tokens | T1 | Pending |
-| TOK-02 | P1: Tokens | T1 | Pending |
-| TOK-03 | P1: Tokens | T1 | Pending |
-| TEM-01 | P1: Utilitários | T2 | Pending |
-| TEM-02 | P1: Utilitários | T2 | Pending |
-| TEM-03 | P1: Utilitários | T2 | Pending |
-| TEM-04 | P1: Utilitários | T2 | Pending |
-| CFG-01 | P1: Utilitários | T2 | Pending |
-| CFG-02 | P1: Utilitários | T2 | Pending |
-| CFG-03 | P1: Utilitários | T2 | Pending |
-| FAV-01 | P1: Favoritos | T3 | Pending |
-| FAV-02 | P1: Favoritos | T3 | Pending |
-| FAV-03 | P1: Favoritos | T3 | Pending |
-| FAV-04 | P1: Favoritos | T3 | Pending |
-| FAV-05 | P1: Favoritos | T3 | Pending |
-| FAV-06 | P1: Favoritos | T3 | Pending |
-| CAR-01 | P1: Card | T4 | Pending |
-| CAR-02 | P1: Card | T4 | Pending |
-| CAR-03 | P1: Card | T4 | Pending |
-| CAR-04 | P1: Card | T4 | Pending |
-| CAR-05 | P1: Card | T4 | Pending |
-| CAR-06 | P1: Card | T4 | Pending |
-| HOM-01 | P1: Home | T5 | Pending |
-| HOM-02 | P1: Home | T5 | Pending |
-| HOM-03 | P1: Home | T5 | Pending |
-| HOM-04 | P1: Home | T5 | Pending |
-| HOM-05 | P1: Home | T5 | Pending |
-| HOM-06 | P1: Home | T5 | Pending |
-| HOM-07 | P1: Home | T5 | Pending |
-| HOM-08 | P1: Home | T5 | Pending |
-| HOM-09 | P1: Home | T5 | Pending |
-| HOM-10 | P1: Home | T5 | Pending |
-| HOM-11 | P1: Home | T5 | Pending |
-| DES-01 | P1: Lista de desejos | T6 | Pending |
-| DES-02 | P1: Lista de desejos | T6 | Pending |
-| DES-03 | P1: Lista de desejos | T6 | Pending |
-| ERR-01 | P1: 404 e CSS | T7 | Pending |
-| ERR-02 | P1: 404 e CSS | T7 | Pending |
-| CSS-01 | P1: 404 e CSS | T7 | Pending |
-| CSS-02 | P1: 404 e CSS | T7 | Pending |
-| CSS-03 | P1: 404 e CSS | T7 | Pending |
-| WRK-01 | P1: Worker | T8 | Pending |
-| WRK-02 | P1: Worker | T8 | Pending |
-| WRK-03 | P1: Worker | T8 | Pending |
+| TOK-01 | P1: Tokens | T1 | Verified |
+| TOK-02 | P1: Tokens | T1 | Verified |
+| TOK-03 | P1: Tokens | T1 | Verified |
+| TEM-01 | P1: Utilitários | T2 | Verified |
+| TEM-02 | P1: Utilitários | T2 | Verified |
+| TEM-03 | P1: Utilitários | T2 | Verified |
+| TEM-04 | P1: Utilitários | T2 | Verified |
+| CFG-01 | P1: Utilitários | T2 | Verified |
+| CFG-02 | P1: Utilitários | T2 | Verified |
+| CFG-03 | P1: Utilitários | T2 | Verified |
+| FAV-01 | P1: Favoritos | T3 | Verified |
+| FAV-02 | P1: Favoritos | T3 | Verified |
+| FAV-03 | P1: Favoritos | T3 | Verified |
+| FAV-04 | P1: Favoritos | T3 | Verified |
+| FAV-05 | P1: Favoritos | T3 | Verified |
+| FAV-06 | P1: Favoritos | T3 | Verified |
+| CAR-01 | P1: Card | T4 | Verified |
+| CAR-02 | P1: Card | T4 | Verified |
+| CAR-03 | P1: Card | T4 | Verified |
+| CAR-04 | P1: Card | T4 | Verified |
+| CAR-05 | P1: Card | T4 | Verified |
+| CAR-06 | P1: Card | T4 | Verified |
+| HOM-01 | P1: Home | T5 | Verified |
+| HOM-02 | P1: Home | T5 | Verified |
+| HOM-03 | P1: Home | T5 | Verified |
+| HOM-04 | P1: Home | T5 | Verified |
+| HOM-05 | P1: Home | T5 | Verified |
+| HOM-06 | P1: Home | T5 | Verified |
+| HOM-07 | P1: Home | T5 | Verified |
+| HOM-08 | P1: Home | T5 | Verified |
+| HOM-09 | P1: Home | T5 | Verified |
+| HOM-10 | P1: Home | T5 | Verified |
+| HOM-11 | P1: Home | T5 | Verified |
+| DES-01 | P1: Lista de desejos | T6 | Verified |
+| DES-02 | P1: Lista de desejos | T6 | Verified |
+| DES-03 | P1: Lista de desejos | T6 | Verified |
+| ERR-01 | P1: 404 e CSS | T7 | Verified |
+| ERR-02 | P1: 404 e CSS | T7 | Verified |
+| CSS-01 | P1: 404 e CSS | T7 | Verified |
+| CSS-02 | P1: 404 e CSS | T7 | Verified |
+| CSS-03 | P1: 404 e CSS | T7 | Verified |
+| WRK-01 | P1: Worker | T8 | Verified |
+| WRK-02 | P1: Worker | T8 | Verified |
+| WRK-03 | P1: Worker | T8 | Verified |
 
 **Coverage:** 44 total, 44 mapped to tasks, 0 unmapped.
 
