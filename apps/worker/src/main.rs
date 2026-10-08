@@ -248,7 +248,6 @@ fn imprimir_relatorio(rel: &Relatorio) {
     }
     println!("maior_html: {}", pag.maior_html);
     println!("tempo_render_ms: {}", pag.tempo_render_ms);
-    println!("css_publicado: {}", site.css_publicado);
     println!("sitemaps_publicados: {}", site.sitemaps_publicados);
     println!("sitemaps_removidos: {}", site.sitemaps_removidos);
     println!("robots_publicado: {}", site.robots_publicado);

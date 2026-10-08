@@ -1,7 +1,8 @@
 # Template da página de oferta (BSV-20)
 
 `oferta.html` (minijinja) + `areas.json` → `/oferta/{id}/index.html`. CSS em
-`../assets/css/besave.css`, servido como `/assets/besave.css`. Render: `worker::pagina_html::TemplateOferta`
+`apps/site/src/lib/estilo/besave.css` (mesmos tokens do site), gerado no build do site e servido
+como `/assets/besave.css` (BSV-30). Render: `worker::pagina_html::TemplateOferta`
 (template e tabela embutidos no binário com `include_str!`). BSV-21 liga à geração.
 
 ## Comandos (em `apps/worker/`)
@@ -42,9 +43,10 @@ Filtros: `reais` (centavos → `R$ 1.299,90`), `milhar` (`1.832`), `nota` (`4,6`
 `areas.json` é a tabela única de rótulos e slugs; o teste `tabela_de_areas_igual_ao_contrato`
 falha se ela divergir de CONTRATO §2.3 ou do `enums.schema.json`.
 
-## Classes que BSV-30 precisa manter
+## Classes (interface com o CSS do site)
 
-O teste `classes_do_template_existem_no_css` falha se o template usar classe sem regra no CSS.
+`classes_do_template_existem_no_css` (aqui) e `besave-css.test.ts` (no site) falham se o template
+usar classe sem regra no CSS. Renomear classe é mudança de contrato.
 
 | classe | elemento | papel |
 |---|---|---|

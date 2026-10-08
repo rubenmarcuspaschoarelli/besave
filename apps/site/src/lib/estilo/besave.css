@@ -1,0 +1,339 @@
+/* besave.css — páginas do worker (oferta e aviso), servido como /assets/besave.css (BSV-30).
+   Tokens e fontes são os mesmos do site. As classes são a interface dos templates em
+   apps/worker/templates/: restilizar à vontade, renomear é mudança de contrato. */
+@import './tokens.css';
+@import './fontes.css';
+
+:root {
+	--largura: 72rem;
+	--cta-hover: #9a3412;
+}
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+html {
+	-webkit-text-size-adjust: 100%;
+}
+body {
+	margin: 0;
+	background: var(--cor-fundo);
+	color: var(--cor-texto);
+	font: 16px/1.5 var(--fonte-corpo);
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+		env(safe-area-inset-left);
+}
+img {
+	max-width: 100%;
+	height: auto;
+}
+a {
+	color: var(--cor-marca);
+}
+a:focus-visible,
+.cta:focus-visible {
+	outline: 3px solid var(--cor-foco);
+	outline-offset: 2px;
+}
+h1,
+h2,
+p,
+dl,
+dd,
+figure {
+	margin: 0;
+}
+
+/* Cabeçalho: logo em Lato 900 e áreas em pílulas, como no site. */
+.topo {
+	position: sticky;
+	top: 0;
+	z-index: 1;
+	display: flex;
+	align-items: center;
+	gap: 1rem;
+	padding: 0.625rem 1rem;
+	background: var(--cor-fundo);
+	border-bottom: 1px solid var(--cor-borda);
+}
+.logo {
+	flex: none;
+	font: 900 1.375rem/1 var(--fonte-titulo);
+	letter-spacing: -0.01em;
+	color: var(--cor-marca);
+	text-decoration: none;
+}
+.menu {
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.menu ul {
+	display: flex;
+	gap: 0.5rem;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	white-space: nowrap;
+}
+.menu a {
+	display: block;
+	padding: 0.375rem 0.8rem;
+	border: 1px solid var(--cor-borda);
+	border-radius: 999px;
+	color: var(--cor-texto);
+	text-decoration: none;
+	font-size: 0.8125rem;
+}
+.menu a:hover {
+	border-color: var(--cor-suave);
+}
+
+/* Oferta */
+.oferta {
+	max-width: var(--largura);
+	margin: 0 auto;
+	padding: 1rem;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 1.25rem;
+}
+.titulo {
+	font: 700 1.375rem/1.3 var(--fonte-titulo);
+	overflow-wrap: anywhere;
+}
+.expirada {
+	background: var(--cor-superficie);
+	color: var(--cor-texto);
+	font-weight: 700;
+	padding: 0.625rem 1rem;
+	border-radius: var(--raio);
+	border: 1px solid var(--cor-borda);
+	border-left: 4px solid var(--cor-destaque);
+}
+.compra {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 1.25rem;
+}
+.foto {
+	background: #fff;
+	border: 1px solid var(--cor-borda);
+	border-radius: var(--raio);
+	aspect-ratio: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	overflow: hidden;
+}
+.foto img {
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+.painel {
+	display: grid;
+	gap: 1rem;
+	align-content: start;
+}
+.preco {
+	display: grid;
+	gap: 0.25rem;
+}
+.loja {
+	color: var(--cor-suave);
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 0.8125rem;
+}
+.de {
+	color: var(--cor-suave);
+}
+.por {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	font-variant-numeric: tabular-nums;
+}
+.por strong {
+	font: 900 2rem/1.1 var(--fonte-titulo);
+	color: var(--cor-texto);
+}
+.desconto {
+	background: var(--cor-destaque);
+	color: var(--cor-sobre-destaque);
+	font: 900 0.9375rem/1 var(--fonte-titulo);
+	padding: 0.3rem 0.5rem;
+	border-radius: 6px;
+}
+.data {
+	color: var(--cor-suave);
+	font-size: 0.875rem;
+}
+.cupom {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	border: 2px dashed var(--cor-marca);
+	border-radius: var(--raio);
+	padding: 0.625rem 1rem;
+	color: var(--cor-suave);
+}
+.codigo {
+	font:
+		700 1.125rem/1.2 ui-monospace,
+		SFMono-Regular,
+		Menlo,
+		Consolas,
+		monospace;
+	color: var(--cor-texto);
+	letter-spacing: 0.05em;
+	overflow-wrap: anywhere;
+}
+.cta {
+	display: block;
+	text-align: center;
+	font-weight: 700;
+	font-size: 1.0625rem;
+	background: var(--cor-destaque);
+	color: var(--cor-sobre-destaque);
+	text-decoration: none;
+	padding: 0.875rem 1rem;
+	border-radius: 999px;
+	min-height: 48px;
+}
+.cta:hover {
+	background: var(--cta-hover);
+}
+.cta[aria-disabled='true'] {
+	background: var(--cor-suave);
+	cursor: not-allowed;
+}
+.avaliacao {
+	color: var(--cor-suave);
+}
+.avaliacao strong {
+	color: var(--cor-texto);
+}
+
+/* Detalhes e faixa de preço */
+.detalhes,
+.faixa {
+	display: grid;
+	gap: 0.75rem;
+	border-top: 1px solid var(--cor-borda);
+	padding-top: 1.25rem;
+}
+.detalhes h2,
+.faixa h2 {
+	font: 900 1.125rem/1.2 var(--fonte-titulo);
+	color: var(--cor-marca);
+}
+.ficha {
+	display: grid;
+	gap: 0;
+	border: 1px solid var(--cor-borda);
+	border-radius: var(--raio);
+	overflow: hidden;
+}
+.ficha div {
+	display: grid;
+	grid-template-columns: 9rem 1fr;
+	gap: 0.75rem;
+	padding: 0.5rem 0.75rem;
+}
+.ficha div:nth-child(odd) {
+	background: var(--cor-superficie);
+}
+.ficha dt {
+	color: var(--cor-suave);
+}
+.ficha dd {
+	overflow-wrap: anywhere;
+}
+.barra {
+	position: relative;
+	height: 0.5rem;
+	border-radius: 999px;
+	background: linear-gradient(90deg, var(--cor-marca), #d4a017 50%, var(--cor-destaque));
+}
+.marcador {
+	position: absolute;
+	top: 50%;
+	width: 1.125rem;
+	height: 1.125rem;
+	border-radius: 50%;
+	background: var(--cor-fundo);
+	border: 3px solid var(--cor-texto);
+	transform: translate(-50%, -50%);
+}
+.limites {
+	display: flex;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	color: var(--cor-suave);
+	font-size: 0.875rem;
+}
+
+/* Página de aviso (BSV-41) */
+.aviso .foto {
+	max-width: 36rem;
+}
+.canal a {
+	font-weight: 700;
+}
+
+/* Rodapé verde, como o do site */
+.rodape {
+	background: var(--cor-rodape);
+	color: var(--cor-rodape-texto);
+	margin-top: 1.5rem;
+	padding-block: 1.5rem;
+}
+.rodape nav {
+	max-width: var(--largura);
+	margin: 0 auto;
+	padding: 0 1rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 1rem 1.5rem;
+}
+.rodape a {
+	display: inline-block;
+	padding: 0.25rem 0;
+	color: var(--cor-rodape-texto);
+}
+
+/* Oferta encerrada (CONTRATO §7.1) */
+.encerrada .foto img {
+	filter: grayscale(1);
+	opacity: 0.8;
+}
+.encerrada .por strong {
+	color: var(--cor-suave);
+}
+
+@media (min-width: 1024px) {
+	.oferta {
+		padding: 1.5rem 1.5rem 2rem;
+	}
+	.titulo {
+		font-size: 1.75rem;
+	}
+	.compra {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 2rem;
+		align-items: start;
+	}
+	.topo {
+		padding: 0.75rem 1.5rem;
+	}
+	.rodape nav {
+		padding: 0 1.5rem;
+	}
+}

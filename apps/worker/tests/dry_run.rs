@@ -272,7 +272,9 @@ fn gerar_fake_publica_paginas_e_imprime_relatorio_do_site() {
             "{id}"
         );
     }
-    assert!(dir.join("assets/besave.css").is_file());
+    // BSV-30: o CSS é do deploy do site.
+    assert!(!dir.join("assets/besave.css").exists());
+    assert!(!stdout.contains("css_publicado"), "{stdout}");
     assert!(dir.join("sitemap.xml").is_file());
     assert!(dir.join("_estado/paginas.json").is_file());
     assert_eq!(
@@ -285,7 +287,6 @@ fn gerar_fake_publica_paginas_e_imprime_relatorio_do_site() {
         "paginas_inalteradas: 0\n",
         "paginas_removidas: 0\n",
         "paginas_falhas: 0\n",
-        "css_publicado: true\n",
         "sitemaps_publicados: 2\n",
         "robots_publicado: true\n",
     ] {

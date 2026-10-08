@@ -346,7 +346,6 @@ fn relatorio_com_contagens() {
                     // Tempo de relógio: o único campo sem valor fixo.
                     tempo_render_ms: rel.site.paginas.tempo_render_ms,
                 },
-                css_publicado: true,
                 sitemaps_publicados: 2,
                 sitemaps_removidos: 0,
                 robots_publicado: true,
@@ -502,7 +501,6 @@ fn falha_na_kvs_nao_grava_manifest() {
             || c.starts_with("img/placeholder/")
             || c.starts_with("oferta/")
             || c.starts_with("sitemap")
-            || c == "assets/besave.css"
             || c == "robots.txt"
             || c == "_estado/paginas.json"),
         "{:?}",
@@ -654,7 +652,7 @@ fn sem_origem_de_imagem_nao_bloqueia_a_oferta() {
 
 // ---- BSV-21 ----
 
-/// SIT-13: imagens → chunks → CSS → páginas → sitemaps → robots → índice → KVS → manifest.
+/// SIT-13: imagens → chunks → páginas → sitemaps → robots → índice → KVS → manifest (sem CSS, BSV-30).
 #[test]
 fn ordem_de_publicacao_do_site() {
     let tempo: Tempo = Rc::default();
@@ -668,7 +666,6 @@ fn ordem_de_publicacao_do_site() {
         ultima(&|c| c.starts_with("img/")),
         pos(&|c| c.starts_with("data/chunks/")),
         ultima(&|c| c.starts_with("data/chunks/")),
-        pos(&|c| c == "assets/besave.css"),
         pos(&|c| c.starts_with("oferta/")),
         ultima(&|c| c.starts_with("oferta/")),
         pos(&|c| c == "sitemap-1.xml"),
@@ -679,6 +676,7 @@ fn ordem_de_publicacao_do_site() {
         pos(&|c| c == "manifest.json"),
     ];
     assert!(ordem.windows(2).all(|w| w[0] < w[1]), "{ordem:?} {t:?}");
+    assert!(!t.iter().any(|c| c == "assets/besave.css"), "{t:?}");
 }
 
 /// Falha só nas páginas de oferta.

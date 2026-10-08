@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import './lib/estilo/tokens.css';
+@import './lib/estilo/fontes.css';
+
+@theme inline {
+	--color-fundo: var(--cor-fundo);
+	--color-superficie: var(--cor-superficie);
+	--color-borda: var(--cor-borda);
+	--color-texto: var(--cor-texto);
+	--color-suave: var(--cor-suave);
+	--color-marca: var(--cor-marca);
+	--color-marca-escura: var(--cor-marca-escura);
+	--color-destaque: var(--cor-destaque);
+	--color-sobre-destaque: var(--cor-sobre-destaque);
+	--color-rodape: var(--cor-rodape);
+	--color-rodape-texto: var(--cor-rodape-texto);
+	--color-foco: var(--cor-foco);
+	--radius-cartao: var(--raio);
+	--font-sans: var(--fonte-corpo);
+	--font-titulo: var(--fonte-titulo);
+}
+
+@layer base {
+	html {
+		background: var(--cor-fundo);
+		color: var(--cor-texto);
+		-webkit-text-size-adjust: 100%;
+	}
+	h1,
+	h2,
+	h3 {
+		font-family: var(--fonte-titulo);
+	}
+	:focus-visible {
+		outline: 2px solid var(--cor-foco);
+		outline-offset: 2px;
+	}
+}

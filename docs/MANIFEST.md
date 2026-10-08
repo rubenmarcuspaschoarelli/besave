@@ -24,7 +24,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /img/produtos/{id_produto}.webp
 /img/placeholder/{slug}.webp
 /img/avisos/{id}.{webp,jpg}         ← imagem do aviso, na extensão do arquivo cadastrado (BSV-41)
-/assets/besave.css                  ← CSS da página de oferta (BSV-21; BSV-30 passa a gerá-lo)
+/assets/besave.css                  ← CSS das páginas do worker; gerado pelo build do site e publicado pelo deploy do site (BSV-30, AD-078)
 /sitemap.xml                        ← sitemap index (só ofertas ATIVAS)
 /sitemap-{n}.xml                    ← ≤ 45.000 URLs cada
 /robots.txt                         ← Disallow: / até a virada de DNS (BESAVE_INDEXAVEL)
@@ -149,7 +149,7 @@ depois; o dado já existe).
 
 1. Imagens novas (existência decidida por **uma listagem** de `img/ofertas/`, nunca HEAD por chave — AD-042).
 2. Chunks novos (nomes novos, nunca sobrescreve).
-3. CSS, páginas HTML, sitemaps, robots e `_estado/paginas.json` (só o que mudou de hash — AD-041).
+3. Páginas HTML, sitemaps, robots e `_estado/paginas.json` (só o que mudou de hash — AD-041).
 4. KVS de redirects pelo diff contra `_estado/redirects.json`; KVS só é listada quando o índice
    não é confiável (ItemCount/ETag divergentes, ausente, ilegível) — AD-044.
 5. **Por último**, `manifest.json` e `manifest.prev.json` (regravados em todo ciclo: são o batimento
