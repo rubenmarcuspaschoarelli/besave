@@ -68,13 +68,12 @@ imagens_maior_small: 18420
 imagens_maior_grande: 142031
 ```
 
-## Páginas, CSS, sitemap e robots (BSV-21)
+## Páginas, sitemap e robots (BSV-21)
 
 Depois dos chunks e antes da KVS (MANIFEST §6 passo 3), `gerar()` publica, nesta ordem:
 
 | chave | conteúdo | headers |
 |---|---|---|
-| `assets/besave.css` | `assets/css/besave.css`, embutido no binário; o template referencia `/assets/besave.css` | `text/css; charset=utf-8`, `public, max-age=3600, stale-while-revalidate=86400` |
 | `oferta/{id}/index.html` | uma página por oferta publicada (ativa ou expirada ≤ 7 dias), `TemplateOferta` (BSV-20) | `text/html; charset=utf-8`, `public, max-age=600, stale-while-revalidate=300` |
 | `sitemap-{n}.xml` | só ofertas **ATIVAS**, até 45 000 URLs cada, `<loc>{base}/oferta/{id}/</loc>`, `<lastmod>` = data de `dt_oferta` | `application/xml`, `public, max-age=300` |
 | `sitemap.xml` | sitemap index apontando para os `sitemap-{n}.xml` | idem |
@@ -90,7 +89,9 @@ O `<link rel="canonical">` da página continua `https://besave.com.br/oferta/{id
 seja `BESAVE_BASE_URL`.
 
 **Só sobe o que mudou.** `_estado/paginas.json` é um objeto plano com o hash16 (SHA-256, 16 hex)
-de cada objeto publicado: chave numérica = id da página, `_css`, `_robots` e cada `sitemap*.xml`.
+de cada objeto publicado: chave numérica = id da página, `_robots` e cada `sitemap*.xml` (`_css` de
+índices antigos é ignorado). O `/assets/besave.css` que o template referencia é gerado pelo build
+do site e publicado pelo deploy do site (BSV-30, AD-078); o worker não o publica.
 É lido uma vez por execução; objeto com o mesmo hash não é enviado. Sem índice (primeira vez) ou
 com índice ilegível, tudo sobe (páginas são idempotentes) e o ciclo segue; nesse caminho (e só
 nele) o conjunto anterior de páginas é reconstruído com `listar("oferta/")`, então páginas de ids
@@ -118,7 +119,6 @@ paginas_removidas: 0
 paginas_falhas: 0
 maior_html: 3284
 tempo_render_ms: 3
-css_publicado: true
 sitemaps_publicados: 2
 sitemaps_removidos: 0
 robots_publicado: true

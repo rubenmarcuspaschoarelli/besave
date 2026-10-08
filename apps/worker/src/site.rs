@@ -1,4 +1,5 @@
-//! Sitemap, robots.txt, CSS e índice `_estado/` do site (BSV-21, MANIFEST §1, CONTRATO §7.1).
+//! Sitemap, robots.txt e índice `_estado/` do site (BSV-21, MANIFEST §1, CONTRATO §7.1). O CSS das
+//! páginas (`/assets/besave.css`) é gerado e publicado pelo site (BSV-30, AD-078).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
@@ -8,21 +9,15 @@ use tracing::{debug, warn};
 use crate::modelo::{OfertaPagina, Status};
 use crate::pagina_html::{ErroTemplate, TemplateOferta};
 use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
-use crate::publicador::{
-    ErroPublicador, META_CSS, META_ESTADO, META_ROBOTS, META_SITEMAP, Publicador,
-};
+use crate::publicador::{ErroPublicador, META_ESTADO, META_ROBOTS, META_SITEMAP, Publicador};
 
 /// URLs por `sitemap-{n}.xml`: margem sob o limite de 50 000 do protocolo.
 pub const MAX_URLS_SITEMAP: usize = 45_000;
 pub const CHAVE_SITEMAP_INDEX: &str = "sitemap.xml";
 pub const CHAVE_ROBOTS: &str = "robots.txt";
-/// Índice do que já está no bucket: id → hash16 da página, mais `_css`, `_robots` e cada
-/// `sitemap*.xml`. Lido uma vez por execução; regravado só quando muda.
+/// Índice do que já está no bucket: id → hash16 da página, mais `_robots` e cada `sitemap*.xml`.
+/// Lido uma vez por execução; regravado só quando muda. `_css` de índices antigos é ignorado.
 pub const CHAVE_ESTADO: &str = "_estado/paginas.json";
-/// Servido como `/assets/besave.css` (o template referencia esse caminho).
-pub const CHAVE_CSS: &str = "assets/besave.css";
-const CSS: &[u8] = include_bytes!("../assets/css/besave.css");
-const CHAVE_ESTADO_CSS: &str = "_css";
 const CHAVE_ESTADO_ROBOTS: &str = "_robots";
 const BASE_PADRAO: &str = "https://besave.com.br";
 const XMLNS: &str = "http://www.sitemaps.org/schemas/sitemap/0.9";
@@ -42,7 +37,6 @@ pub enum ErroSite {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RelatorioSite {
     pub paginas: RelatorioPaginas,
-    pub css_publicado: bool,
     pub sitemaps_publicados: u64,
     pub sitemaps_removidos: u64,
     pub robots_publicado: bool,
@@ -53,7 +47,6 @@ pub struct RelatorioSite {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct EstadoSite {
     pub paginas: IndicePaginas,
-    pub css: Option<String>,
     pub robots: Option<String>,
     pub sitemaps: BTreeMap<String, String>,
 }
@@ -65,7 +58,6 @@ impl EstadoSite {
         let mut e = Self::default();
         for (k, v) in mapa {
             match k.as_str() {
-                CHAVE_ESTADO_CSS => e.css = Some(v),
                 CHAVE_ESTADO_ROBOTS => e.robots = Some(v),
                 _ if k.starts_with("sitemap") => {
                     e.sitemaps.insert(k, v);
@@ -80,7 +72,7 @@ impl EstadoSite {
         Some(e)
     }
 
-    /// Objeto plano: `{"5412": "…", "_css": "…", "_robots": "…", "sitemap-1.xml": "…"}`.
+    /// Objeto plano: `{"5412": "…", "_robots": "…", "sitemap-1.xml": "…"}`.
     pub fn para_json(&self) -> Result<Vec<u8>, serde_json::Error> {
         let mut mapa: BTreeMap<String, &str> = self
             .paginas
@@ -88,9 +80,6 @@ impl EstadoSite {
             .iter()
             .map(|(id, h)| (id.to_string(), h.as_str()))
             .collect();
-        if let Some(h) = &self.css {
-            mapa.insert(CHAVE_ESTADO_CSS.to_owned(), h);
-        }
         if let Some(h) = &self.robots {
             mapa.insert(CHAVE_ESTADO_ROBOTS.to_owned(), h);
         }
@@ -118,7 +107,7 @@ fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador
     Ok(e)
 }
 
-/// MANIFEST §6 passo 3, na ordem: CSS, páginas (com expurgo), sitemaps (só ATIVAS com página no
+/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (só ATIVAS com página no
 /// bucket), robots e, por último, o índice. Cada objeto só sobe se o hash difere do índice
 /// anterior. Índice ausente ou ilegível: tudo sobe (páginas são idempotentes) e o conjunto anterior
 /// de páginas é reconstruído do bucket, para que as órfãs sejam expurgadas mesmo sem índice.
@@ -139,13 +128,6 @@ pub fn publicar_site(
     };
     let mut rel = RelatorioSite::default();
     let mut novo = EstadoSite::default();
-
-    let css = hash16(CSS);
-    if anterior.css.as_ref() != Some(&css) {
-        pub_.gravar(CHAVE_CSS, CSS, &META_CSS)?;
-        rel.css_publicado = true;
-    }
-    novo.css = Some(css);
 
     let t = TemplateOferta::novo()?;
     let (indice, rel_paginas) = publicar_paginas(paginas, &t, pub_, &anterior.paginas)?;

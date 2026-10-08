@@ -188,7 +188,7 @@ T8
 
 ---
 
-### T8: Worker deixa de publicar o CSS [ ]
+### T8: Worker deixa de publicar o CSS [x]
 
 **What**: remove a fase de CSS e a entrada `_css` do índice; testes do worker leem o CSS do site.
 **Where**: `apps/worker/src/site.rs`
