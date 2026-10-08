@@ -29,7 +29,7 @@ com `loading="lazy"`.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Como a rota recusa slug fora da lista | Rota `src/routes/[area=area]/` com matcher em `src/params/area.ts` (aceita só os 10 slugs) + `entries` explícitas | Matcher faz o SvelteKit não casar a rota (404 no `preview`); no S3 não há arquivo e o CloudFront serve a 404 (AD-020) | y (spec: "slug fora da lista → 404, sem fallback") |
+| Como a rota recusa slug fora da lista | Rota `src/routes/[area=area]/` com matcher `area` em `src/params.ts` (`defineParams` do SvelteKit 3; aceita só os 10 slugs) + `entries` explícitas | Matcher faz o SvelteKit não casar a rota (404 no `preview`); no S3 não há arquivo e o CloudFront serve a 404 (AD-020) | y (spec: "slug fora da lista → 404, sem fallback") |
 | `/?area=slug` da BSV-30 | Deixa de ser lido: a home sempre mostra todas | A spec troca o filtro no lugar por links; ninguém mais gera `?area=` (Areas passa a linkar `/{slug}/`) | n — proposto |
 | Fontes das páginas do worker (`besave.css`) | `besave.css` também aponta para a Lato com hash em `/_app/immutable/assets/`; os `.woff2` de `static/assets/fontes/` saem do build; `OFL.txt` fica | Mesma fonte, um só arquivo publicado com cache de 1 ano. O deploy nunca apaga `assets/fontes/` do bucket (sem `--delete`), então HTML/CSS antigos em cache seguem achando a fonte; a limpeza de `_app/` tem carência de 7 dias (AD-079), maior que o cache do `besave.css` (1 h + swr 1 d) | n — proposto |
 | Valor de `inlineStyleThreshold` | 32768 (CSS da página hoje 19.609 B brutos) | Folga de ~65% para o Tailwind crescer; teste de build falha se o CSS sair do HTML | y |
