@@ -43,14 +43,16 @@ describe('besave.css', () => {
 		expect(css).toMatch(/--raio:\s*10px/);
 	});
 
-	// CSS-01 + TOK-02: Lato 700 e 900 auto-hospedada, swap.
+	// CSS-01 + TOK-02: Lato 700 e 900 auto-hospedada, swap. FNT-01 (BSV-30b): o arquivo vem do
+	// build (import com hash), não de /assets/fontes/; a URL final é conferida em e2e/saida.spec.ts.
 	it('declara a Lato auto-hospedada', () => {
 		for (const peso of [700, 900]) {
 			const face = css.match(
 				new RegExp(`@font-face\\s*\\{[^}]*font-weight:\\s*${peso}[^}]*\\}`)
 			)?.[0];
 			expect(face, String(peso)).toBeDefined();
-			expect(face).toContain(`/assets/fontes/lato-latin-${peso}-normal.woff2`);
+			expect(face).toMatch(new RegExp(`url\\(['"]?/[^)]*lato-latin-${peso}-normal[^)]*\\.woff2`));
+			expect(face).not.toContain('/assets/fontes/');
 			expect(face).toMatch(/font-display:\s*swap/);
 		}
 	});

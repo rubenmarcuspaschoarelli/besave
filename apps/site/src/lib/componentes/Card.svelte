@@ -5,7 +5,11 @@
 	import BotaoFavorito from './BotaoFavorito.svelte';
 	import FotoOferta from './FotoOferta.svelte';
 
-	let { card, agora }: { card: OfertaCard; agora: number } = $props();
+	let {
+		card,
+		agora,
+		prioridade
+	}: { card: OfertaCard; agora: number; prioridade?: 'alta' | 'normal' } = $props();
 	const pct = $derived(descontoPct(card));
 </script>
 
@@ -14,7 +18,7 @@
 	data-id={card.id}
 	data-area={card.a}
 >
-	<FotoOferta {card} {pct} tamanho={320} />
+	<FotoOferta {card} {pct} tamanho={320} {prioridade} />
 	<div class="grid content-start gap-1.5 px-2.5 py-2 sm:px-3 sm:py-2.5">
 		<h3 class="line-clamp-2 min-h-[2.7em] font-sans text-[13.5px] leading-[1.35]">
 			<a href="/oferta/{card.id}/" class="outline-none after:absolute after:inset-0">{card.t}</a>

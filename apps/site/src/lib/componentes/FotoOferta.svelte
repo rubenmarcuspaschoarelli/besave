@@ -2,7 +2,18 @@
 	import type { OfertaCard } from '#lib/dados.ts';
 	import { SLUG_AREA } from '#lib/formato.ts';
 
-	let { card, pct, tamanho }: { card: OfertaCard; pct: number | null; tamanho: number } = $props();
+	/** `prioridade`: sem ela a foto é `lazy`; 'alta' também pede `fetchpriority="high"` (LCP). */
+	let {
+		card,
+		pct,
+		tamanho,
+		prioridade
+	}: {
+		card: OfertaCard;
+		pct: number | null;
+		tamanho: number;
+		prioridade?: 'alta' | 'normal';
+	} = $props();
 	const placeholder = $derived(`/img/placeholder/${SLUG_AREA[card.a]}.webp`);
 	let falhou = $state(false);
 </script>
@@ -14,7 +25,8 @@
 		alt=""
 		width={tamanho}
 		height={tamanho}
-		loading="lazy"
+		loading={prioridade ? undefined : 'lazy'}
+		fetchpriority={prioridade === 'alta' ? 'high' : undefined}
 		decoding="async"
 		class={['size-full object-contain', card.x && 'grayscale']}
 		onerror={() => (falhou = true)}

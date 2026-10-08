@@ -75,13 +75,19 @@ export function descontoPct(c: OfertaCard): number | null {
 
 /**
  * "Maiores descontos de hoje": cards da lista padrão (ativos, sem pendentes do toast) com `dp`
- * (ou `dt`) nas últimas 24 h, por desconto desc, desempate `dp` desc e `id` desc. `agora` em ms.
+ * (ou `dt`) nas últimas 24 h que casam com `f`, por desconto desc, desempate `dp` desc e `id` desc.
+ * `agora` em ms.
  */
-export function maioresDescontos(cat: Catalogo, agora: number, n: number): OfertaCard[] {
+export function maioresDescontos(
+	cat: Catalogo,
+	agora: number,
+	n: number,
+	f: Filtro = {}
+): OfertaCard[] {
 	const desde = agora - DIA_MS;
 	const r: { c: OfertaCard; pct: number }[] = [];
 	// `lista()` vem em recentes (dp desc, id desc): para no primeiro fora da janela.
-	for (const c of cat.lista()) {
+	for (const c of cat.lista(f)) {
 		if (Date.parse(c.dp ?? c.dt) < desde) break;
 		const pct = descontoPct(c);
 		if (pct !== null) r.push({ c, pct });
