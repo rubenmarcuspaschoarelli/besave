@@ -24,3 +24,7 @@ vite.config.ts.timestamp-*
 
 # Medições locais
 /medicoes
+
+# Playwright
+/test-results
+/playwright-report

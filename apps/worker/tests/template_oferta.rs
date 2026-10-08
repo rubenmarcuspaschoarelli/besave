@@ -499,15 +499,18 @@ fn exatamente_um_h1() {
     }
 }
 
+/// Regras do `/assets/besave.css`: a fonte fica no site, que o gera no build (BSV-30).
+fn css_do_site() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../site/src/lib/estilo/besave.css")
+}
+
 // TAB-02
 #[test]
 fn orcamentos_de_html_e_css() {
     let html = render(&oferta_ok());
     assert!(html.len() <= 30 * 1024, "HTML {} B", html.len());
 
-    let css =
-        std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/css/besave.css"))
-            .unwrap();
+    let css = std::fs::read(css_do_site()).unwrap();
     let mut br = Vec::new();
     let params = brotli::enc::BrotliEncoderParams::default();
     brotli::BrotliCompress(&mut &css[..], &mut br, &params).unwrap();
@@ -518,10 +521,7 @@ fn orcamentos_de_html_e_css() {
 // TAB-02: toda classe usada no template existe no CSS.
 #[test]
 fn classes_do_template_existem_no_css() {
-    let css = std::fs::read_to_string(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/css/besave.css"),
-    )
-    .unwrap();
+    let css = std::fs::read_to_string(css_do_site()).unwrap();
     for o in [oferta_ok(), oferta_encerrada()] {
         let html = render(&o);
         for pedaco in html.split("class=\"").skip(1) {

@@ -1,0 +1,15 @@
+/* Lato auto-hospedada (OFL, static/assets/fontes/OFL.txt): só latin, só logo e títulos. */
+@font-face {
+	font-family: 'Lato';
+	font-style: normal;
+	font-weight: 700;
+	font-display: swap;
+	src: url('/assets/fontes/lato-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+	font-family: 'Lato';
+	font-style: normal;
+	font-weight: 900;
+	font-display: swap;
+	src: url('/assets/fontes/lato-latin-900-normal.woff2') format('woff2');
+}

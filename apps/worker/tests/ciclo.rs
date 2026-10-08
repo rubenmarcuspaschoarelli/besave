@@ -298,15 +298,14 @@ fn do_site(chaves: &[String]) -> Vec<String> {
         .collect()
 }
 
-/// SIT-01: primeira execução com as 3 ofertas das fixtures.
+/// SIT-01: primeira execução com as 3 ofertas das fixtures. O CSS é do deploy do site (BSV-30).
 #[test]
-fn primeira_execucao_publica_paginas_css_sitemap_robots_e_indice() {
+fn primeira_execucao_publica_paginas_sitemap_robots_e_indice() {
     let mut p = PublicadorMemoria::new();
     rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
     assert_eq!(
         do_site(p.gravacoes()),
         [
-            "assets/besave.css",
             "oferta/5412/index.html",
             "oferta/5413/index.html",
             "oferta/5420/index.html",
@@ -318,18 +317,14 @@ fn primeira_execucao_publica_paginas_css_sitemap_robots_e_indice() {
             "_estado/redirects.json",
         ]
     );
-    let css = std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/assets/css/besave.css"
-    ))
-    .unwrap();
-    assert_eq!(p.ler("assets/besave.css").unwrap().unwrap(), css);
+    assert!(!p.existe("assets/besave.css").unwrap());
     assert_eq!(texto(&p, "robots.txt"), "User-agent: *\nDisallow: /\n");
     let estado: serde_json::Value =
         serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
     for id in ["5412", "5413", "5420"] {
         assert_eq!(estado[id].as_str().unwrap().len(), 16, "{estado}");
     }
+    assert!(estado.get("_css").is_none(), "{estado}");
 }
 
 /// SIT-02: segunda execução sem mudança → só os manifests.
@@ -343,7 +338,7 @@ fn segunda_execucao_sem_mudanca_nao_sobe_nada_do_site() {
     assert_eq!(gravadas(&p, marca), ["manifest.prev.json", "manifest.json"]);
     assert_eq!(r2.site.paginas.publicadas, 0);
     assert_eq!(r2.site.paginas.inalteradas, 3);
-    assert!(!r2.site.css_publicado && !r2.site.robots_publicado && !r2.site.indice_gravado);
+    assert!(!r2.site.robots_publicado && !r2.site.indice_gravado);
     assert_eq!(r2.site.sitemaps_publicados, 0);
 }
 
@@ -435,11 +430,10 @@ fn indice_ilegivel_reenvia_tudo_sem_abortar() {
     let marca = p.gravacoes().len();
     let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
     assert_eq!(r.site.paginas.publicadas, 3);
-    assert!(r.site.css_publicado && r.site.robots_publicado);
+    assert!(r.site.robots_publicado);
     assert_eq!(
         do_site(&gravadas(&p, marca)),
         [
-            "assets/besave.css",
             "oferta/5412/index.html",
             "oferta/5413/index.html",
             "oferta/5420/index.html",
@@ -560,14 +554,13 @@ fn virada_para_indexavel_regrava_robots_e_sitemaps() {
     );
 }
 
-/// Regra 6 do dono: CSS com hash diferente do índice é reenviado e o índice passa a ter o novo.
+/// BSV-30 (WRK-02): índice antigo com `_css` não faz o worker publicar CSS; a chave some do índice.
 #[test]
-fn css_com_hash_diferente_e_reenviado() {
+fn indice_antigo_com_css_nao_publica_css() {
     let mut p = PublicadorMemoria::new();
     rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA).unwrap();
     let mut estado: serde_json::Map<String, serde_json::Value> =
         serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
-    let atual = estado["_css"].clone();
     estado.insert("_css".into(), "0000000000000000".into());
     p.gravar(
         "_estado/paginas.json",
@@ -577,13 +570,11 @@ fn css_com_hash_diferente_e_reenviado() {
     .unwrap();
     let marca = p.gravacoes().len();
     let r = rodar(&linhas_fixture(), &mut p, &mapeamento(), AGORA + 600).unwrap();
-    assert!(r.site.css_publicado);
-    assert_eq!(
-        do_site(&gravadas(&p, marca)),
-        ["assets/besave.css", "_estado/paginas.json"]
-    );
+    assert_eq!(r.site.paginas.publicadas, 0);
+    assert_eq!(do_site(&gravadas(&p, marca)), ["_estado/paginas.json"]);
+    assert!(!p.existe("assets/besave.css").unwrap());
     let novo: serde_json::Value =
         serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
-    assert_eq!(novo["_css"], atual);
-    assert_eq!(atual.as_str().unwrap().len(), 16);
+    assert!(novo.get("_css").is_none(), "{novo}");
+    assert_eq!(novo["5412"].as_str().unwrap().len(), 16);
 }
