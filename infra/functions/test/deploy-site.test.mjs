@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { planejar } from '../../deploy-site/publicar.mjs';
+import { planejar, expurgar, lerListagem } from '../../deploy-site/publicar.mjs';
 
 // Deploy do site (BSV-17): script chamado pelo .github/workflows/site-deploy.yml.
 const script = fileURLToPath(new URL('../../deploy-site/publicar.mjs', import.meta.url));
@@ -72,21 +72,55 @@ test('PUB-01/02: build válido não tem erro e só escreve dentro de s3://besave
   }
 });
 
-test('PUB-03: --delete só no sync de _app/, e só depois do HTML e da invalidação', () => {
+// PUB-03 (revisão do dono): sem sync --delete; a limpeza de _app/ é por carência (PUB-09).
+test('PUB-03: o plano não apaga nada (nenhum --delete, nenhum rm)', () => {
   const { comandos } = planejar(buildBom, opcoes);
-  const comDelete = comandos.filter((c) => c.includes('--delete'));
-  assert.equal(comDelete.length, 1);
-  const [del] = comDelete;
-  assert.deepEqual(del.slice(0, 2), ['s3', 'sync']);
-  assert.equal(del[3], 's3://besave-site/_app/');
-  const iDel = comandos.indexOf(del);
-  const iUltimoHtml = comandos.findLastIndex((c) => c[1] === 'cp' && c[3].endsWith('.html'));
-  const iInval = comandos.findIndex((c) => c[0] === 'cloudfront');
-  assert.ok(iUltimoHtml >= 0 && iInval >= 0);
-  assert.ok(iDel > iUltimoHtml && iDel > iInval, `delete em ${iDel}, html até ${iUltimoHtml}, invalidação ${iInval}`);
-  // o primeiro sync (antes do HTML) existe e não apaga
-  const iSync = comandos.findIndex((c) => c[1] === 'sync');
-  assert.ok(iSync < iUltimoHtml && !comandos[iSync].includes('--delete'));
+  assert.ok(!comandos.some((c) => c.includes('--delete')));
+  assert.ok(!comandos.some((c) => c[1] === 'rm' || c.includes('delete-object') || c.includes('delete-objects')));
+  const syncs = comandos.filter((c) => c[1] === 'sync');
+  assert.equal(syncs.length, 1);
+  const iSync = comandos.indexOf(syncs[0]);
+  const iPrimeiroHtml = comandos.findIndex((c) => c[1] === 'cp' && c[3].endsWith('.html'));
+  assert.ok(iSync < iPrimeiroHtml, '_app/ novo sobe antes do HTML que o referencia');
+});
+
+// PUB-09: apaga de _app/ só o que (a) não está no build atual e (b) tem LastModified há mais de 7 dias.
+const DIA = 86_400_000;
+const AGORA = Date.parse('2026-10-07T12:00:00Z');
+const ha = (dias) => new Date(AGORA - dias * DIA).toISOString();
+
+test('PUB-09: fora do build com 8 dias → apagado; com 1 dia → mantido; do build com 30 dias → mantido', () => {
+  const remotos = [
+    { Key: '_app/immutable/chunks/velho.js', LastModified: ha(8) },
+    { Key: '_app/immutable/chunks/recente.js', LastModified: ha(1) },
+    { Key: '_app/immutable/entry/start.abc123.js', LastModified: ha(30) },
+  ];
+  assert.deepEqual(expurgar(remotos, buildBom, AGORA), ['_app/immutable/chunks/velho.js']);
+});
+
+test('PUB-09: fronteira de 7 dias — exatamente 7 dias fica, 7 dias e 1 s sai', () => {
+  const remotos = [
+    { Key: '_app/a.js', LastModified: ha(7) },
+    { Key: '_app/b.js', LastModified: new Date(AGORA - 7 * DIA - 1000).toISOString() },
+  ];
+  assert.deepEqual(expurgar(remotos, buildBom, AGORA), ['_app/b.js']);
+});
+
+test('PUB-09: version.json do build nunca sai; nada fora de _app/ sai; lista vazia/nula não apaga', () => {
+  const remotos = [
+    { Key: '_app/version.json', LastModified: ha(90) },
+    { Key: 'index.html', LastModified: ha(90) },
+    { Key: 'data/chunks/0-ab.json.br', LastModified: ha(90) },
+    { Key: '_appx/x.js', LastModified: ha(90) },
+  ];
+  assert.deepEqual(expurgar(remotos, buildBom, AGORA), []);
+  assert.deepEqual(expurgar([], buildBom, AGORA), []);
+  assert.deepEqual(expurgar(null, buildBom, AGORA), []);
+});
+
+test('PUB-09: caminhos do build no formato do Windows também protegem', () => {
+  const remotos = [{ Key: '_app/immutable/entry/start.abc123.js', LastModified: ha(30) }];
+  assert.deepEqual(expurgar(remotos, buildBom.map((f) => f.replaceAll('/', '\\')), AGORA), []);
 });
 
 test('PUB-04: _app/ é imutável por 1 ano; version.json (nome fixo) tem 300 s', () => {
@@ -174,12 +208,55 @@ function rodar(arquivos, extra = []) {
   }
 }
 
+// --remotos: listagem de _app/ lida de arquivo (o que list-objects-v2 devolveria), para testar sem AWS.
+function comRemotos(remotos, fn) {
+  const dir = mkdtempSync(join(tmpdir(), 'deploy-site-remotos-'));
+  try {
+    const arq = join(dir, 'remotos.json');
+    writeFileSync(arq, JSON.stringify(remotos));
+    return fn(arq);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const haReal = (dias) => new Date(Date.now() - dias * DIA).toISOString();
+
 test('PUB-08: --ensaio imprime os comandos aws e sai 0', () => {
-  const r = rodar(buildBom, ['--ensaio']);
+  const r = comRemotos([], (arq) => rodar(buildBom, ['--ensaio', '--remotos', arq]));
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /aws s3 sync .*_app s3:\/\/besave-site\/_app\/ .*--delete/);
+  assert.match(r.stdout, /aws s3 sync .*_app s3:\/\/besave-site\/_app\/ /);
+  assert.doesNotMatch(r.stdout, /--delete/);
   assert.match(r.stdout, /aws cloudfront create-invalidation --distribution-id EDIST0000/);
   assert.match(r.stdout, /s3:\/\/besave-site\/elas\/feminino\/index\.html/);
+});
+
+test('PUB-09 (CLI): --ensaio mostra a lista que seria apagada, depois da invalidação', () => {
+  const remotos = [
+    { Key: '_app/immutable/chunks/velho.js', LastModified: haReal(8) },
+    { Key: '_app/immutable/chunks/recente.js', LastModified: haReal(1) },
+    { Key: '_app/immutable/entry/start.abc123.js', LastModified: haReal(30) },
+  ];
+  const r = comRemotos(remotos, (arq) => rodar(buildBom, ['--ensaio', '--remotos', arq]));
+  assert.equal(r.status, 0, r.stderr);
+  const rms = r.stdout.split('\n').filter((l) => l.startsWith('aws s3 rm '));
+  assert.deepEqual(rms, ['aws s3 rm s3://besave-site/_app/immutable/chunks/velho.js']);
+  assert.ok(r.stdout.indexOf('create-invalidation') < r.stdout.indexOf('aws s3 rm '));
+  assert.match(r.stdout, /apagaria 1 arquivo/);
+});
+
+test('PUB-09 (CLI): nada a apagar é dito no ensaio', () => {
+  const r = comRemotos([{ Key: '_app/x.js', LastModified: haReal(1) }], (arq) => rodar(buildBom, ['--ensaio', '--remotos', arq]));
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /aws s3 rm /);
+  assert.match(r.stdout, /apagaria 0 arquivo/);
+});
+
+test('PUB-09: listagem do list-objects-v2 (JSON ou "null" de prefixo vazio) é lida', () => {
+  assert.deepEqual(lerListagem('null\n'), []);
+  assert.deepEqual(lerListagem('[{"Key":"_app/a.js","LastModified":"2026-10-01T00:00:00+00:00"}]'), [
+    { Key: '_app/a.js', LastModified: '2026-10-01T00:00:00+00:00' },
+  ]);
+  assert.throws(() => lerListagem('não é json'));
 });
 
 test('PUB-01 (CLI): arquivo proibido no build sai 1, mesmo em ensaio, sem imprimir comando', () => {

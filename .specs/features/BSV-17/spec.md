@@ -34,7 +34,8 @@ guardada no GitHub.
 | ID da distribuição para a invalidação | variável do repositório `CF_DISTRIBUICAO_SITE` + output `id_distribuicao` | o papel não pode listar distribuições; spec não nomeia | n |
 | `thumbprint_list` do provedor OIDC | omitido | opcional no provedor AWS 6.66 (schema conferido); a AWS valida o GitHub pela CA | n |
 | `_app/version.json` (SvelteKit, nome fixo) | fora do sync imutável; `public, max-age=300`, `application/json` | nome sem hash com `immutable` congelaria a versão por 1 ano | n |
-| Ordem do `--delete` em `_app/` | sync sem `--delete` primeiro, HTML, invalidação, e só no fim o sync com `--delete` | HTML novo nunca aponta para chunk ainda não enviado; o antigo some por último | n |
+| Limpeza de `_app/` | **revisão do dono (07/10):** sem `--delete`; por último, apaga só o que não está no build atual e tem `LastModified` há mais de 7 dias (estrito); ensaio mostra a lista | página antiga em cache acha seus chunks durante a carência | s |
+| Ensaio no workflow | depois da credencial | precisa listar `_app/` (só leitura) para mostrar o que seria apagado | n |
 | `--size-only` no sync de `_app/` | sim | nomes com hash: mesmo nome = mesmo conteúdo; evita reenviar tudo a cada build | n |
 | Cache de `favicon.*` e `assets/fontes/*` | `public, max-age=3600, stale-while-revalidate=86400` (igual ao CSS) | spec não define; nomes sem hash | n |
 | Arquivo do build fora dos prefixos | o script falha antes de qualquer upload | a policy negaria no meio do deploy, deixando-o pela metade | n |
@@ -66,12 +67,13 @@ guardada no GitHub.
 
 1. PUB-01: IF algum arquivo do build está fora dos prefixos THEN o script SHALL falhar sem nenhum comando AWS
 2. PUB-02: IF `index.html` ou `404.html` faltam no build THEN o script SHALL falhar sem nenhum comando AWS
-3. PUB-03: The script SHALL usar `--delete` só em `aws s3 sync` com destino `s3://{bucket}/_app/`, depois dos uploads de HTML e da invalidação
+3. PUB-03: The script SHALL nunca usar `--delete`; o `_app/` novo sobe antes do HTML
 4. PUB-04: The script SHALL enviar `_app/` com `public, max-age=31536000, immutable` (exceto `_app/version.json`: `public, max-age=300`)
 5. PUB-05: The script SHALL enviar cada HTML com `public, max-age=300` e `text/html; charset=utf-8`, por arquivo
 6. PUB-06: The script SHALL enviar `assets/besave.css` com `public, max-age=3600, stale-while-revalidate=86400` e `text/css; charset=utf-8`
 7. PUB-07: The script SHALL criar uma invalidação só com caminhos de HTML e `/assets/*`, nunca `/*`
 8. PUB-08: WHEN `--ensaio` the script SHALL imprimir os comandos sem executá-los
+9. PUB-09: WHEN publicação e invalidação terminaram the script SHALL apagar de `_app/` só os arquivos que não estão no build atual AND têm `LastModified` há mais de 7 dias; arquivo do build nunca é apagado; WHEN `--ensaio` SHALL mostrar essa lista sem apagar
 
 ### P1: Workflow ⭐ MVP
 
@@ -114,6 +116,7 @@ guardada no GitHub.
 | PUB-06 | P1: Publicação | Execute | Implemented |
 | PUB-07 | P1: Publicação | Execute | Implemented |
 | PUB-08 | P1: Publicação | Execute | Implemented |
+| PUB-09 | P1: Publicação | Execute | Implemented |
 | WF-01 | P1: Workflow | Execute | Implemented |
 | WF-02 | P1: Workflow | Execute | Implemented |
 | WF-03 | P1: Workflow | Execute | Implemented |
@@ -122,7 +125,7 @@ guardada no GitHub.
 | WF-06 | P1: Workflow | Execute | Implemented |
 | OPS-01 | P2: README | Execute | Implemented |
 
-**Coverage:** 22 total, 22 mapped, 0 unmapped
+**Coverage:** 23 total, 23 mapped, 0 unmapped
 
 ---
 

@@ -314,12 +314,16 @@ O que o script faz, em ordem:
 
 | passo | comando | headers |
 |---|---|---|
-| 1 | `aws s3 sync _app/` (sem `--delete`, `--size-only`) | `public, max-age=31536000, immutable` |
+| 1 | `aws s3 sync _app/` (sem `--delete`, `--size-only`: o `LastModified` fica o do 1º upload) | `public, max-age=31536000, immutable` |
 | 2 | `_app/version.json` (nome fixo do SvelteKit) | `public, max-age=300`, `application/json` |
 | 3 | `assets/besave.css`, `assets/fontes/*`, `favicon.*`, um `cp` por arquivo | `public, max-age=3600, stale-while-revalidate=86400` |
 | 4 | cada HTML, um `cp` por arquivo; `404.html` e `index.html` por último | `public, max-age=300`, `text/html; charset=utf-8` |
 | 5 | invalidação: `/index.html`, `/404.html`, `/{dir}/*` de cada diretório com HTML, `/assets/*` (nunca `/*`) | — |
-| 6 | `aws s3 sync _app/ --delete`: só agora o `_app/` do build anterior sai | — |
+| 6 | limpeza de `_app/` com carência: lista `_app/` (`s3api list-objects-v2`) e apaga (`s3 rm`, um por arquivo) só o que **não está no build atual e subiu há mais de 7 dias**; arquivo do build nunca sai, mesmo antigo | — |
+
+A carência deixa uma página antiga ainda em cache (navegador ou borda) achar os chunks dela por uma semana.
+Nunca há `--delete`. O `--ensaio` também lista `_app/` (só leitura) e mostra o que seria apagado
+(`apagaria N arquivo(s)` e as linhas `aws s3 rm`), por isso no workflow ele roda depois da credencial.
 
 Uma rota nova fora desses prefixos (ex.: `/sobre/`) exige, na mesma PR, o prefixo em
 `deploy-site/prefixos.json`, os testes (`tests/site_deploy.tftest.hcl`, `functions/test/deploy-site.test.mjs`)
@@ -391,6 +395,9 @@ Ensaio local, sem AWS (imprime os comandos):
 cd apps/site && pnpm build && cd ../..
 node infra/deploy-site/publicar.mjs --build apps/site/build --bucket besave-site --distribuicao EXEMPLO --ensaio
 ```
+
+O ensaio lista `_app/` no bucket; sem credencial, passe uma listagem salva com `--remotos arquivo.json`
+(`[{"Key": "_app/...", "LastModified": "..."}]`, `[]` para nenhuma).
 
 ### 5. Reverter
 

@@ -48,11 +48,12 @@ test('WF-05: commit pedido precisa ser SHA ancestral de main e só troca apps/si
   assert.deepEqual([...semComentarios.matchAll(/^.*\$\{\{\s*inputs\..*$/gm)].map((m) => m[0].trim()), ['COMMIT: ${{ inputs.commit }}']);
 });
 
-test('PUB: ensaio antes da credencial; publicação pelo script do repositório', () => {
-  const iEnsaio = yml.indexOf('publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio');
+// PUB-09: o ensaio lista _app/ no bucket (só leitura), então vem depois da credencial e antes de publicar.
+test('PUB: credencial, ensaio e publicação, nessa ordem, pelo script do repositório', () => {
   const iCred = yml.indexOf('configure-aws-credentials@v4');
+  const iEnsaio = yml.indexOf('publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio');
   const iPub = yml.lastIndexOf('node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO"\n');
-  assert.ok(iEnsaio > 0 && iEnsaio < iCred && iCred < iPub, `${iEnsaio} ${iCred} ${iPub}`);
+  assert.ok(iCred > 0 && iCred < iEnsaio && iEnsaio < iPub, `${iCred} ${iEnsaio} ${iPub}`);
   assert.match(yml, /BUCKET: besave-site\n/);
   assert.doesNotMatch(semComentarios, /aws s3 |--delete|create-invalidation/);
 });

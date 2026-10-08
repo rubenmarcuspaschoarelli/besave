@@ -73,16 +73,16 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm build
 
-      # Falha antes de pedir credencial se o build tiver arquivo fora dos prefixos do site.
-      - name: Ensaio
-        run: node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio
-
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_SITE }}
           role-session-name: besave-site-deploy-${{ github.run_id }}
           role-duration-seconds: 3600
           aws-region: us-east-1
+
+      # Nada é escrito: confere os prefixos do build e lista o que a limpeza de _app/ apagaria.
+      - name: Ensaio
+        run: node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio
 
       - name: Publicar
         run: node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO"
