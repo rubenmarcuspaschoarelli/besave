@@ -30,7 +30,26 @@ test('build sem fallback', () => {
 		.map((f) => f.replaceAll('\\', '/'))
 		.filter((f) => f.endsWith('.html'))
 		.sort();
-	expect(htmls).toEqual(['404.html', 'desejos/index.html', 'index.html']);
+	expect(htmls).toEqual(
+		[
+			'404.html',
+			'desejos/index.html',
+			'index.html',
+			// ARE-01: as 10 áreas do CONTRATO §2.3.
+			...[
+				'tech',
+				'players',
+				'meu-lar',
+				'elas',
+				'eles',
+				'cultura',
+				'familia',
+				'pets',
+				'esporte-vida',
+				'outros'
+			].map((s) => `${s}/index.html`)
+		].sort()
+	);
 });
 
 // CSS-01
@@ -61,5 +80,75 @@ test('Lato no logo e nos títulos, fonte do sistema no corpo', async ({ page }) 
 		/^system-ui/
 	);
 	expect(await page.evaluate(() => document.fonts.check('900 16px Lato'))).toBe(true);
-	expect(fontes).toContain('/assets/fontes/lato-latin-900-normal.woff2');
+	// FNT-03: a Lato vem do arquivo com hash do build.
+	expect(
+		fontes.some((f) => /^\/_app\/immutable\/assets\/lato-latin-900-normal\.[\w-]+\.woff2$/.test(f))
+	).toBe(true);
+	expect(fontes.filter((f) => f.startsWith('/assets/fontes/'))).toEqual([]);
+});
+
+// FNT-01, FNT-02: Lato com hash em _app/immutable/assets, citada pelo CSS do site e pelo besave.css.
+test('Lato sai do build com hash e sem cópia em assets/fontes', () => {
+	const imutaveis = readdirSync(new URL('_app/immutable/assets/', BUILD));
+	const cssSite = imutaveis
+		.filter((f) => f.endsWith('.css'))
+		.map((f) => ler(`_app/immutable/assets/${f}`));
+	const besave = ler('assets/besave.css');
+	for (const peso of [700, 900]) {
+		const arquivo = imutaveis.find((f) =>
+			new RegExp(`^lato-latin-${peso}-normal\\.[\\w-]{6,}\\.woff2$`).test(f)
+		);
+		expect(arquivo, String(peso)).toBeDefined();
+		const url = `/_app/immutable/assets/${arquivo}`;
+		expect(besave, `besave.css ${peso}`).toContain(`url(${url})`);
+		// O CSS do site pode estar só embutido no HTML (CSS-04): procura nos dois.
+		const html = ler('index.html');
+		expect(
+			[...cssSite, html].some((c) => c.includes(`url(${url})`)),
+			`site ${peso}`
+		).toBe(true);
+	}
+	expect(readdirSync(new URL('assets/fontes/', BUILD))).toEqual(['OFL.txt']);
+});
+
+// CSS-04: CSS da página num <style>. O SvelteKit mantém um <link> `disabled` com media que nunca casa
+// (kit/src/runtime/server/page/render.js) só para o roteador saber que o CSS já está na página.
+const PAGINAS = [
+	'index.html',
+	'elas/index.html',
+	'outros/index.html',
+	'desejos/index.html',
+	'404.html'
+];
+test('CSS embutido: <style> com o CSS e nenhum <link> de CSS ativo', () => {
+	for (const p of PAGINAS) {
+		const html = ler(p);
+		const estilo = html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] ?? '';
+		expect(estilo.length, p).toBeGreaterThan(10_000);
+		expect(estilo, p).toContain('--cor-marca:#0b6e4f');
+		const links = html.match(/<link\b[^>]*rel="stylesheet"[^>]*>/g) ?? [];
+		for (const l of links) {
+			expect(l, p).toMatch(/\sdisabled[\s>]/);
+			expect(l, p).toContain('media="(max-width: 0)"');
+		}
+	}
+});
+
+test('home e área abrem sem pedir arquivo de CSS', async ({ page }) => {
+	await servir(page);
+	for (const url of ['/', '/elas/']) {
+		const css: string[] = [];
+		const ouvir = (r: { resourceType(): string; url(): string }) => {
+			if (r.resourceType() === 'stylesheet' || r.url().endsWith('.css')) css.push(r.url());
+		};
+		page.on('request', ouvir);
+		await page.goto(url);
+		await expect(page.locator('[data-grade] article').first()).toBeVisible();
+		page.off('request', ouvir);
+		expect(css, url).toEqual([]);
+		// O desenho continua: logo em Lato 900 na cor da marca.
+		const logo = page.getByRole('link', { name: 'Besave', exact: true });
+		await expect(logo).toHaveCSS('font-weight', '900');
+		await expect(logo).toHaveCSS('color', 'rgb(11, 110, 79)');
+	}
 });

@@ -186,5 +186,19 @@ describe('dp: data de publicação no site', () => {
 		it('SIT-05: expirada fica de fora', () => {
 			expect(ids(maioresDescontos(cat, agora, 10))).not.toContain(13);
 		});
+
+		// ARE-04: a faixa da página de área só traz a área, na mesma ordem de desconto.
+		it('ARE-04: filtro de área', () => {
+			const porArea = completo([
+				promo(20, '2026-10-07T11:00:00Z', 5000, { a: 'ELAS' }), // 50%
+				promo(21, '2026-10-07T10:00:00Z', 1000, { a: 'TECH' }), // 90%
+				promo(22, '2026-10-07T09:00:00Z', 2000, { a: 'ELAS' }), // 80%
+				promo(23, '2026-10-07T08:00:00Z', 4000, { a: 'MEU_LAR' }) // 60%
+			]);
+			expect(ids(maioresDescontos(porArea, agora, 10, { area: 'ELAS' }))).toEqual([22, 20]);
+			expect(ids(maioresDescontos(porArea, agora, 10, { area: 'TECH' }))).toEqual([21]);
+			expect(ids(maioresDescontos(porArea, agora, 10, { area: 'PETS' }))).toEqual([]);
+			expect(ids(maioresDescontos(porArea, agora, 10))).toEqual([21, 22, 23, 20]);
+		});
 	});
 });
