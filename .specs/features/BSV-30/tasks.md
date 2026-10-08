@@ -79,7 +79,7 @@ T8
 
 ---
 
-### T2: Formato e configuração [ ]
+### T2: Formato e configuração [x]
 
 **What**: `lib/formato.ts` (`reais`, `haQuanto`, rótulos e slugs de área) e `lib/config.ts` (links, flags, listas visíveis).
 **Where**: `apps/site/src/lib/formato.ts`
