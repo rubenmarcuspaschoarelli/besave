@@ -50,23 +50,68 @@ test('barra do canal fecha e não volta ao recarregar', async ({ page }) => {
 	await expect(barra).toBeHidden();
 });
 
-// HOM-04
-test('área filtra a grade; Outros só no menu Mais', async ({ page }) => {
+// HOM-04 → LNK-01..04 (BSV-30b): áreas são links; Outros só no menu Mais.
+test('áreas são links; Meu Lar abre /meu-lar/ ativo e Todas volta', async ({ page }) => {
 	const nav = page.getByRole('navigation', { name: 'Áreas' });
-	await expect(nav.getByRole('button', { name: 'Outros' })).toBeHidden();
+	const ativos = () =>
+		nav.locator('a[aria-current="page"]').evaluateAll((els) => els.map((e) => e.textContent));
+	await expect(nav.getByRole('button')).toHaveCount(0);
+	expect(await ativos()).toEqual(['Todas']);
 
-	await nav.getByRole('button', { name: 'Tech', exact: true }).click();
-	await expect(page.locator('#titulo-recentes')).toContainText('Tech');
-	const tech = await atributos(page, 'data-area');
-	expect(tech.length).toBeGreaterThan(0);
-	expect(new Set(tech)).toEqual(new Set(['TECH']));
+	await nav.getByRole('link', { name: 'Meu Lar', exact: true }).click();
+	await expect(page).toHaveURL(/\/meu-lar\/$/);
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Ofertas de Meu Lar');
+	expect(await ativos()).toEqual(['Meu Lar']);
+	const areas = await atributos(page, 'data-area');
+	expect(areas.length).toBeGreaterThan(0);
+	expect(new Set(areas)).toEqual(new Set(['MEU_LAR']));
 
-	await nav.getByText('Mais ▾').click();
-	await nav.getByRole('button', { name: 'Outros' }).click();
-	await expect(page.locator('#titulo-recentes')).toContainText('Outros');
-	const outros = await atributos(page, 'data-area');
-	expect(outros.length).toBeGreaterThan(0);
-	expect(new Set(outros)).toEqual(new Set(['OUTROS']));
+	await nav.getByRole('link', { name: 'Todas', exact: true }).click();
+	await expect(page).toHaveURL(/:\d+\/$/);
+	expect(await ativos()).toEqual(['Todas']);
+	await expect(page.locator(GRADE)).toHaveCount(40);
+});
+
+// LNK-04
+test('Outros só no menu Mais, leva a /outros/ com Mais destacado', async ({ page }) => {
+	const nav = page.getByRole('navigation', { name: 'Áreas' });
+	await expect(nav.getByRole('link', { name: 'Outros' })).toBeHidden();
+	const mais = nav.getByText('Mais ▾');
+	await expect(mais).not.toHaveAttribute('data-ativo');
+	await mais.click();
+	await nav.getByRole('link', { name: 'Outros' }).click();
+	await expect(page).toHaveURL(/\/outros\/$/);
+	// Menu Mais fechado: o link existe, escondido, e é o atual.
+	const outros = nav.locator('a[href="/outros/"]');
+	await expect(outros).toBeHidden();
+	await expect(outros).toHaveAttribute('aria-current', 'page');
+	await expect(mais).toHaveAttribute('data-ativo', '');
+	await expect(mais).toHaveCSS('background-color', 'rgb(11, 110, 79)');
+});
+
+// LNK-01: mesmos links em toda página com a navegação.
+test('links de área iguais na home, área, desejos e 404', async ({ page }) => {
+	const esperado = [
+		['Todas', '/'],
+		['Elas', '/elas/'],
+		['Meu Lar', '/meu-lar/'],
+		['Tech', '/tech/'],
+		['Esporte & vida', '/esporte-vida/'],
+		['Família & filhos', '/familia/'],
+		['Pets', '/pets/'],
+		['Players', '/players/'],
+		['Cultura', '/cultura/'],
+		['Eles', '/eles/'],
+		['Outros', '/outros/']
+	];
+	for (const url of ['/', '/elas/', '/desejos/', '/404.html']) {
+		await page.goto(url);
+		const links = await page
+			.getByRole('navigation', { name: 'Áreas' })
+			.locator('a')
+			.evaluateAll((els) => els.map((e) => [e.textContent?.trim(), e.getAttribute('href')]));
+		expect(links, url).toEqual(esperado);
+	}
 });
 
 // HOM-05

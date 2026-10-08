@@ -1,8 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { AREAS, buscar, maioresDescontos, normalizar } from '#lib/dados.ts';
+	import { buscar, maioresDescontos, normalizar } from '#lib/dados.ts';
 	import type { Area } from '#lib/dados.ts';
-	import { ROTULO_AREA, SLUG_AREA } from '#lib/formato.ts';
+	import { ROTULO_AREA } from '#lib/formato.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
 	import Areas from './Areas.svelte';
 	import BarraCanal from './BarraCanal.svelte';
@@ -13,13 +13,11 @@
 	import Topo from './Topo.svelte';
 
 	/** `area` fixa a página na área (`/{slug}/`); `null` é a home, com todas. */
-	let { area: daPagina }: { area: Area | null } = $props();
+	let { area }: { area: Area | null } = $props();
 
 	const POR_VEZ = 40;
 
 	let consulta = $state('');
-	// svelte-ignore state_referenced_locally
-	let area = $state<Area | null>(daPagina);
 	let limite = $state(POR_VEZ);
 
 	const buscando = $derived(normalizar(consulta).length >= 2);
@@ -41,18 +39,14 @@
 		return { itens: todos.slice(0, limite), total: todos.length };
 	});
 
-	function filtrar(mudar: () => void) {
-		mudar();
+	function buscarPor(q: string) {
+		consulta = q;
 		limite = POR_VEZ;
 	}
 
 	onMount(() => {
 		const p = new URL(location.href).searchParams;
 		consulta = p.get('q') ?? '';
-		if (!daPagina) {
-			const slug = p.get('area');
-			area = AREAS.find((a) => SLUG_AREA[a] === slug) ?? null;
-		}
 		vitrine.iniciar();
 	});
 </script>
@@ -60,20 +54,16 @@
 <BarraCanal />
 <Topo>
 	{#snippet busca()}
-		<Busca valor={consulta} aoMudar={(q) => filtrar(() => (consulta = q))} />
+		<Busca valor={consulta} aoMudar={buscarPor} />
 	{/snippet}
 	{#snippet areas()}
-		{#if daPagina}
-			<Areas ativa={area} />
-		{:else}
-			<Areas ativa={area} aoEscolher={(a) => filtrar(() => (area = a))} />
-		{/if}
+		<Areas ativa={area} />
 	{/snippet}
 </Topo>
 
 <main class="mx-auto grid max-w-290 grid-cols-1 gap-5.5 px-3.5 pt-3.5 pb-8 sm:px-5 sm:pt-4.5">
-	{#if daPagina}
-		<h1 class="text-2xl leading-tight font-black text-marca">Ofertas de {ROTULO_AREA[daPagina]}</h1>
+	{#if area}
+		<h1 class="text-2xl leading-tight font-black text-marca">Ofertas de {ROTULO_AREA[area]}</h1>
 	{:else}
 		<h1 class="sr-only">Besave: ofertas e cupons</h1>
 	{/if}
@@ -91,9 +81,6 @@
 				class="flex flex-wrap items-baseline gap-x-2.5 text-lg leading-tight font-black text-marca"
 			>
 				{buscando ? `Resultados para “${consulta.trim()}”` : 'Mais recentes'}
-				{#if area}<span class="font-sans text-sm font-semibold text-texto"
-						>· {ROTULO_AREA[area]}</span
-					>{/if}
 				{#if resultado}
 					<small class="font-sans text-xs font-normal text-suave" data-total
 						>{resultado.itens.length.toLocaleString('pt-BR')} de {resultado.total.toLocaleString(

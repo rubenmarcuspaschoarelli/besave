@@ -128,9 +128,9 @@ T5 → T6
 
 **Done when**:
 
-- [ ] e2e: "Meu Lar" na home → `/meu-lar/` ativo; "Todas" → `/` ativo; "Outros" só no "Mais" → `/outros/` com "Mais" destacado; links iguais em desejos e 404
-- [ ] HOM-04 trocado pelo fluxo de links (o filtro no lugar deixou de existir por ordem da spec)
-- [ ] Gate build passa
+- [x] e2e: "Meu Lar" na home → `/meu-lar/` ativo; "Todas" → `/` ativo; "Outros" só no "Mais" → `/outros/` com "Mais" destacado; links iguais em desejos e 404
+- [x] HOM-04 trocado pelo fluxo de links (o filtro no lugar deixou de existir por ordem da spec)
+- [x] Gate build passa
 
 **Tests**: e2e
 **Gate**: build
