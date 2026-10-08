@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; decisões em `spec.md` → Assumptions)
-**Status**: Done (aguarda Verifier)
+**Status**: Done
 
 ---
 

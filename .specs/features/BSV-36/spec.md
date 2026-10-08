@@ -109,24 +109,24 @@ mas não está no card. O site precisa dela para ordenar e para a faixa "Maiores
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CON-01 | P1: Contrato | T1 | Implementing |
-| CON-02 | P1: Contrato | T1 | Implementing |
-| CON-03 | P1: Contrato | T1 | Implementing |
-| CON-04 | P1: Contrato | T1 | Implementing |
-| DP-01 | P1: Worker | T1 | Implementing |
-| DP-02 | P1: Worker | T1 | Implementing |
-| DP-03 | P1: Worker | T1 | Implementing |
-| DP-04 | P1: Worker | T1 | Implementing |
-| GRV-01 | P1: Worker | T2 | Implementing |
-| GRV-02 | P1: Worker | T2 | Implementing |
-| IDE-01 | P1: Worker | T2 | Implementing |
-| ORC-01 | P1: Worker | T3 | Implementing |
-| SIT-01 | P1: Site | T3 | Implementing |
-| SIT-02 | P1: Site | T3 | Implementing |
-| SIT-03 | P1: Site | T3 | Implementing |
-| SIT-04 | P1: Site | T3 | Implementing |
-| SIT-05 | P1: Site | T3 | Implementing |
-| SIT-06 | P1: Site | T3 | Implementing |
+| CON-01 | P1: Contrato | T1 | Verified |
+| CON-02 | P1: Contrato | T1 | Verified |
+| CON-03 | P1: Contrato | T1 | Verified |
+| CON-04 | P1: Contrato | T1 | Verified |
+| DP-01 | P1: Worker | T1 | Verified |
+| DP-02 | P1: Worker | T1 | Verified |
+| DP-03 | P1: Worker | T1 | Verified |
+| DP-04 | P1: Worker | T1 | Verified |
+| GRV-01 | P1: Worker | T2 | Verified |
+| GRV-02 | P1: Worker | T2 | Verified |
+| IDE-01 | P1: Worker | T2 | Verified |
+| ORC-01 | P1: Worker | T3 | Verified |
+| SIT-01 | P1: Site | T3 | Verified |
+| SIT-02 | P1: Site | T3 | Verified |
+| SIT-03 | P1: Site | T3 | Verified |
+| SIT-04 | P1: Site | T3 | Verified |
+| SIT-05 | P1: Site | T3 | Verified |
+| SIT-06 | P1: Site | T3 | Verified |
 
 **Coverage:** 18 total, 18 mapped to tasks, 0 unmapped.
 
