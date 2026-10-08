@@ -73,3 +73,6 @@ Mutantes aplicados um a um, com reversão por `git checkout`; `git status` final
 
 ## Adendo do autor (pós-Verifier)
 L1 e L2 fechadas: `e2e/novas.spec.ts` NOV-10 (aria-live) e NOV-11 (rolagem `instant` com `reducedMotion: reduce`, `smooth` sem). Reexecutado: `pnpm lint` e `pnpm e2e` (102 passed). L3–L5 seguem como lacunas não bloqueantes. Os testes NOV-10/NOV-11 não foram revalidados por mutante.
+
+## Defeito achado nos prints (pós-Verifier)
+Ao tirar os prints, o botão aparecia achatado (altura 0): o contêiner `h-0` esticava o item flex. Os testes e os mutantes não pegaram porque só mediam a posição `y`. Corrigido com `items-start` em `AvisoNovas.svelte`; `e2e/novas.spec.ts` NOV-06 agora exige altura ≥ 32 px e botão inteiro na janela, e reprova com a correção removida (confirmado). Gates reexecutados: lint, check, test (114), build, e2e (102) verdes. Prints em `prints/` (catálogo sintético; imagens quebradas são do fixture).
