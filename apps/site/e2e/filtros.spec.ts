@@ -283,3 +283,85 @@ test('botões de filtro: toque ≥ 44 px e foco visível', async ({ page }) => {
 	expect(alturas.length).toBeGreaterThan(2);
 	for (const h of alturas) expect(h).toBeGreaterThanOrEqual(44);
 });
+
+test.describe('celular (390 px)', () => {
+	test.use({ viewport: { width: 390, height: 844 } });
+
+	// PNL-01
+	test('ordem fica fora; os outros filtros ficam no painel', async ({ page }) => {
+		await abrir(page);
+		for (const nome of ['Recentes', 'Maior desconto', 'Menor preço', 'Filtros'])
+			await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
+		for (const nome of ['Feminino', 'Shopee', 'Até R$ 50', 'Só com cupom'])
+			await expect(page.getByRole('button', { name: nome, exact: true })).toBeHidden();
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+	});
+
+	// PNL-02
+	test('painel "Filtros" abre, aplica e fecha', async ({ page }) => {
+		await abrir(page);
+		await page.getByRole('button', { name: 'Filtros', exact: true }).click();
+		const painel = page.getByRole('dialog', { name: 'Filtros' });
+		await expect(painel).toBeVisible();
+		// Folha inferior: encosta no fim da tela.
+		const caixa = await painel.boundingBox();
+		expect(Math.round((caixa?.y ?? 0) + (caixa?.height ?? 0))).toBe(844);
+		for (const nome of ['Todos', 'Feminino', 'Todas', 'Shopee', 'Até R$ 50', 'Só com cupom'])
+			await expect(painel.getByRole('button', { name: nome, exact: true })).toBeVisible();
+
+		await painel.getByRole('button', { name: 'Shopee', exact: true }).click();
+		await painel.getByRole('button', { name: 'Até R$ 50', exact: true }).click();
+		const esperado = CARDS.filter((c) => c.l === 'SHOPEE' && c.pp <= 5000);
+		// Aplica na hora: URL e contador já mudaram com o painel aberto.
+		await expect(page).toHaveURL(/\/\?loja=shopee&preco=ate50$/);
+		const ver = painel.getByRole('button', { name: `Ver ${esperado.length} ofertas` });
+		await expect(ver).toBeVisible();
+		const alturas = await painel
+			.getByRole('button')
+			.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
+		for (const h of alturas) expect(h).toBeGreaterThanOrEqual(44);
+
+		await ver.click();
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await expect(page.getByRole('button', { name: 'Shopee', exact: true })).toBeHidden();
+		const grade = await naGrade(page);
+		expect(grade).toHaveLength(esperado.length);
+		expect(grade.every((c) => c.l === 'SHOPEE' && c.pp <= 5000)).toBe(true);
+	});
+});
+
+test.describe('desktop (1280 px)', () => {
+	test.use({ viewport: { width: 1280, height: 800 } });
+
+	// PNL-03
+	test('todos os grupos na barra, sem botão "Filtros"', async ({ page }) => {
+		await abrir(page);
+		await expect(page.getByRole('button', { name: 'Filtros', exact: true })).toBeHidden();
+		for (const nome of [
+			'Recentes',
+			'Maior desconto',
+			'Menor preço',
+			'Todos',
+			'Feminino',
+			'Masculino',
+			'Unissex',
+			'Infantil',
+			'Todas',
+			'Amazon',
+			'Mercado Livre',
+			'Shopee',
+			'Até R$ 50',
+			'R$ 50–100',
+			'R$ 100–200',
+			'Acima de R$ 200',
+			'Só com cupom'
+		])
+			await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+		// A barra quebra linha em vez de vazar para o lado.
+		const largura = await page
+			.locator('[data-filtros]')
+			.evaluate((e) => [e.scrollWidth, e.clientWidth]);
+		expect(largura[0]).toBeLessThanOrEqual(largura[1]);
+	});
+});

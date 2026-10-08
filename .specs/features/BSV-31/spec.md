@@ -134,9 +134,9 @@ não há filtro por faixa de preço nem por cupom.
 | BAR-07 | P1: Barra | T3 | Done |
 | BAR-08 | P1: Barra | T3 | Done |
 | BAR-09 | P1: Barra | T3 | Done |
-| PNL-01 | P1: Painel | T4 | Pending |
-| PNL-02 | P1: Painel | T4 | Pending |
-| PNL-03 | P1: Painel | T4 | Pending |
+| PNL-01 | P1: Painel | T4 | Done |
+| PNL-02 | P1: Painel | T4 | Done |
+| PNL-03 | P1: Painel | T4 | Done |
 
 **Coverage:** 21 total, 21 mapped to tasks, 0 unmapped.
 

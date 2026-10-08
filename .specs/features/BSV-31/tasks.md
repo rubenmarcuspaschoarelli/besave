@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-31/spec.md`
-**Status**: In progress
+**Status**: Done
 
 ---
 
@@ -121,10 +121,20 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Painel abre, aplica e fecha no celular; desktop sem botão "Filtros"
-- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+- [x] Painel abre, aplica e fecha no celular; desktop sem botão "Filtros"
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
 
 **Tests**: e2e
 **Gate**: build
+
+Bundle inicial da home (JS de modulepreload + imports estáticos, CSS embutido), medido com o mesmo critério da BSV-30b:
+
+| | JS bruto | JS gzip | CSS embutido | total bruto |
+| - | - | - | - | - |
+| `origin/develop` (7e7fa32) | 121.139 B | 49.211 B | 19.861 B | 141.000 B |
+| BSV-31 | 130.124 B | 52.212 B | 21.920 B | 152.044 B (148,5 KiB) |
+
+Dentro de 150 KiB; acima de 150.000 B se o orçamento for decimal. A BarraFiltros soma ~7 KB brutos ao chunk da página.
+Prints: `prints/barra-celular.png`, `prints/painel-celular.png`, `prints/filtros-desktop.png`, `prints/vazio-desktop.png` (catálogo sintético, sem dado real).
 
 **Commit**: `feat(site): painel de filtros no celular`
