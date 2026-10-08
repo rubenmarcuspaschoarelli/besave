@@ -22,7 +22,8 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | Lógica do site (`lib/*.ts`) | unit | 1:1 com os ACs; todo edge case listado | `apps/site/src/lib/**/*.test.ts` | `pnpm test` |
 | Componentes com regra de exibição (Card) | unit (render SSR) | CAR-01..06 | `apps/site/src/lib/componentes/*.test.ts` | `pnpm test` |
 | Páginas e fluxos (home, desejos) | e2e | todo fluxo da spec em 390 px e 1280 px | `apps/site/e2e/*.spec.ts` | `pnpm e2e` |
-| Saída do build (404, besave.css) | unit sobre o build/fonte | ERR-01..02, CSS-01..03 | `apps/site/src/lib/estilo/*.test.ts` | `pnpm test` (após `pnpm build`) |
+| `besave.css` (rota prerenderizada) | unit | CSS-01..03 | `apps/site/src/lib/estilo/*.test.ts` | `pnpm test` |
+| Saída do build (404, fallback, fontes) | e2e | ERR-01..02, CSS-01, TOK-02..03 | `apps/site/e2e/saida.spec.ts` | `pnpm e2e` (após `pnpm build`) |
 | Estilo/tokens/config de build | none | build gate | - | `pnpm build` |
 | Worker (`site.rs`) | integration | WRK-01..03 | `apps/worker/tests/*.rs` | `cargo test` |
 
@@ -169,7 +170,7 @@ T8
 
 ---
 
-### T7: 404 e besave.css [ ]
+### T7: 404 e besave.css [x]
 
 **What**: rota `/404.html` (noindex) e rota prerenderizada `assets/besave.css` com tokens, fontes e as classes dos templates do worker restilizadas.
 **Where**: `apps/site/src/lib/estilo/besave.css`
@@ -178,11 +179,11 @@ T8
 
 **Done when**:
 
-- [ ] `besave-css.test.ts` e `saida.test.ts` cobrem CSS-01..03 e ERR-01..02
-- [ ] Build gate verde
+- [ ] `besave-css.test.ts` (Vitest, CSS-01..03) e `e2e/saida.spec.ts` (ERR-01..02, CSS-01, TOK-02/03 sobre o build)
+- [ ] Full gate verde
 
-**Tests**: unit
-**Gate**: build
+**Tests**: unit, e2e
+**Gate**: full
 **Commit**: `feat(site): gera besave.css e 404 a partir dos tokens`
 
 ---
@@ -228,5 +229,5 @@ T8
 | T4 | componente com regra | unit | unit | ✅ |
 | T5 | página/fluxo | e2e | e2e | ✅ |
 | T6 | página/fluxo | e2e | e2e | ✅ |
-| T7 | saída do build | unit | unit | ✅ |
+| T7 | besave.css + saída do build | unit, e2e | unit, e2e | ✅ |
 | T8 | worker | integration | integration | ✅ |

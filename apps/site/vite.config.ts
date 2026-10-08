@@ -20,6 +20,8 @@ export default defineConfig({
 	// sincronizador.ts lê a versão do contrato em packages/contract (regra 4).
 	server: { fs: { allow: ['../../packages/contract'] } },
 	test: {
+		// besave-css.test.ts lê o CSS processado (imports resolvidos), como no build.
+		css: { include: [/estilo[/\\]besave\.css/] },
 		expect: { requireAssertions: true },
 		environment: 'node',
 		// Orçamentos de tempo (desempenho.test.ts) não podem disputar CPU com outros arquivos.
