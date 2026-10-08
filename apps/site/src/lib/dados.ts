@@ -1,8 +1,9 @@
 // Camada de dados do site (BSV-35): única porta de entrada; componentes não fazem fetch.
-export { AREAS, LOJAS, PUBLICOS, ROTULO_LOJA } from './dados/tipos.ts';
+export { AREAS, FAIXAS, LOJAS, PUBLICOS, ROTULO_LOJA } from './dados/tipos.ts';
 export type {
 	Area,
 	ChunkRef,
+	Faixa,
 	Filtro,
 	Loja,
 	Manifest,
