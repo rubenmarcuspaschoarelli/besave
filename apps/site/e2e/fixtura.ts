@@ -23,7 +23,13 @@ function card(id: number, agora: number): OfertaCard {
 	return {
 		id,
 		l: id % 2 ? 'AMAZON' : 'SHOPEE',
-		t: id % 10 === 0 ? `Protetor solar FPS ${id} toque seco` : `Produto ${id} da área ${a}`,
+		// "protetor" em ELAS (id % 10 = 0) e em MEU_LAR (id % 10 = 1): a busca na área tem de separar.
+		t:
+			id % 10 === 0
+				? `Protetor solar FPS ${id} toque seco`
+				: id % 10 === 1
+					? `Protetor de colchão ${id} casal`
+					: `Produto ${id} da área ${a}`,
 		pd: id % 3 === 0 ? pp * 2 : null,
 		pp,
 		dt: new Date(agora - 48 * 3_600_000).toISOString(),

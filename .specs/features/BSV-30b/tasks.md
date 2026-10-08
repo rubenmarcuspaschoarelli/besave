@@ -108,9 +108,9 @@ T5 → T6
 
 **Done when**:
 
-- [ ] e2e `area.spec.ts`: 10 slugs com h1/title/canonical/sem noindex; `/elas/` só ELAS na grade e na faixa; busca em `/elas/` só ELAS; `/xyz/` → 404; topo, favoritos e rodapé presentes
-- [ ] `saida.spec.ts` (ERR-02) lista as 10 páginas novas e nenhuma outra
-- [ ] Gate build passa
+- [x] e2e `area.spec.ts`: 10 slugs com h1/title/canonical/sem noindex; `/elas/` só ELAS na grade e na faixa; busca em `/elas/` só ELAS; `/xyz/` → 404; topo, favoritos e rodapé presentes
+- [x] `saida.spec.ts` (ERR-02) lista as 10 páginas novas e nenhuma outra
+- [x] Gate build passa
 
 **Tests**: e2e
 **Gate**: build

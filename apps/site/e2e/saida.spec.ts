@@ -30,7 +30,26 @@ test('build sem fallback', () => {
 		.map((f) => f.replaceAll('\\', '/'))
 		.filter((f) => f.endsWith('.html'))
 		.sort();
-	expect(htmls).toEqual(['404.html', 'desejos/index.html', 'index.html']);
+	expect(htmls).toEqual(
+		[
+			'404.html',
+			'desejos/index.html',
+			'index.html',
+			// ARE-01: as 10 áreas do CONTRATO §2.3.
+			...[
+				'tech',
+				'players',
+				'meu-lar',
+				'elas',
+				'eles',
+				'cultura',
+				'familia',
+				'pets',
+				'esporte-vida',
+				'outros'
+			].map((s) => `${s}/index.html`)
+		].sort()
+	);
 });
 
 // CSS-01
