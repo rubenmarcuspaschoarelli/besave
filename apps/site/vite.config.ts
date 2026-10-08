@@ -14,7 +14,9 @@ export default defineConfig({
 			// Sem fallback SPA (AD-020): toda rota é prerenderizada.
 			adapter: adapter({ pages: 'build', assets: 'build', fallback: undefined, strict: true }),
 			// A 404.html é servida em qualquer path: assets sempre a partir da raiz.
-			paths: { relative: false }
+			paths: { relative: false },
+			// CSS da página (~20 KB bruto) num <style>: sem pedido bloqueando a renderização (BSV-30b).
+			inlineStyleThreshold: 32_768
 		})
 	],
 	// sincronizador.ts lê a versão do contrato em packages/contract (regra 4).

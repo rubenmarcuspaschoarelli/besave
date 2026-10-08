@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-30b/spec.md`
-**Status**: In Progress
+**Status**: Done
 
 ---
 
@@ -154,7 +154,7 @@ T5 → T6
 
 **Tests**: e2e
 **Gate**: build
-**Commit**: `perf(site): Lato com hash no build (cache de 1 ano)`
+**Commit**: `perf(site): fonte Lato com hash no build (cache de 1 ano)`
 
 ---
 
@@ -168,13 +168,24 @@ T5 → T6
 
 **Done when**:
 
-- [ ] Saída: home, áreas, desejos e 404 com `<style>` e sem `<link rel="stylesheet">`
-- [ ] Medição antes/depois do HTML da home registrada
-- [ ] Gate build passa
+- [x] Saída: home, áreas, desejos e 404 com `<style>` e sem `<link rel="stylesheet">`
+- [x] Medição antes/depois do HTML da home registrada
+- [x] Gate build passa
+
+**Medição (CSS-05)**, build local, `build/index.html`:
+
+| | HTML bruto | HTML gzip | HTML br | pedidos de CSS |
+| - | - | - | - | - |
+| antes (T5) | 12.646 B | 3.144 B | 2.645 B | 1 (`0.*.css`, 19.729 B / 4.971 B gzip, bloqueante) |
+| depois (T6) | 32.427 B | 7.867 B | 6.910 B | 0 |
+
+Bundle inicial da home: JS 117.893 B brutos (47.895 B gzip, 17 arquivos) + CSS embutido 19.729 B = 137.622 B ≤ 150 KB.
+O `<link rel="stylesheet">` que sobra é `disabled media="(max-width: 0)"`, posto pelo SvelteKit para o roteador
+(`kit/src/runtime/server/page/render.js:317`); não baixa nem bloqueia (teste "home e área abrem sem pedir arquivo de CSS").
 
 **Tests**: e2e
 **Gate**: build
-**Commit**: `perf(site): CSS da página embutido no HTML`
+**Commit**: `perf(site): embute o CSS da página no HTML`
 
 ---
 
