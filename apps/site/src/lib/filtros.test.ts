@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PADRAO, escreverFiltros, foraDoPadrao, lerFiltros } from './filtros.ts';
+import { PADRAO, escreverFiltros, foraDoPadrao, lerFiltros, temFiltro } from './filtros.ts';
 import type { EstadoFiltros } from './filtros.ts';
 
 const ler = (q: string) => lerFiltros(new URLSearchParams(q));
@@ -110,5 +110,16 @@ describe('foraDoPadrao', () => {
 		expect(foraDoPadrao({ ...PADRAO, loja: 'SHOPEE' })).toBe(true);
 		expect(foraDoPadrao({ ...PADRAO, faixa: 'ate50' })).toBe(true);
 		expect(foraDoPadrao({ ...PADRAO, soComCupom: true })).toBe(true);
+	});
+});
+
+describe('temFiltro', () => {
+	it('BAR-08: ordem sozinha não é filtro', () => {
+		expect(temFiltro(PADRAO)).toBe(false);
+		expect(temFiltro({ ...PADRAO, ordem: 'preco' })).toBe(false);
+		expect(temFiltro({ ...PADRAO, publico: 'INFANTIL' })).toBe(true);
+		expect(temFiltro({ ...PADRAO, loja: 'AMAZON' })).toBe(true);
+		expect(temFiltro({ ...PADRAO, faixa: 'acima200' })).toBe(true);
+		expect(temFiltro({ ...PADRAO, soComCupom: true })).toBe(true);
 	});
 });

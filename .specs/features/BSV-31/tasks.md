@@ -101,8 +101,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Fluxos BAR-01..09 e URL-04..05 passam em e2e (390 px e 1280 px)
-- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+- [x] Fluxos BAR-01..09 e URL-04..05 passam em e2e (390 px e 1280 px)
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
 
 **Tests**: e2e
 **Gate**: build

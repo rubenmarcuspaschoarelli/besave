@@ -49,12 +49,12 @@ export function escreverFiltros(url: URL, e: EstadoFiltros): string {
 	return url.pathname + (q ? `?${q}` : '') + url.hash;
 }
 
+/** Algum filtro além da ordem (estado vazio). */
+export function temFiltro(e: EstadoFiltros): boolean {
+	return e.publico !== undefined || e.loja !== undefined || e.faixa !== undefined || e.soComCupom;
+}
+
+/** Ordem ou filtro fora do padrão ("Limpar filtros"). */
 export function foraDoPadrao(e: EstadoFiltros): boolean {
-	return (
-		e.ordem !== 'recentes' ||
-		e.publico !== undefined ||
-		e.loja !== undefined ||
-		e.faixa !== undefined ||
-		e.soComCupom
-	);
+	return e.ordem !== 'recentes' || temFiltro(e);
 }
