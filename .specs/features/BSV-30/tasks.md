@@ -151,7 +151,7 @@ T8
 
 ---
 
-### T6: Lista de desejos [ ]
+### T6: Lista de desejos [x]
 
 **What**: `routes/desejos/+page.svelte`.
 **Where**: `apps/site/src/routes/desejos/+page.svelte`
