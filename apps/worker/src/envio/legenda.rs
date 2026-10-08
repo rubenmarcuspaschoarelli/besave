@@ -116,7 +116,7 @@ fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros) -> (Vec<Linha>, String) {
 
 /// Corta o título (fronteira de palavra + `…`) no maior tamanho com que `montar(título)` cabe em
 /// `MAX_LEGENDA` (busca binária: o escape faz o HTML crescer mais que o título).
-fn caber(titulo: &str, montar: impl Fn(&str) -> String) -> String {
+pub(crate) fn caber(titulo: &str, montar: impl Fn(&str) -> String) -> String {
     let inteira = montar(titulo);
     let total = titulo.chars().count();
     if tamanho(&inteira) <= MAX_LEGENDA || total <= MIN_TITULO {

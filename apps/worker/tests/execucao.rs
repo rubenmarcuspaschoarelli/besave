@@ -12,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use worker::alerta::{Alertas, ErroTelegram, Telegram};
+use worker::avisos::modelo::LinhaAviso;
 use worker::conversao::{LinhaOferta, LinhaProduto};
 use worker::execucao::{Codigo, Falha, concluir, rodar, variante_de};
 use worker::fonte::{ErroFonte, FakeFonte, FonteOfertas};
@@ -38,6 +39,12 @@ impl FonteOfertas for FonteQueErra {
     }
     fn marcar_publicadas_site(&self, _: &[i64]) -> Result<u64, ErroFonte> {
         Ok(0)
+    }
+    fn avisos(&self) -> Result<Vec<LinhaAviso>, ErroFonte> {
+        Ok(Vec::new())
+    }
+    fn marcar_aviso_site(&self, _: i64, _: bool) -> Result<(), ErroFonte> {
+        Ok(())
     }
 }
 

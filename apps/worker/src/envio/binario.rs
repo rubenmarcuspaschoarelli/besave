@@ -144,6 +144,29 @@ pub fn texto_simulacao(sim: &Simulacao, fotos: &[PathBuf]) -> String {
         if sim.silencioso { "sim" } else { "não" },
         sim.expiradas
     );
+    match &sim.aviso {
+        Some(a) => {
+            let _ = writeln!(
+                t,
+                "\n--- aviso {} ({}, {})\n{}",
+                a.id,
+                if a.jpeg.is_some() {
+                    "sendPhoto"
+                } else {
+                    "sendMessage"
+                },
+                if sim.na_janela {
+                    "na janela: vai agora"
+                } else {
+                    "fora da janela: não vai agora"
+                },
+                a.legenda
+            );
+        }
+        None => {
+            let _ = writeln!(t, "nenhum aviso devido agora");
+        }
+    }
     if let Some(p) = sim.parada {
         let _ = writeln!(t, "parada: {p:?}");
     }
@@ -179,6 +202,12 @@ fn mostrar_simulacao(sim: &Simulacao) {
                 fotos.push(PathBuf::new());
             }
         }
+    }
+    if let Some(a) = &sim.aviso
+        && let Some(jpeg) = &a.jpeg
+        && let Err(e) = std::fs::write(dir.join(format!("aviso-{}.jpg", a.id)), jpeg)
+    {
+        warn!(erro = %e, "gravando foto do aviso do --sim");
     }
     let texto = texto_simulacao(sim, &fotos);
     if let Err(e) = std::fs::write(dir.join("sim.txt"), &texto) {
@@ -279,6 +308,10 @@ impl CanalTelegram for SemTelegram {
     fn editar_legenda(&self, _: &str, _: i64, _: &str) -> Result<(), ErroCanal> {
         Err(ErroCanal::Conexao("--sim não envia".to_owned()))
     }
+
+    fn enviar_mensagem(&self, _: &str, _: &str, _: bool) -> Result<i64, ErroCanal> {
+        Err(ErroCanal::Conexao("--sim não envia".to_owned()))
+    }
 }
 
 /// Configuração (código 2 se faltar), Oracle e a execução; `None` no `--sim`.
@@ -291,6 +324,7 @@ fn rodar_envio(
         .map_err(|e| Falha::config("config", &e))?;
     let canal = canal_do_env().map_err(|e| Falha::config("config", &e))?;
     let dir_imagens = var_caminho("BESAVE_IMAGENS_DIR");
+    let dir_avisos = var_caminho("BESAVE_AVISOS_DIR");
     if dir_imagens.is_none() {
         warn!("BESAVE_IMAGENS_DIR ausente: todas as fotos serão o placeholder da área");
     }
@@ -311,6 +345,7 @@ fn rodar_envio(
         relogio,
         m: &m,
         dir_imagens: dir_imagens.as_deref(),
+        dir_avisos: dir_avisos.as_deref(),
         foto,
         canal,
         pausa_ate: anterior.pausa_ate,

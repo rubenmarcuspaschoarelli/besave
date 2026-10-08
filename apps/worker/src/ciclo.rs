@@ -15,8 +15,11 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 use crate::alerta::{Alertas, ConfigSemNovas, ConfigTelegram, host_do_env};
+use crate::avisos::publicacao::ConfigAvisos;
 use crate::aws::{ConfigAws, ContextoAws, ErroAws, PublicadorS3, RedirectsKvs};
-use crate::execucao::{Codigo, Falha, concluir, marcar_publicacao_site, rodar};
+use crate::execucao::{
+    Codigo, Falha, concluir, marcar_publicacao_site, publicar_avisos_ciclo, rodar,
+};
 use crate::fonte::{FonteOfertas, fake_demo};
 use crate::geracao::Relatorio;
 use crate::logs::{HoraBrasilia, arquivo_do_dia, limpar_antigos};
@@ -311,6 +314,7 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
         .clone()
         .ok_or_else(|| Falha::config("config", &ErroCiclo::ImagensAusente))?;
     let site = ConfigSite::do_env().map_err(|e| Falha::config("config", &e))?;
+    let avisos = ConfigAvisos::do_env();
     let fonte: Box<dyn FonteOfertas> = match std::env::var("BESAVE_FONTE").as_deref() {
         Ok("fake") => Box::new(fake_demo(agora)),
         Ok("oracle") | Err(_) => {
@@ -332,9 +336,10 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             warn!(pasta = %dir.display(), "BESAVE_DESTINO_LOCAL definida: publicando na pasta, não no S3");
             let mut pub_ = PublicadorLocal::new(&dir);
             let mut kvs = RedirectsMemoria::new();
-            let rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
+            let mut rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
             // O site não foi publicado de verdade: o canal não pode achar que a página existe.
             info!("BESAVE_DESTINO_LOCAL definida: DT_PUBLICACAO_SITE não gravada");
+            publicar_avisos_ciclo(fonte, &mut pub_, &avisos, agora, false, &mut rel);
             Ok(rel)
         }
         Destino::Aws(aws) => {
@@ -348,6 +353,7 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
             let mut kvs = RedirectsKvs::new(&ctx, &aws.kvs_arn);
             let mut rel = rodar(fonte, &m, &mut pub_, &mut kvs, &dir_imagens, &site, agora)?;
             marcar_publicacao_site(fonte, &mut rel);
+            publicar_avisos_ciclo(fonte, &mut pub_, &avisos, agora, true, &mut rel);
             Ok(rel)
         }
     }

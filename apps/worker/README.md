@@ -582,7 +582,7 @@ Log diário próprio: `%LOCALAPPDATA%\besave\logs\besave-envio.AAAA-MM-DD.log` (
 execução ok deixa:
 
 ```
-… INFO worker::envio::binario: relatorio canal=1 enviados_hoje=42 devido=2 enviados=2 editadas=1 edicoes_descartadas=0 retry_after=- parada=- tempo_ms=3120
+… INFO worker::envio::binario: relatorio canal=1 enviados_hoje=42 devido=2 enviados=2 editadas=1 edicoes_descartadas=0 aviso=- aviso_falhou=0 retry_after=- parada=- tempo_ms=3120
 ```
 
 | código | quando |
@@ -601,6 +601,82 @@ execução ok deixa:
 Fases do envio: `env_file`, `config`, `parametros`, `trava`, `conexao_oracle`, `leitura_oracle`,
 `foto`, `reserva_oracle`, `envio_telegram`, `confirmacao_oracle`, `edicao_telegram`,
 `edicao_oracle`, `cliente_telegram`.
+
+## Avisos programados (BSV-41)
+
+Mensagens próprias no canal (aviso de afiliado, campanhas, "ofertas do dia"): o `besave-ciclo`
+publica uma página `/avisos/{id}/` para cada aviso ativo e vigente, e o `besave-envio` posta o
+aviso no canal a cada `NR_INTERVALO_MIN` minutos, dentro da janela do canal.
+
+### Oracle
+
+`sql/bsv-41.sql` cria `AVISO`, `AVISO_CANAL`, `ENVIO_AVISO` e as sequências (já rodado; `GRANT`
+comentados no fim, se o worker conecta com outro usuário). Cadastrar um aviso ligado ao canal 1,
+a cada 2 h:
+
+```sql
+INSERT INTO AVISO (ID_AVISO, DS_TITULO, DS_TEXTO, DS_IMAGEM, DS_LINK_INTERNO)
+VALUES (SQ_AVISO.NEXTVAL, 'Como o Besave funciona',
+        'Os links deste canal são de afiliado: quando você compra por eles, o Besave pode receber uma comissão, sem custo extra para você.',
+        'aviso-afiliado.jpg', '/');
+INSERT INTO AVISO_CANAL (ID_AVISO, ID_CANAL, NR_INTERVALO_MIN) VALUES (SQ_AVISO.CURRVAL, 1, 120);
+COMMIT;
+```
+
+| coluna | regra |
+|---|---|
+| `DS_TITULO` (≤ 120) | título da página e do post |
+| `DS_TEXTO` (≤ 800) | texto puro; linha em branco separa parágrafos. HTML do banco sai escapado |
+| `DS_IMAGEM` | nome do arquivo em `BESAVE_AVISOS_DIR`, só `.webp` ou `.jpg`; outro formato → aviso ignorado (`WARN`). Nula → página sem imagem e post como mensagem de texto |
+| `DS_LINK_INTERNO` | caminho do site (`/`, `/elas/`, `/oferta/12345/`), só `a-z 0-9 / _ -`; outra coisa (URL externa) → página sem botão + `WARN` |
+| `DT_INICIO`, `DT_FIM` | vigência `[início, fim)`; fim nulo = sem fim |
+| `AVISO_CANAL.NR_INTERVALO_MIN` | minutos entre posts do aviso no canal (≥ 30; padrão 120) |
+
+### Imagens (`BESAVE_AVISOS_DIR`)
+
+Uma pasta só para os avisos (ex.: `BESAVE_AVISOS_DIR='C:\besave\avisos'` no `.env` do ciclo **e**
+do envio). Na página vai o arquivo original em `img/avisos/{id}.{webp,jpg}` (até 1 MB; acima disso
+a página sai sem imagem, com `WARN`); trocar o arquivo com o mesmo nome republica a imagem no
+ciclo seguinte (cache de 1 h). No canal vai a imagem centralizada em 800×800 branco, como as
+ofertas. Sem a variável, páginas e posts saem sem imagem.
+
+`BESAVE_CANAL_URL` (opcional, padrão `https://t.me/besaveofertas`) é o link do canal no rodapé da
+página.
+
+### Ciclo
+
+Depois do manifest e das datas das ofertas, o ciclo publica página e imagem de cada aviso vigente,
+só o que mudou (índice `_estado/avisos.json`), e remove página e imagem do aviso desativado, vencido
+ou apagado. Grava `AVISO.DT_PUBLICACAO_SITE` quando a página vai ao ar e a anula quando sai; o envio
+só posta aviso com a data preenchida. Falha na fase (Oracle, S3) vira `WARN` e `avisos_falhas=1`,
+sem mudar o código de saída. A linha `relatorio` ganha `avisos_publicados`, `avisos_removidos`,
+`avisos_falhas`, `avisos_datas_gravadas` e `t_avisos`. Com `BESAVE_DESTINO_LOCAL` as páginas vão para a pasta e a data não é
+gravada.
+
+### Envio
+
+Em cada execução, antes do lote de ofertas e só dentro da janela do canal (`NR_HORA_INICIO` a
+`NR_HORA_FIM`), no máximo **1 aviso**: o mais atrasado entre os vencidos (`agora − último envio ≥
+NR_INTERVALO_MIN`; nunca enviado = mais atrasado). O silencioso segue o horário de som do canal.
+Avisos **não** contam na cota de ofertas (`QT_MAX_DIA`). Legenda:
+
+```
+<b>{título}</b>
+{texto}
+<a href="https://besave.com.br/avisos/{id}/?utm_source=telegram">Saiba mais</a>
+```
+
+Sem duplicata como nas ofertas: a linha de `ENVIO_AVISO` nasce antes do envio e é apagada se o
+Telegram recusa. Falha no aviso (Oracle ou Telegram) vira `WARN` e `aviso_falhou=1` no relatório e
+o lote de ofertas segue; 429 encerra a execução como nas ofertas. `--sim` mostra o aviso devido
+(mesmo fora da janela) e grava a foto em `%TEMP%\besave-envio-sim\aviso-{id}.jpg`.
+
+### Pausar
+
+- Um aviso em todos os canais (a página sai no ciclo seguinte):
+  `UPDATE AVISO SET ST_ATIVO = 0 WHERE ID_AVISO = :id; COMMIT;`
+- Só no canal (a página fica): `UPDATE AVISO_CANAL SET ST_ATIVO = 0 WHERE ID_AVISO = :id AND ID_CANAL = 1; COMMIT;`
+- Mudar a frequência: `UPDATE AVISO_CANAL SET NR_INTERVALO_MIN = 240 WHERE ID_AVISO = :id; COMMIT;`
 
 ## Testes
 

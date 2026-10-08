@@ -51,6 +51,7 @@ fn rodar_em(
         relogio: r,
         m: &m,
         dir_imagens: None,
+        dir_avisos: None,
         foto: foto_rapida,
         canal: 1,
         pausa_ate,
@@ -182,6 +183,7 @@ fn post_com_foto_real() {
         relogio: &r,
         m: &m,
         dir_imagens: None,
+        dir_avisos: None,
         foto,
         canal: 1,
         pausa_ate: None,
@@ -236,6 +238,9 @@ impl CanalTelegram for Espiao<'_> {
     fn editar_legenda(&self, _: &str, _: i64, _: &str) -> Result<(), ErroCanal> {
         Ok(())
     }
+    fn enviar_mensagem(&self, _: &str, _: &str, _: bool) -> Result<i64, ErroCanal> {
+        Ok(78)
+    }
 }
 
 /// DUP-01: no instante do `sendPhoto` a linha já existe, sem `message_id`; depois, com ele.
@@ -254,6 +259,7 @@ fn linha_gravada_antes_do_envio() {
         relogio: &r,
         m: &m,
         dir_imagens: None,
+        dir_avisos: None,
         foto: foto_rapida,
         canal: 1,
         pausa_ate: None,

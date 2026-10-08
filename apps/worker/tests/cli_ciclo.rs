@@ -65,6 +65,8 @@ fn comando_de(exe: &str, local: &Path) -> Command {
         "TELEGRAM_CHAT_ID",
         "BESAVE_ALERTA_SEM_NOVAS_HORAS",
         "BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS",
+        "BESAVE_AVISOS_DIR",
+        "BESAVE_CANAL_URL",
     ] {
         c.env_remove(k);
     }
@@ -297,6 +299,25 @@ fn besave_ciclo_e_ciclo_dao_o_mesmo_relatorio() {
     // BSV-40 CIC-04: ensaio local não grava DT_PUBLICACAO_SITE.
     assert!(log_c.contains("DT_PUBLICACAO_SITE não gravada"), "{log_c}");
     assert!(rel_w.contains("publicacao_site_marcadas=0"), "{rel_w}");
+    // BSV-41 DTP-03, REL-01: o ciclo publica o aviso da fonte fake na pasta, sem gravar a data.
+    assert!(
+        local_c
+            .join("saida")
+            .join("avisos")
+            .join("1")
+            .join("index.html")
+            .exists()
+    );
+    assert!(
+        local_c
+            .join("saida")
+            .join("_estado")
+            .join("avisos.json")
+            .exists()
+    );
+    assert!(rel_w.contains("avisos_publicados=1"), "{rel_w}");
+    assert!(rel_w.contains("avisos_falhas=0"), "{rel_w}");
+    assert!(rel_w.contains("avisos_datas_gravadas=0"), "{rel_w}");
 }
 
 /// CIC-06: argumento desconhecido no `besave-ciclo` → código 2, registrado só no log. Vale

@@ -132,6 +132,27 @@ pub fn pedido_edicao(
     .map_err(|_| erro_pedido())
 }
 
+/// POST `.../sendMessage` (JSON) com `parse_mode=HTML` e prévia do link ligada (aviso sem foto).
+pub fn pedido_mensagem(
+    cfg: &ConfigCanal,
+    chat_id: &str,
+    texto: &str,
+    silencioso: bool,
+) -> Result<http::Request<Vec<u8>>, ErroCanal> {
+    let corpo = serde_json::json!({
+        "chat_id": chat_id,
+        "text": texto,
+        "parse_mode": "HTML",
+        "disable_notification": silencioso,
+        "link_preview_options": { "is_disabled": false },
+    })
+    .to_string();
+    http::Request::post(format!("https://{HOST}/bot{}/sendMessage", cfg.token()))
+        .header(http::header::CONTENT_TYPE, "application/json")
+        .body(corpo.into_bytes())
+        .map_err(|_| erro_pedido())
+}
+
 /// Resposta da Bot API → `result` ou o erro: 429 → `Limite(retry_after)`; com `description` →
 /// `Recusada`; senão `Http`.
 pub fn interpretar(status: u16, corpo: &[u8]) -> Result<serde_json::Value, ErroCanal> {
@@ -223,5 +244,17 @@ impl CanalTelegram for CanalTelegramHttp {
     ) -> Result<(), ErroCanal> {
         self.chamar(pedido_edicao(&self.cfg, chat_id, message_id, legenda)?)
             .map(|_| ())
+    }
+
+    fn enviar_mensagem(
+        &self,
+        chat_id: &str,
+        texto: &str,
+        silencioso: bool,
+    ) -> Result<i64, ErroCanal> {
+        let r = self.chamar(pedido_mensagem(&self.cfg, chat_id, texto, silencioso)?)?;
+        r["message_id"]
+            .as_i64()
+            .ok_or_else(|| ErroCanal::Conexao("resposta sem message_id".to_owned()))
     }
 }

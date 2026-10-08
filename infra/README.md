@@ -13,6 +13,7 @@ Terraform que cria, ao lado do protótipo (AD-016), a infra do site novo:
 | vigia externo: Lambda Python a cada 10 min (Scheduler), avisa no Telegram (BSV-15) | `besave-vigia` | `vigia.tf`, `lambdas/vigia/` |
 | A/AAAA de `besave.com.br` e `www` na distribuição nova (com `ativar_dominios`, BSV-16) | — | `dominios.tf` |
 | zonas `besave.io`/`besave.me`; com `ativar_curto`: certificado, Function `link-curto`, distribuição e A/AAAA (BSV-16) | `besave-curto` | `curto.tf`, `functions/link-curto.js` |
+| provedor OIDC do GitHub e papel do deploy do site, restrito aos prefixos do site (BSV-17) | `besave-site-deploy` | `site_deploy.tf`, `deploy-site/` |
 
 Não gerencia o bucket `besave.com.br` nem a distribuição atual do protótipo: o `plan` não mostra nenhum dos dois.
 
@@ -71,7 +72,7 @@ terraform fmt -check -recursive
 terraform init -backend=false && terraform validate
 terraform test                       # tests/*.tftest.hcl com mock_provider: nada é criado
 python -m unittest discover -s lambdas/vigia   # vigia: dublês de S3/HTTP/SSM/Telegram, sem rede
-cd functions && npm ci && npm test   # Functions com fixtures de evento + 404.html + sem recursos do protótipo
+cd functions && npm ci && npm test   # Functions, 404.html, sem recursos do protótipo, deploy do site (BSV-17)
 ```
 
 **Obrigatório** após qualquer mudança em `functions/*.js`, **antes do `apply`**: rodar `test-function` no
@@ -292,6 +293,130 @@ done
   `prevent_destroy`, AD-022). Para desligar, remova o `prevent_destroy` num commit explícito. As zonas
   também têm `prevent_destroy` e não dependem de `ativar_curto`: zona recriada ganha outros NS e os links
   já postados param até o registrador ser atualizado.
+
+## Deploy do site (BSV-17)
+
+O GitHub Actions (`.github/workflows/site-deploy.yml`) compila `apps/site` e publica no `besave-site` com
+credencial temporária (OIDC): nenhuma chave de acesso no GitHub. O bucket é compartilhado com o worker, então
+há duas travas com a mesma lista de prefixos (`deploy-site/prefixos.json`):
+
+1. **Policy do papel** `besave-site-deploy`: `PutObject`/`DeleteObject` e `ListBucket` (`s3:prefix`) só em
+   `_app/*`, `index.html`, `404.html`, `favicon.*`, `desejos/*`, `assets/besave.css`, `assets/fontes/*` e
+   `{slug}/*` das 10 áreas; `CreateInvalidation` só na distribuição do site. Nada em `data/`, `oferta/`,
+   `img/`, `manifest*.json`, `sitemap*`, `robots.txt`, `_estado/`.
+2. **Script** `deploy-site/publicar.mjs`: recusa o build inteiro, antes de qualquer upload, se houver
+   arquivo fora desses prefixos ou se faltar `index.html` ou `404.html` (MANIFEST §5).
+
+O papel só é assumido por `repo:rubenmarcuspaschoarelli/besave:ref:refs/heads/main`, com sessão de 1 h.
+O job só roda em `main` (o `if` pula outros branches); fora dele o STS recusaria o token.
+
+O que o script faz, em ordem:
+
+| passo | comando | headers |
+|---|---|---|
+| 1 | `aws s3 sync _app/` (sem `--delete` e sem `--size-only`: reenvia o `_app/` do build, e o `LastModified` fica o do último deploy que tinha o arquivo) | `public, max-age=31536000, immutable` |
+| 2 | `_app/version.json` (nome fixo do SvelteKit) | `public, max-age=300`, `application/json` |
+| 3 | `assets/besave.css`, `assets/fontes/*`, `favicon.*`, um `cp` por arquivo | `public, max-age=3600, stale-while-revalidate=86400` |
+| 4 | cada HTML, um `cp` por arquivo; `404.html` e `index.html` por último | `public, max-age=300`, `text/html; charset=utf-8` |
+| 5 | invalidação: `/index.html`, `/404.html`, `/{dir}/*` de cada diretório com HTML, `/assets/*` (nunca `/*`) | — |
+| 6 | limpeza de `_app/` com carência: lista `_app/` (`s3api list-objects-v2`) e apaga (`s3 rm`, um por arquivo) só o que **não está no build atual e subiu há mais de 7 dias**; arquivo do build nunca sai, mesmo antigo | — |
+
+A carência conta de quando o arquivo saiu do build e deixa uma página antiga ainda em cache (navegador ou borda) achar
+os chunks dela por uma semana. Reenviar o `_app/` a cada deploy custa pouco (hoje 12 arquivos, ~100 KB).
+Nunca há `--delete`. O `--ensaio` também lista `_app/` (só leitura) e mostra o que seria apagado
+(`apagaria N arquivo(s)` e as linhas `aws s3 rm`), por isso no workflow ele roda depois da credencial.
+
+Uma rota nova fora desses prefixos (ex.: `/sobre/`) exige, na mesma PR, o prefixo em
+`deploy-site/prefixos.json`, os testes (`tests/site_deploy.tftest.hcl`, `functions/test/deploy-site.test.mjs`)
+e um `apply`. Antes disso, o deploy falha no passo de ensaio.
+
+### 1. Aplicar (dono)
+
+```sh
+cd infra
+terraform plan -out plano.tfplan   # 3 to add (provedor OIDC, papel, policy), 0 to change, 0 to destroy
+terraform apply plano.tfplan
+terraform output arn_papel_site_deploy id_distribuicao
+```
+
+O provedor `token.actions.githubusercontent.com` não existe na conta. Se o `apply` acusar
+`EntityAlreadyExists`, alguém o criou no console: `terraform import aws_iam_openid_connect_provider.github <arn>`.
+
+### 2. Variáveis do repositório
+
+São variáveis (não segredos): o ARN não dá acesso sem o token OIDC do GitHub.
+
+```sh
+gh variable set AWS_ROLE_SITE        --body "$(terraform output -raw arn_papel_site_deploy)"
+gh variable set CF_DISTRIBUICAO_SITE --body "$(terraform output -raw id_distribuicao)"
+```
+
+### 3. Simular o papel
+
+```sh
+ROLE=$(terraform output -raw arn_papel_site_deploy)
+sim() { aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names "$1" \
+  --resource-arns "arn:aws:s3:::besave-site/$2" --query 'EvaluationResults[0].EvalDecision' --output text; }
+sim s3:PutObject    _app/x.js              # allowed
+sim s3:PutObject    elas/index.html        # allowed
+sim s3:DeleteObject manifest.json          # implicitDeny
+sim s3:DeleteObject oferta/1/index.html    # implicitDeny
+sim s3:DeleteObject data/chunks/x          # implicitDeny
+sim s3:PutObject    robots.txt             # implicitDeny
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:ListBucket \
+  --resource-arns arn:aws:s3:::besave-site \
+  --context-entries ContextKeyName=s3:prefix,ContextKeyValues=data/,ContextKeyType=string \
+  --query 'EvaluationResults[0].EvalDecision' --output text   # implicitDeny (com _app/ → allowed)
+```
+
+### 4. Primeiro deploy (à mão) e ligar o automático
+
+O build tem de trazer `index.html` **e** `404.html`; o placeholder da BSV-35 ainda não traz o `404.html`, e o
+deploy falha no ensaio sem tocar o bucket. Primeiro deploy, quando a BSV-30 estiver aprovada:
+
+```sh
+gh workflow run site-deploy.yml --ref main
+gh run watch "$(gh run list --workflow site-deploy.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+curl -s https://besave.com.br/ | head        # home nova
+curl -I https://besave.com.br/nao-existe     # 404 com o /404.html do site
+```
+
+Até aqui `curl -s https://besave.com.br/` continua mostrando a home provisória. Depois do primeiro deploy
+conferido, ligar o automático (todo merge em `main` que mexa em `apps/site/**`):
+
+```sh
+gh variable set SITE_DEPLOY_ATIVO --body true
+```
+
+Para desligar: `gh variable set SITE_DEPLOY_ATIVO --body false` (qualquer valor diferente de `true`).
+
+Ensaio local, sem AWS (imprime os comandos):
+
+```sh
+cd apps/site && pnpm build && cd ../..
+node infra/deploy-site/publicar.mjs --build apps/site/build --bucket besave-site --distribuicao EXEMPLO --ensaio
+```
+
+O ensaio lista `_app/` no bucket; sem credencial, passe uma listagem salva com `--remotos arquivo.json`
+(`[{"Key": "_app/...", "LastModified": "..."}]`, `[]` para nenhuma).
+
+### 5. Reverter
+
+Rodar o workflow com o SHA de um commit anterior de `main` (só ancestral de `main` é aceito; o workflow e o
+script continuam os do HEAD, só `apps/site` vem do commit):
+
+```sh
+git log --oneline main -- apps/site            # escolher o último commit bom
+gh workflow run site-deploy.yml --ref main -f commit=<sha>
+```
+
+### Cuidados
+
+- `assets/besave.css` passa a ser do deploy do site (AD-078), mas o worker ainda o publica até a BSV-30
+  tirá-lo do worker. Enquanto os dois publicam, vale o último que escreveu.
+- Invalidação: cada deploy usa até 14 caminhos (wildcard conta como 1); 1.000 por mês são grátis, depois
+  US$ 0,005 por caminho.
+- O papel não lê nem lista nada fora dos prefixos; `aws s3 ls s3://besave-site/` com ele dá `AccessDenied`.
 
 ## Cuidados
 

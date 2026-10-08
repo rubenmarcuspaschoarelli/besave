@@ -22,3 +22,13 @@ output "ns_curtos" {
   description = "NS de cada zona curta, para configurar no registrador antes de ativar_curto."
   value       = { for d, z in aws_route53_zone.curto : d => z.name_servers }
 }
+
+output "id_distribuicao" {
+  description = "ID da distribuição nova (variável CF_DISTRIBUICAO_SITE do repositório, BSV-17)."
+  value       = aws_cloudfront_distribution.site.id
+}
+
+output "arn_papel_site_deploy" {
+  description = "Papel do deploy do site (variável AWS_ROLE_SITE do repositório, BSV-17)."
+  value       = aws_iam_role.site_deploy.arn
+}

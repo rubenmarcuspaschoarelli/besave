@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use tracing::{debug, info, warn};
 
+use crate::avisos::publicacao::RelatorioAvisos;
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
 use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, para_pagina};
 use crate::fonte::{ErroFonte, FonteOfertas};
@@ -81,6 +82,8 @@ pub struct Relatorio {
     pub publicacao_site_marcadas: u64,
     /// Lotes do `UPDATE` de `DT_PUBLICACAO_SITE` que falharam.
     pub publicacao_site_falhas: u64,
+    /// Fase de avisos (BSV-41; fora de `gerar`).
+    pub avisos: RelatorioAvisos,
 }
 
 /// Tempo de cada fase de `gerar()`, em ms (BSV-13b). `*_listagem` é parte da fase acima dela.
