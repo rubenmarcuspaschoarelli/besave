@@ -94,7 +94,10 @@ test('"Ver mais ofertas" acrescenta 40', async ({ page }) => {
 	await expect(page.locator(GRADE)).toHaveCount(80);
 	const depois = await atributos(page, 'data-id');
 	expect(depois.slice(0, 40)).toEqual(primeiros);
+	expect(depois).toHaveLength(80);
 	expect(depois.map(Number)).not.toContain(EXPIRADAS[1]);
+	// A 147 cairia dentro dos 80 se não fosse expirada: 146 e 148 aparecem.
+	expect(depois.map(Number)).toEqual(expect.arrayContaining([146, 148]));
 });
 
 // HOM-07
@@ -162,5 +165,28 @@ test('rodapé com aviso de afiliado e canal; sem redes sem link', async ({ page 
 	);
 	for (const r of ['X', 'Instagram', 'Facebook', 'YouTube', 'Discord', 'Android', 'iOS']) {
 		await expect(rodape.getByRole('link', { name: r, exact: true })).toHaveCount(0);
+		await expect(rodape).not.toContainText(new RegExp(`(^|\\W)${r}(\\W|$)`));
+	}
+	await expect(rodape).not.toContainText('Aplicativos');
+});
+
+// CAR-04: sem `-small` no bucket, a imagem cai no placeholder da área.
+test('imagem ausente vira o placeholder da área', async ({ page }) => {
+	const slug: Record<string, string> = {
+		ELAS: 'elas',
+		MEU_LAR: 'meu-lar',
+		TECH: 'tech',
+		ESPORTE_VIDA: 'esporte-vida',
+		FAMILIA: 'familia',
+		PETS: 'pets',
+		PLAYERS: 'players',
+		CULTURA: 'cultura',
+		ELES: 'eles',
+		OUTROS: 'outros'
+	};
+	for (const i of [0, 1, 2]) {
+		const card = page.locator(GRADE).nth(i);
+		const area = (await card.getAttribute('data-area')) ?? '';
+		await expect(card.locator('img')).toHaveAttribute('src', `/img/placeholder/${slug[area]}.webp`);
 	}
 });

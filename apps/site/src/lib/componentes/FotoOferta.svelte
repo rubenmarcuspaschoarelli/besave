@@ -21,6 +21,7 @@
 	/>
 	{#if pct}
 		<span
+			data-selo
 			class="absolute top-2 left-2 rounded-md bg-destaque px-1.5 py-1 font-titulo text-xs leading-none font-black text-sobre-destaque tabular-nums"
 			>-{pct}%</span
 		>

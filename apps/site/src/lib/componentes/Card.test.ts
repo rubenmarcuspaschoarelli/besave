@@ -24,7 +24,7 @@ describe('Card', () => {
 	// CAR-01: desconto do contrato round((1 - 19990/29990) * 100) = 33.
 	it('com pd: selo -N% e preço "de" riscado', () => {
 		const h = html(BASE);
-		expect(h).toMatch(/>-33%</);
+		expect(h).toMatch(/<span data-selo[^>]*>-33%<\/span>/);
 		expect(h).toMatch(/<s[^>]*>R\$ 299,90<\/s>/);
 	});
 
@@ -32,7 +32,8 @@ describe('Card', () => {
 	it('sem pd: sem selo e sem "de"', () => {
 		for (const pd of [null, undefined]) {
 			const h = html({ ...BASE, pd });
-			expect(h).not.toMatch(/-\d+%/);
+			expect(h).not.toContain('data-selo');
+			expect(h).not.toMatch(/-[^\s<>"]*%/);
 			expect(h).not.toMatch(/<s[\s>]/);
 			expect(h).not.toContain('R$ 299,90');
 			expect(h).toContain('R$ 199,90');

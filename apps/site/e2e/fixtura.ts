@@ -14,7 +14,8 @@ const AREAS: Area[] = [
 	'ELES',
 	'OUTROS'
 ];
-export const EXPIRADAS = [7, 77];
+/** 147 fica entre os 80 mais recentes: a grade tem de pulá-la. */
+export const EXPIRADAS = [7, 147];
 
 function card(id: number, agora: number): OfertaCard {
 	const a = AREAS[id % AREAS.length];

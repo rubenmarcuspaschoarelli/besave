@@ -50,6 +50,24 @@ test('id fora do catálogo: "saiu do ar" e Remover', async ({ page }) => {
 	expect(await page.evaluate(() => localStorage.getItem('besave:favoritos'))).toBe('[20]');
 });
 
+// DES-02: antes de o catálogo completar, favorito não achado é "Carregando…", nunca "saiu do ar".
+test('catálogo incompleto: carregando, não "saiu do ar"', async ({ page }) => {
+	let liberar = () => {};
+	const segurado = new Promise<void>((r) => (liberar = r));
+	await page.goto('/');
+	await page.evaluate(() => localStorage.setItem('besave:favoritos', '[1003]'));
+	await page.route('**/data/chunks/1-*', async (r) => {
+		await segurado;
+		await r.fallback();
+	});
+	await page.goto('/desejos/');
+	await expect(page.getByText('Carregando…')).toBeVisible();
+	await expect(page.getByText('Esta oferta saiu do ar')).toHaveCount(0);
+	liberar();
+	await expect(page.locator(CARD)).toHaveAttribute('data-id', '1003');
+	await expect(page.getByText('Carregando…')).toHaveCount(0);
+});
+
 // DES-03
 test('lista vazia mostra aviso e link para a home', async ({ page }) => {
 	await page.goto('/desejos/');
