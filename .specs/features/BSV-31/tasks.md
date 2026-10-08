@@ -79,10 +79,10 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Todos os valores válidos da URL viram filtro
-- [ ] Inválidos são ignorados sem afetar os outros
-- [ ] Padrão fica fora da URL; `q`/`utm_*` preservados; sem `?` quando vazia
-- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test`
+- [x] Todos os valores válidos da URL viram filtro
+- [x] Inválidos são ignorados sem afetar os outros
+- [x] Padrão fica fora da URL; `q`/`utm_*` preservados; sem `?` quando vazia
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test`
 
 **Tests**: unit
 **Gate**: quick

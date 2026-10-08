@@ -38,6 +38,7 @@ não há filtro por faixa de preço nem por cupom.
 | Painel do celular | `<dialog>` modal (folha inferior), filtros aplicam ao tocar; "Ver N ofertas" fecha | `<dialog>` dá foco preso e Esc sem dependência; contagem ao vivo permite o "Ver N" | y |
 | Corte celular/desktop | `sm` (640 px) do Tailwind | Mesmo corte das outras telas | y |
 | Contador | "N ofertas" na barra (total do resultado); o "X de Y" do título continua | Spec pede contador na barra; "X de Y" já existe para o "Ver mais" | y |
+| "Limpar filtros" e ordem | Aparece quando ordem **ou** algum filtro difere do padrão; volta os dois ao padrão. O estado vazio (BAR-08) depende só dos filtros | Spec: "Limpar volta ao padrão e limpa a URL"; ordem não esvazia a grade | y |
 | Navegar para outra área | Filtros voltam ao padrão (componente recriado por área, como hoje) | Os links de área não levam a query | y |
 
 **Open questions:** none - all resolved or logged above.
@@ -119,9 +120,9 @@ não há filtro por faixa de preço nem por cupom.
 | DAD-02 | P1: Dados | T1 | Done |
 | DAD-03 | P1: Dados | T1 | Done |
 | DAD-04 | P1: Dados | T1 | Done |
-| URL-01 | P1: Endereço | T2 | Pending |
-| URL-02 | P1: Endereço | T2 | Pending |
-| URL-03 | P1: Endereço | T2 | Pending |
+| URL-01 | P1: Endereço | T2 | Done |
+| URL-02 | P1: Endereço | T2 | Done |
+| URL-03 | P1: Endereço | T2 | Done |
 | URL-04 | P1: Endereço | T3 | Pending |
 | URL-05 | P1: Endereço | T3 | Pending |
 | BAR-01 | P1: Barra | T3 | Pending |
