@@ -90,6 +90,8 @@ test('busca "protetor" mostra só cards com a palavra', async ({ page }) => {
 test('"Ver mais ofertas" acrescenta 40', async ({ page }) => {
 	await expect(page.locator(GRADE)).toHaveCount(40);
 	const primeiros = await atributos(page, 'data-id');
+	// Mais recentes primeiro: na fixtura, id maior = dp mais recente.
+	expect(primeiros.slice(0, 3)).toEqual(['1009', '1008', '1007']);
 	await page.getByRole('button', { name: 'Ver mais ofertas' }).click();
 	await expect(page.locator(GRADE)).toHaveCount(80);
 	const depois = await atributos(page, 'data-id');
@@ -165,7 +167,7 @@ test('rodapé com aviso de afiliado e canal; sem redes sem link', async ({ page 
 	);
 	for (const r of ['X', 'Instagram', 'Facebook', 'YouTube', 'Discord', 'Android', 'iOS']) {
 		await expect(rodape.getByRole('link', { name: r, exact: true })).toHaveCount(0);
-		await expect(rodape).not.toContainText(new RegExp(`(^|\\W)${r}(\\W|$)`));
+		await expect(rodape.getByText(r, { exact: true })).toHaveCount(0);
 	}
 	await expect(rodape).not.toContainText('Aplicativos');
 });
