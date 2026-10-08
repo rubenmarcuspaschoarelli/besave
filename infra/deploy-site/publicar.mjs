@@ -1,5 +1,5 @@
 // Publica o build do SvelteKit no bucket compartilhado com o worker (BSV-17).
-// Uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio] [--remotos <listagem.json>]
+// Uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio [--remotos <listagem.json>]]
 // Só toca os prefixos de prefixos.json (a mesma lista da policy do papel besave-site-deploy).
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -84,7 +84,7 @@ export function expurgar(remotos, arquivosBuild, agora, dias = CARENCIA_DIAS) {
 /** Saída de `list-objects-v2 --query Contents[]...` → [{ Key, LastModified }]; prefixo vazio dá `null`. */
 export const lerListagem = (saida) => JSON.parse(saida) ?? [];
 
-const listagem = (bucket) => [
+export const listagem = (bucket) => [
   's3api', 'list-objects-v2', '--bucket', bucket, '--prefix', '_app/',
   '--query', 'Contents[].{Key: Key, LastModified: LastModified}', '--output', 'json',
 ];
@@ -106,10 +106,18 @@ function argumentos(argv) {
 
 const exibir = (args) => 'aws ' + args.map((x) => (/[\s;,]/.test(x) ? `"${x}"` : x)).join(' ');
 
-function principal() {
-  const a = argumentos(process.argv.slice(2));
+// Executor do aws CLI; os testes passam um falso que grava os argumentos.
+const awsReal = (args, { capturar = false } = {}) =>
+  spawnSync('aws', args, capturar ? { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] } : { stdio: 'inherit' });
+
+export function principal(argv, aws = awsReal, agora = Date.now()) {
+  const a = argumentos(argv);
   if (!a.build || !a.bucket || !a.distribuicao) {
-    console.error('uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio]');
+    console.error('uso: node publicar.mjs --build <dir> --bucket <nome> --distribuicao <id> [--ensaio [--remotos <listagem.json>]]');
+    return 1;
+  }
+  if (a.remotos && !a.ensaio) {
+    console.error('--remotos só com --ensaio: a limpeza real usa a listagem do bucket');
     return 1;
   }
   if (!existsSync(a.build)) {
@@ -125,7 +133,7 @@ function principal() {
   const executar = (c) => {
     console.log(exibir(c));
     if (a.ensaio) return true;
-    const r = spawnSync('aws', c, { stdio: 'inherit' });
+    const r = aws(c);
     if (r.status !== 0) console.error(`falhou (${r.status ?? r.error}): ${exibir(c)}`);
     return r.status === 0;
   };
@@ -137,17 +145,22 @@ function principal() {
     remotos = lerListagem(readFileSync(a.remotos, 'utf8'));
   } else {
     console.log(exibir(listagem(a.bucket)));
-    const r = spawnSync('aws', listagem(a.bucket), { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
+    const r = aws(listagem(a.bucket), { capturar: true });
     if (r.status !== 0) {
       console.error(`falhou (${r.status ?? r.error}): listagem de _app/`);
       return 1;
     }
-    remotos = lerListagem(r.stdout);
+    try {
+      remotos = lerListagem(r.stdout);
+    } catch {
+      console.error('listagem de _app/ ilegível');
+      return 1;
+    }
   }
-  const velhos = expurgar(remotos, arquivos, Date.now());
+  const velhos = expurgar(remotos, arquivos, agora);
   console.log(`${a.ensaio ? 'apagaria' : 'apagando'} ${velhos.length} arquivo(s) de _app/ fora do build e com mais de ${CARENCIA_DIAS} dias`);
   for (const k of velhos) if (!executar(['s3', 'rm', `s3://${a.bucket}/${k}`])) return 1;
   return 0;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = principal();
+if (process.argv[1] === fileURLToPath(import.meta.url)) process.exitCode = principal(process.argv.slice(2));

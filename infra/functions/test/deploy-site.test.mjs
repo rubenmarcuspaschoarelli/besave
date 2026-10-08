@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { planejar, expurgar, lerListagem } from '../../deploy-site/publicar.mjs';
+import { planejar, expurgar, lerListagem, listagem, principal } from '../../deploy-site/publicar.mjs';
 
 // Deploy do site (BSV-17): script chamado pelo .github/workflows/site-deploy.yml.
 const script = fileURLToPath(new URL('../../deploy-site/publicar.mjs', import.meta.url));
@@ -276,4 +276,82 @@ test('PUB (CLI): diretório de build inexistente sai 1 com mensagem, sem stack t
 test('PUB (CLI): sem --bucket ou --distribuicao sai 1', () => {
   const r = spawnSync(process.execPath, [script, '--build', '.', '--ensaio'], { encoding: 'utf8' });
   assert.equal(r.status, 1);
+});
+
+// PUB-09, modo real: aws falso grava as chamadas; nada sai para a rede.
+test('PUB-09: listagem pede só _app/ do bucket, com Key e LastModified, em JSON', () => {
+  assert.deepEqual(listagem('besave-site'), [
+    's3api', 'list-objects-v2', '--bucket', 'besave-site', '--prefix', '_app/',
+    '--query', 'Contents[].{Key: Key, LastModified: LastModified}', '--output', 'json',
+  ]);
+});
+
+function comBuild(fn) {
+  const dir = mkdtempSync(join(tmpdir(), 'deploy-site-real-'));
+  try {
+    for (const f of buildBom) {
+      mkdirSync(dirname(join(dir, f)), { recursive: true });
+      writeFileSync(join(dir, f), 'x');
+    }
+    return fn(dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function awsFalso({ listagemStatus = 0, saida } = {}) {
+  const chamadas = [];
+  const aws = (args) => {
+    chamadas.push(args);
+    if (args[1] === 'list-objects-v2') return { status: listagemStatus, stdout: saida };
+    return { status: 0 };
+  };
+  return { aws, chamadas };
+}
+
+const remotosReais = JSON.stringify([
+  { Key: '_app/immutable/chunks/velho.js', LastModified: ha(8).replace('Z', '+00:00') },
+  { Key: '_app/immutable/chunks/recente.js', LastModified: ha(1).replace('Z', '+00:00') },
+  { Key: '_app/immutable/entry/start.abc123.js', LastModified: ha(30).replace('Z', '+00:00') },
+]);
+const argsReais = (dir) => ['--build', dir, '--bucket', 'besave-site', '--distribuicao', 'EDIST0000'];
+
+test('PUB-09 (real): publica, lista _app/ depois da invalidação e apaga só o arquivo fora do build com 8 dias', () => {
+  const { aws, chamadas } = awsFalso({ saida: remotosReais });
+  const status = comBuild((dir) => principal(argsReais(dir), aws, AGORA));
+  assert.equal(status, 0);
+  const iInval = chamadas.findIndex((c) => c[0] === 'cloudfront');
+  const iLista = chamadas.findIndex((c) => c[1] === 'list-objects-v2');
+  assert.ok(iInval >= 0 && iLista > iInval);
+  assert.deepEqual(chamadas[iLista], listagem('besave-site'));
+  const rms = chamadas.filter((c) => c[1] === 'rm');
+  assert.deepEqual(rms, [['s3', 'rm', 's3://besave-site/_app/immutable/chunks/velho.js']]);
+  assert.ok(chamadas.indexOf(rms[0]) > iLista);
+  assert.ok(chamadas.some((c) => c[1] === 'cp' && c[3] === 's3://besave-site/index.html'));
+});
+
+test('PUB-09 (real): prefixo vazio ("null") não apaga nada e sai 0', () => {
+  const { aws, chamadas } = awsFalso({ saida: 'null\n' });
+  assert.equal(comBuild((dir) => principal(argsReais(dir), aws, AGORA)), 0);
+  assert.ok(!chamadas.some((c) => c[1] === 'rm'));
+});
+
+test('PUB-09 (real): listagem que falha ou vem ilegível sai 1 sem apagar', () => {
+  for (const falso of [awsFalso({ listagemStatus: 255, saida: remotosReais }), awsFalso({ saida: 'xml?' })]) {
+    assert.equal(comBuild((dir) => principal(argsReais(dir), falso.aws, AGORA)), 1);
+    assert.ok(!falso.chamadas.some((c) => c[1] === 'rm'));
+  }
+});
+
+test('PUB-08/09 (ensaio): só a listagem chega ao aws; nada é escrito nem apagado', () => {
+  const { aws, chamadas } = awsFalso({ saida: remotosReais });
+  assert.equal(comBuild((dir) => principal([...argsReais(dir), '--ensaio'], aws, AGORA)), 0);
+  assert.deepEqual(chamadas, [listagem('besave-site')]);
+});
+
+test('PUB-09: --remotos sem --ensaio é recusado (a limpeza real usa a listagem do bucket)', () => {
+  const { aws, chamadas } = awsFalso({ saida: remotosReais });
+  const status = comRemotos([], (arq) => comBuild((dir) => principal([...argsReais(dir), '--remotos', arq], aws, AGORA)));
+  assert.equal(status, 1);
+  assert.deepEqual(chamadas, []);
 });

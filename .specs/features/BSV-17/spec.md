@@ -72,7 +72,7 @@ guardada no GitHub.
 5. PUB-05: The script SHALL enviar cada HTML com `public, max-age=300` e `text/html; charset=utf-8`, por arquivo
 6. PUB-06: The script SHALL enviar `assets/besave.css` com `public, max-age=3600, stale-while-revalidate=86400` e `text/css; charset=utf-8`
 7. PUB-07: The script SHALL criar uma invalidação só com caminhos de HTML e `/assets/*`, nunca `/*`
-8. PUB-08: WHEN `--ensaio` the script SHALL imprimir os comandos sem executá-los
+8. PUB-08: WHEN `--ensaio` the script SHALL imprimir os comandos sem executá-los; a única chamada ao aws é a listagem de `_app/` (só leitura), e `--remotos` (listagem de arquivo) só é aceito com `--ensaio`
 9. PUB-09: WHEN publicação e invalidação terminaram the script SHALL apagar de `_app/` só os arquivos que não estão no build atual AND têm `LastModified` há mais de 7 dias; arquivo do build nunca é apagado; WHEN `--ensaio` SHALL mostrar essa lista sem apagar
 
 ### P1: Workflow ⭐ MVP
