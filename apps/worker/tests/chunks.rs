@@ -46,7 +46,7 @@ fn fixture_chunk_ok_tem_json_e_hash_deterministicos() {
         String::from_utf8(json).unwrap(),
         compactar(&fixture("chunk-ok.json"))
     );
-    assert_eq!(hash, "89590e56ef6361dc");
+    assert_eq!(hash, "178a129b470c155b"); // SHA-256 da fixture 1.5.0 (com `dp`)
 }
 
 #[test]

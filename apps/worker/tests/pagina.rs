@@ -29,6 +29,7 @@ fn linha() -> LinhaOferta {
         ativo: true,
         dt_desativacao: None,
         url_afiliado: "https://amzn.to/xyz".into(),
+        dt_publicacao_site: None,
     }
 }
 
@@ -68,7 +69,12 @@ fn titulo_longo_integral_na_pagina_e_cortado_no_card() {
     };
     let m = m();
     assert_eq!(para_pagina(&l, None, &m).unwrap().titulo, longo);
-    assert!(para_card(&l, &m).unwrap().titulo.ends_with('…'));
+    assert!(
+        para_card(&l, &m, 1_790_253_600)
+            .unwrap()
+            .titulo
+            .ends_with('…')
+    );
 }
 
 #[test]

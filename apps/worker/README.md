@@ -495,7 +495,8 @@ Também edita o post quando a oferta expira ("⛔ Oferta encerrada", texto risca
 Os critérios ficam no Oracle (`PARAMETROS_ENVIO`), não no código.
 
 Só vai ao canal oferta cuja página já está no ar: o `besave-ciclo`, depois de publicar o
-`manifest.json`, grava `OFERTA.DT_PUBLICACAO_SITE` (uma vez por oferta, lotes de 1 000). Falha
+`manifest.json`, grava `OFERTA.DT_PUBLICACAO_SITE` (lotes de 1 000) com o instante do ciclo truncado
+ao minuto, o mesmo `dp` dos cards (BSV-36); só toca data nula ou fora de `[2026-10-06, instante]`. Falha
 nesse `UPDATE` vira `WARN` e `publicacao_site_falhas=` na linha `relatorio`, sem mudar o código de
 saída. Com `BESAVE_DESTINO_LOCAL` (ensaio) a data não é gravada.
 

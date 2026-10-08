@@ -9,7 +9,9 @@ use tracing::{debug, info, warn};
 
 use crate::avisos::publicacao::RelatorioAvisos;
 use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializar_chunk};
-use crate::conversao::{LinhaOferta, Rejeicao, iso_utc, para_card, para_pagina};
+use crate::conversao::{
+    LinhaOferta, Rejeicao, data_publicacao, instante_ciclo, iso_utc, para_pagina, validar_card,
+};
 use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
@@ -78,6 +80,9 @@ pub struct Relatorio {
     pub tempos: Tempos,
     /// Ids do conjunto publicado (cards válidos, ativos e expirados).
     pub ids_publicados: Vec<i64>,
+    /// Instante do ciclo (`agora` truncado ao minuto): `dp` de quem foi ao ar agora e valor do
+    /// `UPDATE` de `DT_PUBLICACAO_SITE` (BSV-36).
+    pub instante_ciclo: i64,
     /// Linhas com `DT_PUBLICACAO_SITE` gravada neste ciclo (BSV-40; fora de `gerar`).
     pub publicacao_site_marcadas: u64,
     /// Lotes do `UPDATE` de `DT_PUBLICACAO_SITE` que falharam.
@@ -190,13 +195,14 @@ pub fn gerar(
     let mut rel = Relatorio {
         lidas: linhas.len() as u64,
         versao,
+        instante_ciclo: instante_ciclo(agora),
         ..Default::default()
     };
     let mut cards = Vec::with_capacity(linhas.len());
     let mut urls = Vec::with_capacity(linhas.len());
     let mut validas: Vec<&LinhaOferta> = Vec::with_capacity(linhas.len());
     for l in &linhas {
-        match publicavel(l, m) {
+        match publicavel(l, m, agora) {
             Ok(c) => {
                 urls.push((c.id, l.url_afiliado.trim().to_owned()));
                 cards.push(c);
@@ -406,13 +412,17 @@ pub fn checar_orcamento(n: u64, bytes: u64) -> Result<()> {
 }
 
 /// Card publicável: válido (inclui URL de afiliado) e com página possível (`id_produto`), as
-/// mesmas regras do `--dry-run`.
-fn publicavel(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
-    let card = para_card(l, m)?;
+/// mesmas regras do `--dry-run`, com `dp` (CONTRATO §3).
+fn publicavel(l: &LinhaOferta, m: &Mapeamento, agora: i64) -> Result<OfertaCard, Rejeicao> {
+    let card = validar_card(l, m)?;
     if l.id_produto.is_none_or(|id| id < 1) {
         return Err(Rejeicao::IdProdutoAusente);
     }
-    Ok(card)
+    // `dp` só depois da validação: o WARN de faixa sai apenas para quem vai ao ar.
+    Ok(OfertaCard {
+        dt_publicacao: iso_utc(data_publicacao(l, agora)),
+        ..card
+    })
 }
 
 /// `2026-09-24T13:05:00Z` → `20260924130500`.

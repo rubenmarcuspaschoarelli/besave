@@ -4,7 +4,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, HashMap};
 
 use crate::avisos::modelo::LinhaAviso;
-use crate::conversao::{LinhaOferta, LinhaProduto};
+use crate::conversao::{LinhaOferta, LinhaProduto, faixa_publicacao};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ErroFonte {
@@ -28,9 +28,10 @@ pub trait FonteOfertas {
     fn produto(&self, id_produto: i64) -> Result<Option<LinhaProduto>>;
     /// Produtos dos ids pedidos, em lote; ids sem linha em PRODUTO ficam de fora.
     fn produtos(&self, ids: &[i64]) -> Result<HashMap<i64, LinhaProduto>>;
-    /// `DT_PUBLICACAO_SITE = SYSDATE` nos ids com a data nula (BSV-40), num statement só e com
-    /// commit; até `BLOCO_IN` ids. Devolve as linhas alteradas.
-    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64>;
+    /// `DT_PUBLICACAO_SITE` = instante do ciclo de `agora` (o `dp` do card) nos ids com a data nula
+    /// ou fora da faixa válida (BSV-40, BSV-36), num statement só e com commit; até `BLOCO_IN`
+    /// ids. Devolve as linhas alteradas.
+    fn marcar_publicadas_site(&self, ids: &[i64], agora: i64) -> Result<u64>;
     /// Todas as linhas de `AVISO` (BSV-41); o ciclo decide o que publica.
     fn avisos(&self) -> Result<Vec<LinhaAviso>>;
     /// `AVISO.DT_PUBLICACAO_SITE = SYSDATE` (só se nula) ou nula, com commit.
@@ -45,7 +46,7 @@ pub struct FakeFonte {
     agora: i64,
     chamadas_produto: Cell<u64>,
     chamadas_produtos: Cell<u64>,
-    /// id → `DT_PUBLICACAO_SITE` (o `agora` do fake faz o papel de `SYSDATE`).
+    /// id → `DT_PUBLICACAO_SITE` gravada por `marcar_publicadas_site`; `ofertas` devolve esse valor.
     publicadas_site: RefCell<BTreeMap<i64, i64>>,
     lotes_publicacao_site: Cell<u64>,
     falhar_publicacao_site: bool,
@@ -135,7 +136,15 @@ impl FonteOfertas for FakeFonte {
             .ofertas
             .iter()
             .filter(|l| l.ativo || l.dt_desativacao.is_some_and(|d| d >= limite))
-            .cloned()
+            .map(|l| LinhaOferta {
+                dt_publicacao_site: self
+                    .publicadas_site
+                    .borrow()
+                    .get(&l.id)
+                    .copied()
+                    .or(l.dt_publicacao_site),
+                ..l.clone()
+            })
             .collect())
     }
 
@@ -158,7 +167,7 @@ impl FonteOfertas for FakeFonte {
             .collect())
     }
 
-    fn marcar_publicadas_site(&self, ids: &[i64]) -> Result<u64> {
+    fn marcar_publicadas_site(&self, ids: &[i64], agora: i64) -> Result<u64> {
         self.lotes_publicacao_site
             .set(self.lotes_publicacao_site.get() + 1);
         if self.falhar_publicacao_site {
@@ -167,11 +176,13 @@ impl FonteOfertas for FakeFonte {
                 "falha injetada".into(),
             ));
         }
+        let (min, instante) = faixa_publicacao(agora);
         let mut datas = self.publicadas_site.borrow_mut();
         let mut n = 0;
         for l in self.ofertas.iter().filter(|l| ids.contains(&l.id)) {
-            if let std::collections::btree_map::Entry::Vacant(e) = datas.entry(l.id) {
-                e.insert(self.agora);
+            let atual = datas.get(&l.id).copied().or(l.dt_publicacao_site);
+            if !atual.is_some_and(|d| (min..=instante).contains(&d)) {
+                datas.insert(l.id, instante);
                 n += 1;
             }
         }

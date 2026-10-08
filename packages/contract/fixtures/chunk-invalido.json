@@ -1,6 +1,7 @@
 [
-  {"id":1,"l":"AMERICANAS","t":"Loja fora do enum","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"},
-  {"id":2,"l":"AMAZON","t":"Preço float","pp":19.9,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"},
-  {"id":3,"l":"AMAZON","t":"Campo extra proibido","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX","url":"https://x"},
-  {"id":4,"l":"AMAZON","t":"x fora do domínio","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX","x":0}
+  {"id":1,"l":"AMERICANAS","t":"Loja fora do enum","pp":100,"dt":"2026-09-24T12:40:00Z","dp":"2026-10-07T12:00:00Z","a":"TECH","p":"UNISSEX"},
+  {"id":2,"l":"AMAZON","t":"Preço float","pp":19.9,"dt":"2026-09-24T12:40:00Z","dp":"2026-10-07T12:00:00Z","a":"TECH","p":"UNISSEX"},
+  {"id":3,"l":"AMAZON","t":"Campo extra proibido","pp":100,"dt":"2026-09-24T12:40:00Z","dp":"2026-10-07T12:00:00Z","a":"TECH","p":"UNISSEX","url":"https://x"},
+  {"id":4,"l":"AMAZON","t":"x fora do domínio","pp":100,"dt":"2026-09-24T12:40:00Z","dp":"2026-10-07T12:00:00Z","a":"TECH","p":"UNISSEX","x":0},
+  {"id":5,"l":"AMAZON","t":"Sem dp","pp":100,"dt":"2026-09-24T12:40:00Z","a":"TECH","p":"UNISSEX"}
 ]

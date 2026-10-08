@@ -32,6 +32,8 @@ pub struct LinhaOferta {
     pub dt_desativacao: Option<i64>,
     /// `DS_URL_AFILIADO`; NULL vira `""`. Nunca vai para card nem página (CONTRATO §1.2).
     pub url_afiliado: String,
+    /// `DT_PUBLICACAO_SITE` (BSV-40); `None` = ainda não foi ao ar.
+    pub dt_publicacao_site: Option<i64>,
 }
 
 /// Uma linha de PRODUTO. Preços em reais.
@@ -78,7 +80,54 @@ const MAX_CUPOM: usize = 30;
 const MAX_TITULO_PAGINA: usize = 400;
 const MAX_DESCRICAO: usize = 600;
 
-pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
+/// Primeira gravação de `DT_PUBLICACAO_SITE` (BSV-40): 2026-10-06T00:00:00Z.
+pub const PRIMEIRA_PUBLICACAO_SITE: i64 = 1_791_244_800;
+
+/// Instante do ciclo: `agora` truncado ao minuto. É o `dp` de quem vai ao ar no ciclo e o valor
+/// gravado em `DT_PUBLICACAO_SITE` depois do manifest.
+pub fn instante_ciclo(agora: i64) -> i64 {
+    agora - agora.rem_euclid(60)
+}
+
+/// Faixa válida de `DT_PUBLICACAO_SITE`: `[2026-10-06, instante]`. O limite inferior só vale com
+/// o relógio já depois dele (testes e ensaios com relógio antigo não têm limite inferior).
+pub fn faixa_publicacao(agora: i64) -> (i64, i64) {
+    let instante = instante_ciclo(agora);
+    let min = if instante >= PRIMEIRA_PUBLICACAO_SITE {
+        PRIMEIRA_PUBLICACAO_SITE
+    } else {
+        i64::MIN
+    };
+    (min, instante)
+}
+
+/// `dp` em segundos: a coluna quando dentro da faixa; senão o instante do ciclo (WARN se a coluna
+/// veio preenchida e fora da faixa).
+pub fn data_publicacao(l: &LinhaOferta, agora: i64) -> i64 {
+    let (min, instante) = faixa_publicacao(agora);
+    match l.dt_publicacao_site {
+        Some(d) if (min..=instante).contains(&d) => d,
+        Some(d) => {
+            warn!(
+                id = l.id,
+                dt_publicacao_site = %iso_utc(d),
+                "DT_PUBLICACAO_SITE fora da faixa; dp = instante do ciclo"
+            );
+            instante
+        }
+        None => instante,
+    }
+}
+
+/// Card com `dp` (CONTRATO §3). `agora` = relógio do ciclo, segundos Unix UTC.
+pub fn para_card(l: &LinhaOferta, m: &Mapeamento, agora: i64) -> Result<OfertaCard, Rejeicao> {
+    let mut card = validar_card(l, m)?;
+    card.dt_publicacao = iso_utc(data_publicacao(l, agora));
+    Ok(card)
+}
+
+/// Regras do §9 e projeção do card, sem `dp` (página e canal não usam a data).
+pub(crate) fn validar_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
     let pp = l
         .preco_por
         .map(centavos)
@@ -108,6 +157,7 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao
         preco_por: pp,
         cupom: cupom(l),
         dt_oferta: iso_utc(dt),
+        dt_publicacao: String::new(),
         area,
         publico,
         x: (!l.ativo).then_some(1),
@@ -127,7 +177,7 @@ pub fn para_pagina(
     p: Option<&LinhaProduto>,
     m: &Mapeamento,
 ) -> Result<OfertaPagina, Rejeicao> {
-    let card = para_card(l, m)?;
+    let card = validar_card(l, m)?;
     let id_produto = l
         .id_produto
         .filter(|&id| id >= 1)

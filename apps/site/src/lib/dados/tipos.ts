@@ -36,6 +36,8 @@ export interface OfertaCard {
 	c?: string;
 	/** ISO 8601 UTC. */
 	dt: string;
+	/** Publicação no site, ISO 8601 UTC (contrato 1.5.0); ausente só em chunk antigo em cache. */
+	dp?: string;
 	a: Area;
 	p: Publico;
 	/** Expirada quando presente. */

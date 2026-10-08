@@ -95,6 +95,9 @@ pub struct OfertaCard {
     pub cupom: Option<String>,
     #[serde(rename = "dt")]
     pub dt_oferta: String,
+    /// Publicação no site (`DT_PUBLICACAO_SITE`), ISO 8601 UTC.
+    #[serde(rename = "dp")]
+    pub dt_publicacao: String,
     #[serde(rename = "a")]
     pub area: Area,
     #[serde(rename = "p")]
