@@ -307,7 +307,7 @@ há duas travas com a mesma lista de prefixos (`deploy-site/prefixos.json`):
 2. **Script** `deploy-site/publicar.mjs`: recusa o build inteiro, antes de qualquer upload, se houver
    arquivo fora desses prefixos ou se faltar `index.html` ou `404.html` (MANIFEST §5).
 
-O papel só é assumido por `repo:rubenmarcuspaschoarelli/besave:ref:refs/heads/main`, com sessão de 1 h.
+O papel só é assumido por `repo:rubenmarcuspaschoarelli@51489817/besave@1371919473:ref:refs/heads/main`, com sessão de 1 h. O repositório usa o formato imutável do `sub` (`gh api repos/{dono}/{repo}/actions/oidc/customization/sub` → `use_immutable_subject: true`), com os IDs numéricos do dono e do repositório; o formato antigo (`repo:dono/repo:…`) é recusado pela AWS com `Not authorized to perform sts:AssumeRoleWithWebIdentity`.
 O job só roda em `main` (o `if` pula outros branches); fora dele o STS recusaria o token.
 
 O que o script faz, em ordem:

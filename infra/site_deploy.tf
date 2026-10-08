@@ -1,7 +1,9 @@
 # Deploy do site pelo GitHub Actions (BSV-17): OIDC, sem chave guardada. O bucket é compartilhado com o
 # worker; a policy só alcança os prefixos do site (deploy-site/prefixos.json, também lido pelo script).
 locals {
-  site_deploy_repo     = "rubenmarcuspaschoarelli/besave"
+  # Formato imutável do "sub" do GitHub (use_immutable_subject: dono@ID/repo@ID): um repositório
+  # recriado com o mesmo nome não herda o acesso. IDs públicos, não segredo.
+  site_deploy_repo     = "rubenmarcuspaschoarelli@51489817/besave@1371919473"
   site_deploy_prefixos = jsondecode(file("${path.module}/deploy-site/prefixos.json"))
 }
 
