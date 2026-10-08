@@ -4,6 +4,7 @@
 	import type { Area } from '#lib/dados.ts';
 	import { ROTULO_AREA } from '#lib/formato.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
+	import AvisoNovas from './AvisoNovas.svelte';
 	import Areas from './Areas.svelte';
 	import BarraCanal from './BarraCanal.svelte';
 	import Busca from './Busca.svelte';
@@ -60,6 +61,7 @@
 		<Areas ativa={area} />
 	{/snippet}
 </Topo>
+<AvisoNovas {area} />
 
 <main class="mx-auto grid max-w-290 grid-cols-1 gap-5.5 px-3.5 pt-3.5 pb-8 sm:px-5 sm:pt-4.5">
 	{#if area}
