@@ -92,6 +92,12 @@ jobs:
           pnpm check
           pnpm test
           pnpm build
+      # Fluxos da spec (Playwright) sobre o build: só o Chromium, com as libs do sistema.
+      - if: steps.exists.outputs.ok == 'true'
+        working-directory: apps/site
+        run: |
+          pnpm exec playwright install --with-deps chromium
+          pnpm e2e
 
   infra:
     needs: changes

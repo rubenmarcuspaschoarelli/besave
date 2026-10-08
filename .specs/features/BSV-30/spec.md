@@ -24,7 +24,6 @@ da identidade escolhida (modelo A) e que o worker publica, embora o dono agora s
 | Páginas de área `/{slug}/` | BSV-33; aqui as áreas filtram a grade na home |
 | Página de busca | BSV-34 |
 | Login, likes, comentários, notificações, modo escuro, analytics | spec |
-| Playwright no CI (`ci.yml`) | fora da pasta do ticket; proposto no PR |
 
 ---
 
@@ -261,3 +260,5 @@ da identidade escolhida (modelo A) e que o worker publica, embora o dono agora s
 - [ ] `pnpm lint && pnpm check && pnpm test && pnpm build` e `pnpm e2e` verdes; `cargo fmt/clippy/test` verdes.
 - [ ] Bundle inicial (JS + CSS da home) ≤ 150 KB.
 - [ ] Real (dono): deploy com `SITE_DEPLOY_ATIVO`, Lighthouse mobile ≥ 90 nas quatro categorias, `curl -I /assets/besave.css` → 200 `text/css`.
+
+> Revisão do dono: o job `site` do `.github/workflows/ci.yml` passa a rodar `pnpm e2e` depois do build (só o Chromium).
