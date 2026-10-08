@@ -1,6 +1,241 @@
-# Validation: BSV-17 - PASS ✅
+# Validation: BSV-17 - FAIL ❌
 
-## Veredito: PASS ✅ (ciclo 2 de 3)
+## Veredito do ciclo 3: reprovado (HEAD `ca64835`, delta `2fd9fd7..ca64835`)
+
+O requisito do dono para a limpeza de `_app/` com carência está implementado e os três casos que ele pediu
+(fora do build com 8 dias → apagado; com 1 dia → mantido; do build com 30 dias → mantido) são afirmados por
+teste com o valor exato. Os gates estão verdes. A troca da ordem no workflow é legítima.
+
+Mesmo assim o ciclo reprova por regra da skill: 4 de 28 mutantes do delta sobreviveram (C21, C22, C23, C25).
+Os quatro estão no caminho que só roda com a AWS de verdade: a listagem real e o `s3 rm` fora do ensaio.
+Nenhum deles faz apagar mais do que deveria. Todos falham para o lado seguro (não apagam nada, ou o
+deploy fica vermelho depois de publicar). É o 3º ciclo, então a decisão sobe para o dono: corrigir os testes
+(correção pequena, abaixo) ou aceitar a cobertura pela execução real.
+
+- **Data**: 2026-10-07
+- **Verifier**: sub-agente Verifier independente, Claude Opus 5.5 (autor ≠ verificador; não escreveu código nem testes)
+- **Spec do dono**: `docs/specs/BSV-17.md` + revisão do dono de 07/10 (limpeza com carência) · **EARS**: `.specs/features/BSV-17/spec.md` (PUB-03 reescrito, PUB-09 novo)
+- **Faixa do diff**: `31a86f4..ca64835`; delta verificado neste ciclo: `2fd9fd7..ca64835` (commit `ca64835`; `39e7e5b` só trouxe o validation.md)
+- **Escopo do ciclo 3**: só o delta, a pedido do dono; o resto teve PASS no ciclo 2 (histórico abaixo)
+
+---
+
+## Histórico de ciclos
+
+| ciclo | HEAD | veredito | sensor | gaps |
+|---|---|---|---|---|
+| 1 | `6c2d4a3` | FAIL ❌ | 39/40 (W7 sobreviveu) | 5 (ver relatório do ciclo 2) |
+| 2 | `2fd9fd7` | PASS ✅ | 47/47 | 2 não bloqueantes (ex-gap 3 `--delete` cedo; D6) |
+| 3 | `ca64835` | FAIL ❌ | 24/28 no delta | 4 mutantes sobreviventes no caminho real; carência medida a partir do 1º upload; PUB-08 e spec do dono desatualizados |
+
+O ex-gap 3 do ciclo 2 (`sync --delete` logo depois da invalidação) foi fechado pela revisão do dono: o
+`--delete` saiu e entrou a limpeza com carência.
+
+---
+
+## Gates (em `ca64835`, árvore real)
+
+| gate | comando | resultado |
+|---|---|---|
+| fmt | `cd infra && terraform fmt -check -recursive` | limpo (exit 0) |
+| validate | `terraform validate` | `Success! The configuration is valid.` (Terraform 1.16.2, aws 6.66.0) |
+| test | `terraform test` | **17 passed, 0 failed** |
+| node | `cd infra/functions && npm test` (com o `aws` fora do PATH) | **59 passed, 0 failed, 0 skipped** (ciclo 2: 52 → +7) |
+| workflow | `actionlint -shellcheck shellcheck.exe .github/workflows/site-deploy.yml` | exit 0, sem achados |
+
+Integridade dos testes: nenhum teste apagado. Dois foram reescritos por causa da mudança de requisito:
+- `deploy-site.test.mjs:76-86` (PUB-03): antes exigia exatamente um `--delete` no fim; agora exige nenhum
+  `--delete`, nenhum `rm`/`delete-object(s)` no plano, um só sync e o sync antes do 1º HTML. Segue o PUB-03 novo.
+- `site-deploy-workflow.test.mjs:52-59`: antes "ensaio antes da credencial"; agora "credencial → ensaio →
+  publicar". Análise abaixo.
+
+---
+
+## Requisito do dono × evidência
+
+| requisito (dono, 07/10) | código | teste (`file:line` + asserção) | resultado |
+|---|---|---|---|
+| sem `sync --delete` em `_app/` | `infra/deploy-site/publicar.mjs:60-66` (o plano não tem mais o 2º sync) | `deploy-site.test.mjs:78-80`: `!comandos.some(c => c.includes('--delete'))`, sem `rm`; `:224-231`: `doesNotMatch(stdout, /--delete/)` | ✅ |
+| apaga só o que (a) não está no build atual | `publicar.mjs:76,79` (`!build.has(o.Key)`) | `deploy-site.test.mjs:92-99`: `deepEqual(expurgar(...), ['_app/immutable/chunks/velho.js'])`; o do build com 30 dias fica | ✅ |
+| e (b) tem `LastModified` há mais de 7 dias | `publicar.mjs:27,77,79` (`Date.parse(o.LastModified) < agora - 7*86_400_000`) | `deploy-site.test.mjs:101-107`: exatamente 7 dias fica, 7 dias + 1 s sai | ✅ |
+| arquivo do build nunca sai, mesmo antigo | `publicar.mjs:76,79` | `deploy-site.test.mjs:92-99` (30 dias), `:109-119` (`version.json` com 90 dias), `:121-124` (caminho Windows) | ✅ |
+| só dentro de `_app/` | `publicar.mjs:79` (`startsWith('_app/')`), `:88` (`--prefix _app/`) | `deploy-site.test.mjs:109-119`: `index.html`, `data/chunks/…`, `_appx/x.js` com 90 dias → `[]` | ✅ |
+| limpeza por último (depois do HTML e da invalidação) | `publicar.mjs:132-149` | `deploy-site.test.mjs:233-245`: `indexOf('create-invalidation') < indexOf('aws s3 rm ')` | ✅ |
+| `--ensaio` mostra a lista e não apaga | `publicar.mjs:125-131,148-149` | `deploy-site.test.mjs:233-245`: `deepEqual(rms, ['aws s3 rm s3://besave-site/_app/immutable/chunks/velho.js'])`, `apagaria 1 arquivo`, exit 0; `:247-252`: `apagaria 0 arquivo` | ✅ |
+| listagem vazia (`null`) não quebra | `publicar.mjs:78,85` | `deploy-site.test.mjs:254-260`: `lerListagem('null\n')` → `[]`; `:117`: `expurgar(null, …)` → `[]` | ✅ |
+| no modo real, o `s3 rm` roda de fato | `publicar.mjs:128,149` | **nenhum teste** (C22 sobrevive) | ⚠️ só a execução real prova |
+| o comando de listagem real é o certo | `publicar.mjs:87-90,139-145` | **nenhum teste** (C21, C25 sobrevivem); conferido à mão com S3 falso local (abaixo) | ⚠️ |
+
+### IDs EARS do delta
+
+| ID | evidência | resultado |
+|---|---|---|
+| PUB-03 (novo) | `deploy-site.test.mjs:76-86` | ✅ |
+| PUB-08 | `deploy-site.test.mjs:224-231` | ✅ (texto do EARS desatualizado, gap 3) |
+| PUB-09 | `deploy-site.test.mjs:92-124`, `:233-260` | ✅ no ensaio e na função; ⚠️ no modo real (C22) |
+
+### Ordem do workflow: legítima, não é enfraquecimento
+
+`.github/workflows/site-deploy.yml:76-88`: credencial (`:76`) → Ensaio (`:84-85`) → Publicar (`:87-88`).
+Teste `site-deploy-workflow.test.mjs:56`: `iCred > 0 && iCred < iEnsaio && iEnsaio < iPub`.
+
+- O requisito novo exige que o `--ensaio` mostre a lista que seria apagada. Para isso ele precisa listar `_app/`
+  no bucket, e isso exige credencial. Ensaio antes da credencial e requisito novo não cabem juntos no workflow.
+- A garantia que o teste antigo protegia continua: com build fora dos prefixos ou sem `404.html`, o script sai
+  em `publicar.mjs:121-124` antes de qualquer `spawnSync`, também no ensaio (`deploy-site.test.mjs:262-267`:
+  exit 1, sem comando impresso). A única diferença é que o STS emite uma credencial de 1 h para um run que vai
+  falhar sem usá-la. O papel é o mesmo do Publicar, que já recebia essa credencial.
+- O teste novo continua discriminando: W13 (ensaio de volta antes da credencial), W14 (ensaio removido) e W15
+  (ensaio sem `--ensaio`) morrem.
+- Nenhum WF-xx da spec exigia ensaio antes da credencial; isso era uma suposição do autor no ciclo 1.
+
+### Policy do papel (`infra/site_deploy.tf`, sem mudança) × o que a limpeza usa
+
+| chamada | permissão | policy | resultado |
+|---|---|---|---|
+| `s3api list-objects-v2 --bucket besave-site --prefix _app/` | `s3:ListBucket` no bucket com `s3:prefix = "_app/"` | `site_deploy.tf:45-51`: `StringLike s3:prefix` ∈ `prefixos.json`, que tem `_app/*`; o `*` casa vazio, então `_app/` casa | ✅ |
+| `s3 rm s3://besave-site/_app/…` | `s3:DeleteObject` em `arn:…:besave-site/_app/…` | `site_deploy.tf:39-44`: Put/Delete em `${bucket}/_app/*` | ✅ |
+| paginação da listagem (> 1000 objetos) | mesma `ListBucket` com `continuation-token`; o prefixo não muda | idem | ✅ |
+
+O `sync` de `_app/` já listava com o mesmo prefixo, então a limpeza não pede nenhuma permissão nova. A
+simulação do papel pelo dono deve incluir `s3:ListBucket` com `s3:prefix=_app/` → allowed (veja a execução real).
+
+### Formato da listagem (AWS CLI), conferido sem tocar a AWS real
+
+- Documentação (`cli-usage-filter`): com `--output json` "the output is completely processed as a single, native
+  structure before the `--query` filter is applied" → a paginação automática junta todas as páginas antes do
+  `--query`. Com `--output text` seria por página; o script usa `json` (`publicar.mjs:89`). ✅
+- Documentação (`cli-configure-files`): `cli_timestamp_format` padrão do CLI v2 é `iso8601`. A página do
+  `list-objects-v2` mostra `"2019-11-05T23:11:50.000Z"` (formato do v1/wire).
+- Execução local do `aws-cli/2.37.3` contra um S3 **falso em 127.0.0.1** (`--endpoint-url`, credencial falsa,
+  nenhuma chamada à AWS): com 1 objeto a saída foi
+  `[{"Key": "_app/immutable/chunks/a b(1).js", "LastModified": "2026-09-28T10:11:12+00:00"}]`; com prefixo
+  vazio, `null`. O CLI pede `encoding-type=url` e decodifica a chave sozinho (espaço e parênteses voltaram
+  certos). `Date.parse` aceita `+00:00`, `.000Z` e `Z`; `lerListagem('null')` → `[]`. ✅
+- Se o `LastModified` vier ilegível, `Date.parse` dá `NaN`, `NaN < limite` é falso e o arquivo fica. Falha segura.
+
+---
+
+## Sensor de discriminação (só o delta)
+
+Worktree temporário (`git worktree add --detach <scratchpad>/m3 HEAD`), mutação textual, arquivo original
+restaurado a cada mutante, `npm test` em `infra/functions`. Para nenhum mutante chegar à AWS, os testes rodaram
+com o diretório do `aws` fora do `PATH`, `AWS_ENDPOINT_URL=http://127.0.0.1:9` e credencial falsa. Mutantes de
+workflow também passaram pelo actionlint. Worktree removido com `git worktree remove --force`; `git status
+--porcelain` da árvore real vazio antes e depois.
+
+| # | arquivo | mutação | resultado | quem mata |
+|---|---|---|---|---|
+| C1 | `publicar.mjs:27` | carência 6 dias | ✅ morto | fronteira de 7 dias (`:101`) |
+| C2 | `publicar.mjs:27` | carência 8 dias | ✅ morto | caso de 8 dias (`:92`), fronteira |
+| C3 | `publicar.mjs:79` | `<` → `<=` | ✅ morto | fronteira (`:101`) |
+| C4 | `publicar.mjs:79` | sem condição (a): apaga arquivo do build antigo | ✅ morto | `:92`, `:109`, `:121` |
+| C5 | `publicar.mjs:79` | sem condição (b): ignora a idade | ✅ morto | `:92`, `:101`, CLI |
+| C6 | `publicar.mjs:79` | sem filtro de prefixo `_app/` | ✅ morto | `:109` |
+| C7 | `publicar.mjs:79` | `_app` sem barra | ✅ morto | `:109` (`_appx/x.js`) |
+| C8 | `publicar.mjs:77` | carência em horas em vez de dias | ✅ morto | `:92`, `:101`, CLI |
+| C9 | `publicar.mjs:76` | sem normalizar `\` do build | ✅ morto | `:121`, CLI |
+| C10 | `publicar.mjs:65` | volta o `sync --delete` no fim | ✅ morto | PUB-03 (`:76`), PUB-08 (`:224`) |
+| C11 | `publicar.mjs:61` | `--delete` no sync de `_app/` | ✅ morto | PUB-03, PUB-08 |
+| C12 | `publicar.mjs:132,149` | limpeza antes do HTML e da invalidação | ✅ morto | CLI (`:233`) |
+| C13 | `publicar.mjs:149` | ensaio executa o `s3 rm` de verdade | ✅ morto | CLI (`:233`): exit ≠ 0 |
+| C14 | `publicar.mjs:149` | ensaio não mostra a lista | ✅ morto | CLI (`:233`) |
+| C15 | `publicar.mjs:148` | contagem errada na mensagem | ✅ morto | CLI (`:233`) |
+| C16 | `publicar.mjs:78,85` | listagem `null` quebra (sem `?? []` nos dois lugares) | ✅ morto | `:109`, `:254` |
+| C17 | `publicar.mjs:85` | só `lerListagem` sem `?? []` | ✅ morto | `:254` |
+| C18 | `publicar.mjs:78` | só `expurgar` sem `?? []` | ✅ morto | `:109` |
+| C19 | `publicar.mjs:136` | ignora `--remotos` e lista de verdade | ✅ morto | PUB-08, CLI |
+| C20 | `publicar.mjs:149` | `rm` em `s3://bucket/_app/_app/…` | ✅ morto | CLI (`:233`) |
+| C24 | `publicar.mjs:147` | expurgo sem a lista do build | ✅ morto | CLI (`:233`) |
+| C21 | `publicar.mjs:88` | listagem com `--prefix ''` | ❌ **sobreviveu** | — |
+| C22 | `publicar.mjs:147` | modo real não apaga nada (`if (!a.ensaio) return 0`) | ❌ **sobreviveu** | — |
+| C23 | `publicar.mjs:141` | falha da listagem ignorada | ❌ **sobreviveu** | — |
+| C25 | `publicar.mjs:89` | `--query` com `LastModified: Owner` (campo errado) | ❌ **sobreviveu** | — |
+| W13 | `site-deploy.yml:84-85` | ensaio de volta antes da credencial | ✅ morto | `site-deploy-workflow.test.mjs:56` (actionlint 0) |
+| W14 | `site-deploy.yml:84-85` | ensaio removido | ✅ morto | `:56` (actionlint 0) |
+| W15 | `site-deploy.yml:85` | ensaio sem `--ensaio` | ✅ morto | `:56` (actionlint 0) |
+
+**Resultado**: 24/28 mortos. Os sobreviventes e o efeito de cada um em produção:
+- **C22**: o deploy real nunca apaga; `_app/` só cresce. Silencioso, seguro (custo de armazenamento).
+- **C25**: `LastModified` vira `undefined` → `NaN` → nada sai. Silencioso, seguro.
+- **C21**: `ListBucket` com `s3:prefix=""` é negado pela policy → deploy vermelho depois de publicar. Barulhento, seguro.
+- **C23**: com o `aws` falhando, `stdout` vazio → `JSON.parse('')` lança → exit 1 com stack trace; com o
+  `aws` ausente, `stdout` nulo → `[]` → exit 0 sem limpar. Seguro, mas pode esconder a falha.
+
+---
+
+## Code quality (delta)
+
+| verificação | status |
+|---|---|
+| Só o pedido: função pura `expurgar`, `lerListagem`, a listagem e o `rm` | ✅ |
+| Mudanças cirúrgicas, só em `infra/`, workflow e spec; `site_deploy.tf` sem mudança | ✅ |
+| Sem dependência nova (regra 7) | ✅ |
+| Testes com os valores do dono (8 d, 1 d, 30 d, fronteira estrita) | ✅ |
+| `--remotos` também vale fora do ensaio (apaga com base num arquivo local) | ⚠️ não usado pelo workflow; ver gap 5 |
+| README coerente com o código (`infra/README.md:317-326,399-400`) | ✅, salvo a frase da carência (gap 2) |
+
+---
+
+## Gaps ranqueados
+
+1. **[Teste, motivo do FAIL] Caminho real sem teste: C22, C25, C21, C23.** Correção sugerida:
+   (a) exportar `listagem` e afirmar os argumentos exatos (`--prefix _app/`, `--query 'Contents[].{Key: Key,
+   LastModified: LastModified}'`, `--output json`). Mata C21 e C25.
+   (b) teste de CLI no modo real com um `aws` falso, por exemplo uma variável `AWS_CLI` (padrão `aws`) que o
+   teste aponta para um shim Node que grava os argumentos e devolve a listagem. O teste afirma que houve
+   `s3 rm` só da chave velha e que listagem com exit ≠ 0 dá exit 1 com `falhou … listagem de _app/`. Mata C22 e C23.
+   Também trocar `JSON.parse(r.stdout)` por uma checagem de `r.error`/`stdout` nulo.
+2. **[Risco de desenho, decisão do dono] A carência conta do 1º upload, não da saída do build.** Com
+   `--size-only` (`publicar.mjs:51`), um chunk que ficou igual por mais de 7 dias mantém o `LastModified`
+   antigo. No deploy em que ele sai do build, é apagado **no mesmo deploy**, sem carência nenhuma. Isso segue a
+   letra do requisito ("LastModified há mais de 7 dias"), mas contradiz o motivo dado no spec.md
+   ("página antiga em cache acha seus chunks durante a carência") e no `infra/README.md:324`. A borda
+   (`immutable`, 1 ano) reduz o risco, mas não zera: aba aberta há horas pedindo chunk que a borda não tem.
+   Correção sugerida: tirar o `--size-only` do sync de `_app/`. No CI o build é novo, então o mtime local é
+   sempre mais novo e o sync reenvia tudo. Assim `LastModified` = último deploy que tinha o arquivo, e
+   "mais de 7 dias" passa a ser "fora de todos os builds dos últimos 7 dias". Custa algumas centenas de PUT por
+   deploy, sem invalidação nova. Outra saída: `s3 cp --metadata-directive REPLACE` só nos arquivos do build.
+3. **[Spec-precision] PUB-08 desatualizado.** `.specs/features/BSV-17/spec.md` PUB-08 diz "imprimir os comandos
+   sem executá-los", mas o ensaio agora executa `list-objects-v2` (só leitura). Corrigir para "sem executar
+   nenhum comando que escreva; a listagem de `_app/` roda".
+4. **[Doc do dono] `docs/specs/BSV-17.md` ainda diz `_app/` → `aws s3 sync --delete` e "`--delete` só dentro
+   de `_app/`".** A revisão de 07/10 está só no spec.md e no README. O dono atualiza a spec ou registra a decisão
+   (AD) no PR.
+5. **[Menor] `--remotos` aceito fora do ensaio.** `publicar.mjs:136-137`: no modo real, apaga com base num
+   arquivo local, sem olhar o bucket. O workflow não usa. Sugestão: recusar `--remotos` sem `--ensaio`.
+
+---
+
+## O que só a execução real do dono prova (bloqueia o merge)
+
+Tudo o que estava na lista do ciclo 2 (plan só com adições, apply, provedor OIDC inexistente, simulação, `sub`
+do token, variáveis, primeiro deploy manual depois da BSV-30, evidência `REDACTED`, CI rodou), mais:
+
+- `aws iam simulate-principal-policy`: `s3:ListBucket` com `s3:prefix=_app/` → allowed; `s3:DeleteObject` em
+  `_app/x.js` → allowed.
+- No 1º deploy manual, o passo Ensaio mostra a linha `list-objects-v2` e `apagaria 0 arquivo(s)` (bucket sem
+  `_app/` antigo), e o Publicar termina com `apagando 0 arquivo(s)` e exit 0.
+- Num deploy com mais de 7 dias de distância de outro que mudou chunks, o log mostra `aws s3 rm` só de
+  `_app/…` fora do build atual, e `curl -I` de uma chave do build atual continua 200. É o que prova C22 e C25
+  enquanto o gap 1 não for corrigido.
+
+---
+
+## Resumo
+
+**Overall**: ❌ não pronto pelo critério da skill (mutantes sobreviventes); o requisito do dono está cumprido.
+Ciclo 3 de 3: decisão escalada ao dono (corrigir o gap 1 ou aceitar a cobertura pela execução real).
+**Spec-anchored**: os 8 itens do requisito do dono afirmados com o valor exato; o modo real ficou sem teste
+**Sensor (delta)**: 24/28 mortos (C21, C22, C23, C25 sobreviveram; todos falham para o lado seguro)
+**Gates**: terraform test 17/17, npm test 59/59, actionlint limpo, fmt/validate limpos
+
+---
+
+## Histórico: relatório do ciclo 2 (HEAD `2fd9fd7`)
+
+
+### Veredito do ciclo 2: aprovado (HEAD 2fd9fd7)
 
 Todos os critérios de aceite da spec do dono (`docs/specs/BSV-17.md`) que dá para verificar offline estão
 atendidos no código e afirmados por teste com o valor da spec. Gates verdes. Sensor: 47/47 mutantes mortos;
@@ -14,7 +249,7 @@ o sobrevivente do ciclo 1 (W7) agora morre, assim como 2 variantes dele. O que f
 
 ---
 
-## Histórico de ciclos
+### Histórico de ciclos
 
 | ciclo | HEAD | veredito | sensor | gaps |
 |---|---|---|---|---|
@@ -31,7 +266,7 @@ Correções do ciclo 2 (commit `2fd9fd7`, só 4 arquivos: README, `publicar.mjs`
 
 ---
 
-## Gate Check (em `2fd9fd7`)
+### Gate Check (em `2fd9fd7`)
 
 | gate | comando | resultado |
 |---|---|---|
@@ -46,7 +281,7 @@ forte (de "não casa nesta linha" para "conjunto exato de ocorrências").
 
 ---
 
-## Spec-Anchored Acceptance Criteria
+### Spec-Anchored Acceptance Criteria
 
 ### Critérios da spec do dono
 
@@ -102,7 +337,7 @@ forte (de "não casa nesta linha" para "conjunto exato de ocorrências").
 
 ---
 
-## Discrimination Sensor
+### Discrimination Sensor
 
 Worktree temporário (`git worktree add --detach <scratchpad>/m2 2fd9fd7`), mutação textual, `git checkout -- .`
 entre mutantes, worktree removido no fim. `git status --porcelain` da árvore real igual antes e depois (só o
@@ -170,7 +405,7 @@ invalidação `/index.html /404.html /assets/*` → sync `--delete`).
 
 ---
 
-## Code Quality
+### Code Quality
 
 | princípio | status |
 |---|---|
@@ -185,7 +420,7 @@ invalidação `/index.html /404.html /assets/*` → sync `--delete`).
 
 ---
 
-## Gaps restantes (não bloqueiam este veredito)
+### Gaps restantes (não bloqueiam este veredito)
 
 1. **[Risco, decisão do dono — ex-gap 3]** `publicar.mjs:64-66`: `sync --delete` de `_app/` logo após uma invalidação
    assíncrona. Página antiga (até 300 s no navegador) pode pedir chunk já apagado numa falta de cache na borda → 404.
@@ -195,7 +430,7 @@ invalidação `/index.html /404.html /assets/*` → sync `--delete`).
 
 ---
 
-## O que só a execução real do dono prova (bloqueia o merge)
+### O que só a execução real do dono prova (bloqueia o merge)
 
 - `terraform plan` real: só 3 adições (provedor OIDC, papel, policy), 0 change/destroy; `apply`.
 - Que a conta não tem `token.actions.githubusercontent.com` (senão `EntityAlreadyExists` → `import`).
@@ -210,14 +445,14 @@ invalidação `/index.html /404.html /assets/*` → sync `--delete`).
 
 ---
 
-## Requirement Traceability Update
+### Requirement Traceability Update
 
 | Requirement | Ciclo 1 | Ciclo 2 |
 |---|---|---|
 | OIDC-01..03, POL-01..04, PUB-01..08, WF-01..04, WF-06, OPS-01 | ✅ Verified | ✅ Verified |
 | WF-05 | ❌ Needs Fix | ✅ Verified |
 
-## Summary
+### Summary
 
 **Overall**: ✅ Ready para o PR (merge bloqueado só pela execução real do dono)
 **Spec-anchored check**: 21/21 ACs verificáveis offline com valor da spec; 1 spec-precision (D6, agora afirmado); plan/apply/simulação/deploy só na execução real
