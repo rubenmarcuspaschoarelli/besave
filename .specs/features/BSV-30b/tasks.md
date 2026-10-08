@@ -148,9 +148,9 @@ T5 → T6
 
 **Done when**:
 
-- [ ] Saída: woff2 com hash em `_app/immutable/assets/`, nenhum em `assets/fontes/`, `OFL.txt` mantido; `besave.css` e CSS do site citam o arquivo com hash
-- [ ] e2e TOK-02 pede a fonte de `/_app/immutable/assets/`
-- [ ] Gate build passa
+- [x] Saída: woff2 com hash em `_app/immutable/assets/`, nenhum em `assets/fontes/`, `OFL.txt` mantido; `besave.css` e CSS do site citam o arquivo com hash
+- [x] e2e TOK-02 pede a fonte de `/_app/immutable/assets/`
+- [x] Gate build passa
 
 **Tests**: e2e
 **Gate**: build
