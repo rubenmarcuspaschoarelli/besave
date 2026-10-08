@@ -1,6 +1,249 @@
 # Validation: BSV-17 - FAIL ❌
 
-## Veredito do ciclo 3: reprovado (HEAD `ca64835`, delta `2fd9fd7..ca64835`)
+## Veredito do ciclo 4: reprovado por 1 mutante sobrevivente (HEAD `f4a4e83`, delta `ca64835..f4a4e83`)
+
+Os gaps 1, 3, 4 e 5 do ciclo 3 estão fechados. C21, C22, C23 e C25 agora morrem, e também C23b e todos os
+mutantes que o dono pediu. R1 e R3 estão cumpridos. R2 está implementado, e o teste de R2 com o S3 simulado
+pega o `--size-only` de volta, incondicional (N1) ou só quando a chave já existe (N2). Gates verdes. Nenhum
+teste foi enfraquecido.
+
+O ciclo reprova pela regra da skill porque 1 de 37 mutantes do delta sobreviveu, o **N3**: um sync com
+`--no-overwrite`. Esse flag existe no `aws s3 sync` v2 e só envia "files not present at the destination", ou
+seja, traz de volta exatamente o defeito que R2 elimina: a carência voltaria a contar do 1º upload. O S3
+simulado só sabe o que é `--size-only` (`deploy-site.test.mjs:374`), e o PUB-04 só afirma
+`!s.includes('--size-only')` (`:135`). A correção é de uma linha: afirmar o comando `sync` inteiro com
+`deepEqual`. Esse `deepEqual` também mata o N3b (abaixo, fora do delta).
+
+Este é o ciclo 4, o último que o dono autorizou. A decisão sobe para ele: aplicar a correção de uma linha, ou
+aceitar o risco e cobrir pela leitura do código e pela execução real.
+
+- **Data**: 2026-10-07
+- **Verifier**: sub-agente Verifier independente, Claude Opus 5.5 (autor ≠ verificador; não escreveu código nem testes)
+- **Spec do dono**: `docs/specs/BSV-17.md` + requisitos R1–R3 do dono (limpeza de `_app/` com carência, sem `--size-only`, nota AD-079) · **EARS**: `.specs/features/BSV-17/spec.md` (PUB-04, PUB-08 e PUB-09 ajustados)
+- **Faixa total do diff**: `31a86f4..f4a4e83`
+- **Delta deste ciclo**: `ca64835..f4a4e83` (033c53d relatório do ciclo 3; 6c7d94e testes com aws falso, `--remotos` só no ensaio; 9a6f402 sem `--size-only`; f4a4e83 nota na spec do dono)
+
+---
+
+## Histórico de ciclos
+
+| ciclo | HEAD | veredito | sensor | gaps |
+|---|---|---|---|---|
+| 1 | `6c2d4a3` | FAIL ❌ | 39/40 (W7 sobreviveu) | 5 (ver relatório do ciclo 2) |
+| 2 | `2fd9fd7` | PASS ✅ | 47/47 | 2 não bloqueantes |
+| 3 | `ca64835` | FAIL ❌ | 24/28 no delta | C21, C22, C23 e C25 sobreviveram; carência contava do 1º upload; PUB-08 e spec do dono desatualizados; `--remotos` aceito fora do ensaio |
+| 4 | `f4a4e83` | FAIL ❌ | 36/37 no delta (+1 informativo fora do delta) | N3 (`--no-overwrite`) sobreviveu; os 5 gaps do ciclo 3 estão fechados |
+
+---
+
+## Gates (em `f4a4e83`, árvore real)
+
+| gate | comando | resultado |
+|---|---|---|
+| fmt | `cd infra && terraform fmt -check -recursive` | limpo (exit 0) |
+| validate | `terraform validate` | `Success! The configuration is valid.` |
+| test | `terraform test` | **17 passed, 0 failed** |
+| node | `cd infra/functions && npm test` (com o `aws` fora do PATH, `AWS_ENDPOINT_URL=http://127.0.0.1:9`, credencial falsa) | **67 passed, 0 failed, 0 skipped** (ciclo 3: 59 → +8) |
+| workflow | `actionlint -shellcheck shellcheck.exe .github/workflows/site-deploy.yml` | exit 0, sem achados (workflow sem mudança no delta) |
+
+### Integridade dos testes (asserts removidos × adicionados)
+
+`git diff ca64835..HEAD -- infra/functions/test/` só remove 4 linhas:
+- 3 linhas de `import` (`readdirSync`, `relative`, `listagem`, `principal` passaram a ser importados);
+- o título do teste PUB-04 (`:126`), que ficou com "reenviado a cada deploy (sem --size-only)".
+
+Nenhum `assert` foi removido ou afrouxado. Entraram 1 assert no PUB-04 (`:135`) e 8 testes novos (`:284-420`).
+
+---
+
+## Gaps do ciclo 3 × delta
+
+| gap (ciclo 3) | correção | evidência | resultado |
+|---|---|---|---|
+| 1. caminho real sem teste (C21, C22, C23, C25) | `principal(argv, aws, agora)` exportado com executor injetável (`publicar.mjs:110-114`); `listagem` exportada (`:88`); `JSON.parse` com `try` (`:154-159`) | `deploy-site.test.mjs:284-288` (argumentos exatos da listagem), `:321-333` (modo real: só `rm` de `velho.js`, depois da listagem e da invalidação), `:341-346` (status 255 ou saída ilegível → 1, sem `rm`) | ✅ C21, C22, C23, C23b e C25 morrem |
+| 2. carência contava do 1º upload | `--size-only` saiu do sync (`publicar.mjs:51`), conforme R2 | `deploy-site.test.mjs:135`, `:405-412`, `:414-421` | ✅ para N1 e N2; ❌ N3 sobrevive (gap 1 abaixo) |
+| 3. PUB-08 desatualizado | EARS reescrito (`spec.md:75`) | `deploy-site.test.mjs:348-352`: `deepEqual(chamadas, [listagem('besave-site')])` | ✅ |
+| 4. spec do dono desatualizada | nota de R3 (`docs/specs/BSV-17.md:25-26`) | `git diff ca64835..HEAD -- docs/specs/BSV-17.md` | ✅ |
+| 5. `--remotos` fora do ensaio | recusado (`publicar.mjs:120-123`) | `deploy-site.test.mjs:354-359`: exit 1, `deepEqual(chamadas, [])` | ✅ N5 morre |
+
+---
+
+## Requisitos do dono × evidência
+
+| req. | o que pede | código | teste (`file:line` + asserção) | resultado |
+|---|---|---|---|---|
+| R1 (a)+(b) | apaga só o que está fora do build **e** tem `LastModified` há mais de 7 dias | `publicar.mjs:76-83` | `deploy-site.test.mjs:92-99`: `deepEqual(expurgar(...), ['_app/immutable/chunks/velho.js'])` (8 d sai; 1 d fica; do build com 30 d fica); `:101-107` fronteira estrita | ✅ |
+| R1 | arquivo do build nunca sai | `publicar.mjs:80` | `:109-119` (`version.json` com 90 d), `:121-124` (caminho Windows), `:420` (todo `_app/` do build continua no S3 simulado) | ✅ |
+| R1 | `--ensaio` mostra a lista e não apaga | `publicar.mjs:136,162-163` | `:348-352`: só a listagem chega ao aws; CLI `:235-247` (ciclo 3): `aws s3 rm …velho.js` impresso, `apagaria 1 arquivo` | ✅ |
+| R1 | modo real apaga de fato | `publicar.mjs:137,163` | `:330`: `deepEqual(rms, [['s3','rm','s3://besave-site/_app/immutable/chunks/velho.js']])` | ✅ (C22 morre) |
+| R2 | sem `--size-only` no sync de `_app/` | `publicar.mjs:51` | `:135`: `!s.includes('--size-only')` | ✅ |
+| R2 | saiu agora, 1º upload há 30 d, estava no deploy anterior (1 d) → **não** sai | `publicar.mjs:51,161` | `:405-412`: `s3.objetos.has(SAIU)` e `get(SAIU) === AGORA - 1*DIA` | ✅ para `--size-only`; ❌ não pega `--no-overwrite` (N3) |
+| R2 | saiu há mais de 7 dias → sai no deploy seguinte | idem | `:414-421`: `!s3.objetos.has(SAIU)` | ✅ |
+| R2 | PUB-04 ajustado | `spec.md:71` | — (leitura) | ✅ |
+| R3 | só a nota, no início do item 3 | `docs/specs/BSV-17.md:25-26` | `git diff ca64835..HEAD -- docs/specs/BSV-17.md`: 1 linha trocada por 2; o texto antigo do item 3 segue igual depois da nota | ✅ |
+
+Sobre R3: o texto da nota é idêntico ao pedido. Ele quebra a linha depois de "7 dias,", e no Markdown essa
+quebra é só um espaço. A nota tem a data 2026-10-08, como o dono pediu. As linhas antigas do item 3
+(`aws s3 sync --delete`, "`--delete` só dentro de `_app/`") continuam no arquivo, e isso é o esperado por R3
+("e mais nada").
+
+---
+
+## O S3 simulado é fiel ao `aws s3 sync`?
+
+Documentação da AWS CLI (`aws s3 sync help`, CLI 2.37.3 local, sem chamar a AWS):
+
+- Sem flags: "A local file will require uploading if the size of the local file is different than the size of
+  the S3 object, the last modified time of the local file is newer than the last modified time of the S3
+  object, or the local file does not exist under the specified bucket and prefix."
+- `--size-only`: "Makes the size of each key the only criteria used to decide whether to sync from source to
+  destination."
+- `--no-overwrite`: "only files not present at the destination will be transferred."
+
+O modelo em `deploy-site.test.mjs:363-401` reenvia todo arquivo do build quando não há `--size-only`
+(`:374`). No CI isso vale, porque o checkout e o `pnpm build` são novos a cada execução: o mtime local é
+sempre mais novo que o `LastModified` do deploy anterior. Com `--size-only` e a chave já existente, o arquivo
+não é reenviado. Para nomes com hash (mesmo nome, mesmo conteúdo, mesmo tamanho) isso também confere com a
+documentação. Os arquivos do teste têm todos o mesmo tamanho (`'x'`), então o caso modelado é o certo.
+
+**O teste prova o requisito ou espelha a implementação?** Ele não espelha: o modelo reage aos argumentos
+reais que o script passa ao executor (`args.includes('--size-only')`), e não a uma constante do script. Por
+isso mata N1 e N2 (o `--size-only` condicional, que um teste por leitura de argumentos não pegaria tão bem).
+Mas o modelo é parcial. Ele conhece um único mecanismo de "não reenviar" e trata qualquer outro flag como
+sync completo. Não modela `--no-overwrite` (N3 sobrevive) nem um 2º `--exclude` (N3b sobrevive). Resumindo:
+o teste prova R2 contra a volta do `--size-only`, não contra qualquer forma de pular o reenvio. A garantia de
+que o sync real reenvia tudo só vem da execução real (abaixo).
+
+---
+
+## Sensor de discriminação (delta)
+
+Worktree temporário (`git worktree add --detach <scratchpad>/m4 HEAD`). Um script Node aplica cada
+mutação por substituição de texto e confere que o padrão ocorre exatamente 1 vez (o checkout tem CRLF). Depois
+roda `npm test` em `infra/functions` e restaura o arquivo original. Para nenhum mutante chegar à AWS, o `aws`
+ficou fora do `PATH`, com `AWS_ENDPOINT_URL=http://127.0.0.1:9` e credencial falsa. Baseline sem mutação:
+67/67. Worktree removido com `git worktree remove --force`. O `git status --porcelain` da árvore real ficou
+vazio antes e depois. Nunca foi usado `git stash`. Profundidade: P0, porque o código apaga objetos num bucket
+compartilhado.
+
+Linhas em `infra/deploy-site/publicar.mjs` no HEAD `f4a4e83`.
+
+### Mutantes do ciclo 3, refeitos
+
+| # | linha | mutação | resultado | quem mata (`deploy-site.test.mjs`) |
+|---|---|---|---|---|
+| C1 | `:27` | carência 6 dias | ✅ morto | fronteira `:101` |
+| C2 | `:27` | carência 8 dias | ✅ morto | `:92`, `:101`, `:321`, `:414` |
+| C3 | `:80` | `<` → `<=` | ✅ morto | `:101` |
+| C4 | `:80` | sem condição (a) | ✅ morto | `:92`, `:109`, `:121`, CLI |
+| C5 | `:80` | sem condição (b) | ✅ morto | `:92`, `:101`, CLI |
+| C6 | `:80` | sem filtro `_app/` | ✅ morto | `:109` |
+| C7 | `:80` | `_app` sem barra | ✅ morto | `:109` |
+| C8 | `:78` | carência em horas | ✅ morto | `:92`, `:101`, CLI |
+| C9 | `:77` | build sem normalizar `\` | ✅ morto | `:121`, CLI, `:321` |
+| C10 | `:65` | `sync --delete` de volta no fim | ✅ morto | PUB-03, PUB-08 |
+| C11 | `:51` | `--delete` no sync | ✅ morto | PUB-03, PUB-08 |
+| C12 | `:141,164` | limpeza antes do HTML e da invalidação | ✅ morto | CLI `:235`, `:321` |
+| C13 | `:163` | `rm` chama o aws direto, também no ensaio | ✅ morto | CLI `:235`, `:348` |
+| C14 | `:163` | ensaio não mostra a lista | ✅ morto | CLI `:235` |
+| C15 | `:162` | contagem errada | ✅ morto | CLI `:235`, `:249` |
+| C16 | `:79,86` | sem `?? []` nos dois lugares | ✅ morto | `:109`, `:256`, `:335` |
+| C17 | `:86` | `lerListagem` sem `?? []` | ✅ morto | `:256` |
+| C18 | `:79` | `expurgar` sem `?? []` | ✅ morto | `:109` |
+| C19 | `:145` | ignora `--remotos` e lista de verdade | ✅ morto | PUB-08, CLI |
+| C20 | `:163` | `rm` em `_app/_app/…` | ✅ morto | CLI `:235`, `:321`, `:414` |
+| C21 | `:89` | listagem com `--prefix ''` | ✅ **morto** (sobrevivia no ciclo 3) | `:284` |
+| C22 | `:163` | modo real não apaga (`if (!a.ensaio) return 0`) | ✅ **morto** (sobrevivia) | `:321`, `:414` |
+| C23 | `:150` | listagem com status ≠ 0 ignorada (`if (false)`) | ✅ **morto** (sobrevivia) | `:341` |
+| C23b | `:157-158` | listagem ilegível vira `[]` em vez de exit 1 | ✅ morto | `:341` |
+| C24 | `:161` | expurgo sem a lista do build | ✅ morto | CLI `:235`, `:321` |
+| C25 | `:90` | `--query` com `LastModified: Owner` | ✅ **morto** (sobrevivia) | `:284` |
+
+### Mutantes novos do ciclo 4
+
+| # | linha | mutação | resultado | quem mata |
+|---|---|---|---|---|
+| N1 | `:51` | `--size-only` de volta | ✅ morto | `:135`, `:405` |
+| N2 | `:141` | `--size-only` só quando `_app/` já existe no bucket (`s3 ls` antes, só fora do ensaio) | ✅ morto | `:405` (só o teste de R2 pega) |
+| N3 | `:51` | carência do 1º upload por outro caminho: `--no-overwrite` no sync | ❌ **sobreviveu** | — |
+| N4a | `:137` | executor ignorado: `spawnSync('aws', …)` direto em `executar` | ✅ morto | `:321`, `:335`, `:405`, `:414` |
+| N4b | `:149` | executor ignorado na listagem | ✅ morto | `:321`, `:335`, `:348`, `:405` |
+| N5 | `:120` | `--remotos` aceito sem `--ensaio` | ✅ morto | `:354` |
+| N6 | `:150` | listagem só falha com status nulo (status 255 ignorado) | ✅ morto | `:341` |
+| N7 | `:141,164` | invalidação só depois do `rm` | ✅ morto | CLI `:235`, `:321` |
+| N8a | `:136` | ensaio executa os `cp` | ✅ morto | PUB-08, CLI, `:348` |
+| N8b | `:136` | ensaio executa os `rm` | ✅ morto | CLI `:235`, `:348` |
+| N9 | `:167` | CLI passa `agora = 0` | ✅ morto | CLI `:235` |
+
+### Informativo, fora do delta
+
+| # | linha | mutação | resultado | observação |
+|---|---|---|---|---|
+| N3b | `:51` | 2º `--exclude 'immutable/*'` no sync (o `_app/immutable/` nunca sobe) | ❌ sobreviveu | Fraqueza que já existia: o PUB-04 (`:133`) só lê o 1º `--exclude`, e o S3 simulado (`:372`) também. Em produção o site quebraria, e o 1º deploy manual mostraria isso. A mesma correção do N3 mata este. |
+
+**Resultado**: 36/37 mortos no delta (N3 sobreviveu). N3b fica registrado à parte, porque a fraqueza já existia
+desde o ciclo 1 e o requisito dela não mudou no delta.
+
+---
+
+## Code quality (delta)
+
+| verificação | status |
+|---|---|
+| Só o pedido: executor injetável, `listagem` exportada, `try` no parse, recusa de `--remotos`, `--size-only` removido | ✅ |
+| Mudanças cirúrgicas: `publicar.mjs`, teste, README, spec.md e nota na spec do dono; workflow e `site_deploy.tf` sem mudança | ✅ |
+| Sem dependência nova (regra 7) | ✅ |
+| `principal` só roda sozinho quando é o script de entrada (`publicar.mjs:167`), então importar no teste não dispara nada | ✅ |
+| Workflow não usa `--remotos` (`site-deploy.yml:85,88`) | ✅ |
+| README coerente (`infra/README.md:317,324-325`): sem `--delete`, sem `--size-only`, carência a partir da saída do build | ✅ |
+| `awsReal` sem `encoding` no modo não capturado: `r.status` vale do mesmo jeito | ✅ |
+
+---
+
+## Gaps ranqueados
+
+1. **[Teste, motivo do FAIL] N3: o teste de R2 não pega `--no-overwrite`.** `deploy-site.test.mjs:126-136`
+   (PUB-04) só proíbe `--size-only`, e o S3 simulado (`:374`) só modela esse flag. Correção sugerida, de uma
+   linha, no PUB-04: `assert.deepEqual(s, ['s3','sync','build/_app','s3://besave-site/_app/','--exclude','version.json','--cache-control', IMUTAVEL])`.
+   Isso mata N3, N3b e qualquer flag extra no sync. Uma alternativa é o S3 simulado recusar flag desconhecido.
+2. **[Informativo, fora do delta] N3b: 2º `--exclude` no sync passa.** Resolvido pela mesma correção do gap 1.
+3. **[Execução real] R2 depende do CI reenviar todo o `_app/`.** O teste assume que o mtime local é sempre mais
+   novo. Isso vale para checkout e build novos, e só a execução real confirma (abaixo).
+
+---
+
+## O que só a execução real do dono prova (bloqueia o merge)
+
+Tudo o que já estava nas listas dos ciclos 2 e 3: `plan` só com adições, `apply`, provedor OIDC inexistente,
+simulação do papel (incluindo `s3:ListBucket` com `s3:prefix=_app/` e `s3:DeleteObject` em `_app/x.js` →
+allowed), `sub` do token, variáveis, 1º deploy manual depois da BSV-30, evidência `REDACTED` e CI rodado. Mais:
+
+- **R2 de verdade**: em dois deploys seguidos do mesmo commit (`workflow_dispatch`), o log do 2º mostra o `sync`
+  com `upload:` de **todos** os arquivos de `_app/immutable/`, não só os novos. Em seguida,
+  `aws s3api list-objects-v2 --bucket besave-site --prefix _app/` mostra o `LastModified` desses arquivos igual
+  à hora do 2º deploy.
+- **Carência**: num deploy em que um chunk saiu do build, mas estava no deploy anterior feito há menos de 7 dias,
+  o passo Publicar diz `apagando 0 arquivo(s)` para ele, e `curl -I https://besave.com.br/_app/immutable/…`
+  desse chunk continua 200.
+- **Ensaio**: o passo Ensaio lista `_app/` e mostra `apagaria N arquivo(s)` sem nenhum `upload:` nem `delete:` no
+  log.
+
+---
+
+## Resumo
+
+**Overall**: ❌ não pronto pelo critério da skill. Há 1 mutante sobrevivente no delta (N3), que se corrige com
+1 linha de teste. R1, R2 e R3 estão implementados, e os 5 gaps do ciclo 3 estão fechados. Ciclo 4 de 4
+autorizados: a decisão é do dono.
+**Spec-anchored**: R1 e R3 afirmados com o valor exato; R2 afirmado contra `--size-only`, mas não contra `--no-overwrite`
+**Sensor (delta)**: 36/37 mortos (N3 sobreviveu); N3b informativo, fora do delta
+**Gates**: terraform test 17/17, npm test 67/67, actionlint limpo, fmt/validate limpos
+
+---
+
+## Histórico: relatório do ciclo 3 (HEAD `ca64835`)
+
+### Veredito do ciclo 3: reprovado (HEAD `ca64835`, delta `2fd9fd7..ca64835`)
 
 O requisito do dono para a limpeza de `_app/` com carência está implementado e os três casos que ele pediu
 (fora do build com 8 dias → apagado; com 1 dia → mantido; do build com 30 dias → mantido) são afirmados por
@@ -20,7 +263,7 @@ deploy fica vermelho depois de publicar). É o 3º ciclo, então a decisão sobe
 
 ---
 
-## Histórico de ciclos
+### Histórico de ciclos
 
 | ciclo | HEAD | veredito | sensor | gaps |
 |---|---|---|---|---|
@@ -33,7 +276,7 @@ O ex-gap 3 do ciclo 2 (`sync --delete` logo depois da invalidação) foi fechado
 
 ---
 
-## Gates (em `ca64835`, árvore real)
+### Gates (em `ca64835`, árvore real)
 
 | gate | comando | resultado |
 |---|---|---|
@@ -51,7 +294,7 @@ Integridade dos testes: nenhum teste apagado. Dois foram reescritos por causa da
 
 ---
 
-## Requisito do dono × evidência
+### Requisito do dono × evidência
 
 | requisito (dono, 07/10) | código | teste (`file:line` + asserção) | resultado |
 |---|---|---|---|
@@ -116,7 +359,7 @@ simulação do papel pelo dono deve incluir `s3:ListBucket` com `s3:prefix=_app/
 
 ---
 
-## Sensor de discriminação (só o delta)
+### Sensor de discriminação (só o delta)
 
 Worktree temporário (`git worktree add --detach <scratchpad>/m3 HEAD`), mutação textual, arquivo original
 restaurado a cada mutante, `npm test` em `infra/functions`. Para nenhum mutante chegar à AWS, os testes rodaram
@@ -164,7 +407,7 @@ workflow também passaram pelo actionlint. Worktree removido com `git worktree r
 
 ---
 
-## Code quality (delta)
+### Code quality (delta)
 
 | verificação | status |
 |---|---|
@@ -177,7 +420,7 @@ workflow também passaram pelo actionlint. Worktree removido com `git worktree r
 
 ---
 
-## Gaps ranqueados
+### Gaps ranqueados
 
 1. **[Teste, motivo do FAIL] Caminho real sem teste: C22, C25, C21, C23.** Correção sugerida:
    (a) exportar `listagem` e afirmar os argumentos exatos (`--prefix _app/`, `--query 'Contents[].{Key: Key,
@@ -207,7 +450,7 @@ workflow também passaram pelo actionlint. Worktree removido com `git worktree r
 
 ---
 
-## O que só a execução real do dono prova (bloqueia o merge)
+### O que só a execução real do dono prova (bloqueia o merge)
 
 Tudo o que estava na lista do ciclo 2 (plan só com adições, apply, provedor OIDC inexistente, simulação, `sub`
 do token, variáveis, primeiro deploy manual depois da BSV-30, evidência `REDACTED`, CI rodou), mais:
@@ -222,13 +465,14 @@ do token, variáveis, primeiro deploy manual depois da BSV-30, evidência `REDAC
 
 ---
 
-## Resumo
+### Resumo
 
 **Overall**: ❌ não pronto pelo critério da skill (mutantes sobreviventes); o requisito do dono está cumprido.
 Ciclo 3 de 3: decisão escalada ao dono (corrigir o gap 1 ou aceitar a cobertura pela execução real).
 **Spec-anchored**: os 8 itens do requisito do dono afirmados com o valor exato; o modo real ficou sem teste
 **Sensor (delta)**: 24/28 mortos (C21, C22, C23, C25 sobreviveram; todos falham para o lado seguro)
 **Gates**: terraform test 17/17, npm test 59/59, actionlint limpo, fmt/validate limpos
+
 
 ---
 
