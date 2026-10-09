@@ -3,18 +3,18 @@
 import type { Area, Publico } from '../dados.ts';
 
 export const TEXTO_AREA: Record<Area, string> = {
-	TECH: 'Ofertas de tecnologia: fones, carregadores, acessórios de celular, periféricos e eletrônicos para o dia a dia. Juntamos aqui o que aparece na Amazon, no Mercado Livre e na Shopee, e a lista é atualizada a cada 5 minutos.',
+	TECH: 'Ofertas de tecnologia: fones, carregadores, acessórios de celular, computadores, periféricos e eletrônicos para o dia a dia. Juntamos aqui as melhores ofertas do mercado, e a todo momento aparece novidades',
 	PLAYERS:
 		'Ofertas para quem joga: consoles, controles, headsets, jogos e acessórios para PC e videogame. Confira o preço e o cupom na loja antes de comprar, porque as condições mudam rápido.',
 	MEU_LAR:
 		'Ofertas para a casa: cozinha, organização, cama, mesa e banho, limpeza e decoração. As mais recentes aparecem primeiro, e os filtros ajudam a escolher loja, faixa de preço e cupom.',
-	ELAS: 'Ofertas de beleza e cuidados pessoais: maquiagem, skincare, cabelo, perfumes, moda e acessórios. A lista junta as ofertas da Amazon, do Mercado Livre e da Shopee e é atualizada a cada 5 minutos.',
+	ELAS: 'Ofertas de beleza e cuidados pessoais: maquiagem, skincare, cabelo, perfumes, moda e acessórios. A lista junta as melhores ofertas do mercado a todo momento.',
 	ELES: 'Ofertas para o público masculino: cuidados pessoais, barbear, perfumes, roupas e acessórios. Use os filtros para ver só uma loja, uma faixa de preço ou as ofertas com cupom.',
 	CULTURA:
 		'Ofertas de livros, filmes, séries, música e papelaria. O preço é o da loja no momento em que a oferta foi encontrada e pode mudar depois.',
 	FAMILIA:
 		'Ofertas para a família e para os filhos: brinquedos, roupas infantis, itens de bebê, material escolar e utilidades para a rotina com crianças. O filtro de público separa o que é infantil do que serve para todos.',
-	PETS: 'Ofertas para cães, gatos e outros bichos: ração, petiscos, areia, brinquedos, camas e acessórios. As ofertas chegam da Amazon, do Mercado Livre e da Shopee ao longo do dia.',
+	PETS: 'Ofertas para cães, gatos e outros bichos: ração, petiscos, areia, brinquedos, camas e acessórios. As ofertas chegam do mercado on-line ao longo do dia.',
 	ESPORTE_VIDA:
 		'Ofertas de esporte e vida saudável: roupas e calçados esportivos, suplementos, equipamentos de treino e acessórios para atividades ao ar livre. Escolha o público para ver o que é feminino, masculino ou unissex.',
 	OUTROS:

@@ -30,18 +30,18 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Título da subpágina | `<title>` "Ofertas de {Área} · {Público} · Besave"; `<h1>` "{Área} · {Público}" | `<h1>` vem da spec; `<title>` segue o padrão da área | n — proposto |
-| Breadcrumb visível na área | "Início › {Área}" também em `/{slug}/` | JSON-LD vale para as duas; mesma navegação | n — proposto |
+| Título da subpágina | `<title>` "Ofertas de {Área} · {Público} · Besave"; `<h1>` "{Área} · {Público}" | `<h1>` vem da spec; `<title>` segue o padrão da área | y (dono, 09/10) |
+| Breadcrumb visível na área | "Início › {Área}" também em `/{slug}/` | JSON-LD vale para as duas; mesma navegação | y (dono, 09/10) |
 | Texto da subpágina sem frase própria | Só o texto da área | Spec: frase só para subpáginas com volume | y |
 | Subpáginas com frase (dados de 08/10/2026, ativas) | `elas/unissex`, `meu-lar/feminino`, `esporte-vida/unissex`, `esporte-vida/feminino`, `esporte-vida/masculino`, `familia/infantil`, `familia/unissex` | Contagem dos chunks públicos com os limiares do item 5 | y (dados) |
 | Estado vazio | Área ou subpágina com 0 ofertas no catálogo, sem busca e sem filtro: texto + "Ainda não temos ofertas aqui" + links para as outras áreas | Spec item 3 | y |
-| `?publico=` em subpágina | Também redireciona para `/{slug}/{x}/` (o público da query vence e sai da query) | Mesma regra de `/{slug}/?publico=x` | n — proposto |
+| `?publico=` em subpágina | Também redireciona para `/{slug}/{x}/` (o público da query vence e sai da query) | Mesma regra de `/{slug}/?publico=x` | y (dono, 09/10) |
 | "Limpar filtros" na subpágina | Volta a `/{slug}/` sem query | "Todos" + padrão dos demais | y |
 | Contagem "ativas" do sitemap | Cards publicados sem `x` (mesma base de `manifest.areas`) | CONTRATO §7 | y |
-| Troca de público na área | Navegação com nova entrada no histórico e `reset: false` (rolagem e foco mantidos); só o redirect de `?publico=` usa `replace` | Trocar de público é trocar de página; o voltar do navegador volta ao público anterior | n — proposto |
+| Troca de público na área | Navegação com nova entrada no histórico e `reset: false` (rolagem e foco mantidos); só o redirect de `?publico=` usa `replace` | Trocar de público é trocar de página; o voltar do navegador volta ao público anterior | y (dono, 09/10) |
 | Bundle da home (BUD-01) | Painel de filtros do celular em `PainelFiltros.svelte`, importado ao tocar em "Filtros" | Pedido do dono: sem aumentar o limite; 149,9 → 150,2 KiB com a T4 | y (dono) |
-| Onde nasce o JSON-LD | `hooks.server.ts` (`transformPageChunk`) no prerender, com a mesma `trilha()` do cabeçalho | `{@html}` levava a home a 150,3 KiB e `<svelte:element>` a 155,2 KiB (runtime no chunk compartilhado); o hook custa 0 B no cliente. Na navegação no cliente o `<head>` mantém o JSON-LD da primeira página (crawler lê o HTML prerenderizado) | n — proposto |
-| `lastmod` da home sem ativas | Sem `<lastmod>` | Protocolo: `lastmod` é opcional | n — proposto |
+| Onde nasce o JSON-LD | `hooks.server.ts` (`transformPageChunk`) no prerender, com a mesma `trilha()` do cabeçalho | `{@html}` levava a home a 150,3 KiB e `<svelte:element>` a 155,2 KiB (runtime no chunk compartilhado); o hook custa 0 B no cliente. Na navegação no cliente o `<head>` mantém o JSON-LD da primeira página (crawler lê o HTML prerenderizado) | y (dono, 09/10) |
+| `lastmod` da home sem ativas | Sem `<lastmod>` | Protocolo: `lastmod` é opcional | y (dono, 09/10) |
 | Ordem no `sitemap-paginas.xml` | Home, depois cada área na ordem do enum seguida das suas subpáginas na ordem do enum `Publico` | Determinístico (AD-041) | y |
 | Posição no index | `sitemap-paginas.xml` depois dos `sitemap-{n}.xml` | Index só muda de bytes quando muda de lista | y |
 
