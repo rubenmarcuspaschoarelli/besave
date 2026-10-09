@@ -310,6 +310,7 @@ fn primeira_execucao_publica_paginas_sitemap_robots_e_indice() {
             "oferta/5413/index.html",
             "oferta/5420/index.html",
             "sitemap-1.xml",
+            "sitemap-paginas.xml",
             "sitemap.xml",
             "robots.txt",
             "_estado/paginas.json",
@@ -410,7 +411,7 @@ fn sitemap_que_nao_e_mais_gerado_e_removido() {
     assert_eq!(p.remocoes(), ["sitemap-2.xml"]);
     assert_eq!(
         p.listar("sitemap").unwrap(),
-        ["sitemap-1.xml", "sitemap.xml"]
+        ["sitemap-1.xml", "sitemap-paginas.xml", "sitemap.xml"]
     );
     assert!(!texto(&p, "sitemap.xml").contains("sitemap-2.xml"));
 }
@@ -438,6 +439,7 @@ fn indice_ilegivel_reenvia_tudo_sem_abortar() {
             "oferta/5413/index.html",
             "oferta/5420/index.html",
             "sitemap-1.xml",
+            "sitemap-paginas.xml",
             "sitemap.xml",
             "robots.txt",
             "_estado/paginas.json",
@@ -539,6 +541,7 @@ fn virada_para_indexavel_regrava_robots_e_sitemaps() {
         do_site(&gravadas(&p, marca)),
         [
             "sitemap-1.xml",
+            "sitemap-paginas.xml",
             "sitemap.xml",
             "robots.txt",
             "_estado/paginas.json"
@@ -577,4 +580,65 @@ fn indice_antigo_com_css_nao_publica_css() {
         serde_json::from_slice(&p.ler("_estado/paginas.json").unwrap().unwrap()).unwrap();
     assert!(novo.get("_css").is_none(), "{novo}");
     assert_eq!(novo["5412"].as_str().unwrap().len(), 16);
+}
+
+/// 25 TECH unissex + 5 TECH feminino (já no ar) e as fixtures: TECH entra no sitemap de páginas,
+/// `/tech/unissex/` (25 de 30, 83%) também; `/tech/feminino/` (5) não.
+fn com_volume_em_tech() -> Vec<LinhaOferta> {
+    let mut v = linhas_fixture();
+    v.extend((2001..=2025).map(linha));
+    v.extend((2026..=2030).map(|id| LinhaOferta {
+        publico: Some("F".into()),
+        ..linha(id)
+    }));
+    no_ar(v)
+}
+
+/// SMP-01: `sitemap-paginas.xml` sobe antes do index, que o lista; os `sitemap-{n}.xml` continuam
+/// só com ofertas.
+#[test]
+fn sitemap_de_paginas_sobe_antes_do_index_e_e_listado() {
+    let mut p = PublicadorMemoria::new();
+    rodar(&com_volume_em_tech(), &mut p, &mapeamento(), AGORA).unwrap();
+    let site = do_site(p.gravacoes());
+    let pos = |c: &str| site.iter().position(|x| x == c).unwrap();
+    assert!(pos("sitemap-paginas.xml") < pos("sitemap.xml"), "{site:?}");
+    assert!(
+        texto(&p, "sitemap.xml")
+            .contains("<sitemap><loc>https://besave.com.br/sitemap-paginas.xml</loc></sitemap>")
+    );
+    let paginas = texto(&p, "sitemap-paginas.xml");
+    let locs: Vec<&str> = paginas
+        .split("<loc>")
+        .skip(1)
+        .filter_map(|r| r.split("</loc>").next())
+        .collect();
+    assert_eq!(
+        locs,
+        [
+            "https://besave.com.br/",
+            "https://besave.com.br/tech/",
+            "https://besave.com.br/tech/unissex/"
+        ]
+    );
+    // `dp` = AGORA − 30 min = 2026-09-24T12:10Z → 24/09 em Brasília.
+    assert!(
+        paginas.contains("<lastmod>2026-09-24</lastmod>"),
+        "{paginas}"
+    );
+    let ofertas = texto(&p, "sitemap-1.xml");
+    assert!(!ofertas.contains("/tech/"), "{ofertas}");
+    assert_eq!(ofertas.matches("<url>").count(), 32);
+}
+
+/// SMP-05: segundo ciclo sem mudança → nenhum upload de sitemap.
+#[test]
+fn segundo_ciclo_sem_mudanca_nao_sobe_sitemap_de_paginas() {
+    let m = mapeamento();
+    let mut p = PublicadorMemoria::new();
+    rodar(&com_volume_em_tech(), &mut p, &m, AGORA).unwrap();
+    let marca = p.gravacoes().len();
+    let r2 = rodar(&com_volume_em_tech(), &mut p, &m, AGORA + 600).unwrap();
+    assert_eq!(r2.site.sitemaps_publicados, 0);
+    assert_eq!(gravadas(&p, marca), ["manifest.prev.json", "manifest.json"]);
 }

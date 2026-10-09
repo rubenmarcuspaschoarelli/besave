@@ -14,6 +14,8 @@ use crate::publicador::{ErroPublicador, META_ESTADO, META_ROBOTS, META_SITEMAP, 
 /// URLs por `sitemap-{n}.xml`: margem sob o limite de 50 000 do protocolo.
 pub const MAX_URLS_SITEMAP: usize = 45_000;
 pub const CHAVE_SITEMAP_INDEX: &str = "sitemap.xml";
+/// Home, áreas e subpáginas de público (BSV-33).
+pub const CHAVE_SITEMAP_PAGINAS: &str = "sitemap-paginas.xml";
 pub const CHAVE_ROBOTS: &str = "robots.txt";
 /// Índice do que já está no bucket: id → hash16 da página, mais `_robots` e cada `sitemap*.xml`.
 /// Lido uma vez por execução; regravado só quando muda. `_css` de índices antigos é ignorado.
@@ -107,12 +109,14 @@ fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador
     Ok(e)
 }
 
-/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (só ATIVAS com página no
-/// bucket), robots e, por último, o índice. Cada objeto só sobe se o hash difere do índice
+/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (ofertas só ATIVAS com página no
+/// bucket; páginas do site a partir de `ativas_site`, os cards sem `x`), robots e, por último, o
+/// índice. Cada objeto só sobe se o hash difere do índice
 /// anterior. Índice ausente ou ilegível: tudo sobe (páginas são idempotentes) e o conjunto anterior
 /// de páginas é reconstruído do bucket, para que as órfãs sejam expurgadas mesmo sem índice.
 pub fn publicar_site(
     paginas: &[OfertaPagina],
+    ativas_site: &[AtivaPagina],
     cfg: &ConfigSite,
     pub_: &mut dyn Publicador,
 ) -> Result<RelatorioSite, ErroSite> {
@@ -139,7 +143,7 @@ pub fn publicar_site(
         .map(|o| (o.id, o.dt_oferta.as_str()))
         .collect();
     novo.paginas = indice;
-    let arquivos = sitemaps(&ativas, &cfg.base);
+    let arquivos = sitemaps(&ativas, ativas_site, &cfg.base);
     let atuais: BTreeSet<&str> = arquivos.iter().map(|(c, _)| c.as_str()).collect();
     // Filhos antes do index (o index nunca aponta para arquivo que ainda não subiu).
     for (chave, bytes) in &arquivos {
@@ -230,10 +234,16 @@ impl ConfigSite {
 }
 
 /// `sitemap-{n}.xml` (n a partir de 1), um por bloco de `MAX_URLS_SITEMAP` ofertas ativas em ordem
-/// de id, e por último o index `sitemap.xml`. `ativas` = `(id, dt_oferta ISO UTC)`; `lastmod` é a
+/// de id, depois `sitemap-paginas.xml` (`sitemap_paginas` sobre `ativas_site`) e por último o index
+/// `sitemap.xml`, que lista todos. `ativas` = `(id, dt_oferta ISO UTC)`; `lastmod` é a
 /// data (AAAA-MM-DD) de `dt_oferta`. Sem ativas, sai um `sitemap-1.xml` vazio: o index nunca
 /// aponta para arquivo inexistente.
-pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
+pub fn sitemaps(
+    ativas: &[(i64, &str)],
+    ativas_site: &[AtivaPagina],
+    base: &str,
+) -> Vec<(String, Vec<u8>)> {
+    let paginas = sitemap_paginas(ativas_site, base);
     let base = escapar(base);
     let mut ordenadas = ativas.to_vec();
     ordenadas.sort_unstable_by_key(|(id, _)| *id);
@@ -242,7 +252,7 @@ pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
     } else {
         ordenadas.chunks(MAX_URLS_SITEMAP).collect()
     };
-    let mut out = Vec::with_capacity(blocos.len() + 1);
+    let mut out = Vec::with_capacity(blocos.len() + 2);
     let mut index =
         format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<sitemapindex xmlns=\"{XMLNS}\">\n");
     for (i, bloco) in blocos.iter().enumerate() {
@@ -261,6 +271,11 @@ pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
         let _ = writeln!(index, "<sitemap><loc>{base}/{chave}</loc></sitemap>");
         out.push((chave, xml.into_bytes()));
     }
+    let _ = writeln!(
+        index,
+        "<sitemap><loc>{base}/{CHAVE_SITEMAP_PAGINAS}</loc></sitemap>"
+    );
+    out.push((CHAVE_SITEMAP_PAGINAS.to_owned(), paginas));
     index.push_str("</sitemapindex>\n");
     out.push((CHAVE_SITEMAP_INDEX.to_owned(), index.into_bytes()));
     out

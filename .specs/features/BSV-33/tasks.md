@@ -79,9 +79,9 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Primeiro ciclo grava `sitemap-paginas.xml` antes de `sitemap.xml`; o index lista o arquivo
-- [ ] Segundo ciclo sem mudança: 0 uploads de sitemap
-- [ ] Testes que listam os arquivos do site passam a incluir `sitemap-paginas.xml` (artefato novo, não afrouxamento)
+- [x] Primeiro ciclo grava `sitemap-paginas.xml` antes de `sitemap.xml`; o index lista o arquivo
+- [x] Segundo ciclo sem mudança: 0 uploads de sitemap
+- [x] Testes que listam os arquivos do site passam a incluir `sitemap-paginas.xml` (artefato novo, não afrouxamento)
 
 **Tests**: integration
 **Gate**: quick

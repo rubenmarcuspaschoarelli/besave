@@ -102,11 +102,11 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| SMP-01 | Sitemap | T2 | Pending |
+| SMP-01 | Sitemap | T2 | Done |
 | SMP-02 | Sitemap | T1 | Done |
 | SMP-03 | Sitemap | T1 | Done |
 | SMP-04 | Sitemap | T1 | Done |
-| SMP-05 | Sitemap | T2 | Pending |
+| SMP-05 | Sitemap | T2 | Done |
 | SMP-06 | Sitemap | T1 | Done |
 | SUB-01 | Subpáginas | T3 | Pending |
 | SUB-02 | Subpáginas | T3 | Pending |

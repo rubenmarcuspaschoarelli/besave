@@ -21,7 +21,7 @@ use crate::redirects::{
     self, ErroRedirects, EstadoKvs, Redirects, RelatorioRedirects, carregar_base,
     sincronizar_com_indice,
 };
-use crate::site::{ConfigSite, ErroSite, RelatorioSite, publicar_site};
+use crate::site::{AtivaPagina, ConfigSite, ErroSite, RelatorioSite, publicar_site};
 
 /// Orçamento de chunk comprimido (MANIFEST §7, `bytes.maximum` do schema).
 pub const ORCAMENTO_CHUNK: u64 = 61_440;
@@ -247,6 +247,12 @@ pub fn gerar(
     for c in cards.iter().filter(|c| c.x.is_none()) {
         *areas.entry(c.area).or_default() += 1;
     }
+    // Área, público e `dp` das ativas para o sitemap de páginas (BSV-33); os cards vão aos chunks.
+    let resumo_site: Vec<_> = cards
+        .iter()
+        .filter(|c| c.x.is_none())
+        .map(|c| (c.area, c.publico, c.dt_publicacao.clone()))
+        .collect();
 
     // Tudo serializado e medido antes da primeira gravação: estouro de orçamento não publica nada.
     let mut prontos = Vec::new();
@@ -288,7 +294,15 @@ pub fn gerar(
 
     // MANIFEST §6 passo 3: CSS, páginas, sitemaps, robots e índice, antes da KVS e do manifest.
     let t = Instant::now();
-    rel.site = publicar_site(&paginas, site, pub_)?;
+    let ativas_site: Vec<AtivaPagina> = resumo_site
+        .iter()
+        .map(|(area, publico, dp)| AtivaPagina {
+            area: *area,
+            publico: *publico,
+            dp,
+        })
+        .collect();
+    rel.site = publicar_site(&paginas, &ativas_site, site, pub_)?;
     let d_paginas = t.elapsed();
 
     let t = Instant::now();
