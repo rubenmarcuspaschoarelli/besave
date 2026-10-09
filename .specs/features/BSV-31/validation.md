@@ -1,6 +1,6 @@
 # BSV-31 Validation
 
-**Verdict**: PASS
+**Verdict**: PASS — conjunto inicial (`7e7fa32..5fb22e8`) e revisão do dono (`807e445..e59e737`) aprovados; o mutante M5 morre desde e59e737 (ver "Re-verificação após e59e737" no fim). Veredito anterior do delta (histórico, em 56a8aad): reprovado por M5 vivo.
 
 **Date**: 2026-10-08
 **Spec**: `.specs/features/BSV-31/spec.md` (escopo do dono: `docs/specs/BSV-31.md`)
@@ -100,7 +100,7 @@ força servidor próprio, sem reaproveitar preview de outro worktree). Lotes de 
 | M20 | `BarraFiltros.svelte:115` | painel `hidden` também no desktop | ✅ Morto (e2e:337) |
 
 **Sensor depth**: expandido (23 mutações, 10 de unidade e 13 de e2e)
-**Result**: 22 mortos, 1 equivalente, 0 vivos - PASS ✅
+**Saída do sensor (conjunto inicial)**: 22 mortos, 1 equivalente, 0 vivos - aprovado ✅
 **Isolamento**: worktree removido (`Remove-Item -LiteralPath '\\?\...'` + `git worktree prune`; `git worktree remove` falhou com "Filename too long"); `git status --porcelain` do worktree real antes = depois (`?? package.json`, `?? pnpm-lock.yaml` na raiz, alheios ao ticket).
 
 ---
@@ -197,3 +197,113 @@ Imagens dos cards aparecem quebradas nos prints: catálogo sintético sem `img/`
 **Spec-anchored check**: 21/21 ACs com o valor da spec; 2 spec-precision gaps (unidade do bundle, contraste AA)
 **Sensor**: 22/22 mortos + 1 equivalente
 **Gate**: 136 unit + 140 e2e passed
+
+---
+
+## Revisão do dono — delta 807e445..56a8aad
+
+**Veredito do delta em 56a8aad (histórico)**: reprovado (1 mutante vivo não equivalente; o código atende os 3 ACs, mas um requisito da T5 não tem teste que o discrimine)
+**Verificou**: Verifier independente (sub-agente), autor ≠ verificador
+**Diff range**: `807e445..56a8aad` (86643a2, 7a443ca, 57285ec, 56a8aad)
+**Data**: 2026-10-08
+
+### Gates (`apps/site`, worktree real)
+
+`pnpm lint` ok; `pnpm check` ok; `pnpm test` Vitest 14 arquivos, **136 passed** (DES/DAD-04 passaram na primeira, sem repetição); `pnpm build` ok; `pnpm e2e` **146 passed** (1,9 min), 0 falhas, 0 pulados. Antes do delta: 140 e2e; +6 = 3 testes novos × 2 projetos. Nenhum teste removido ou enfraquecido no diff.
+
+### ACs novos (evidência ou zero)
+
+| AC | Valor da spec | Código | `file:line` + asserção | Result |
+| -- | ------------- | ------ | ---------------------- | ------ |
+| PNL-04 foco preso, fundo inerte | Tab e Shift+Tab não saem; fundo inerte | `<dialog>` + `showModal()` (`BarraFiltros.svelte:181`, `:57`); `cicloTab` dá a volta no último/primeiro botão (`:68`–`:77`, ligado em `:187`) | `e2e/filtros.spec.ts:379`–`:381` 25 × Tab `dentro()` `toBe(true)`; `:384` passou por "Ver 130 ofertas" e "Todos" (deu a volta); `:386`–`:388` 25 × Shift+Tab; `:390`–`:393` `card.focus()` não tira o foco do painel (fundo inerte) | ✅ (M1, M2 mortos) |
+| PNL-04 Esc | painel fecha e foco volta a "Filtros" | `onclose={aoFechar}` (`:185`) → `aberto = false; gatilho?.focus()` (`:62`–`:65`) | `:395` `press('Escape')`; `:396` `getByRole('dialog')` `toHaveCount(0)`; `:397` gatilho `toBeFocused()` | ✅ (M4 morto; M3 equivalente no Chromium) |
+| PNL-04 grupos num lugar só (What da T5) | grupos só no diálogo enquanto aberto | `{#if !aberto}` (`:169`) | **sem asserção**: os seletores por papel ignoram a cópia `display:none` | ❌ M5 vivo |
+| PNL-05 degradê com conteúdo à direita | visível no início | `hidden={!mais}` (`:175`); `mais` = `scrollLeft + clientWidth < scrollWidth - 1` (`:83`), medido em `scroll` e `ResizeObserver` (`:85`–`:90`) | `e2e/filtros.spec.ts:341` `toBeVisible()`; `:348` borda direita do degradê = borda da linha; `:349`–`:351` `linear-gradient(... rgb(255, 255, 255))`; `:353` `pointerEvents` `'none'` | ✅ (M7, M8 mortos) |
+| PNL-05 some no fim | oculto no fim da rolagem, volta no início | idem | `:354`–`:355` `scrollTo(scrollWidth)` → `toBeHidden()`; `:356` "Menor preço" `toBeInViewport({ratio: 1})`; `:359`–`:360` volta → `toBeVisible()` | ✅ (M6, M12 mortos) |
+| PNL-05 ≥ 640 px | sem degradê | `sm:hidden` (`:174`) e `mais` falso com `sm:overflow-visible` + `sm:flex-wrap` (`:155`) | `:430` `[data-mais]` `toBeHidden()` a 1280 px | ✅ (M9 equivalente) |
+| PNL-05 sem rolagem horizontal a 390 px | a linha rola por dentro | `min-w-0` na envoltória (`:153`), `overflow-x-auto` na linha (`:155`) | `:343` `documentElement.scrollWidth` `≤ 390` | ✅ (M8 morto) |
+| BUD-01 | JS inicial (`modulepreload` + imports estáticos, bruto) + `<style>` ≤ 153.600 B | `jsInicial` segue `href=`/`import(` do HTML e `from`/`import` relativos dos módulos (`e2e/saida.spec.ts:160`–`:173`) | `saida.spec.ts:190` `toBeLessThanOrEqual(ORCAMENTO_KIB * 1024)` com `ORCAMENTO_KIB = 150` (`:157`); sanidade `:187` `entry/start.`, `:188` `> 5` arquivos, `:189` CSS `> 10_000` | ✅ (M10 morto; M11 equivalente hoje) |
+
+ACs anteriores depois da troca para `<dialog>`: PNL-01 (`filtros.spec.ts:291`), PNL-02 (`:301`, base do painel = 844, aplica com o painel aberto, "Ver N ofertas" fecha), PNL-03 (`:405`) e BAR-01..09 continuam verdes nos dois projetos (146/146).
+
+Sonda extra do Verifier (worktree temporário, não versionada): com o painel aberto a 390 px há 1 `#filtro-publico` no DOM (o código atende o "num lugar só"); girando para 844 × 390 o diálogo continua aberto e visível (`display: grid`: `open:grid` vence `sm:hidden`), o clique na grade é bloqueado e a linha não mostra os grupos até fechar. Não trava: o painel segue usável. Print do painel refeito pelo Verifier a partir de 56a8aad: mesma folha de `prints/painel-celular.png` (o arquivo é de 5fb22e8, mas segue representativo).
+
+### Discrimination Sensor (worktree temporário em 56a8aad, porta 4174, `CI=1`, 2 workers, `pnpm build` por mutante)
+
+| # | Mutação | Testes | Resultado |
+| - | ------- | ------ | --------- |
+| M1 | `showModal()` → `show()` (`BarraFiltros.svelte:57`) | 11 falhas em `filtros.spec.ts` (PNL-02, PNL-04, filtros no celular) | ✅ morto |
+| M2 | sem `onkeydown={cicloTab}` (`:187`) | `filtros.spec.ts:364` falha nos 2 projetos (Tab sai do painel) | ✅ morto |
+| M3 | `aoFechar` sem `gatilho?.focus()` (`:64`) | 42 passed | ⚪ equivalente no Chromium: o `<dialog>` devolve o foco nativamente ao elemento focado antes do `showModal`. No WebKit (iPhone) o toque não foca o botão; a linha `:64` é quem garante lá, e não há projeto WebKit no `playwright.config.ts` |
+| M4 | `oncancel` com `preventDefault` (Esc bloqueado) | `filtros.spec.ts:396` `toHaveCount(0)` falha nos 2 projetos | ✅ morto |
+| M5 | `{#if !aberto}` → `{#if true}` (`:169`): grupos duplicados com o painel aberto | 42 passed | ❌ **vivo**: 2 cópias de cada grupo e ids `filtro-publico`/`filtro-loja`/`filtro-preco` duplicados; nenhum teste conta os grupos |
+| M6 | degradê sempre visível (`hidden={false}`, `:175`) | `filtros.spec.ts:355` `toBeHidden` falha | ✅ morto |
+| M7 | degradê nunca visível (`hidden={true}`) | `filtros.spec.ts:341` `toBeVisible` falha | ✅ morto |
+| M8 | sem `min-w-0` na envoltória (`:153`) | `filtros.spec.ts:341` falha (a linha não rola, `mais` falso) | ✅ morto |
+| M9 | `sm:hidden` removido do degradê (`:174`) | 42 passed | ⚪ equivalente: ≥ 640 px a linha quebra e não rola, `mais` é sempre falso e `hidden` já esconde |
+| M10 | limite `150 * 1024` → `150 * 1000` (`saida.spec.ts:190`) | bundle falha nos 2 projetos (153.069 > 153.000) | ✅ morto |
+| M11 | `jsInicial` ignora imports estáticos (`saida.spec.ts:171`) | 16 passed | ⚪ equivalente no build atual: os 18 arquivos alcançados pelos imports já estão todos no `modulepreload` do `index.html` (conferido pelo script próprio do Verifier) |
+| M12 | `mais` com margem de +40 px (`:83`) | `filtros.spec.ts:355` falha | ✅ morto |
+
+**Sensor depth**: expandido (12 mutações). **Resultado do sensor**: 8 mortos, 3 equivalentes, **1 vivo (M5)**.
+Isolamento: worktree temporário removido (`Remove-Item \\?\…` + `git worktree prune`); `git status --porcelain` do worktree real antes e depois: `?? package.json`, `?? pnpm-lock.yaml` (iguais).
+
+### Bundle (BUD-01)
+
+Medida refeita com script próprio (regex mais larga, caminhos relativos resolvidos, CSS em bytes UTF-8): **18 arquivos JS, 130.903 B (52.660 B gzip) + CSS 22.166 B = 153.069 B = 149,5 KiB**; igual à anotação do teste (`JS 130903 B (18 arquivos) + CSS 22166 B = 153069 B`). Nenhum import dinâmico entra na conta. **Folga: 531 B (0,35 %)**. Delta desde o PASS anterior: +1.025 B (painel `<dialog>` + degradê).
+
+### Prints (lição 19)
+
+| Arquivo | O que mostra | OK? |
+| ------- | ------------ | --- |
+| `prints/barra-celular.png` | 390 px, "Filtros" + Recentes + Maior desconto; "Menor preç" esmaecendo na borda direita | ✅ degradê visível (sutil, para o branco do fundo) |
+| `prints/barra-celular-fim.png` | mesma linha rolada até o fim: "Filtros" cortado à esquerda, "Menor preço" inteiro, sem esmaecer à direita | ✅ fim sem degradê |
+| `prints/painel-celular.png` | folha inferior sobre fundo escurecido, Feminino e Amazon marcados, "Ver 13 ofertas" | ✅ (de 5fb22e8; o print do Verifier em 56a8aad tem o mesmo layout) |
+
+### Lacunas (ranqueadas)
+
+1. **M5 vivo: duplicação dos grupos sem teste** - `BarraFiltros.svelte:169`; `e2e/filtros.spec.ts:364` não conta. **Fix-1**: no teste PNL-04 (ou PNL-02), com o painel aberto, `expect(page.locator('[id="filtro-publico"]')).toHaveCount(1)` (e o mesmo para `filtro-loja`/`filtro-preco`), ou contar os botões "Shopee" no DOM incluindo ocultos. Prioridade: Major (requisito da T5 sem sensor); a correção é só de teste.
+2. **Folga do bundle: 531 B** - `e2e/saida.spec.ts:190`. Qualquer mudança de ~0,5 KB na home quebra o gate; o dono decide se aceita ou se o próximo ticket de site já nasce com corte.
+3. **Retorno de foco só testado no Chromium** - `BarraFiltros.svelte:64` (M3 equivalente). No iPhone o toque não foca "Filtros"; conferir no "Real (dono)" ou adicionar projeto WebKit.
+4. **"Fundo inerte" testado só por foco** - `e2e/filtros.spec.ts:390`–`:393`; o comentário fala em clique, mas não há asserção de clique bloqueado (a sonda do Verifier confirmou que o clique é bloqueado). Baixa.
+5. **Ramo de imports estáticos de `jsInicial` sem efeito hoje** - `e2e/saida.spec.ts:171` (M11 equivalente). Só pesa se o SvelteKit deixar de listar algum chunk no `modulepreload`. Baixa.
+6. **Celular girado com o painel aberto** - ≥ 640 px o diálogo fica visível (`open:grid` vence `sm:hidden`, `BarraFiltros.svelte:184`) e a linha não mostra os grupos até fechar. Usável; informativo.
+
+### Lições propostas (para o dono consolidar; não gravadas)
+
+- Requisito do tipo "X existe uma vez só" precisa de contagem no DOM (`[id=…]` ou locator CSS); `getByRole` ignora cópias ocultas e deixa a duplicação passar.
+- Comportamento que o Chromium já faz sozinho (devolver o foco ao fechar `<dialog>`) não é discriminado por e2e só em Chromium; se o alvo é iPhone, o teste precisa de WebKit.
+
+### validate_state
+
+`python .claude/skills/tlc-spec-driven/scripts/validate_state.py BSV-31 --root .` → exit 1 em 56a8aad (histórico): o script leu juntas a linha de resultado do sensor inicial (aprovado) e a do delta (reprovado) e acusou "placeholder". Corrigido na re-verificação: um único veredito vigente no fim do arquivo.
+
+**Veredito do delta em 56a8aad (histórico)**: reprovado — Fix-1 pedido (feito em e59e737, abaixo).
+
+### Re-verificação após e59e737 (iteração 2 de 3)
+
+**Verificou**: Verifier independente (sub-agente), autor ≠ verificador
+**Diff range**: `56a8aad..e59e737` (só teste: `apps/site/e2e/filtros.spec.ts`, +6 linhas no teste PNL-04)
+
+**Fix-1 conferido**: com o painel aberto, `e2e/filtros.spec.ts:378`–`:379` `#filtro-ordem`, `#filtro-publico`, `#filtro-loja`, `#filtro-preco` `toHaveCount(1)`; `:381` `[data-filtros] button[aria-pressed]` `toHaveCount(17)` (3 ordem + 5 público + 4 loja + 4 preço + cupom, os mesmos 17 rótulos de PNL-03); `:382` painel `button[aria-pressed]` `toHaveCount(14)` (5 + 4 + 4 + 1, sem a ordem). Valores conferidos contra `BarraFiltros.svelte:15`–`:38` e `:143`. Com o fix, as linhas citadas acima para o teste PNL-04 em diante andam +6 (Esc em `:401`–`:403`; degradê no desktop em `:436`).
+
+**Gates** (worktree real, em e59e737): `pnpm lint` ok; `pnpm check` ok; Vitest 14 arquivos, **136 passed** (testes de tempo verdes na primeira, sem repetição); `pnpm build` ok; Playwright **146 passed** (2,6 min), 0 falhas, 0 pulados.
+
+**Sensor** (worktree temporário em e59e737, porta 4174, `CI=1`, `pnpm build` por mutante):
+
+| # | Mutação | Resultado |
+| - | ------- | --------- |
+| M5 | `{#if !aberto}`/`{/if}` removidos em volta de `<div class="hidden sm:contents">{@render grupos()}</div>` (`BarraFiltros.svelte:169`–`:171`) | ✅ morto: `filtros.spec.ts:364` falha nos 2 projetos em `toHaveCount` |
+| M1 | `showModal()` → `show()` (sanidade) | ✅ morto (11 falhas, inclui PNL-02 e PNL-04) |
+| M6 | degradê sempre visível (sanidade) | ✅ morto (`:337`, `toBeHidden`) |
+| M2 | sem `cicloTab` (sanidade) | ✅ morto (`:364`, Tab sai do painel) |
+
+Sensor do delta somado: 12 mutações em 56a8aad + M5 refeito = **9 mortos, 3 equivalentes (M3, M9, M11), 0 vivos**. Isolamento: worktree temporário removido (`Remove-Item \\?\…` + `git worktree prune`); `git status --porcelain` do worktree real igual ao de antes (só `validation.md` desta verificação, `?? package.json`, `?? pnpm-lock.yaml`).
+
+**Print**: `prints/painel-celular.png` refeito pelo autor em 56a8aad, idêntico em bytes ao anterior (sem mudança no git); bate com o print do Verifier.
+
+**Lacunas que seguem abertas (nenhuma bloqueia)**: 2 (folga do bundle 531 B), 3 (retorno de foco só no Chromium), 4 (clique no fundo sem asserção), 5 (ramo de imports estáticos sem efeito hoje), 6 (painel aberto ao girar o celular). Bloqueia o merge só o "Real (dono)" da spec.
+
+**validate_state**: `python .claude/skills/tlc-spec-driven/scripts/validate_state.py BSV-31 --root .` → **exit 0** (`validate_state: 0 error(s) across [BSV-31]`)
+
+**Result**: PASS
