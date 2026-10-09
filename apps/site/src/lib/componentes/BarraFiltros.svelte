@@ -76,6 +76,19 @@
 		}
 	}
 
+	/** Linha "Filtros"/ordem do celular: degradê à direita enquanto há o que rolar. */
+	let linha: HTMLDivElement | undefined = $state();
+	let mais = $state(false);
+	const medirLinha = () => {
+		if (linha) mais = linha.scrollLeft + linha.clientWidth < linha.scrollWidth - 1;
+	};
+	$effect(() => {
+		if (!linha) return;
+		const ro = new ResizeObserver(medirLinha);
+		ro.observe(linha);
+		return () => ro.disconnect();
+	});
+
 	/** Toque fora da folha (no `::backdrop`) fecha. */
 	function tocouFora(e: MouseEvent) {
 		if (!dialogo || e.target !== dialogo) return;
@@ -137,21 +150,32 @@
 
 <div class="grid gap-3" data-filtros>
 	<!-- Celular: "Filtros" + ordem numa linha que rola; desktop: tudo numa linha que quebra. -->
-	<div
-		class="-mx-3.5 flex items-center gap-2 overflow-x-auto px-3.5 py-1 [scrollbar-width:none] sm:mx-0 sm:py-0 sm:flex-wrap sm:gap-x-5 sm:gap-y-3 sm:overflow-visible sm:px-0"
-	>
-		<button
-			type="button"
-			class="{botao} font-bold sm:hidden"
-			aria-expanded={aberto}
-			aria-haspopup="dialog"
-			bind:this={gatilho}
-			onclick={abrir}>Filtros</button
+	<div class="relative -mx-3.5 min-w-0 sm:mx-0">
+		<div
+			class="flex items-center gap-2 overflow-x-auto px-3.5 py-1 [scrollbar-width:none] sm:flex-wrap sm:gap-x-5 sm:gap-y-3 sm:overflow-visible sm:px-0 sm:py-0"
+			bind:this={linha}
+			onscroll={medirLinha}
+			data-linha
 		>
-		{@render escolhas('filtro-ordem', 'Ordem', ORDENS, estado.ordem, 'ordem', true)}
-		{#if !aberto}
-			<div class="hidden sm:contents">{@render grupos()}</div>
-		{/if}
+			<button
+				type="button"
+				class="{botao} font-bold sm:hidden"
+				aria-expanded={aberto}
+				aria-haspopup="dialog"
+				bind:this={gatilho}
+				onclick={abrir}>Filtros</button
+			>
+			{@render escolhas('filtro-ordem', 'Ordem', ORDENS, estado.ordem, 'ordem', true)}
+			{#if !aberto}
+				<div class="hidden sm:contents">{@render grupos()}</div>
+			{/if}
+		</div>
+		<div
+			class="pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-fundo to-transparent sm:hidden"
+			hidden={!mais}
+			aria-hidden="true"
+			data-mais
+		></div>
 	</div>
 
 	<dialog

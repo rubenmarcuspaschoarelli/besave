@@ -333,6 +333,33 @@ test.describe('celular (390 px)', () => {
 test.describe('celular: teclado no painel (390 px)', () => {
 	test.use({ viewport: { width: 390, height: 844 } });
 
+	// PNL-05
+	test('degradê à direita da linha de ordem enquanto há mais para rolar', async ({ page }) => {
+		await abrir(page);
+		const degrade = page.locator('[data-filtros] [data-mais]');
+		const linha = page.locator('[data-filtros] [data-linha]');
+		await expect(degrade).toBeVisible();
+		// A linha rola por dentro: a página não ganha rolagem horizontal.
+		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+			390
+		);
+		// Cobre a borda direita da linha e é um degradê para a cor do fundo.
+		const [d, l] = await Promise.all([degrade.boundingBox(), linha.boundingBox()]);
+		expect(Math.round(d!.x + d!.width)).toBe(Math.round(l!.x + l!.width));
+		expect(await degrade.evaluate((e) => getComputedStyle(e).backgroundImage)).toMatch(
+			/linear-gradient\(.*rgb\(255, 255, 255\)/
+		);
+		// O botão cortado continua clicável através do degradê.
+		expect(await degrade.evaluate((e) => getComputedStyle(e).pointerEvents)).toBe('none');
+		await linha.evaluate((e) => e.scrollTo({ left: e.scrollWidth }));
+		await expect(degrade).toBeHidden();
+		await expect(page.getByRole('button', { name: 'Menor preço', exact: true })).toBeInViewport({
+			ratio: 1
+		});
+		await linha.evaluate((e) => e.scrollTo({ left: 0 }));
+		await expect(degrade).toBeVisible();
+	});
+
 	// PNL-04
 	test('foco preso no painel; Esc fecha e volta ao "Filtros"', async ({ page }) => {
 		await abrir(page);
@@ -399,6 +426,8 @@ test.describe('desktop (1280 px)', () => {
 		])
 			await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
 		await expect(page.getByRole('dialog')).toHaveCount(0);
+		// PNL-05: sem degradê no desktop.
+		await expect(page.locator('[data-filtros] [data-mais]')).toBeHidden();
 		// A barra quebra linha em vez de vazar para o lado.
 		const largura = await page
 			.locator('[data-filtros]')

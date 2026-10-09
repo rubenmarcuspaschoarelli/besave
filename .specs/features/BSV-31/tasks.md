@@ -135,7 +135,7 @@ Bundle inicial da home (JS de modulepreload + imports estáticos, CSS embutido),
 | BSV-31 | 130.124 B | 52.212 B | 21.920 B | 152.044 B (148,5 KiB) |
 
 Dentro de 150 KiB; acima de 150.000 B se o orçamento for decimal. A BarraFiltros soma ~7 KB brutos ao chunk da página.
-Prints: `prints/barra-celular.png`, `prints/painel-celular.png`, `prints/filtros-desktop.png`, `prints/vazio-desktop.png` (catálogo sintético, sem dado real).
+Prints: `prints/barra-celular.png` (com degradê, T6), `prints/barra-celular-fim.png` (T6), `prints/painel-celular.png`, `prints/filtros-desktop.png`, `prints/vazio-desktop.png` (catálogo sintético, sem dado real).
 
 **Commit**: `feat(site): painel de filtros no celular`
 
@@ -171,8 +171,8 @@ Prints: `prints/barra-celular.png`, `prints/painel-celular.png`, `prints/filtros
 
 **Done when**:
 
-- [ ] e2e: degradê visível no início, some no fim (390 px), ausente em 1280 px; print novo
-- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+- [x] e2e: degradê visível no início, some no fim (390 px), ausente em 1280 px; print novo
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
 
 **Tests**: e2e
 **Gate**: build
