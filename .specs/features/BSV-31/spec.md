@@ -149,7 +149,7 @@ não há filtro por faixa de preço nem por cupom.
 | PNL-03 | P1: Painel | T4 | Done |
 | PNL-04 | P1: Painel | T5 | Done |
 | PNL-05 | P1: Painel | T6 | Done |
-| BUD-01 | P1: Bundle | T7 | Pending |
+| BUD-01 | P1: Bundle | T7 | Done |
 
 **Coverage:** 24 total, 24 mapped to tasks, 0 unmapped.
 

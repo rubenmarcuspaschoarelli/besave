@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-31/spec.md`
-**Status**: In progress (revisão do dono)
+**Status**: Done
 
 ---
 
@@ -191,10 +191,12 @@ Prints: `prints/barra-celular.png` (com degradê, T6), `prints/barra-celular-fim
 
 **Done when**:
 
-- [ ] Teste passa com o valor atual e falha com limite abaixo dele
-- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+- [x] Teste passa com o valor atual e falha com limite abaixo dele
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
 
 **Tests**: e2e
 **Gate**: build
+
+Medida do teste (`e2e/saida.spec.ts`, anotação `bundle`): JS 130.903 B (18 arquivos) + CSS 22.166 B = **153.069 B (149,5 KiB)**, folga de 531 B. Com o `bg-linear-to-l` da T6 eram 154.593 B (151,0 KiB) e o teste falhou; corrigido no commit `perf(site)` anterior. Sensor: com `ORCAMENTO_KIB = 145` o teste falha (154.593 > 148.480).
 
 **Commit**: `test(site): orçamento do bundle inicial da home em KiB`
