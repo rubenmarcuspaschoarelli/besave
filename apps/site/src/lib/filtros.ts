@@ -1,6 +1,7 @@
 // Filtros da grade no endereço (BSV-31): `?ordem=&publico=&loja=&preco=&cupom=1`, valores em minúsculas.
 import { FAIXAS, LOJAS, PUBLICOS } from './dados.ts';
-import type { Faixa, Loja, Ordem, Publico } from './dados.ts';
+import type { Area, Faixa, Loja, Ordem, Publico } from './dados.ts';
+import { caminhoArea } from './formato.ts';
 
 export interface EstadoFiltros {
 	ordem: Ordem;
@@ -57,4 +58,10 @@ export function temFiltro(e: EstadoFiltros): boolean {
 /** Ordem ou filtro fora do padrão ("Limpar filtros"). */
 export function foraDoPadrao(e: EstadoFiltros): boolean {
 	return e.ordem !== 'recentes' || temFiltro(e);
+}
+
+/** Área (BSV-33): público no caminho `/{slug}/{publico}/`, os demais filtros na query de `url`. */
+export function destinoArea(url: URL, area: Area, e: EstadoFiltros): string {
+	const { publico, ...resto } = e;
+	return escreverFiltros(new URL(caminhoArea(area, publico) + url.search + url.hash, url), resto);
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { PADRAO, escreverFiltros, foraDoPadrao, lerFiltros, temFiltro } from './filtros.ts';
+import {
+	PADRAO,
+	destinoArea,
+	escreverFiltros,
+	foraDoPadrao,
+	lerFiltros,
+	temFiltro
+} from './filtros.ts';
 import type { EstadoFiltros } from './filtros.ts';
 
 const ler = (q: string) => lerFiltros(new URLSearchParams(q));
@@ -121,5 +128,39 @@ describe('temFiltro', () => {
 		expect(temFiltro({ ...PADRAO, loja: 'AMAZON' })).toBe(true);
 		expect(temFiltro({ ...PADRAO, faixa: 'acima200' })).toBe(true);
 		expect(temFiltro({ ...PADRAO, soComCupom: true })).toBe(true);
+	});
+});
+
+describe('destinoArea (BSV-33)', () => {
+	const destino = (href: string, e: Partial<EstadoFiltros>) =>
+		destinoArea(new URL(href), 'ELAS', { ...PADRAO, ...e });
+
+	it('PUB-01: público vira caminho e os demais filtros ficam na query', () => {
+		expect(destino('https://x/elas/?loja=amazon', { publico: 'MASCULINO', loja: 'AMAZON' })).toBe(
+			'/elas/masculino/?loja=amazon'
+		);
+		expect(
+			destino('https://x/elas/feminino/?loja=amazon&cupom=1', {
+				publico: 'INFANTIL',
+				loja: 'AMAZON',
+				soComCupom: true
+			})
+		).toBe('/elas/infantil/?loja=amazon&cupom=1');
+	});
+
+	it('PUB-02: "Todos" volta a /{slug}/ com os demais filtros', () => {
+		expect(destino('https://x/elas/masculino/?loja=amazon', { loja: 'AMAZON' })).toBe(
+			'/elas/?loja=amazon'
+		);
+	});
+
+	it('PUB-02: "Limpar filtros" volta a /{slug}/ sem filtros na query', () => {
+		expect(destino('https://x/elas/masculino/?loja=amazon&ordem=preco', {})).toBe('/elas/');
+	});
+
+	it('PUB-03: ?publico= sai da query e vai para o caminho; outros parâmetros ficam', () => {
+		expect(
+			destino('https://x/elas/?publico=infantil&utm_source=telegram', { publico: 'INFANTIL' })
+		).toBe('/elas/infantil/?utm_source=telegram');
 	});
 });

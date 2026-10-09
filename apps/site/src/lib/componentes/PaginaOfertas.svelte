@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type { Snippet } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { buscar, maioresDescontos, normalizar } from '#lib/dados.ts';
-	import type { Area, Filtro } from '#lib/dados.ts';
-	import { PADRAO, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
+	import type { Area, Filtro, Publico } from '#lib/dados.ts';
+	import { PADRAO, destinoArea, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
 	import type { EstadoFiltros } from '#lib/filtros.ts';
-	import { ROTULO_AREA } from '#lib/formato.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
 	import AvisoNovas from './AvisoNovas.svelte';
 	import Areas from './Areas.svelte';
@@ -17,8 +17,17 @@
 	import Rodape from './Rodape.svelte';
 	import Topo from './Topo.svelte';
 
-	/** `area` fixa a página na área (`/{slug}/`); `null` é a home, com todas. */
-	let { area }: { area: Area | null } = $props();
+	/**
+	 * `area` fixa a página na área (`/{slug}/`); `null` é a home, com todas. `publico` fixa a
+	 * subpágina (`/{slug}/{publico}/`, BSV-33). `cabecalho` substitui o `<h1>` oculto da home;
+	 * `vazio` é o estado da página sem nenhuma oferta (sem busca nem filtro).
+	 */
+	let {
+		area,
+		publico,
+		cabecalho,
+		vazio
+	}: { area: Area | null; publico?: Publico; cabecalho?: Snippet; vazio?: Snippet } = $props();
 
 	const POR_VEZ = 40;
 
@@ -28,13 +37,15 @@
 
 	/** Filtros da grade (BSV-31); a faixa de descontos só respeita a área. */
 	const filtro = $derived<Filtro>({ ...(area ? { area } : {}), ...filtros });
-	const comFiltro = $derived(temFiltro(filtros));
+	/** O público fixo da subpágina não conta como filtro escolhido. */
+	const comFiltro = $derived(temFiltro(publico ? { ...filtros, publico: undefined } : filtros));
 
 	const buscando = $derived(normalizar(consulta).length >= 2);
+	/** Faixa: só a página (área e, na subpágina, o público do caminho); filtros não mudam. */
 	const faixa = $derived.by(() => {
 		void vitrine.versao;
 		return vitrine.pronto
-			? maioresDescontos(vitrine.cat, vitrine.agora, 8, area ? { area } : {})
+			? maioresDescontos(vitrine.cat, vitrine.agora, 8, area ? { area, publico } : {})
 			: null;
 	});
 	const resultado = $derived.by(() => {
@@ -54,15 +65,31 @@
 	}
 
 	function filtrar(e: EstadoFiltros) {
+		// Na área, público é caminho (BSV-33): trocar de público é trocar de página.
+		if (area && e.publico !== publico) {
+			void goto(destinoArea(new URL(location.href), area, e), { reset: false });
+			return;
+		}
 		filtros = e;
 		limite = POR_VEZ;
-		void goto(escreverFiltros(new URL(location.href), e), { shallow: true, replace: true });
+		const url = new URL(location.href);
+		void goto(area ? destinoArea(url, area, e) : escreverFiltros(url, e), {
+			shallow: true,
+			replace: true
+		});
 	}
 
 	onMount(() => {
-		const p = new URL(location.href).searchParams;
+		const url = new URL(location.href);
+		const p = url.searchParams;
+		const lido = lerFiltros(p);
+		// `/{slug}/?publico=x` → `/{slug}/x/`, sem nova entrada no histórico (BSV-33).
+		if (area && lido.publico) {
+			void goto(destinoArea(url, area, lido), { replace: true });
+			return;
+		}
 		consulta = p.get('q') ?? '';
-		filtros = lerFiltros(p);
+		filtros = publico ? { ...lido, publico } : lido;
 		vitrine.iniciar();
 	});
 </script>
@@ -79,8 +106,8 @@
 <AvisoNovas {area} />
 
 <main class="mx-auto grid max-w-290 grid-cols-1 gap-5.5 px-3.5 pt-3.5 pb-8 sm:px-5 sm:pt-4.5">
-	{#if area}
-		<h1 class="text-2xl leading-tight font-black text-marca">Ofertas de {ROTULO_AREA[area]}</h1>
+	{#if cabecalho}
+		{@render cabecalho()}
 	{:else}
 		<h1 class="sr-only">Besave: ofertas e cupons</h1>
 	{/if}
@@ -116,6 +143,8 @@
 						onclick={() => filtrar(PADRAO)}>Limpar filtros</button
 					>
 				</div>
+			{:else if resultado && resultado.total === 0 && vazio && !buscando}
+				{@render vazio()}
 			{:else if resultado && resultado.total === 0}
 				<p class="text-sm text-suave">
 					{buscando ? 'Nenhuma oferta encontrada.' : 'Nenhuma oferta nesta área agora.'}

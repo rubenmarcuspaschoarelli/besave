@@ -346,7 +346,7 @@ fn relatorio_com_contagens() {
                     // Tempo de relógio: o único campo sem valor fixo.
                     tempo_render_ms: rel.site.paginas.tempo_render_ms,
                 },
-                sitemaps_publicados: 2,
+                sitemaps_publicados: 3,
                 sitemaps_removidos: 0,
                 robots_publicado: true,
                 indice_gravado: true,
@@ -531,6 +531,7 @@ fn falha_na_kvs_nao_grava_manifest() {
         depois.iter().all(|c| c.starts_with("data/chunks/")
             || c == "oferta/1600/index.html"
             || c == "sitemap-1.xml"
+            || c == "sitemap-paginas.xml"
             || c == "_estado/paginas.json"),
         "{depois:?}"
     );
@@ -669,6 +670,7 @@ fn ordem_de_publicacao_do_site() {
         pos(&|c| c.starts_with("oferta/")),
         ultima(&|c| c.starts_with("oferta/")),
         pos(&|c| c == "sitemap-1.xml"),
+        pos(&|c| c == "sitemap-paginas.xml"),
         pos(&|c| c == "sitemap.xml"),
         pos(&|c| c == "robots.txt"),
         pos(&|c| c == "_estado/paginas.json"),

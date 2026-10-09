@@ -22,7 +22,7 @@ fn ativas(n: i64) -> Vec<(i64, String)> {
 
 fn gerar(ativas: &[(i64, String)]) -> Vec<(String, Vec<u8>)> {
     let refs: Vec<(i64, &str)> = ativas.iter().map(|(id, dt)| (*id, dt.as_str())).collect();
-    sitemaps(&refs, BASE)
+    sitemaps(&refs, &[], BASE)
 }
 
 fn arquivo<'a>(arquivos: &'a [(String, Vec<u8>)], chave: &str) -> &'a str {
@@ -61,7 +61,15 @@ fn quarenta_e_seis_mil_ativas_viram_dois_sitemaps_e_um_index() {
     let arquivos = gerar(&ativas(46_000));
     let mut chaves: Vec<&str> = arquivos.iter().map(|(c, _)| c.as_str()).collect();
     chaves.sort();
-    assert_eq!(chaves, ["sitemap-1.xml", "sitemap-2.xml", "sitemap.xml"]);
+    assert_eq!(
+        chaves,
+        [
+            "sitemap-1.xml",
+            "sitemap-2.xml",
+            "sitemap-paginas.xml",
+            "sitemap.xml"
+        ]
+    );
     for (c, b) in &arquivos {
         assert!(b.len() <= 50 * 1024 * 1024, "{c}: {} B", b.len());
     }
@@ -83,7 +91,8 @@ fn quarenta_e_seis_mil_ativas_viram_dois_sitemaps_e_um_index() {
         locs,
         [
             "https://besave.com.br/sitemap-1.xml",
-            "https://besave.com.br/sitemap-2.xml"
+            "https://besave.com.br/sitemap-2.xml",
+            "https://besave.com.br/sitemap-paginas.xml"
         ]
     );
 }
@@ -94,7 +103,10 @@ fn quarenta_e_cinco_mil_ativas_cabem_num_sitemap() {
     let arquivos = gerar(&ativas(45_000));
     let mut chaves: Vec<&str> = arquivos.iter().map(|(c, _)| c.as_str()).collect();
     chaves.sort();
-    assert_eq!(chaves, ["sitemap-1.xml", "sitemap.xml"]);
+    assert_eq!(
+        chaves,
+        ["sitemap-1.xml", "sitemap-paginas.xml", "sitemap.xml"]
+    );
     let (_, locs, _) = ler_xml(arquivo(&arquivos, "sitemap-1.xml"));
     assert_eq!(locs.len(), 45_000);
 }
@@ -106,7 +118,13 @@ fn sem_ativas_o_index_aponta_para_urlset_vazio() {
     let (raiz, locs, _) = ler_xml(arquivo(&arquivos, "sitemap-1.xml"));
     assert_eq!((raiz.as_str(), locs.len()), ("urlset", 0));
     let (_, locs, _) = ler_xml(arquivo(&arquivos, "sitemap.xml"));
-    assert_eq!(locs, ["https://besave.com.br/sitemap-1.xml"]);
+    assert_eq!(
+        locs,
+        [
+            "https://besave.com.br/sitemap-1.xml",
+            "https://besave.com.br/sitemap-paginas.xml"
+        ]
+    );
 }
 
 /// SIT-03: `<loc>` = `{base}/oferta/{id}/`, `<lastmod>` = AAAA-MM-DD de `dt_oferta`, id crescente.
@@ -209,7 +227,7 @@ fn base_sem_esquema_http_nomeia_a_variavel() {
 fn base_com_barra_final_nao_duplica_a_barra() {
     let c = ConfigSite::de(env(&[("BESAVE_BASE_URL", "https://besave.com.br/")])).unwrap();
     let refs = [(1, "2026-09-24T12:40:00Z")];
-    let arquivos = sitemaps(&refs, &c.base);
+    let arquivos = sitemaps(&refs, &[], &c.base);
     let (_, locs, _) = ler_xml(arquivo(&arquivos, "sitemap-1.xml"));
     assert_eq!(locs, ["https://besave.com.br/oferta/1/"]);
 }
@@ -236,7 +254,8 @@ fn pagina_acima_do_orcamento_aborta_sem_indice() {
     let mut grande = pagina(7001);
     grande.titulo = "x".repeat(40_000);
     let mut p = PublicadorMemoria::new();
-    let erro = publicar_site(&[pagina(5412), grande], &ConfigSite::default(), &mut p).unwrap_err();
+    let erro =
+        publicar_site(&[pagina(5412), grande], &[], &ConfigSite::default(), &mut p).unwrap_err();
     assert!(
         matches!(
             erro,
@@ -260,7 +279,13 @@ fn ativa_sem_pagina_fica_fora_do_sitemap() {
         ..pagina(5413)
     };
     let mut p = PublicadorMemoria::new();
-    let r = publicar_site(&[pagina(5412), quebrada], &ConfigSite::default(), &mut p).unwrap();
+    let r = publicar_site(
+        &[pagina(5412), quebrada],
+        &[],
+        &ConfigSite::default(),
+        &mut p,
+    )
+    .unwrap();
     assert_eq!(r.paginas.falhas, [5413]);
     let sitemap = String::from_utf8(p.ler("sitemap-1.xml").unwrap().unwrap()).unwrap();
     assert!(sitemap.contains("/oferta/5412/"), "{sitemap}");

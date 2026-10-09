@@ -6,14 +6,16 @@ use std::fmt::Write;
 
 use tracing::{debug, warn};
 
-use crate::modelo::{OfertaPagina, Status};
-use crate::pagina_html::{ErroTemplate, TemplateOferta};
+use crate::modelo::{Area, OfertaPagina, Publico, Status};
+use crate::pagina_html::{ErroTemplate, TemplateOferta, data_brasilia};
 use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
 use crate::publicador::{ErroPublicador, META_ESTADO, META_ROBOTS, META_SITEMAP, Publicador};
 
 /// URLs por `sitemap-{n}.xml`: margem sob o limite de 50 000 do protocolo.
 pub const MAX_URLS_SITEMAP: usize = 45_000;
 pub const CHAVE_SITEMAP_INDEX: &str = "sitemap.xml";
+/// Home, áreas e subpáginas de público (BSV-33).
+pub const CHAVE_SITEMAP_PAGINAS: &str = "sitemap-paginas.xml";
 pub const CHAVE_ROBOTS: &str = "robots.txt";
 /// Índice do que já está no bucket: id → hash16 da página, mais `_robots` e cada `sitemap*.xml`.
 /// Lido uma vez por execução; regravado só quando muda. `_css` de índices antigos é ignorado.
@@ -107,12 +109,14 @@ fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador
     Ok(e)
 }
 
-/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (só ATIVAS com página no
-/// bucket), robots e, por último, o índice. Cada objeto só sobe se o hash difere do índice
+/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (ofertas só ATIVAS com página no
+/// bucket; páginas do site a partir de `ativas_site`, os cards sem `x`), robots e, por último, o
+/// índice. Cada objeto só sobe se o hash difere do índice
 /// anterior. Índice ausente ou ilegível: tudo sobe (páginas são idempotentes) e o conjunto anterior
 /// de páginas é reconstruído do bucket, para que as órfãs sejam expurgadas mesmo sem índice.
 pub fn publicar_site(
     paginas: &[OfertaPagina],
+    ativas_site: &[AtivaPagina],
     cfg: &ConfigSite,
     pub_: &mut dyn Publicador,
 ) -> Result<RelatorioSite, ErroSite> {
@@ -139,7 +143,7 @@ pub fn publicar_site(
         .map(|o| (o.id, o.dt_oferta.as_str()))
         .collect();
     novo.paginas = indice;
-    let arquivos = sitemaps(&ativas, &cfg.base);
+    let arquivos = sitemaps(&ativas, ativas_site, &cfg.base);
     let atuais: BTreeSet<&str> = arquivos.iter().map(|(c, _)| c.as_str()).collect();
     // Filhos antes do index (o index nunca aponta para arquivo que ainda não subiu).
     for (chave, bytes) in &arquivos {
@@ -230,10 +234,16 @@ impl ConfigSite {
 }
 
 /// `sitemap-{n}.xml` (n a partir de 1), um por bloco de `MAX_URLS_SITEMAP` ofertas ativas em ordem
-/// de id, e por último o index `sitemap.xml`. `ativas` = `(id, dt_oferta ISO UTC)`; `lastmod` é a
+/// de id, depois `sitemap-paginas.xml` (`sitemap_paginas` sobre `ativas_site`) e por último o index
+/// `sitemap.xml`, que lista todos. `ativas` = `(id, dt_oferta ISO UTC)`; `lastmod` é a
 /// data (AAAA-MM-DD) de `dt_oferta`. Sem ativas, sai um `sitemap-1.xml` vazio: o index nunca
 /// aponta para arquivo inexistente.
-pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
+pub fn sitemaps(
+    ativas: &[(i64, &str)],
+    ativas_site: &[AtivaPagina],
+    base: &str,
+) -> Vec<(String, Vec<u8>)> {
+    let paginas = sitemap_paginas(ativas_site, base);
     let base = escapar(base);
     let mut ordenadas = ativas.to_vec();
     ordenadas.sort_unstable_by_key(|(id, _)| *id);
@@ -242,7 +252,7 @@ pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
     } else {
         ordenadas.chunks(MAX_URLS_SITEMAP).collect()
     };
-    let mut out = Vec::with_capacity(blocos.len() + 1);
+    let mut out = Vec::with_capacity(blocos.len() + 2);
     let mut index =
         format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<sitemapindex xmlns=\"{XMLNS}\">\n");
     for (i, bloco) in blocos.iter().enumerate() {
@@ -261,9 +271,102 @@ pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
         let _ = writeln!(index, "<sitemap><loc>{base}/{chave}</loc></sitemap>");
         out.push((chave, xml.into_bytes()));
     }
+    let _ = writeln!(
+        index,
+        "<sitemap><loc>{base}/{CHAVE_SITEMAP_PAGINAS}</loc></sitemap>"
+    );
+    out.push((CHAVE_SITEMAP_PAGINAS.to_owned(), paginas));
     index.push_str("</sitemapindex>\n");
     out.push((CHAVE_SITEMAP_INDEX.to_owned(), index.into_bytes()));
     out
+}
+
+/// Área com ao menos isto de ativas entra no sitemap de páginas.
+pub const MIN_ATIVAS_AREA: usize = 10;
+/// Subpágina `/{slug}/{publico}/` entra com ao menos isto de ativas…
+pub const MIN_ATIVAS_SUBPAGINA: usize = 20;
+/// …e no máximo esta porcentagem das ativas da área (acima disso quase repete a área).
+pub const MAX_PCT_SUBPAGINA: usize = 90;
+
+/// Oferta ativa (sem `x`) vista pelo sitemap de páginas; `dp` em ISO 8601 UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AtivaPagina<'a> {
+    pub area: Area,
+    pub publico: Publico,
+    pub dp: &'a str,
+}
+
+const PUBLICOS: [Publico; 4] = [
+    Publico::Feminino,
+    Publico::Masculino,
+    Publico::Unissex,
+    Publico::Infantil,
+];
+
+/// Segmento de URL do público (CONTRATO §2.3): o valor em minúsculas.
+fn slug_publico(p: Publico) -> &'static str {
+    match p {
+        Publico::Feminino => "feminino",
+        Publico::Masculino => "masculino",
+        Publico::Unissex => "unissex",
+        Publico::Infantil => "infantil",
+    }
+}
+
+/// Contagem e maior `dp` (o formato fixo ordena como texto).
+#[derive(Default)]
+struct Volume<'a> {
+    qtd: usize,
+    dp: Option<&'a str>,
+}
+
+impl<'a> Volume<'a> {
+    fn somar(&mut self, dp: &'a str) {
+        self.qtd += 1;
+        self.dp = self.dp.max(Some(dp));
+    }
+}
+
+/// `sitemap-paginas.xml` (BSV-33): `/` sempre, `/{slug}/` com ≥ `MIN_ATIVAS_AREA` e
+/// `/{slug}/{publico}/` com ≥ `MIN_ATIVAS_SUBPAGINA` e ≤ `MAX_PCT_SUBPAGINA`% da área. `lastmod` =
+/// data em Brasília do maior `dp` das ativas da página. Ordem: home, cada área (ordem do enum)
+/// seguida das suas subpáginas (ordem do enum `Publico`).
+pub fn sitemap_paginas(ativas: &[AtivaPagina], base: &str) -> Vec<u8> {
+    let base = escapar(base);
+    let mut home = Volume::default();
+    let mut areas: BTreeMap<Area, Volume> = BTreeMap::new();
+    let mut subs: BTreeMap<(Area, Publico), Volume> = BTreeMap::new();
+    for a in ativas {
+        home.somar(a.dp);
+        areas.entry(a.area).or_default().somar(a.dp);
+        subs.entry((a.area, a.publico)).or_default().somar(a.dp);
+    }
+    let mut xml =
+        format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"{XMLNS}\">\n");
+    let mut url = |path: &str, v: &Volume| {
+        let lastmod =
+            v.dp.and_then(data_brasilia)
+                .map(|d| format!("<lastmod>{}</lastmod>", escapar(&d)))
+                .unwrap_or_default();
+        let _ = writeln!(xml, "<url><loc>{base}{path}</loc>{lastmod}</url>");
+    };
+    url("/", &home);
+    for area in Area::TODAS {
+        let Some(va) = areas.get(&area).filter(|v| v.qtd >= MIN_ATIVAS_AREA) else {
+            continue;
+        };
+        url(&format!("/{}/", area.slug()), va);
+        for p in PUBLICOS {
+            let Some(vs) = subs.get(&(area, p)) else {
+                continue;
+            };
+            if vs.qtd >= MIN_ATIVAS_SUBPAGINA && vs.qtd * 100 <= va.qtd * MAX_PCT_SUBPAGINA {
+                url(&format!("/{}/{}/", area.slug(), slug_publico(p)), vs);
+            }
+        }
+    }
+    xml.push_str("</urlset>\n");
+    xml.into_bytes()
 }
 
 /// Não indexável enquanto o site está em `*.cloudfront.net` (conteúdo duplicado); a virada de DNS
