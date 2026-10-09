@@ -121,16 +121,16 @@ T3 → T4 → T5 → T6 → T7
 ### T5: Textos por área e estado sem ofertas
 
 **What**: `conteudo/areas.ts` com os textos; texto abaixo do `<h1>` no HTML prerenderizado; estado "Ainda não temos ofertas aqui"; bundle da home ≤ 150 KiB.
-**Where**: `apps/site/src/lib/conteudo/areas.ts`, `areas.test.ts`, `CabecalhoArea.svelte`, `PaginaOfertas.svelte`, `apps/site/e2e/publico.spec.ts`
+**Where**: `apps/site/src/lib/conteudo/areas.ts`, `areas.test.ts`, `CabecalhoArea.svelte`, `PaginaOfertas.svelte`, `SemOfertas.svelte`, rotas de área, `apps/site/e2e/publico.spec.ts`
 **Depends on**: T4
 **Requirement**: TXT-01, TXT-02, TXT-03, TXT-04
 
 **Done when**:
 
-- [ ] 10 áreas com 2–3 frases; 7 subpáginas com 1 frase
-- [ ] Texto no `build/{slug}/index.html` e no da subpágina
-- [ ] `/eles/` sem ofertas mostra texto, aviso e links
-- [ ] BUD-01 verde
+- [x] 10 áreas com 2–3 frases; 7 subpáginas com 1 frase
+- [x] Texto no `build/{slug}/index.html` e no da subpágina
+- [x] `/eles/` sem ofertas mostra texto, aviso e links
+- [x] BUD-01 verde
 
 **Tests**: unit + e2e
 **Gate**: full

@@ -2,6 +2,7 @@
 	import { ROTULO_AREA, SLUG_AREA } from '#lib/formato.ts';
 	import CabecalhoArea from '#lib/componentes/CabecalhoArea.svelte';
 	import PaginaOfertas from '#lib/componentes/PaginaOfertas.svelte';
+	import SemOfertas from '#lib/componentes/SemOfertas.svelte';
 
 	let { data } = $props();
 	const rotulo = $derived(ROTULO_AREA[data.area]);
@@ -21,6 +22,9 @@
 	<PaginaOfertas area={data.area}>
 		{#snippet cabecalho()}
 			<CabecalhoArea area={data.area} />
+		{/snippet}
+		{#snippet vazio()}
+			<SemOfertas area={data.area} />
 		{/snippet}
 	</PaginaOfertas>
 {/key}

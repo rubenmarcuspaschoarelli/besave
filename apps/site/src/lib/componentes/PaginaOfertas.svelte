@@ -19,10 +19,15 @@
 
 	/**
 	 * `area` fixa a página na área (`/{slug}/`); `null` é a home, com todas. `publico` fixa a
-	 * subpágina (`/{slug}/{publico}/`, BSV-33). `cabecalho` substitui o `<h1>` oculto da home.
+	 * subpágina (`/{slug}/{publico}/`, BSV-33). `cabecalho` substitui o `<h1>` oculto da home;
+	 * `vazio` é o estado da página sem nenhuma oferta (sem busca nem filtro).
 	 */
-	let { area, publico, cabecalho }: { area: Area | null; publico?: Publico; cabecalho?: Snippet } =
-		$props();
+	let {
+		area,
+		publico,
+		cabecalho,
+		vazio
+	}: { area: Area | null; publico?: Publico; cabecalho?: Snippet; vazio?: Snippet } = $props();
 
 	const POR_VEZ = 40;
 
@@ -32,7 +37,8 @@
 
 	/** Filtros da grade (BSV-31); a faixa de descontos só respeita a área. */
 	const filtro = $derived<Filtro>({ ...(area ? { area } : {}), ...filtros });
-	const comFiltro = $derived(temFiltro(filtros));
+	/** O público fixo da subpágina não conta como filtro escolhido. */
+	const comFiltro = $derived(temFiltro(publico ? { ...filtros, publico: undefined } : filtros));
 
 	const buscando = $derived(normalizar(consulta).length >= 2);
 	const faixa = $derived.by(() => {
@@ -136,6 +142,8 @@
 						onclick={() => filtrar(PADRAO)}>Limpar filtros</button
 					>
 				</div>
+			{:else if resultado && resultado.total === 0 && vazio && !buscando}
+				{@render vazio()}
 			{:else if resultado && resultado.total === 0}
 				<p class="text-sm text-suave">
 					{buscando ? 'Nenhuma oferta encontrada.' : 'Nenhuma oferta nesta área agora.'}

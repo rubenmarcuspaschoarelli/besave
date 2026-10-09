@@ -2,6 +2,7 @@
 	import { ROTULO_AREA, ROTULO_PUBLICO, caminhoArea } from '#lib/formato.ts';
 	import CabecalhoArea from '#lib/componentes/CabecalhoArea.svelte';
 	import PaginaOfertas from '#lib/componentes/PaginaOfertas.svelte';
+	import SemOfertas from '#lib/componentes/SemOfertas.svelte';
 
 	let { data } = $props();
 	const area = $derived(ROTULO_AREA[data.area]);
@@ -22,6 +23,9 @@
 	<PaginaOfertas area={data.area} publico={data.publico}>
 		{#snippet cabecalho()}
 			<CabecalhoArea area={data.area} publico={data.publico} />
+		{/snippet}
+		{#snippet vazio()}
+			<SemOfertas area={data.area} />
 		{/snippet}
 	</PaginaOfertas>
 {/key}

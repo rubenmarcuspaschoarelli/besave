@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { OfertaCard, Publico } from '../src/lib/dados.ts';
 import { catalogo, servir, todos } from './fixtura.ts';
+import { TEXTO_AREA, TEXTO_SUBPAGINA } from '../src/lib/conteudo/areas.ts';
 
 const GRADE = '[data-grade] article';
 const BUILD = new URL('../build/', import.meta.url);
@@ -205,4 +206,83 @@ test('na home, público continua em ?publico=', async ({ page }) => {
 	await expect(page).toHaveURL(/\/\?publico=masculino$/);
 	expect(new URL(page.url()).pathname).toBe('/');
 	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Besave: ofertas e cupons');
+});
+
+/** Posição do fim do `<h1>` e do texto no HTML. */
+function depoisDoH1(html: string, texto: string) {
+	const h1 = html.indexOf('</h1>');
+	const pos = html.indexOf(texto);
+	expect(h1).toBeGreaterThan(0);
+	expect(pos, texto).toBeGreaterThan(h1);
+}
+
+// TXT-02
+test('texto da área e da subpágina no HTML, sem JavaScript, abaixo do h1', async ({ request }) => {
+	const area = await (await request.get('/elas/')).text();
+	depoisDoH1(area, TEXTO_AREA.ELAS);
+	const sub = await (await request.get('/elas/unissex/')).text();
+	depoisDoH1(sub, TEXTO_SUBPAGINA['ELAS/UNISSEX'] as string);
+	depoisDoH1(sub, TEXTO_AREA.ELAS);
+	// Sem frase própria: só o texto da área.
+	const semFrase = await (await request.get('/elas/masculino/')).text();
+	depoisDoH1(semFrase, TEXTO_AREA.ELAS);
+	for (const t of Object.values(TEXTO_SUBPAGINA)) expect(semFrase).not.toContain(t);
+	for (const slug of SLUGS) expect(ler(`${slug}/index.html`)).toContain('data-texto-area');
+});
+
+// TXT-02: visível na página.
+test('texto da área aparece abaixo do h1 em /pets/', async ({ page }) => {
+	await abrir(page, '/pets/');
+	const texto = page.locator('[data-texto-area]');
+	await expect(texto).toHaveText(TEXTO_AREA.PETS);
+	await expect(texto).toBeVisible();
+	const h1 = await page.getByRole('heading', { level: 1 }).boundingBox();
+	const caixa = await texto.boundingBox();
+	expect(caixa!.y).toBeGreaterThan(h1!.y);
+});
+
+/** Catálogo sem nenhuma oferta de ELES. */
+const semEles = () =>
+	new Map([...variado()].map(([n, cs]) => [n, cs.filter((c) => c.a !== 'ELES')]));
+
+// TXT-03
+for (const url of ['/eles/', '/eles/masculino/'])
+	test(`${url} sem ofertas: texto, aviso e links para outras áreas`, async ({ page }) => {
+		await servir(page, semEles());
+		await page.goto(url);
+		const vazio = page.locator('[data-sem-ofertas]');
+		await expect(vazio).toBeVisible();
+		await expect(vazio).toContainText('Ainda não temos ofertas aqui');
+		await expect(page.locator('[data-texto-area]')).toContainText(TEXTO_AREA.ELES);
+		const links = vazio.getByRole('link');
+		await expect(links).toHaveCount(9);
+		const hrefs = await links.evaluateAll((els) => els.map((e) => e.getAttribute('href')));
+		expect(hrefs).toContain('/elas/');
+		expect(hrefs).toContain('/outros/');
+		expect(hrefs).not.toContain('/eles/');
+		await expect(page.locator(GRADE)).toHaveCount(0);
+	});
+
+// TXT-03: com ofertas, nada de estado vazio.
+test('/elas/ com ofertas não mostra o aviso de área vazia', async ({ page }) => {
+	await abrir(page, '/elas/');
+	await expect(page.locator('[data-sem-ofertas]')).toHaveCount(0);
+});
+
+// TXT-04: textos fora do JS que a home baixa ao abrir.
+test('texto das áreas fora do bundle inicial da home', () => {
+	const html = ler('index.html');
+	expect(html).not.toContain(TEXTO_AREA.ELAS);
+	const vistos = new Set<string>();
+	const fila = [...html.matchAll(/(?:href="|import\(")(\/_app\/[^"]+\.js)"/g)].map((m) => m[1]);
+	while (fila.length) {
+		const f = fila.shift() as string;
+		if (vistos.has(f)) continue;
+		vistos.add(f);
+		const codigo = ler(f.slice(1));
+		expect(codigo, f).not.toContain('Ofertas de beleza e cuidados pessoais');
+		for (const m of codigo.matchAll(/(?:from|import)\s*"(\.{1,2}\/[^"]+\.js)"/g))
+			fila.push(new URL(m[1], `http://x${f}`).pathname);
+	}
+	expect(vistos.size).toBeGreaterThan(5);
 });

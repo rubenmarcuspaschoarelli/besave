@@ -118,10 +118,10 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | PUB-02 | Público | T4 | Done |
 | PUB-03 | Público | T4 | Done |
 | PUB-04 | Público | T4 | Done |
-| TXT-01 | Texto | T5 | Pending |
-| TXT-02 | Texto | T5 | Pending |
-| TXT-03 | Texto | T5 | Pending |
-| TXT-04 | Texto | T5 | Pending |
+| TXT-01 | Texto | T5 | Done |
+| TXT-02 | Texto | T5 | Done |
+| TXT-03 | Texto | T5 | Done |
+| TXT-04 | Texto | T5 | Done |
 | JLD-01 | JSON-LD | T6 | Pending |
 
 **Coverage:** 19 total, 19 mapped to tasks, 0 unmapped.

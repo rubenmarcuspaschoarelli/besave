@@ -1,8 +1,9 @@
 <script lang="ts">
 	import type { Area, Publico } from '#lib/dados.ts';
+	import { textoDaPagina } from '#lib/conteudo/areas.ts';
 	import { ROTULO_AREA, ROTULO_PUBLICO, caminhoArea } from '#lib/formato.ts';
 
-	/** Trilha e `<h1>` de `/{slug}/` e `/{slug}/{publico}/` (BSV-33). */
+	/** Trilha, `<h1>` e texto de `/{slug}/` e `/{slug}/{publico}/` (BSV-33), no HTML prerenderizado. */
 	let { area, publico }: { area: Area; publico?: Publico } = $props();
 
 	const trilha = $derived([
@@ -32,4 +33,9 @@
 			? `${ROTULO_AREA[area]} · ${ROTULO_PUBLICO[publico]}`
 			: `Ofertas de ${ROTULO_AREA[area]}`}
 	</h1>
+	<div class="grid max-w-2xl gap-1.5 text-sm text-suave" data-texto-area>
+		{#each textoDaPagina(area, publico) as p (p)}
+			<p>{p}</p>
+		{/each}
+	</div>
 </div>
