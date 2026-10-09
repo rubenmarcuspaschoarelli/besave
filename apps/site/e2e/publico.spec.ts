@@ -120,6 +120,14 @@ test('/elas/masculino/: grade só ELAS + MASCULINO, com o público marcado', asy
 	expect(new Set(grade.map((c) => `${c.a}/${c.p}`))).toEqual(new Set(['ELAS/MASCULINO']));
 	await expect(pressionado(page, 'Masculino')).toHaveAttribute('aria-pressed', 'true');
 	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'false');
+	// Faixa de descontos também só da subpágina (mesmo layout da área, com o público aplicado).
+	const faixa = await page
+		.locator('[data-faixa] a')
+		.evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-id'))));
+	expect(faixa.length).toBeGreaterThan(0);
+	expect(new Set(faixa.map((id) => `${porId.get(id)?.a}/${porId.get(id)?.p}`))).toEqual(
+		new Set(['ELAS/MASCULINO'])
+	);
 });
 
 /** Botão de filtro pelo nome; no celular, abre o painel "Filtros" quando ele está lá dentro. */

@@ -41,10 +41,11 @@
 	const comFiltro = $derived(temFiltro(publico ? { ...filtros, publico: undefined } : filtros));
 
 	const buscando = $derived(normalizar(consulta).length >= 2);
+	/** Faixa: só a página (área e, na subpágina, o público do caminho); filtros não mudam. */
 	const faixa = $derived.by(() => {
 		void vitrine.versao;
 		return vitrine.pronto
-			? maioresDescontos(vitrine.cat, vitrine.agora, 8, area ? { area } : {})
+			? maioresDescontos(vitrine.cat, vitrine.agora, 8, area ? { area, publico } : {})
 			: null;
 	});
 	const resultado = $derived.by(() => {
