@@ -171,7 +171,7 @@
 			{/if}
 		</div>
 		<div
-			class="pointer-events-none absolute inset-y-0 right-0 w-12 bg-linear-to-l from-fundo to-transparent sm:hidden"
+			class="pointer-events-none absolute inset-y-0 right-0 w-12 bg-[linear-gradient(to_left,var(--cor-fundo),transparent)] sm:hidden"
 			hidden={!mais}
 			aria-hidden="true"
 			data-mais
