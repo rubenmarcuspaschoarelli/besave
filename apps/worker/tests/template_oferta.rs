@@ -699,9 +699,7 @@ fn com_e_sem_cupom_orcamento_determinismo_e_sem_url_externa() {
         for (i, _) in html.match_indices("http") {
             let url = &html[i..];
             assert!(
-                url.starts_with("https://besave.com.br/")
-                    || url.starts_with("https://schema.org")
-                    || url.starts_with("http://www.w3.org/2000/svg"),
+                url.starts_with("https://besave.com.br/") || url.starts_with("https://schema.org"),
                 "URL externa: {}",
                 &url[..url.len().min(60)]
             );

@@ -23,9 +23,12 @@ const lerClipboard = (page: Page) => page.evaluate(() => navigator.clipboard.rea
 const selecao = (page: Page) => page.evaluate(() => window.getSelection()?.toString() ?? '');
 
 test.describe('com JavaScript', () => {
-	test.beforeEach(async ({ context, baseURL }) => {
+	test.beforeEach(async ({ page, context, baseURL }) => {
 		await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: baseURL });
 		await servirOferta(context);
+		// Relógio controlado: o aviso só some quando o teste avança o tempo.
+		await page.clock.install({ time: new Date('2026-10-09T12:00:00Z') });
+		await page.clock.pauseAt(new Date('2026-10-09T12:00:01Z'));
 	});
 
 	// CUP-07
@@ -42,9 +45,29 @@ test.describe('com JavaScript', () => {
 		await expect.poll(() => lerClipboard(page)).toBe(CODIGO);
 		const aviso = page.getByRole('status');
 		await expect(aviso).toHaveText('Cupom copiado!');
-		await expect(aviso).toHaveText('', { timeout: 3500 });
+		await expect(icone).toContainClass('copiado');
+		await page.clock.runFor(1900);
+		await expect(aviso).toHaveText('Cupom copiado!');
+		await page.clock.runFor(200);
+		await expect(aviso).toHaveText('');
+		await expect(icone).not.toContainClass('copiado');
 		// Só a página nesta aba: o ícone não navega.
 		expect(new URL(page.url()).pathname).toBe(OFERTA);
+	});
+
+	// Edge case: clique repetido dentro de 2 s recomeça o temporizador.
+	test('segundo clique antes de 2 s mantém o aviso por mais 2 s', async ({ page }) => {
+		await page.goto(OFERTA);
+		const icone = page.getByRole('button', { name: 'Copiar cupom' });
+		const aviso = page.getByRole('status');
+		await icone.click();
+		await expect(aviso).toHaveText('Cupom copiado!');
+		await page.clock.runFor(1500);
+		await icone.click();
+		await page.clock.runFor(1000);
+		await expect(aviso).toHaveText('Cupom copiado!');
+		await page.clock.runFor(1100);
+		await expect(aviso).toHaveText('');
 	});
 
 	// CUP-09
@@ -79,7 +102,9 @@ test.describe('com JavaScript', () => {
 
 		await page.getByRole('button', { name: 'Copiar cupom' }).click();
 		await expect.poll(() => selecao(page)).toBe(CODIGO);
+		// Relógio parado: um "Cupom copiado!" indevido não sumiria sozinho.
 		await expect(page.getByRole('status')).toHaveText('');
+		await expect(page.locator('.copiar')).not.toContainClass('copiado');
 	});
 
 	// CUP-08: navegador sem a API.
@@ -90,7 +115,9 @@ test.describe('com JavaScript', () => {
 		await page.goto(OFERTA);
 		await page.getByRole('button', { name: 'Copiar cupom' }).click();
 		await expect.poll(() => selecao(page)).toBe(CODIGO);
+		// Relógio parado: um "Cupom copiado!" indevido não sumiria sozinho.
 		await expect(page.getByRole('status')).toHaveText('');
+		await expect(page.locator('.copiar')).not.toContainClass('copiado');
 	});
 });
 
