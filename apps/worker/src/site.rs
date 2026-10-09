@@ -6,8 +6,8 @@ use std::fmt::Write;
 
 use tracing::{debug, warn};
 
-use crate::modelo::{OfertaPagina, Status};
-use crate::pagina_html::{ErroTemplate, TemplateOferta};
+use crate::modelo::{Area, OfertaPagina, Publico, Status};
+use crate::pagina_html::{ErroTemplate, TemplateOferta, data_brasilia};
 use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
 use crate::publicador::{ErroPublicador, META_ESTADO, META_ROBOTS, META_SITEMAP, Publicador};
 
@@ -264,6 +264,94 @@ pub fn sitemaps(ativas: &[(i64, &str)], base: &str) -> Vec<(String, Vec<u8>)> {
     index.push_str("</sitemapindex>\n");
     out.push((CHAVE_SITEMAP_INDEX.to_owned(), index.into_bytes()));
     out
+}
+
+/// Área com ao menos isto de ativas entra no sitemap de páginas.
+pub const MIN_ATIVAS_AREA: usize = 10;
+/// Subpágina `/{slug}/{publico}/` entra com ao menos isto de ativas…
+pub const MIN_ATIVAS_SUBPAGINA: usize = 20;
+/// …e no máximo esta porcentagem das ativas da área (acima disso quase repete a área).
+pub const MAX_PCT_SUBPAGINA: usize = 90;
+
+/// Oferta ativa (sem `x`) vista pelo sitemap de páginas; `dp` em ISO 8601 UTC.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AtivaPagina<'a> {
+    pub area: Area,
+    pub publico: Publico,
+    pub dp: &'a str,
+}
+
+const PUBLICOS: [Publico; 4] = [
+    Publico::Feminino,
+    Publico::Masculino,
+    Publico::Unissex,
+    Publico::Infantil,
+];
+
+/// Segmento de URL do público (CONTRATO §2.3): o valor em minúsculas.
+fn slug_publico(p: Publico) -> &'static str {
+    match p {
+        Publico::Feminino => "feminino",
+        Publico::Masculino => "masculino",
+        Publico::Unissex => "unissex",
+        Publico::Infantil => "infantil",
+    }
+}
+
+/// Contagem e maior `dp` (o formato fixo ordena como texto).
+#[derive(Default)]
+struct Volume<'a> {
+    qtd: usize,
+    dp: Option<&'a str>,
+}
+
+impl<'a> Volume<'a> {
+    fn somar(&mut self, dp: &'a str) {
+        self.qtd += 1;
+        self.dp = self.dp.max(Some(dp));
+    }
+}
+
+/// `sitemap-paginas.xml` (BSV-33): `/` sempre, `/{slug}/` com ≥ `MIN_ATIVAS_AREA` e
+/// `/{slug}/{publico}/` com ≥ `MIN_ATIVAS_SUBPAGINA` e ≤ `MAX_PCT_SUBPAGINA`% da área. `lastmod` =
+/// data em Brasília do maior `dp` das ativas da página. Ordem: home, cada área (ordem do enum)
+/// seguida das suas subpáginas (ordem do enum `Publico`).
+pub fn sitemap_paginas(ativas: &[AtivaPagina], base: &str) -> Vec<u8> {
+    let base = escapar(base);
+    let mut home = Volume::default();
+    let mut areas: BTreeMap<Area, Volume> = BTreeMap::new();
+    let mut subs: BTreeMap<(Area, Publico), Volume> = BTreeMap::new();
+    for a in ativas {
+        home.somar(a.dp);
+        areas.entry(a.area).or_default().somar(a.dp);
+        subs.entry((a.area, a.publico)).or_default().somar(a.dp);
+    }
+    let mut xml =
+        format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"{XMLNS}\">\n");
+    let mut url = |path: &str, v: &Volume| {
+        let lastmod =
+            v.dp.and_then(data_brasilia)
+                .map(|d| format!("<lastmod>{}</lastmod>", escapar(&d)))
+                .unwrap_or_default();
+        let _ = writeln!(xml, "<url><loc>{base}{path}</loc>{lastmod}</url>");
+    };
+    url("/", &home);
+    for area in Area::TODAS {
+        let Some(va) = areas.get(&area).filter(|v| v.qtd >= MIN_ATIVAS_AREA) else {
+            continue;
+        };
+        url(&format!("/{}/", area.slug()), va);
+        for p in PUBLICOS {
+            let Some(vs) = subs.get(&(area, p)) else {
+                continue;
+            };
+            if vs.qtd >= MIN_ATIVAS_SUBPAGINA && vs.qtd * 100 <= va.qtd * MAX_PCT_SUBPAGINA {
+                url(&format!("/{}/{}/", area.slug(), slug_publico(p)), vs);
+            }
+        }
+    }
+    xml.push_str("</urlset>\n");
+    xml.into_bytes()
 }
 
 /// Não indexável enquanto o site está em `*.cloudfront.net` (conteúdo duplicado); a virada de DNS
