@@ -64,6 +64,10 @@ export interface Manifest {
 
 export type Ordem = 'recentes' | 'desconto' | 'preco';
 
+/** Faixas de `pp` em centavos: ≤ 5000; 5001–10000; 10001–20000; > 20000. */
+export const FAIXAS = ['ate50', '50a100', '100a200', 'acima200'] as const;
+export type Faixa = (typeof FAIXAS)[number];
+
 export interface Filtro {
 	area?: Area;
 	publico?: Publico;
@@ -72,6 +76,9 @@ export interface Filtro {
 	mostrarExpiradas?: boolean;
 	/** Padrão 'recentes'. */
 	ordem?: Ordem;
+	faixa?: Faixa;
+	/** Só cards com `c`; padrão false. */
+	soComCupom?: boolean;
 }
 
 const SEMVER = /^\d+\.\d+\.\d+$/;
