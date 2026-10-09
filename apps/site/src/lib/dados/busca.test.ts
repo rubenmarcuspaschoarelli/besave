@@ -91,3 +91,22 @@ describe('buscar', () => {
 		expect(ids(buscar(c2, 'hidratante').itens)).toEqual([1]);
 	});
 });
+
+describe('buscar com faixa e cupom (BSV-31)', () => {
+	const c = cat([
+		card(1, { t: 'Serum facial', pp: 5000 }),
+		card(2, { t: 'Serum capilar', pp: 5001, c: 'CUPOM5' }),
+		card(3, { t: 'Serum noturno', pp: 20001, c: 'CUPOM9' })
+	]);
+
+	it('DAD-01: buscar respeita a faixa', () => {
+		expect(ids(buscar(c, 'serum', { faixa: 'ate50' }).itens)).toEqual([1]);
+		expect(ids(buscar(c, 'serum', { faixa: '50a100' }).itens)).toEqual([2]);
+		expect(ids(buscar(c, 'serum', { faixa: 'acima200' }).itens)).toEqual([3]);
+	});
+
+	it('DAD-02: buscar respeita soComCupom', () => {
+		expect(ids(buscar(c, 'serum', { soComCupom: true }).itens)).toEqual([2, 3]);
+		expect(buscar(c, 'serum', { soComCupom: true }).total).toBe(2);
+	});
+});

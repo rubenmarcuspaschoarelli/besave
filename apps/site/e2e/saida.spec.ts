@@ -1,5 +1,5 @@
 // Saída do `pnpm build`: 404, ausência de fallback, besave.css e fontes (MANIFEST §1, §5).
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { expect, test } from '@playwright/test';
 import { servir } from './fixtura.ts';
 
@@ -151,4 +151,41 @@ test('home e área abrem sem pedir arquivo de CSS', async ({ page }) => {
 		await expect(logo).toHaveCSS('font-weight', '900');
 		await expect(logo).toHaveCSS('color', 'rgb(11, 110, 79)');
 	}
+});
+
+// BUD-01: JS inicial da home (modulepreload + imports estáticos, bruto) + CSS embutido ≤ 150 KiB.
+const ORCAMENTO_KIB = 150;
+
+/** Arquivos `/_app/...js` que a home pede ao abrir, seguindo os imports estáticos. */
+function jsInicial(html: string): Map<string, number> {
+	const vistos = new Map<string, number>();
+	const fila = [...html.matchAll(/(?:href="|import\(")(\/_app\/[^"]+\.js)"/g)].map((m) => m[1]);
+	while (fila.length) {
+		const f = fila.shift() as string;
+		if (vistos.has(f)) continue;
+		const arquivo = new URL(f.slice(1), BUILD);
+		expect(existsSync(arquivo), f).toBe(true);
+		const codigo = readFileSync(arquivo);
+		vistos.set(f, codigo.length);
+		for (const m of codigo.toString().matchAll(/(?:from|import)\s*"(\.{1,2}\/[^"]+\.js)"/g))
+			fila.push(new URL(m[1], `http://x${f}`).pathname);
+	}
+	return vistos;
+}
+
+test(`bundle inicial da home ≤ ${ORCAMENTO_KIB} KiB`, () => {
+	const html = ler('index.html');
+	const js = jsInicial(html);
+	const css = (html.match(/<style[^>]*>([\s\S]*?)<\/style>/)?.[1] ?? '').length;
+	const jsBytes = [...js.values()].reduce((a, b) => a + b, 0);
+	const total = jsBytes + css;
+	test.info().annotations.push({
+		type: 'bundle',
+		description: `JS ${jsBytes} B (${js.size} arquivos) + CSS ${css} B = ${total} B (${(total / 1024).toFixed(1)} KiB)`
+	});
+	// Sanidade da medida: entrada do kit e CSS da página entram na conta.
+	expect([...js.keys()].some((f) => f.includes('/entry/start.'))).toBe(true);
+	expect(js.size).toBeGreaterThan(5);
+	expect(css).toBeGreaterThan(10_000);
+	expect(total).toBeLessThanOrEqual(ORCAMENTO_KIB * 1024);
 });

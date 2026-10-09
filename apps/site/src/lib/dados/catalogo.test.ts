@@ -202,3 +202,80 @@ describe('dp: data de publicação no site', () => {
 		});
 	});
 });
+
+describe('faixa de preço e cupom (BSV-31)', () => {
+	// Um card de cada lado de cada fronteira (CONTRATO §3: pp em centavos).
+	const fronteira = [
+		card(1, { pp: 1, dt: '2026-09-20T01:00:00Z' }),
+		card(2, { pp: 5000, dt: '2026-09-20T02:00:00Z' }),
+		card(3, { pp: 5001, dt: '2026-09-20T03:00:00Z' }),
+		card(4, { pp: 10000, dt: '2026-09-20T04:00:00Z' }),
+		card(5, { pp: 10001, dt: '2026-09-20T05:00:00Z' }),
+		card(6, { pp: 20000, dt: '2026-09-20T06:00:00Z' }),
+		card(7, { pp: 20001, dt: '2026-09-20T07:00:00Z' }),
+		card(8, { pp: 999999, dt: '2026-09-20T08:00:00Z' })
+	];
+	const cat = completo(fronteira);
+	const ordenados = (cs: OfertaCard[]) => ids(cs).sort((a, b) => a - b);
+
+	it('DAD-01: ate50 = pp ≤ 5000', () => {
+		expect(ordenados(cat.lista({ faixa: 'ate50' }))).toEqual([1, 2]);
+	});
+
+	it('DAD-01: 50a100 = 5001..10000', () => {
+		expect(ordenados(cat.lista({ faixa: '50a100' }))).toEqual([3, 4]);
+	});
+
+	it('DAD-01: 100a200 = 10001..20000', () => {
+		expect(ordenados(cat.lista({ faixa: '100a200' }))).toEqual([5, 6]);
+	});
+
+	it('DAD-01: acima200 = pp > 20000', () => {
+		expect(ordenados(cat.lista({ faixa: 'acima200' }))).toEqual([7, 8]);
+	});
+
+	it('DAD-01: sem faixa não filtra', () => {
+		expect(cat.lista()).toHaveLength(8);
+		expect(cat.lista({ faixa: undefined })).toHaveLength(8);
+	});
+
+	const comCupom = completo([
+		card(1, { c: 'BESAVE10' }),
+		card(2),
+		card(3, { c: 'X' }),
+		card(4, { c: 'Y', x: 1 })
+	]);
+
+	it('DAD-02: soComCupom só deixa cards com c', () => {
+		expect(ordenados(comCupom.lista({ soComCupom: true }))).toEqual([1, 3]);
+	});
+
+	it('DAD-02: soComCupom ausente ou false não filtra', () => {
+		expect(ordenados(comCupom.lista())).toEqual([1, 2, 3]);
+		expect(ordenados(comCupom.lista({ soComCupom: false }))).toEqual([1, 2, 3]);
+	});
+
+	it('DAD-03: público + loja + faixa + cupom com ordem desconto = interseção ordenada', () => {
+		const mix = completo([
+			// casam: FEMININO, AMAZON, ≤ 5000, com cupom
+			card(1, { p: 'FEMININO', l: 'AMAZON', pp: 4000, pd: 5000, c: 'A' }), // 20%
+			card(2, { p: 'FEMININO', l: 'AMAZON', pp: 1000, pd: 4000, c: 'B' }), // 75%
+			card(3, { p: 'FEMININO', l: 'AMAZON', pp: 5000, pd: null, c: 'C' }), // sem pd
+			// cada um falha num critério
+			card(4, { p: 'MASCULINO', l: 'AMAZON', pp: 1000, pd: 9000, c: 'D' }),
+			card(5, { p: 'FEMININO', l: 'SHOPEE', pp: 1000, pd: 9000, c: 'E' }),
+			card(6, { p: 'FEMININO', l: 'AMAZON', pp: 5001, pd: 90000, c: 'F' }),
+			card(7, { p: 'FEMININO', l: 'AMAZON', pp: 1000, pd: 9000 })
+		]);
+		const f = {
+			publico: 'FEMININO',
+			loja: 'AMAZON',
+			faixa: 'ate50',
+			soComCupom: true
+		} as const;
+		expect(ids(mix.lista({ ...f, ordem: 'desconto' }))).toEqual([2, 1, 3]);
+		expect(ids(mix.lista({ ...f, ordem: 'preco' }))).toEqual([2, 1, 3]);
+		// recentes: mesmo dt, desempate id desc.
+		expect(ids(mix.lista(f))).toEqual([3, 2, 1]);
+	});
+});

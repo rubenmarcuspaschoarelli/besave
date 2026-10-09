@@ -4,6 +4,7 @@ import { gzipSync } from 'node:zlib';
 import { build } from 'vite';
 import { describe, expect, it } from 'vitest';
 import { Catalogo, buscar } from '../dados.ts';
+import type { Filtro } from '../dados.ts';
 import { gerarCards, gerarManifest } from './gerador.ts';
 
 // Orçamentos da BSV-35 (Node, 30 mil cards do gerador).
@@ -102,6 +103,33 @@ describe('orçamentos de desempenho', () => {
 			expect(mediana(tempos)).toBeLessThanOrEqual(40);
 		}
 		expect(cat.lista({ area: 'ELAS' }).length).toBeGreaterThan(15_000);
+	});
+
+	it('DAD-04: trocar filtro (público, loja, faixa, cupom, ordem) ≤ 50 ms (mediana de 5, com aquecimento)', () => {
+		const cat = carregar();
+		const filtros: Filtro[] = [
+			{},
+			{ publico: 'FEMININO' },
+			{ loja: 'AMAZON', ordem: 'desconto' },
+			{ faixa: 'ate50' },
+			{ soComCupom: true, ordem: 'preco' },
+			{
+				area: 'ELAS',
+				publico: 'FEMININO',
+				loja: 'AMAZON',
+				faixa: '50a100',
+				soComCupom: true,
+				ordem: 'desconto'
+			}
+		];
+		for (const f of filtros) {
+			cat.lista(f);
+			cat.lista(f);
+			const tempos = Array.from({ length: 5 }, () => cronometrar(() => cat.lista(f)));
+			expect(mediana(tempos), JSON.stringify(f)).toBeLessThanOrEqual(50);
+		}
+		expect(cat.lista({ faixa: 'ate50' }).length).toBeGreaterThan(1000);
+		expect(cat.lista({ soComCupom: true }).length).toBeGreaterThan(1000);
 	});
 });
 

@@ -1,11 +1,15 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { buscar, maioresDescontos, normalizar } from '#lib/dados.ts';
-	import type { Area } from '#lib/dados.ts';
+	import type { Area, Filtro } from '#lib/dados.ts';
+	import { PADRAO, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
+	import type { EstadoFiltros } from '#lib/filtros.ts';
 	import { ROTULO_AREA } from '#lib/formato.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
 	import AvisoNovas from './AvisoNovas.svelte';
 	import Areas from './Areas.svelte';
+	import BarraFiltros from './BarraFiltros.svelte';
 	import BarraCanal from './BarraCanal.svelte';
 	import Busca from './Busca.svelte';
 	import FaixaDescontos from './FaixaDescontos.svelte';
@@ -20,6 +24,11 @@
 
 	let consulta = $state('');
 	let limite = $state(POR_VEZ);
+	let filtros = $state<EstadoFiltros>(PADRAO);
+
+	/** Filtros da grade (BSV-31); a faixa de descontos só respeita a área. */
+	const filtro = $derived<Filtro>({ ...(area ? { area } : {}), ...filtros });
+	const comFiltro = $derived(temFiltro(filtros));
 
 	const buscando = $derived(normalizar(consulta).length >= 2);
 	const faixa = $derived.by(() => {
@@ -31,12 +40,11 @@
 	const resultado = $derived.by(() => {
 		void vitrine.versao;
 		if (!vitrine.pronto) return null;
-		const f = area ? { area } : {};
 		if (buscando) {
-			const r = buscar(vitrine.cat, consulta, f, limite);
+			const r = buscar(vitrine.cat, consulta, filtro, limite);
 			return { itens: r.itens, total: r.total };
 		}
-		const todos = vitrine.cat.lista(f);
+		const todos = vitrine.cat.lista(filtro);
 		return { itens: todos.slice(0, limite), total: todos.length };
 	});
 
@@ -45,9 +53,16 @@
 		limite = POR_VEZ;
 	}
 
+	function filtrar(e: EstadoFiltros) {
+		filtros = e;
+		limite = POR_VEZ;
+		void goto(escreverFiltros(new URL(location.href), e), { shallow: true, replace: true });
+	}
+
 	onMount(() => {
 		const p = new URL(location.href).searchParams;
 		consulta = p.get('q') ?? '';
+		filtros = lerFiltros(p);
 		vitrine.iniciar();
 	});
 </script>
@@ -91,7 +106,17 @@
 					>
 				{/if}
 			</h2>
-			{#if resultado && resultado.total === 0}
+			<BarraFiltros estado={filtros} total={resultado?.total ?? null} aoMudar={filtrar} />
+			{#if resultado && resultado.total === 0 && comFiltro}
+				<div class="grid justify-items-start gap-2" data-vazio>
+					<p class="text-sm text-suave">Nenhuma oferta com esses filtros</p>
+					<button
+						type="button"
+						class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
+						onclick={() => filtrar(PADRAO)}>Limpar filtros</button
+					>
+				</div>
+			{:else if resultado && resultado.total === 0}
 				<p class="text-sm text-suave">
 					{buscando ? 'Nenhuma oferta encontrada.' : 'Nenhuma oferta nesta área agora.'}
 				</p>

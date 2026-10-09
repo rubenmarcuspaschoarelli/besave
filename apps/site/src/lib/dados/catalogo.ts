@@ -1,5 +1,5 @@
 import { ROTULO_LOJA } from './tipos.ts';
-import type { ChunkRef, Filtro, Manifest, OfertaCard, Ordem } from './tipos.ts';
+import type { ChunkRef, Faixa, Filtro, Manifest, OfertaCard, Ordem } from './tipos.ts';
 
 /** Minúsculas, sem diacríticos; todo não alfanumérico vira um espaço. */
 export function normalizar(s: string): string {
@@ -97,11 +97,21 @@ export function maioresDescontos(
 	return r.slice(0, n).map((x) => x.c);
 }
 
+/** `[min, max]` de `pp` em centavos, inclusivos (BSV-31). */
+const FAIXA: Record<Faixa, [number, number]> = {
+	ate50: [0, 5000],
+	'50a100': [5001, 10000],
+	'100a200': [10001, 20000],
+	acima200: [20001, Infinity]
+};
+
 export function casaFiltro(c: OfertaCard, f: Filtro): boolean {
 	return (
 		(f.area === undefined || c.a === f.area) &&
 		(f.publico === undefined || c.p === f.publico) &&
-		(f.loja === undefined || c.l === f.loja)
+		(f.loja === undefined || c.l === f.loja) &&
+		(f.faixa === undefined || (c.pp >= FAIXA[f.faixa][0] && c.pp <= FAIXA[f.faixa][1])) &&
+		(!f.soComCupom || !!c.c)
 	);
 }
 
