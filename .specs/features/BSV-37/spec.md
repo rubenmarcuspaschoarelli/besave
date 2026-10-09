@@ -108,7 +108,7 @@ opções só quando preciso, para ver a grade sem quatro linhas de botões.
 | SET-02 | P1: setas | T2 | Verifying |
 | SET-03 | P1: setas | T2 | Verifying |
 | SET-04 | P1: setas | T2 | Verifying |
-| BUD-01 | P1: bundle | T1, T2, T3 | Pending |
+| BUD-01 | P1: bundle | T1, T2, T3 | Verifying |
 
 **Coverage:** 17 total, 17 mapped to tasks, 0 unmapped
 

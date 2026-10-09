@@ -1,7 +1,7 @@
 # BSV-37 Tasks
 
 **Spec**: `.specs/features/BSV-37/spec.md`
-**Status**: In progress
+**Status**: Done (aguardando Verifier)
 
 ---
 
@@ -70,7 +70,7 @@ T1 → T2 → T3
 
 ---
 
-### T3: Evidência (prints e bundle) [ ]
+### T3: Evidência (prints e bundle) [x]
 
 **What**: prints 1280 px (fechada, aberta, valor) e 390 px; bundle antes/depois.
 **Where**: `.specs/features/BSV-37/evidencia.md`, `.specs/features/BSV-37/prints/`
@@ -79,8 +79,8 @@ T1 → T2 → T3
 
 **Done when**:
 
-- [ ] Prints olhados pelo autor (lição 19)
-- [ ] Bundle registrado
+- [x] Prints olhados pelo autor (lição 19)
+- [x] Bundle registrado
 
 **Tests**: none
 **Gate**: full
