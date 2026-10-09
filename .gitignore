@@ -33,3 +33,7 @@ infra/*.tfplan
 infra/plan.bin 
 infra/plan.txt
 infra/saida.json
+
+# arquivos vazios que uma ferramenta externa cria na raiz dos worktrees; só na raiz (apps/site e packages/contract versionam os seus)
+/package.json
+/pnpm-lock.yaml

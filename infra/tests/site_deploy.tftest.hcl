@@ -2,8 +2,18 @@ mock_provider "aws" {
   source = "./tests/mocks"
 }
 
-# Lista literal da spec (BSV-17 §2), independente de deploy-site/prefixos.json.
+# Valores que este arquivo assume; independem do terraform.tfvars local.
 variables {
+  regiao          = "us-east-1"
+  dominio         = "besave.com.br"
+  bucket_site     = "besave-site"
+  bucket_logs     = "besave-logs"
+  ativar_dominios = false
+  classe_preco    = "PriceClass_All"
+  dominios_curtos = ["besave.io", "besave.me"]
+  ativar_curto    = false
+
+  # Lista literal da spec (BSV-17 §2), independente de deploy-site/prefixos.json.
   prefixos_spec = [
     "_app/*", "index.html", "404.html", "favicon.*", "desejos/*", "assets/besave.css", "assets/fontes/*",
     "tech/*", "players/*", "meu-lar/*", "elas/*", "eles/*", "cultura/*", "familia/*", "pets/*",

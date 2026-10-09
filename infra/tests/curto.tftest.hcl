@@ -2,6 +2,18 @@ mock_provider "aws" {
   source = "./tests/mocks"
 }
 
+# Valores que este arquivo assume; independem do terraform.tfvars local (os `run` sobrescrevem o que testam).
+variables {
+  regiao          = "us-east-1"
+  dominio         = "besave.com.br"
+  bucket_site     = "besave-site"
+  bucket_logs     = "besave-logs"
+  ativar_dominios = false
+  classe_preco    = "PriceClass_All"
+  dominios_curtos = ["besave.io", "besave.me"]
+  ativar_curto    = false
+}
+
 # BSV-16: besave.io e besave.me em duas fases (ativar_curto).
 run "curto_fase_1" {
   command = apply # mock_provider: nada é criado
