@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-33/spec.md`
-**Status**: In progress
+**Status**: Done (aguardando Verifier)
 
 ---
 
@@ -159,7 +159,7 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] Arquivos de evidência revisados pela regra 11
+- [x] Arquivos de evidência revisados pela regra 11
 
 **Tests**: none
 **Gate**: build
