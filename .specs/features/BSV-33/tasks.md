@@ -104,15 +104,16 @@ T3 → T4 → T5 → T6 → T7
 ### T4: Público vira caminho nas áreas
 
 **What**: na área e na subpágina, público navega para o caminho mantendo a query; `?publico=` redireciona com `replace`; home inalterada.
-**Where**: `apps/site/src/lib/componentes/PaginaOfertas.svelte`, `apps/site/src/lib/filtros.ts`, `apps/site/src/lib/filtros.test.ts`, `apps/site/e2e/publico.spec.ts`
+**Where**: `apps/site/src/lib/componentes/{PaginaOfertas,BarraFiltros,PainelFiltros}.svelte`, `apps/site/src/lib/filtros.ts`, `apps/site/src/lib/filtros.test.ts`, `apps/site/e2e/publico.spec.ts`
 **Depends on**: T3
 **Requirement**: PUB-01, PUB-02, PUB-03, PUB-04
 
 **Done when**:
 
-- [ ] Em `/elas/?loja=amazon`, "Masculino" → `/elas/masculino/?loja=amazon`; "Todos" → `/elas/?loja=amazon`
-- [ ] `/elas/?publico=infantil` → `/elas/infantil/` sem entrada nova no histórico
-- [ ] Home: público continua em `?publico=`
+- [x] Em `/elas/?loja=amazon`, "Masculino" → `/elas/masculino/?loja=amazon`; "Todos" → `/elas/?loja=amazon`
+- [x] `/elas/?publico=infantil` → `/elas/infantil/` sem entrada nova no histórico
+- [x] Home: público continua em `?publico=`
+- [x] Bundle inicial da home ≤ 150 KiB: painel do celular sob demanda (pedido do dono); painel continua passando nos PNL-01..05 da BSV-31
 
 **Tests**: unit + e2e
 **Gate**: full

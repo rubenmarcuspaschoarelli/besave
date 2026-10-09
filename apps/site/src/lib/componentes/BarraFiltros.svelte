@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import type { Component, ComponentProps } from 'svelte';
 	import type { Faixa, Loja, Ordem, Publico } from '#lib/dados.ts';
 	import { PADRAO, foraDoPadrao } from '#lib/filtros.ts';
 	import type { EstadoFiltros } from '#lib/filtros.ts';
+	import type PainelFiltros from './PainelFiltros.svelte';
 
 	/** `total` = ofertas do resultado (`null` enquanto o catálogo não carregou). */
 	let {
@@ -44,36 +45,23 @@
 	const contagem = (n: number) => (n === 1 ? '1 oferta' : `${n.toLocaleString('pt-BR')} ofertas`);
 
 	/**
-	 * Painel do celular (< 640 px): `<dialog>` modal, que deixa o fundo inerte e prende o foco.
-	 * Os grupos ficam num lugar só: no diálogo enquanto aberto, senão na linha (desktop).
+	 * Painel do celular (< 640 px), em `PainelFiltros`, importado ao tocar em "Filtros" (fora do
+	 * bundle inicial da home, BSV-33). Os grupos ficam num lugar só: no painel enquanto aberto,
+	 * senão na linha (desktop).
 	 */
 	let aberto = $state(false);
-	let dialogo: HTMLDialogElement | undefined = $state();
+	let Painel: Component<ComponentProps<typeof PainelFiltros>> | undefined = $state();
 	let gatilho: HTMLButtonElement | undefined = $state();
 
 	async function abrir() {
+		Painel ??= (await import('./PainelFiltros.svelte')).default;
 		aberto = true;
-		await tick();
-		dialogo?.showModal();
-		dialogo?.querySelector('button')?.focus();
 	}
 
-	/** Esc (evento `close` nativo), fundo ou "Ver N ofertas". */
+	/** Esc, fundo ou "Ver N ofertas". */
 	function aoFechar() {
 		aberto = false;
 		gatilho?.focus();
-	}
-
-	/** O modal já deixa o fundo inerte; o Tab do último botão daria a volta pela barra do navegador. */
-	function cicloTab(e: KeyboardEvent) {
-		if (e.key !== 'Tab' || !dialogo) return;
-		const botoes = [...dialogo.querySelectorAll('button')];
-		const alvo = e.shiftKey ? botoes[botoes.length - 1] : botoes[0];
-		const borda = e.shiftKey ? botoes[0] : botoes[botoes.length - 1];
-		if (document.activeElement === borda) {
-			e.preventDefault();
-			alvo.focus();
-		}
 	}
 
 	/** Linha "Filtros"/ordem do celular: degradê à direita enquanto há o que rolar. */
@@ -88,15 +76,6 @@
 		ro.observe(linha);
 		return () => ro.disconnect();
 	});
-
-	/** Toque fora da folha (no `::backdrop`) fecha. */
-	function tocouFora(e: MouseEvent) {
-		if (!dialogo || e.target !== dialogo) return;
-		const r = dialogo.getBoundingClientRect();
-		const dentro =
-			e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
-		if (!dentro) dialogo.close();
-	}
 </script>
 
 {#snippet escolhas<T>(
@@ -178,25 +157,9 @@
 		></div>
 	</div>
 
-	<dialog
-		bind:this={dialogo}
-		aria-label="Filtros"
-		class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto shadow-2xl backdrop:bg-black/40 open:grid sm:hidden"
-		onclose={aoFechar}
-		onclick={tocouFora}
-		onkeydown={cicloTab}
-	>
-		{#if aberto}
-			<p class="text-lg font-black text-marca">Filtros</p>
-			{@render grupos()}
-			<button
-				type="button"
-				class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
-				onclick={() => dialogo?.close()}
-				>{total === null ? 'Ver ofertas' : `Ver ${contagem(total)}`}</button
-			>
-		{/if}
-	</dialog>
+	{#if aberto && Painel}
+		<Painel {total} {grupos} {aoFechar} />
+	{/if}
 
 	<div class="flex flex-wrap items-center gap-3">
 		{#if total !== null}

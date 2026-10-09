@@ -120,3 +120,89 @@ test('/elas/masculino/: grade só ELAS + MASCULINO, com o público marcado', asy
 	await expect(pressionado(page, 'Masculino')).toHaveAttribute('aria-pressed', 'true');
 	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'false');
 });
+
+/** Botão de filtro pelo nome; no celular, abre o painel "Filtros" quando ele está lá dentro. */
+async function tocar(page: Page, nome: string) {
+	const botao = page.getByRole('button', { name: nome, exact: true });
+	if (!(await botao.isVisible()))
+		await page.getByRole('button', { name: 'Filtros', exact: true }).click();
+	await botao.click();
+}
+
+const h1 = (page: Page) => page.getByRole('heading', { level: 1 });
+
+// PUB-01
+test('em /elas/, "Masculino" leva a /elas/masculino/ mantendo ?loja=', async ({ page }) => {
+	await abrir(page, '/elas/?loja=shopee');
+	await tocar(page, 'Masculino');
+	await expect(page).toHaveURL(/\/elas\/masculino\/\?loja=shopee$/);
+	await expect(h1(page)).toHaveText('Elas · Masculino');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	const grade = await naGrade(page);
+	const esperados = CARDS.filter(
+		(c) => c.a === 'ELAS' && c.p === 'MASCULINO' && c.l === 'SHOPEE' && !c.x
+	);
+	expect(grade.length).toBe(esperados.length);
+	expect(new Set(grade.map((c) => `${c.a}/${c.p}/${c.l}`))).toEqual(
+		new Set(['ELAS/MASCULINO/SHOPEE'])
+	);
+	await expect(pressionado(page, 'Shopee')).toHaveAttribute('aria-pressed', 'true');
+});
+
+// PUB-01: de uma subpágina para outra.
+test('em /elas/masculino/, "Infantil" leva a /elas/infantil/', async ({ page }) => {
+	await abrir(page, '/elas/masculino/?ordem=preco');
+	await tocar(page, 'Infantil');
+	await expect(page).toHaveURL(/\/elas\/infantil\/\?ordem=preco$/);
+	await expect(h1(page)).toHaveText('Elas · Infantil');
+	await expect(pressionado(page, 'Infantil')).toHaveAttribute('aria-pressed', 'true');
+	await expect(pressionado(page, 'Menor preço')).toHaveAttribute('aria-pressed', 'true');
+});
+
+// PUB-02
+test('"Todos" volta a /elas/ mantendo ?loja=', async ({ page }) => {
+	await abrir(page, '/elas/masculino/?loja=shopee');
+	await tocar(page, 'Todos');
+	await expect(page).toHaveURL(/\/elas\/\?loja=shopee$/);
+	await expect(h1(page)).toHaveText('Ofertas de Elas');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	const grade = await naGrade(page);
+	expect(new Set(grade.map((c) => `${c.a}/${c.l}`))).toEqual(new Set(['ELAS/SHOPEE']));
+	expect(new Set(grade.map((c) => c.p)).size).toBeGreaterThan(1);
+	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
+});
+
+// PUB-02
+test('"Limpar filtros" numa subpágina volta a /elas/ sem filtros', async ({ page }) => {
+	await abrir(page, '/elas/masculino/?loja=shopee');
+	await page.getByRole('button', { name: 'Limpar filtros' }).first().click();
+	await expect(page).toHaveURL(/\/elas\/$/);
+	await expect(h1(page)).toHaveText('Ofertas de Elas');
+});
+
+// PUB-03
+test('/elas/?publico=infantil vai para /elas/infantil/ sem entrada nova no histórico', async ({
+	page
+}) => {
+	await servir(page, variado());
+	await page.goto('/tech/');
+	await page.goto('/elas/?publico=infantil&loja=shopee');
+	await expect(page).toHaveURL(/\/elas\/infantil\/\?loja=shopee$/);
+	await expect(h1(page)).toHaveText('Elas · Infantil');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	const grade = await naGrade(page);
+	expect(new Set(grade.map((c) => `${c.a}/${c.p}/${c.l}`))).toEqual(
+		new Set(['ELAS/INFANTIL/SHOPEE'])
+	);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/tech\/$/);
+});
+
+// PUB-04
+test('na home, público continua em ?publico=', async ({ page }) => {
+	await abrir(page, '/');
+	await tocar(page, 'Masculino');
+	await expect(page).toHaveURL(/\/\?publico=masculino$/);
+	expect(new URL(page.url()).pathname).toBe('/');
+	await expect(page.getByRole('heading', { level: 1 })).toHaveText('Besave: ofertas e cupons');
+});

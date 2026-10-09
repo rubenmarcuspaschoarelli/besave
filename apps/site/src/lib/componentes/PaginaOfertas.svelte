@@ -4,7 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { buscar, maioresDescontos, normalizar } from '#lib/dados.ts';
 	import type { Area, Filtro, Publico } from '#lib/dados.ts';
-	import { PADRAO, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
+	import { PADRAO, destinoArea, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
 	import type { EstadoFiltros } from '#lib/filtros.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
 	import AvisoNovas from './AvisoNovas.svelte';
@@ -58,15 +58,31 @@
 	}
 
 	function filtrar(e: EstadoFiltros) {
+		// Na área, público é caminho (BSV-33): trocar de público é trocar de página.
+		if (area && e.publico !== publico) {
+			void goto(destinoArea(new URL(location.href), area, e), { reset: false });
+			return;
+		}
 		filtros = e;
 		limite = POR_VEZ;
-		void goto(escreverFiltros(new URL(location.href), e), { shallow: true, replace: true });
+		const url = new URL(location.href);
+		void goto(area ? destinoArea(url, area, e) : escreverFiltros(url, e), {
+			shallow: true,
+			replace: true
+		});
 	}
 
 	onMount(() => {
-		const p = new URL(location.href).searchParams;
+		const url = new URL(location.href);
+		const p = url.searchParams;
+		const lido = lerFiltros(p);
+		// `/{slug}/?publico=x` → `/{slug}/x/`, sem nova entrada no histórico (BSV-33).
+		if (area && lido.publico) {
+			void goto(destinoArea(url, area, lido), { replace: true });
+			return;
+		}
 		consulta = p.get('q') ?? '';
-		filtros = publico ? { ...lerFiltros(p), publico } : lerFiltros(p);
+		filtros = publico ? { ...lido, publico } : lido;
 		vitrine.iniciar();
 	});
 </script>

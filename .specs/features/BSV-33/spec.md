@@ -38,6 +38,8 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | `?publico=` em subpágina | Também redireciona para `/{slug}/{x}/` (o público da query vence e sai da query) | Mesma regra de `/{slug}/?publico=x` | n — proposto |
 | "Limpar filtros" na subpágina | Volta a `/{slug}/` sem query | "Todos" + padrão dos demais | y |
 | Contagem "ativas" do sitemap | Cards publicados sem `x` (mesma base de `manifest.areas`) | CONTRATO §7 | y |
+| Troca de público na área | Navegação com nova entrada no histórico e `reset: false` (rolagem e foco mantidos); só o redirect de `?publico=` usa `replace` | Trocar de público é trocar de página; o voltar do navegador volta ao público anterior | n — proposto |
+| Bundle da home (BUD-01) | Painel de filtros do celular em `PainelFiltros.svelte`, importado ao tocar em "Filtros" | Pedido do dono: sem aumentar o limite; 149,9 → 150,2 KiB com a T4 | y (dono) |
 | `lastmod` da home sem ativas | Sem `<lastmod>` | Protocolo: `lastmod` é opcional | n — proposto |
 | Ordem no `sitemap-paginas.xml` | Home, depois cada área na ordem do enum seguida das suas subpáginas na ordem do enum `Publico` | Determinístico (AD-041) | y |
 | Posição no index | `sitemap-paginas.xml` depois dos `sitemap-{n}.xml` | Index só muda de bytes quando muda de lista | y |
@@ -58,7 +60,7 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 ### P1: Público como caminho ⭐ MVP
 
 1. PUB-01: WHEN, em `/{slug}/` ou `/{slug}/{publico}/`, a pessoa toca um público THEN o site SHALL navegar para `/{slug}/{publico}/` mantendo os demais filtros na query.
-2. PUB-02: WHEN a pessoa toca "Todos" (ou "Limpar filtros") numa subpágina THEN o site SHALL navegar para `/{slug}/` (com os demais filtros, ou sem query no "Limpar").
+2. PUB-02: WHEN a pessoa toca "Todos" (ou "Limpar filtros") numa subpágina THEN o site SHALL navegar para `/{slug}/` (com os demais filtros, ou sem filtros na query no "Limpar"; parâmetros alheios como `q` e `utm_*` ficam, como na BSV-31).
 3. PUB-03: WHEN `/{slug}/?publico=x` (x válido) é aberto THEN o site SHALL ir para `/{slug}/x/` por substituição (sem nova entrada no histórico), mantendo os demais parâmetros.
 4. PUB-04: WHILE na home THE público SHALL continuar em `?publico=` (sem navegação).
 
@@ -112,10 +114,10 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | SUB-02 | Subpáginas | T3 | Done |
 | SUB-03 | Subpáginas | T3 | Done |
 | SUB-04 | Subpáginas | T3 | Done |
-| PUB-01 | Público | T4 | Pending |
-| PUB-02 | Público | T4 | Pending |
-| PUB-03 | Público | T4 | Pending |
-| PUB-04 | Público | T4 | Pending |
+| PUB-01 | Público | T4 | Done |
+| PUB-02 | Público | T4 | Done |
+| PUB-03 | Público | T4 | Done |
+| PUB-04 | Público | T4 | Done |
 | TXT-01 | Texto | T5 | Pending |
 | TXT-02 | Texto | T5 | Pending |
 | TXT-03 | Texto | T5 | Pending |
