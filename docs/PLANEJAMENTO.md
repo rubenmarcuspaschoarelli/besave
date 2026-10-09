@@ -94,18 +94,18 @@ Feito e no ar:
 - Cards com data de publicação no site (`dp`, contrato 1.5.0, BSV-36).
 - Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
   medida em produção: 25 mil cards, busca p95 ~8 ms.
-- Contrato 1.5.0, 89 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
+- Contrato 1.5.0, 94 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
 
 Próximos, nesta ordem:
-- **Site** (BSV-30 em andamento): shell, design system do modelo A, home básica, favoritos locais, 404 e
-  CSS compartilhado; depois BSV-31 (filtros, ordens, faixa de preço, virtualização), BSV-32 (toast de
-  novas), BSV-33 (páginas de área) e BSV-34 (busca). Deploy pelo GitHub Actions já pronto (BSV-17).
-- **Antes de divulgar o site:** `assets/besave.css` com cache de 5 min (AD-087).
-- Desligar o protótipo (bucket `besave.com.br` e distribuição antiga): liberado pelo dono.
-- Tickets pequenos: DES-02 com aquecimento e mediana (BSV-35); limpeza do worker (literal de caminho de
-  usuário em `tests/alerta.rs`, avisos no `--publicar`/`--dry-run`, MANIFEST §6 com a fase de avisos);
-  atualizar as actions do `site-deploy.yml` para as versões maiores.
-- Robô: um cupom por oferta, URL de afiliado nas antigas, marcar expiradas (`ST_ATIVO = 0`).
+- **BSV-37** (filtros compactos no computador, setas na faixa de descontos) e **BSV-38** (copiar o cupom e ir
+  para a loja em aba nova; cache de 5 min do `besave.css`), em paralelo.
+- **BSV-34** (página de busca), depois "dieta" do bundle se a home voltar a encostar no gate (AD-090).
+- **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
+  do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono).
+- **Tickets pequenos:** DES-02 com aquecimento e mediana; limpeza do worker (literal de caminho em
+  `tests/alerta.rs`, avisos no `--publicar`/`--dry-run`, `META_CSS` sem uso, MANIFEST §6 com avisos).
+- **Robô:** código do robô das lojas no repositório (499 ofertas publicadas sem imagem, 1,9%); um cupom por
+  oferta; marcar expiradas (`ST_ATIVO = 0`); regra Elas/Eles revista pelo dono em 09/10.
 - Depois: usuários (F5), app (F6), admin (F7).
 
 Em aberto: tamanho da imagem `-small` (200 px hoje; subir
