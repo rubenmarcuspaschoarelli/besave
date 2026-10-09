@@ -23,6 +23,13 @@ npx html-validate tests/fixtures/paginas/*.html
 posição do marcador da faixa de preço (`left:{pct}%`), calculada no template como a spec pede.
 Templates, CSS e goldens são `eol=lf` (`.gitattributes`): os goldens são comparados byte a byte.
 
+## Script de cópia do cupom (BSV-38, AD-093)
+
+Só com cupom e oferta ativa, um `<script>` embutido no fim do `<body>` (sem arquivo externo, sem dado
+da oferta: lê o código do DOM). Ícone: `navigator.clipboard.writeText` + aviso; falhou → seleciona o
+código. Botão principal: tenta copiar sem `preventDefault`, a aba nova abre do mesmo jeito. Sem JS o
+ícone fica oculto e o botão é um link comum para `/ir/{id}`.
+
 ## Variáveis do template
 
 | variável | tipo | origem |
@@ -60,7 +67,10 @@ usar classe sem regra no CSS. Renomear classe é mudança de contrato.
 | `painel` | `<div>` | preço, cupom, CTA, avaliação |
 | `preco`, `loja`, `de`, `por`, `desconto`, `data` | bloco de preço | loja, preço de (riscado), preço por, selo `-N%`, data de publicação |
 | `cupom`, `codigo` | `<p>`, `<code>` | caixa do cupom |
-| `cta` | `<a>` | "Acesse a oferta"; `[aria-disabled="true"]` sem `href` quando encerrada |
+| `cta` | `<a>` | "Acesse a oferta" (ou "Copiar cupom e ir para a loja" com cupom), aba nova; `[aria-disabled="true"]` sem `href` quando encerrada |
+| `copiar` | `<button hidden>` | ícone de copiar ao lado do código (só ativa com cupom); o script tira o `hidden` (BSV-38) |
+| `copiado` | `.copiar` | estado por ~2 s depois da cópia (posto pelo script) |
+| `confirmacao` | `<p role="status">` | aviso "Cupom copiado!" por ~2 s (vazio no HTML) |
 | `avaliacao` | `<p>` | nota e quantidade de avaliações |
 | `detalhes`, `ficha` | `<section>`, `<dl>` | descrição e ficha técnica (linhas `div > dt + dd`) |
 | `faixa`, `barra`, `marcador`, `limites` | faixa de preço | barra min → max com marcador em `left:{pct}%` |
