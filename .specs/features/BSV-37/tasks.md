@@ -53,17 +53,17 @@ T1 → T2 → T3
 
 ---
 
-### T2: Setas na faixa de descontos [ ]
+### T2: Setas na faixa de descontos [x]
 
 **What**: barra oculta, setas ‹ › com ponteiro fino, rolagem de uma largura visível.
-**Where**: `src/lib/componentes/FaixaDescontos.svelte`, `e2e/setas.spec.ts`
+**Where**: `src/lib/componentes/FaixaDescontos.svelte`, `SetasFaixa.svelte` (novo, sob demanda), `e2e/setas.spec.ts`
 **Depends on**: T1
 **Requirement**: SET-01..04
 
 **Done when**:
 
-- [ ] SET-01..04 cobertos em 1280, 500 e 390 px (toque)
-- [ ] Gate verde
+- [x] SET-01..04 cobertos em 1280, 500 e 390 px (toque)
+- [x] Gate verde
 
 **Tests**: e2e
 **Gate**: full

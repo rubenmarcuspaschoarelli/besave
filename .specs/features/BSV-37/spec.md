@@ -104,10 +104,10 @@ opções só quando preciso, para ver a grade sem quatro linhas de botões.
 | CMP-10 | P1: linha compacta | T1 | Verifying |
 | CMP-11 | P1: linha compacta | T1 | Verifying |
 | CEL-01 | P1: celular | T1 | Verifying |
-| SET-01 | P1: setas | T2 | Pending |
-| SET-02 | P1: setas | T2 | Pending |
-| SET-03 | P1: setas | T2 | Pending |
-| SET-04 | P1: setas | T2 | Pending |
+| SET-01 | P1: setas | T2 | Verifying |
+| SET-02 | P1: setas | T2 | Verifying |
+| SET-03 | P1: setas | T2 | Verifying |
+| SET-04 | P1: setas | T2 | Verifying |
 | BUD-01 | P1: bundle | T1, T2, T3 | Pending |
 
 **Coverage:** 17 total, 17 mapped to tasks, 0 unmapped
