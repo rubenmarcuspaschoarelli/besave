@@ -82,10 +82,19 @@ test.describe('computador (1280 px)', () => {
 		await page.emulateMedia({ reducedMotion: 'no-preference' });
 		await abrir(page);
 		const r0 = await rolagem(page);
+		const alvo = Math.min(r0.largura, r0.max);
+		// Posições de cada evento de rolagem: suave passa por valores intermediários.
+		await page.locator(FAIXA).evaluate((e) => {
+			const g = globalThis as unknown as { posicoes: number[] };
+			g.posicoes = [];
+			e.addEventListener('scroll', () => g.posicoes.push(e.scrollLeft));
+		});
 		await seta(page, DEPOIS).click();
-		const logo = (await rolagem(page)).esq;
-		expect(logo).toBeLessThan(Math.min(r0.largura, r0.max));
-		await expect.poll(async () => (await rolagem(page)).esq).toBe(Math.min(r0.largura, r0.max));
+		await expect.poll(async () => (await rolagem(page)).esq).toBe(alvo);
+		const posicoes = await page.evaluate(
+			() => (globalThis as unknown as { posicoes: number[] }).posicoes
+		);
+		expect(posicoes.some((p) => p > 0 && p < alvo)).toBe(true);
 	});
 
 	// Borda: cards que cabem sem rolar, sem seta nenhuma.

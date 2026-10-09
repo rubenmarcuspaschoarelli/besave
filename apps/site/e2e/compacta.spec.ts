@@ -276,6 +276,8 @@ test.describe('computador (1280 px)', () => {
 		expect(contorno).toBe('solid rgb(29, 78, 216)');
 		// Opções da faixa também com ≥ 44 px.
 		await publico.press('Enter');
+		// A faixa chega por import(): mede só depois que as opções estão na página.
+		await expect(faixa(page).getByRole('button')).toHaveCount(5);
 		const opcoes = await faixa(page)
 			.getByRole('button')
 			.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height));
