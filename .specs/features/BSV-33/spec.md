@@ -40,6 +40,7 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | Contagem "ativas" do sitemap | Cards publicados sem `x` (mesma base de `manifest.areas`) | CONTRATO §7 | y |
 | Troca de público na área | Navegação com nova entrada no histórico e `reset: false` (rolagem e foco mantidos); só o redirect de `?publico=` usa `replace` | Trocar de público é trocar de página; o voltar do navegador volta ao público anterior | n — proposto |
 | Bundle da home (BUD-01) | Painel de filtros do celular em `PainelFiltros.svelte`, importado ao tocar em "Filtros" | Pedido do dono: sem aumentar o limite; 149,9 → 150,2 KiB com a T4 | y (dono) |
+| Onde nasce o JSON-LD | `hooks.server.ts` (`transformPageChunk`) no prerender, com a mesma `trilha()` do cabeçalho | `{@html}` levava a home a 150,3 KiB e `<svelte:element>` a 155,2 KiB (runtime no chunk compartilhado); o hook custa 0 B no cliente. Na navegação no cliente o `<head>` mantém o JSON-LD da primeira página (crawler lê o HTML prerenderizado) | n — proposto |
 | `lastmod` da home sem ativas | Sem `<lastmod>` | Protocolo: `lastmod` é opcional | n — proposto |
 | Ordem no `sitemap-paginas.xml` | Home, depois cada área na ordem do enum seguida das suas subpáginas na ordem do enum `Publico` | Determinístico (AD-041) | y |
 | Posição no index | `sitemap-paginas.xml` depois dos `sitemap-{n}.xml` | Index só muda de bytes quando muda de lista | y |
@@ -122,7 +123,7 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | TXT-02 | Texto | T5 | Done |
 | TXT-03 | Texto | T5 | Done |
 | TXT-04 | Texto | T5 | Done |
-| JLD-01 | JSON-LD | T6 | Pending |
+| JLD-01 | JSON-LD | T6 | Done |
 
 **Coverage:** 19 total, 19 mapped to tasks, 0 unmapped.
 

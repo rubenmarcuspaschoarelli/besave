@@ -138,13 +138,13 @@ T3 → T4 → T5 → T6 → T7
 ### T6: JSON-LD `BreadcrumbList`
 
 **What**: JSON-LD na área e na subpágina, no HTML prerenderizado.
-**Where**: `CabecalhoArea.svelte` (ou rotas), `apps/site/e2e/publico.spec.ts`
+**Where**: `apps/site/src/lib/conteudo/trilha.ts` (+ teste), `apps/site/src/hooks.server.ts`, `CabecalhoArea.svelte`, `apps/site/e2e/publico.spec.ts`
 **Depends on**: T5
 **Requirement**: JLD-01
 
 **Done when**:
 
-- [ ] JSON válido com `@context`, `@type`, posições 1..n e `item` absolutos, igual ao breadcrumb visível
+- [x] JSON válido com `@context`, `@type`, posições 1..n e `item` absolutos, igual ao breadcrumb visível
 
 **Tests**: e2e
 **Gate**: full

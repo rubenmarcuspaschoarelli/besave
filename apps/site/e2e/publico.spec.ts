@@ -286,3 +286,49 @@ test('texto das áreas fora do bundle inicial da home', () => {
 	}
 	expect(vistos.size).toBeGreaterThan(5);
 });
+
+/** Objetos JSON-LD do HTML (cada `<script type="application/ld+json">` tem de fazer parse). */
+function jsonLd(html: string): Record<string, unknown>[] {
+	return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map((m) =>
+		JSON.parse(m[1])
+	);
+}
+
+// JLD-01
+for (const [url, trilha] of [
+	[
+		'/elas/',
+		[
+			['Início', 'https://besave.com.br/'],
+			['Elas', 'https://besave.com.br/elas/']
+		]
+	],
+	[
+		'/familia/infantil/',
+		[
+			['Início', 'https://besave.com.br/'],
+			['Família & filhos', 'https://besave.com.br/familia/'],
+			['Infantil', 'https://besave.com.br/familia/infantil/']
+		]
+	]
+] as const)
+	test(`${url}: JSON-LD BreadcrumbList válido no HTML prerenderizado`, async ({ request }) => {
+		const html = await (await request.get(url)).text();
+		const lds = jsonLd(html);
+		expect(lds).toHaveLength(1);
+		expect(lds[0]).toEqual({
+			'@context': 'https://schema.org',
+			'@type': 'BreadcrumbList',
+			itemListElement: trilha.map(([name, item], i) => ({
+				'@type': 'ListItem',
+				position: i + 1,
+				name,
+				item
+			}))
+		});
+	});
+
+// JLD-01: a home não tem trilha.
+test('home sem BreadcrumbList', () => {
+	expect(jsonLd(ler('index.html'))).toHaveLength(0);
+});
