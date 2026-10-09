@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { Loja, OfertaCard, Publico } from '../src/lib/dados.ts';
 import { servir } from './fixtura.ts';
+import { abrirNaLinha, item } from './linha-compacta.ts';
 
 const GRADE = '[data-grade] article';
 const LOJAS: Loja[] = ['AMAZON', 'SHOPEE', 'MERCADO_LIVRE'];
@@ -47,17 +48,24 @@ const idsNaGrade = (page: Page) =>
 
 const naGrade = async (page: Page) => (await idsNaGrade(page)).map((id) => porId.get(id)!);
 
-/** Botão de filtro pelo nome; no celular, abre o painel "Filtros" quando ele está lá dentro. */
+/**
+ * Botão de filtro pelo nome; no computador, abre a faixa do item na linha compacta (BSV-37);
+ * no celular, abre o painel "Filtros" quando ele está lá dentro.
+ */
 async function escolher(page: Page, nome: string) {
 	const botao = page.getByRole('button', { name: nome, exact: true });
 	if (await botao.isVisible()) return botao.click();
+	if (await abrirNaLinha(page, nome)) return botao.click();
 	await page.getByRole('button', { name: 'Filtros', exact: true }).click();
 	await botao.click();
 	await page.getByRole('button', { name: /^Ver \d+ ofertas?$/ }).click();
 }
 
-const pressionado = (page: Page, nome: string) =>
-	page.locator('[data-filtros] button[aria-pressed]', { hasText: new RegExp(`^${nome}$`) });
+/** No computador, a opção só existe com a faixa do grupo aberta (BSV-37). */
+async function pressionado(page: Page, nome: string) {
+	await abrirNaLinha(page, nome.replaceAll('\\', ''));
+	return page.locator('[data-filtros] button[aria-pressed]', { hasText: new RegExp(`^${nome}$`) });
+}
 
 const contagem = (page: Page) => page.locator('[data-contagem]');
 
@@ -65,8 +73,8 @@ const contagem = (page: Page) => page.locator('[data-contagem]');
 test('"Maior desconto" ordena a grade por desconto', async ({ page }) => {
 	await abrir(page);
 	await escolher(page, 'Maior desconto');
-	await expect(pressionado(page, 'Maior desconto')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Recentes')).toHaveAttribute('aria-pressed', 'false');
+	await expect(await pressionado(page, 'Maior desconto')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Recentes')).toHaveAttribute('aria-pressed', 'false');
 	await expect(page).toHaveURL(/\/\?ordem=desconto$/);
 	const grade = await naGrade(page);
 	const maior = Math.max(...CARDS.map(pct));
@@ -109,7 +117,7 @@ test('"Até R$ 50" só mostra preço ≤ R$ 50; tocar de novo desmarca', async (
 	// BAR-02
 	await escolher(page, 'Até R$ 50');
 	await expect(contagem(page)).toHaveText(`${CARDS.length} ofertas`);
-	await expect(pressionado(page, 'Até R\\$ 50')).toHaveAttribute('aria-pressed', 'false');
+	await expect(await pressionado(page, 'Até R\\$ 50')).toHaveAttribute('aria-pressed', 'false');
 	await expect(page).toHaveURL(/\/$/);
 });
 
@@ -120,7 +128,7 @@ test('"Só com cupom" só mostra cards com cupom e alterna', async ({ page }) =>
 	const esperado = CARDS.filter((c) => c.c).length;
 	await expect(contagem(page)).toHaveText(`${esperado} ofertas`);
 	expect((await naGrade(page)).every((c) => !!c.c)).toBe(true);
-	await expect(pressionado(page, 'Só com cupom')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Só com cupom')).toHaveAttribute('aria-pressed', 'true');
 	await expect(page).toHaveURL(/\/\?cupom=1$/);
 	await escolher(page, 'Só com cupom');
 	await expect(contagem(page)).toHaveText(`${CARDS.length} ofertas`);
@@ -148,8 +156,8 @@ test('recarregar mantém os filtros', async ({ page }) => {
 	await expect(page).toHaveURL(/\/\?ordem=desconto&loja=mercado-livre$/);
 	await page.reload();
 	await expect(page.locator(GRADE).first()).toBeVisible();
-	await expect(pressionado(page, 'Mercado Livre')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Maior desconto')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Mercado Livre')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Maior desconto')).toHaveAttribute('aria-pressed', 'true');
 	const grade = await naGrade(page);
 	expect(new Set(grade.map((c) => c.l))).toEqual(new Set(['MERCADO_LIVRE']));
 	for (let i = 1; i < grade.length; i++)
@@ -172,7 +180,7 @@ test('trocar filtro não cria entrada no histórico; voltar restaura', async ({ 
 	await expect(page.locator(GRADE).first()).toBeVisible();
 	const esperado = CARDS.filter((c) => c.l === 'SHOPEE' && c.p === 'INFANTIL').length;
 	await expect(contagem(page)).toHaveText(`${esperado} ofertas`);
-	await expect(pressionado(page, 'Infantil')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Infantil')).toHaveAttribute('aria-pressed', 'true');
 	// Um voltar a mais sai da home: as trocas de filtro substituíram a entrada.
 	await page.goBack();
 	await expect(page).toHaveURL(/\/desejos\/$/);
@@ -181,7 +189,7 @@ test('trocar filtro não cria entrada no histórico; voltar restaura', async ({ 
 // URL-05
 test('abrir /elas/?loja=shopee já vem filtrado', async ({ page }) => {
 	await abrir(page, '/elas/?loja=shopee');
-	await expect(pressionado(page, 'Shopee')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Shopee')).toHaveAttribute('aria-pressed', 'true');
 	const esperado = CARDS.filter((c) => c.a === 'ELAS' && c.l === 'SHOPEE').length;
 	await expect(contagem(page)).toHaveText(`${esperado} ofertas`);
 	const grade = await naGrade(page);
@@ -192,8 +200,8 @@ test('abrir /elas/?loja=shopee já vem filtrado', async ({ page }) => {
 // URL-02
 test('valor inválido na URL é ignorado', async ({ page }) => {
 	await abrir(page, '/?loja=xyz&publico=feminino');
-	await expect(pressionado(page, 'Feminino')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Todas')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Feminino')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Todas')).toHaveAttribute('aria-pressed', 'true');
 	await expect(contagem(page)).toHaveText(
 		`${CARDS.filter((c) => c.p === 'FEMININO').length} ofertas`
 	);
@@ -207,10 +215,14 @@ test('"Limpar filtros" volta ao padrão e limpa a URL', async ({ page }) => {
 	await limpar.click();
 	await expect(page).toHaveURL(/\/elas\/\?q=x$/);
 	await expect(limpar).toHaveCount(0);
-	await expect(pressionado(page, 'Recentes')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Só com cupom')).toHaveAttribute('aria-pressed', 'false');
-	await expect(page.locator('[data-filtros] button[aria-pressed="true"]')).toHaveCount(3);
+	await expect(await pressionado(page, 'Recentes')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Só com cupom')).toHaveAttribute('aria-pressed', 'false');
+	if (await page.locator('[data-compacta]').isVisible()) {
+		// Computador: cada item mostra só o nome (ordem, o valor padrão).
+		await expect(item(page, 'Ordem')).toHaveText('Ordem: Recentes▾');
+		for (const g of ['Público', 'Loja', 'Preço']) await expect(item(page, g)).toHaveText(`${g}▾`);
+	} else await expect(page.locator('[data-filtros] button[aria-pressed="true"]')).toHaveCount(3);
 });
 
 test('"Limpar filtros" não aparece no padrão', async ({ page }) => {
@@ -261,6 +273,7 @@ test('faixa "Maiores descontos de hoje" não muda com os filtros', async ({ page
 // BAR-09
 test('botões de filtro: toque ≥ 44 px e foco visível', async ({ page }) => {
 	await abrir(page);
+	await abrirNaLinha(page, 'Maior desconto');
 	const ordem = page.getByRole('button', { name: 'Maior desconto', exact: true });
 	const caixa = await ordem.boundingBox();
 	expect(caixa?.height).toBeGreaterThanOrEqual(44);
@@ -407,30 +420,14 @@ test.describe('celular: teclado no painel (390 px)', () => {
 test.describe('desktop (1280 px)', () => {
 	test.use({ viewport: { width: 1280, height: 800 } });
 
-	// PNL-03
-	test('todos os grupos na barra, sem botão "Filtros"', async ({ page }) => {
+	// PNL-03, substituído pela linha compacta da BSV-37 (CMP-01): itens na linha, opções sob demanda.
+	test('linha compacta, sem botão "Filtros"', async ({ page }) => {
 		await abrir(page);
 		await expect(page.getByRole('button', { name: 'Filtros', exact: true })).toBeHidden();
-		for (const nome of [
-			'Recentes',
-			'Maior desconto',
-			'Menor preço',
-			'Todos',
-			'Feminino',
-			'Masculino',
-			'Unissex',
-			'Infantil',
-			'Todas',
-			'Amazon',
-			'Mercado Livre',
-			'Shopee',
-			'Até R$ 50',
-			'R$ 50–100',
-			'R$ 100–200',
-			'Acima de R$ 200',
-			'Só com cupom'
-		])
+		for (const nome of ['Ordem: Recentes', 'Público', 'Loja', 'Preço', 'Só com cupom'])
 			await expect(page.getByRole('button', { name: nome, exact: true })).toBeVisible();
+		for (const nome of ['Maior desconto', 'Feminino', 'Shopee', 'Até R$ 50'])
+			await expect(page.getByRole('button', { name: nome, exact: true })).toHaveCount(0);
 		await expect(page.getByRole('dialog')).toHaveCount(0);
 		// PNL-05: sem degradê no desktop.
 		await expect(page.locator('[data-filtros] [data-mais]')).toBeHidden();

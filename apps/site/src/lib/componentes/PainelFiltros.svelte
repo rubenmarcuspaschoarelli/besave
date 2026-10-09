@@ -1,13 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Snippet } from 'svelte';
+	import type { EstadoFiltros } from '#lib/filtros.ts';
+	import GruposFiltros from './GruposFiltros.svelte';
 
 	/**
-	 * Painel do celular (< 640 px), carregado só ao tocar em "Filtros" (bundle da home, BSV-33):
-	 * `<dialog>` modal, que deixa o fundo inerte e prende o foco. `grupos` vem da barra.
+	 * Painel do celular e do tablet (< 1024 px, BSV-37), carregado só ao tocar em "Filtros" (bundle
+	 * da home, BSV-33): `<dialog>` modal, que deixa o fundo inerte e prende o foco.
 	 */
-	let { total, grupos, aoFechar }: { total: number | null; grupos: Snippet; aoFechar: () => void } =
-		$props();
+	let {
+		total,
+		estado,
+		aoMudar,
+		aoFechar
+	}: {
+		total: number | null;
+		estado: EstadoFiltros;
+		aoMudar: (parcial: Partial<EstadoFiltros>) => void;
+		aoFechar: () => void;
+	} = $props();
 
 	let dialogo: HTMLDialogElement | undefined = $state();
 
@@ -44,13 +54,13 @@
 <dialog
 	bind:this={dialogo}
 	aria-label="Filtros"
-	class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto shadow-2xl backdrop:bg-black/40 open:grid sm:hidden"
+	class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto shadow-2xl backdrop:bg-black/40 open:grid lg:hidden"
 	onclose={aoFechar}
 	onclick={tocouFora}
 	onkeydown={cicloTab}
 >
 	<p class="text-lg font-black text-marca">Filtros</p>
-	{@render grupos()}
+	<GruposFiltros {estado} grupos={['publico', 'loja', 'faixa', 'cupom']} {aoMudar} />
 	<button
 		type="button"
 		class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
