@@ -68,7 +68,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: exists
-        run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+        run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
       - if: steps.exists.outputs.ok == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -91,7 +91,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: exists
-        run: test -f apps/site/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+        run: test -f apps/site/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
       - if: steps.exists.outputs.ok == 'true'
         uses: pnpm/action-setup@v6
         with: { version: 9 }
@@ -131,7 +131,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: python -m unittest discover -s lambdas/vigia -v
       - id: node
-        run: test -f functions/package.json && echo ok=true >> $GITHUB_OUTPUT || echo ok=false >> $GITHUB_OUTPUT
+        run: test -f functions/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
       - if: steps.node.outputs.ok == 'true'
         uses: actions/setup-node@v7
         with: { node-version: 22 }

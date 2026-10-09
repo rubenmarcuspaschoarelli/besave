@@ -28,15 +28,15 @@ test('WF-03: build com pnpm install --frozen-lockfile e pnpm build em apps/site'
   assert.match(yml, /working-directory: apps\/site\n\s+run: \|\n\s+pnpm install --frozen-lockfile\n\s+pnpm build\n/);
 });
 
-test('WF-04: papel de vars.AWS_ROLE_SITE em us-east-1 com configure-aws-credentials@v4', () => {
-  assert.match(yml, /uses: aws-actions\/configure-aws-credentials@v4\n\s+with:\n(\s+.+\n)*?\s+role-to-assume: \$\{\{ vars\.AWS_ROLE_SITE \}\}\n/);
+test('WF-04: papel de vars.AWS_ROLE_SITE em us-east-1 com configure-aws-credentials@v6', () => {
+  assert.match(yml, /uses: aws-actions\/configure-aws-credentials@v6\n\s+with:\n(\s+.+\n)*?\s+role-to-assume: \$\{\{ vars\.AWS_ROLE_SITE \}\}\n/);
   assert.match(yml, /aws-region: us-east-1\n/);
 });
 
 test('WF-04: ações fixadas na versão maior da spec', () => {
   const usos = [...semComentarios.matchAll(/uses: (\S+)/g)].map((m) => m[1]);
   assert.deepEqual(new Set(usos), new Set([
-    'actions/checkout@v4', 'pnpm/action-setup@v4', 'actions/setup-node@v4', 'aws-actions/configure-aws-credentials@v4',
+    'actions/checkout@v7', 'pnpm/action-setup@v6', 'actions/setup-node@v7', 'aws-actions/configure-aws-credentials@v6',
   ]));
 });
 
@@ -50,7 +50,7 @@ test('WF-05: commit pedido precisa ser SHA ancestral de main e só troca apps/si
 
 // PUB-09: o ensaio lista _app/ no bucket (só leitura), então vem depois da credencial e antes de publicar.
 test('PUB: credencial, ensaio e publicação, nessa ordem, pelo script do repositório', () => {
-  const iCred = yml.indexOf('configure-aws-credentials@v4');
+  const iCred = yml.indexOf('configure-aws-credentials@v6');
   const iEnsaio = yml.indexOf('publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO" --ensaio');
   const iPub = yml.lastIndexOf('node infra/deploy-site/publicar.mjs --build apps/site/build --bucket "$BUCKET" --distribuicao "$DISTRIBUICAO"\n');
   assert.ok(iCred > 0 && iCred < iEnsaio && iEnsaio < iPub, `${iCred} ${iEnsaio} ${iPub}`);
