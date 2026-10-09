@@ -287,7 +287,7 @@ fn gerar_fake_publica_paginas_e_imprime_relatorio_do_site() {
         "paginas_inalteradas: 0\n",
         "paginas_removidas: 0\n",
         "paginas_falhas: 0\n",
-        "sitemaps_publicados: 2\n",
+        "sitemaps_publicados: 3\n",
         "robots_publicado: true\n",
     ] {
         assert!(stdout.contains(linha), "falta {linha:?}: {stdout}");

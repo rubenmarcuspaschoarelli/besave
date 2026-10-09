@@ -192,6 +192,21 @@ fn data_br(iso: &str) -> Result<String, minijinja::Error> {
     ))
 }
 
+/// `"2026-10-09T01:00:00Z"` → `"2026-10-08"` (data em Brasília, offset fixo −03:00); `None` se
+/// não está no formato `AAAA-MM-DDThh:mm:ssZ`.
+pub(crate) fn data_brasilia(iso: &str) -> Option<String> {
+    let campo = |a: usize, b: usize| iso.get(a..b).and_then(|s| s.parse::<i64>().ok());
+    if iso.len() != 20 || !iso.ends_with('Z') {
+        return None;
+    }
+    let minutos = dias_de_civil(campo(0, 4)?, campo(5, 7)?, campo(8, 10)?) * 1440
+        + campo(11, 13)? * 60
+        + campo(14, 16)?
+        + OFFSET_BRASILIA_MIN;
+    let (a, m, d) = civil_de_dias(minutos.div_euclid(1440));
+    Some(format!("{a:04}-{m:02}-{d:02}"))
+}
+
 /// Dias desde 1970-01-01 (algoritmo de H. Hinnant, calendário gregoriano proléptico).
 fn dias_de_civil(ano: i64, mes: i64, dia: i64) -> i64 {
     let a = if mes <= 2 { ano - 1 } else { ano };
