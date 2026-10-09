@@ -330,6 +330,47 @@ test.describe('celular (390 px)', () => {
 	});
 });
 
+test.describe('celular: teclado no painel (390 px)', () => {
+	test.use({ viewport: { width: 390, height: 844 } });
+
+	// PNL-04
+	test('foco preso no painel; Esc fecha e volta ao "Filtros"', async ({ page }) => {
+		await abrir(page);
+		const gatilho = page.getByRole('button', { name: 'Filtros', exact: true });
+		await gatilho.focus();
+		await page.keyboard.press('Enter');
+		const painel = page.getByRole('dialog', { name: 'Filtros' });
+		await expect(painel).toBeVisible();
+		const dentro = () =>
+			page.evaluate(() => {
+				const a = document.activeElement;
+				return !!a && a !== document.body && !!a.closest('[role="dialog"], dialog');
+			});
+		expect(await dentro()).toBe(true);
+		// Mais Tabs que botões no painel: tem de dar a volta sem sair.
+		const vistos = new Set<string>();
+		for (let i = 0; i < 25; i++) {
+			await page.keyboard.press('Tab');
+			expect(await dentro(), `Tab ${i + 1}`).toBe(true);
+			vistos.add(await page.evaluate(() => document.activeElement?.textContent?.trim() ?? ''));
+		}
+		expect(vistos).toContain('Ver 130 ofertas');
+		expect(vistos).toContain('Todos');
+		for (let i = 0; i < 25; i++) {
+			await page.keyboard.press('Shift+Tab');
+			expect(await dentro(), `Shift+Tab ${i + 1}`).toBe(true);
+		}
+		// Fundo inerte: a grade não recebe foco nem clique.
+		const card = page.locator(GRADE).first().getByRole('link');
+		await card.focus();
+		expect(await dentro()).toBe(true);
+
+		await page.keyboard.press('Escape');
+		await expect(page.getByRole('dialog')).toHaveCount(0);
+		await expect(gatilho).toBeFocused();
+	});
+});
+
 test.describe('desktop (1280 px)', () => {
 	test.use({ viewport: { width: 1280, height: 800 } });
 

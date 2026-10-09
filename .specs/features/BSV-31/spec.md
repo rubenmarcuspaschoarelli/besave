@@ -35,7 +35,7 @@ não há filtro por faixa de preço nem por cupom.
 | Escrita na URL | `goto(u, { shallow: true, replace: true })` do SvelteKit 3 | `history.replaceState` direto conflita com o roteador (aviso do SvelteKit); `replaceState` de `$app/navigation` está `@deprecated` no SvelteKit 3 | y (código do kit 3.0.0) |
 | Parâmetros alheios (`q`, `utm_*`) | Preservados; só `ordem`, `publico`, `loja`, `preco`, `cupom` são escritos ou apagados | Busca continua como hoje; links do canal levam `utm_source` | y |
 | Filtros na busca | Valem também para os resultados da busca, que ocupam o lugar da grade | Spec: "`lista` e `buscar` respeitam os dois"; busca já usa o `Filtro` | y |
-| Painel do celular | Um só bloco de filtros: no celular vira folha inferior (`div role="dialog" aria-modal`, foco no primeiro botão ao abrir, Esc e fundo fecham, foco volta ao "Filtros"); no desktop é `display: contents` na linha. Filtros aplicam ao tocar; "Ver N ofertas" fecha | Evita duplicar os 14 botões entre linha e painel. **Desvio do plano inicial (`<dialog>`):** sem foco preso, o Tab sai do painel (achado do Verifier) | n — proposto |
+| Painel do celular | `<dialog>` modal (`showModal`: fundo inerte, Esc nativo) em folha inferior; Tab cicla dentro dele (sem passar pela barra do navegador); ao fechar, foco volta a "Filtros". Os grupos ficam num lugar só: no diálogo enquanto aberto, senão na linha (desktop). Filtros aplicam ao tocar; "Ver N ofertas" e toque fora fecham | Revisão do dono (foco preso); sem botões duplicados no DOM | y (dono) |
 | Corte celular/desktop | `sm` (640 px) do Tailwind | Mesmo corte das outras telas | y |
 | Contador | "N ofertas" na barra (total do resultado); o "X de Y" do título continua | Spec pede contador na barra; "X de Y" já existe para o "Ver mais" | y |
 | "Limpar filtros" e ordem | Aparece quando ordem **ou** algum filtro difere do padrão; volta os dois ao padrão. O estado vazio (BAR-08) depende só dos filtros | Spec: "Limpar volta ao padrão e limpa a URL"; ordem não esvazia a grade | y |
@@ -95,6 +95,16 @@ não há filtro por faixa de preço nem por cupom.
 1. PNL-01: WHILE a largura é < 640 px THE barra SHALL mostrar a Ordem e um botão "Filtros"; Público, Loja, Preço e cupom SHALL ficar só no painel.
 2. PNL-02: WHEN "Filtros" é tocado THEN um painel (folha inferior) SHALL abrir com as opções; escolher aplica na hora e "Ver N ofertas" (N do resultado) SHALL fechar o painel.
 3. PNL-03: WHILE a largura é ≥ 640 px THE barra SHALL mostrar todos os grupos numa linha que quebra, sem botão "Filtros".
+4. PNL-04: WHILE o painel está aberto THE foco SHALL ficar dentro dele (Tab e Shift+Tab não saem para a página) e o fundo SHALL ser inerte; WHEN Esc é pressionado THEN o painel SHALL fechar e o foco SHALL voltar ao botão "Filtros" (revisão do dono).
+5. PNL-05: WHILE a linha "Filtros"/ordem do celular tem conteúdo escondido à direita THE linha SHALL mostrar um degradê na borda direita; WHEN ela é rolada até o fim THEN o degradê SHALL sumir; ≥ 640 px não há degradê (revisão do dono).
+
+### P1: Orçamento do bundle
+
+**User Story**: Como dono, quero que o CI falhe se o bundle inicial da home passar do orçamento, para o PageSpeed não regredir em silêncio.
+
+**Acceptance Criteria**:
+
+1. BUD-01: WHEN o build roda THEN o JS inicial da home (`modulepreload` e imports estáticos, bruto) somado ao CSS embutido no `<style>` SHALL ficar ≤ 150 KiB (153.600 B); acima disso o e2e SHALL falhar (revisão do dono: unidade KiB).
 
 ---
 
@@ -137,8 +147,11 @@ não há filtro por faixa de preço nem por cupom.
 | PNL-01 | P1: Painel | T4 | Done |
 | PNL-02 | P1: Painel | T4 | Done |
 | PNL-03 | P1: Painel | T4 | Done |
+| PNL-04 | P1: Painel | T5 | Done |
+| PNL-05 | P1: Painel | T6 | Pending |
+| BUD-01 | P1: Bundle | T7 | Pending |
 
-**Coverage:** 21 total, 21 mapped to tasks, 0 unmapped.
+**Coverage:** 24 total, 24 mapped to tasks, 0 unmapped.
 
 ---
 

@@ -43,20 +43,46 @@
 	const mudar = (parcial: Partial<EstadoFiltros>) => aoMudar({ ...estado, ...parcial });
 	const contagem = (n: number) => (n === 1 ? '1 oferta' : `${n.toLocaleString('pt-BR')} ofertas`);
 
-	/** Painel do celular (< 640 px); no desktop os filtros ficam na linha. */
+	/**
+	 * Painel do celular (< 640 px): `<dialog>` modal, que deixa o fundo inerte e prende o foco.
+	 * Os grupos ficam num lugar só: no diálogo enquanto aberto, senão na linha (desktop).
+	 */
 	let aberto = $state(false);
-	let painel: HTMLDivElement | undefined = $state();
+	let dialogo: HTMLDialogElement | undefined = $state();
 	let gatilho: HTMLButtonElement | undefined = $state();
 
 	async function abrir() {
 		aberto = true;
 		await tick();
-		painel?.querySelector('button')?.focus();
+		dialogo?.showModal();
+		dialogo?.querySelector('button')?.focus();
 	}
 
-	function fechar() {
+	/** Esc (evento `close` nativo), fundo ou "Ver N ofertas". */
+	function aoFechar() {
 		aberto = false;
 		gatilho?.focus();
+	}
+
+	/** O modal já deixa o fundo inerte; o Tab do último botão daria a volta pela barra do navegador. */
+	function cicloTab(e: KeyboardEvent) {
+		if (e.key !== 'Tab' || !dialogo) return;
+		const botoes = [...dialogo.querySelectorAll('button')];
+		const alvo = e.shiftKey ? botoes[botoes.length - 1] : botoes[0];
+		const borda = e.shiftKey ? botoes[0] : botoes[botoes.length - 1];
+		if (document.activeElement === borda) {
+			e.preventDefault();
+			alvo.focus();
+		}
+	}
+
+	/** Toque fora da folha (no `::backdrop`) fecha. */
+	function tocouFora(e: MouseEvent) {
+		if (!dialogo || e.target !== dialogo) return;
+		const r = dialogo.getBoundingClientRect();
+		const dentro =
+			e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+		if (!dentro) dialogo.close();
 	}
 </script>
 
@@ -86,6 +112,29 @@
 	</div>
 {/snippet}
 
+{#snippet grupos()}
+	{@render escolhas('filtro-publico', 'Público', PUBLICOS, estado.publico, 'publico')}
+	{@render escolhas('filtro-loja', 'Loja', LOJAS, estado.loja, 'loja')}
+	<div class="flex flex-wrap items-center gap-2" role="group" aria-labelledby="filtro-preco">
+		<span id="filtro-preco" class="text-xs font-bold text-suave">Preço</span>
+		{#each FAIXAS as [valor, texto] (valor)}
+			<!-- Tocar de novo desmarca. -->
+			<button
+				type="button"
+				class={botao}
+				aria-pressed={estado.faixa === valor}
+				onclick={() => mudar({ faixa: estado.faixa === valor ? undefined : valor })}>{texto}</button
+			>
+		{/each}
+	</div>
+	<button
+		type="button"
+		class="{botao} justify-self-start"
+		aria-pressed={estado.soComCupom}
+		onclick={() => mudar({ soComCupom: !estado.soComCupom })}>Só com cupom</button
+	>
+{/snippet}
+
 <div class="grid gap-3" data-filtros>
 	<!-- Celular: "Filtros" + ordem numa linha que rola; desktop: tudo numa linha que quebra. -->
 	<div
@@ -95,65 +144,35 @@
 			type="button"
 			class="{botao} font-bold sm:hidden"
 			aria-expanded={aberto}
-			aria-controls="painel-filtros"
+			aria-haspopup="dialog"
 			bind:this={gatilho}
 			onclick={abrir}>Filtros</button
 		>
 		{@render escolhas('filtro-ordem', 'Ordem', ORDENS, estado.ordem, 'ordem', true)}
-		{#if aberto}
-			<div
-				class="fixed inset-0 z-30 bg-black/40 sm:hidden"
-				aria-hidden="true"
-				onclick={fechar}
-			></div>
+		{#if !aberto}
+			<div class="hidden sm:contents">{@render grupos()}</div>
 		{/if}
-		<!-- Celular: folha inferior; desktop (sm): `contents`, os grupos entram na linha. -->
-		<div
-			id="painel-filtros"
-			class={aberto
-				? 'fixed inset-x-0 bottom-0 z-40 grid max-h-[85vh] gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl sm:contents'
-				: 'hidden sm:contents'}
-			role={aberto ? 'dialog' : undefined}
-			aria-modal={aberto ? 'true' : undefined}
-			aria-label={aberto ? 'Filtros' : undefined}
-			bind:this={painel}
-			onkeydown={(e) => {
-				if (e.key === 'Escape') fechar();
-			}}
-		>
-			{#if aberto}
-				<p class="text-lg font-black text-marca sm:hidden">Filtros</p>
-			{/if}
-			{@render escolhas('filtro-publico', 'Público', PUBLICOS, estado.publico, 'publico')}
-			{@render escolhas('filtro-loja', 'Loja', LOJAS, estado.loja, 'loja')}
-			<div class="flex flex-wrap items-center gap-2" role="group" aria-labelledby="filtro-preco">
-				<span id="filtro-preco" class="text-xs font-bold text-suave">Preço</span>
-				{#each FAIXAS as [valor, texto] (valor)}
-					<!-- Tocar de novo desmarca. -->
-					<button
-						type="button"
-						class={botao}
-						aria-pressed={estado.faixa === valor}
-						onclick={() => mudar({ faixa: estado.faixa === valor ? undefined : valor })}
-						>{texto}</button
-					>
-				{/each}
-			</div>
+	</div>
+
+	<dialog
+		bind:this={dialogo}
+		aria-label="Filtros"
+		class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto shadow-2xl backdrop:bg-black/40 open:grid sm:hidden"
+		onclose={aoFechar}
+		onclick={tocouFora}
+		onkeydown={cicloTab}
+	>
+		{#if aberto}
+			<p class="text-lg font-black text-marca">Filtros</p>
+			{@render grupos()}
 			<button
 				type="button"
-				class="{botao} justify-self-start"
-				aria-pressed={estado.soComCupom}
-				onclick={() => mudar({ soComCupom: !estado.soComCupom })}>Só com cupom</button
+				class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
+				onclick={() => dialogo?.close()}
+				>{total === null ? 'Ver ofertas' : `Ver ${contagem(total)}`}</button
 			>
-			{#if aberto}
-				<button
-					type="button"
-					class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco sm:hidden"
-					onclick={fechar}>{total === null ? 'Ver ofertas' : `Ver ${contagem(total)}`}</button
-				>
-			{/if}
-		</div>
-	</div>
+		{/if}
+	</dialog>
 
 	<div class="flex flex-wrap items-center gap-3">
 		{#if total !== null}

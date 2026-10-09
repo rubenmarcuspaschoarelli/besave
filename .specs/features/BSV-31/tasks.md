@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Spec**: `.specs/features/BSV-31/spec.md`
-**Status**: Done
+**Status**: In progress (revisão do dono)
 
 ---
 
@@ -39,7 +39,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ### Phase 1: Lógica e tela
 
 ```
-T1 → T2 → T3 → T4
+T1 → T2 → T3 → T4 → T5 → T6 → T7
 ```
 
 ---
@@ -138,3 +138,63 @@ Dentro de 150 KiB; acima de 150.000 B se o orçamento for decimal. A BarraFiltro
 Prints: `prints/barra-celular.png`, `prints/painel-celular.png`, `prints/filtros-desktop.png`, `prints/vazio-desktop.png` (catálogo sintético, sem dado real).
 
 **Commit**: `feat(site): painel de filtros no celular`
+
+---
+
+### T5: Foco preso no painel do celular
+
+**What**: Painel vira `<dialog>` modal (`showModal`: fundo inerte, foco preso); Esc fecha e devolve o foco a "Filtros". Os grupos ficam num só lugar: na linha (desktop) ou no diálogo aberto.
+**Where**: `apps/site/src/lib/componentes/BarraFiltros.svelte`, `apps/site/e2e/filtros.spec.ts`
+**Depends on**: T4
+**Reuses**: snippet `escolhas`
+**Requirement**: PNL-04
+
+**Done when**:
+
+- [x] e2e com Tab, Shift+Tab e Esc passa em 390 px
+- [x] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+
+**Tests**: e2e
+**Gate**: build
+
+**Commit**: `fix(site): foco preso no painel de filtros do celular`
+
+---
+
+### T6: Degradê na linha que rola
+
+**What**: Degradê na borda direita da linha "Filtros"/ordem enquanto há conteúdo à direita; some no fim da rolagem e no desktop.
+**Where**: `apps/site/src/lib/componentes/BarraFiltros.svelte`, `apps/site/e2e/filtros.spec.ts`
+**Depends on**: T5
+**Reuses**: -
+**Requirement**: PNL-05
+
+**Done when**:
+
+- [ ] e2e: degradê visível no início, some no fim (390 px), ausente em 1280 px; print novo
+- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+
+**Tests**: e2e
+**Gate**: build
+
+**Commit**: `feat(site): degradê na linha de ordem do celular`
+
+---
+
+### T7: Orçamento do bundle inicial em teste
+
+**What**: e2e de saída do build que soma JS inicial + CSS embutido da home e falha acima de 150 KiB.
+**Where**: `apps/site/e2e/saida.spec.ts`
+**Depends on**: T6
+**Reuses**: `BUILD`/`ler` de `saida.spec.ts`
+**Requirement**: BUD-01
+
+**Done when**:
+
+- [ ] Teste passa com o valor atual e falha com limite abaixo dele
+- [ ] Gate check passes: `cd apps/site && pnpm lint && pnpm check && pnpm test && pnpm build && pnpm e2e`
+
+**Tests**: e2e
+**Gate**: build
+
+**Commit**: `test(site): orçamento do bundle inicial da home em KiB`
