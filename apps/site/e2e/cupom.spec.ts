@@ -9,6 +9,9 @@ const HTML = readFileSync(
 const CODIGO = 'BESAVE10';
 const OFERTA = '/oferta/5412/';
 const LOJA = '/ir/5412';
+const COPIAR_E_IR = 'Copiar cupom e ir para a loja';
+/** Texto do HTML; o script troca por COPIAR_E_IR quando há clipboard (revisão do dono). */
+const IR = 'Ir para a loja';
 
 /** Serve a página do worker em /oferta/5412/ e uma "loja" em /ir/5412 (o 302 real fica na borda). */
 async function servirOferta(context: BrowserContext) {
@@ -70,11 +73,12 @@ test.describe('com JavaScript', () => {
 		await expect(aviso).toHaveText('');
 	});
 
-	// CUP-09
+	// CUP-07 + CUP-09
 	test('botão principal copia e abre /ir/{id} em aba nova', async ({ page, context }) => {
 		await page.goto(OFERTA);
+		await expect(page.locator('a.cta')).toHaveText(COPIAR_E_IR);
 		await page.evaluate(() => navigator.clipboard.writeText('outro'));
-		const cta = page.getByRole('link', { name: 'Copiar cupom e ir para a loja' });
+		const cta = page.getByRole('link', { name: COPIAR_E_IR, exact: true });
 		const [loja] = await Promise.all([context.waitForEvent('page'), cta.click()]);
 		await loja.waitForLoadState();
 		expect(new URL(loja.url()).pathname).toBe(LOJA);
@@ -94,7 +98,7 @@ test.describe('com JavaScript', () => {
 			});
 		});
 		await page.goto(OFERTA);
-		const cta = page.getByRole('link', { name: 'Copiar cupom e ir para a loja' });
+		const cta = page.getByRole('link', { name: COPIAR_E_IR, exact: true });
 		const [loja] = await Promise.all([context.waitForEvent('page'), cta.click()]);
 		await loja.waitForLoadState();
 		expect(new URL(loja.url()).pathname).toBe(LOJA);
@@ -107,12 +111,23 @@ test.describe('com JavaScript', () => {
 		await expect(page.locator('.copiar')).not.toContainClass('copiado');
 	});
 
-	// CUP-08: navegador sem a API.
-	test('sem navigator.clipboard, o ícone seleciona o código', async ({ page }) => {
+	// CUP-07 + CUP-08: navegador sem a API.
+	test('sem navigator.clipboard, o botão diz "Ir para a loja" e o ícone seleciona o código', async ({
+		page,
+		context
+	}) => {
 		await page.addInitScript(() => {
 			Object.defineProperty(Navigator.prototype, 'clipboard', { get: () => undefined });
 		});
 		await page.goto(OFERTA);
+		const cta = page.locator('a.cta');
+		await expect(cta).toHaveText(IR);
+		const [loja] = await Promise.all([context.waitForEvent('page'), cta.click()]);
+		await loja.waitForLoadState();
+		expect(new URL(loja.url()).pathname).toBe(LOJA);
+		await loja.close();
+		await expect(page.getByRole('status')).toHaveText('');
+
 		await page.getByRole('button', { name: 'Copiar cupom' }).click();
 		await expect.poll(() => selecao(page)).toBe(CODIGO);
 		// Relógio parado: um "Cupom copiado!" indevido não sumiria sozinho.
@@ -131,7 +146,8 @@ test.describe('sem JavaScript', () => {
 		await expect(page.locator('.codigo')).toHaveText(CODIGO);
 		await expect(page.locator('button.copiar')).toHaveCount(1);
 		await expect(page.locator('button.copiar')).toBeHidden();
-		const cta = page.getByRole('link', { name: 'Copiar cupom e ir para a loja' });
+		const cta = page.getByRole('link', { name: IR, exact: true });
+		await expect(cta).toHaveText(IR);
 		await expect(cta).toHaveAttribute('href', LOJA);
 		await expect(cta).toHaveAttribute('target', '_blank');
 		const [loja] = await Promise.all([context.waitForEvent('page'), cta.click()]);

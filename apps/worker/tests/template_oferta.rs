@@ -599,14 +599,17 @@ fn cupom_ativo_tem_botao_de_copiar_oculto_ao_lado_do_codigo() {
 
 // CUP-02
 #[test]
-fn cupom_ativo_cta_copia_e_abre_em_aba_nova() {
+fn cupom_ativo_cta_ir_para_a_loja_em_aba_nova() {
     let html = render(&oferta_ok());
     let cta = trecho(&html, r#"<a class="cta""#, "</a>");
     assert_eq!(
         cta,
-        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Copiar cupom e ir para a loja"#
+        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Ir para a loja"#
     );
     assert!(!html.contains("Acesse a oferta"));
+    // "Copiar cupom e ir para a loja" só existe no script (revisão do dono): sem JS não promete cópia.
+    assert_eq!(ocorrencias(&html, "Copiar cupom e ir para a loja"), 1);
+    assert!(scripts_js(&html)[0].contains("Copiar cupom e ir para a loja"));
 }
 
 // CUP-03
@@ -622,7 +625,12 @@ fn cupom_ativo_tem_status_e_script_sem_dado_da_oferta() {
     for proibido in ["BESAVE10", "5412", "/ir/", "http", "Fone"] {
         assert!(!js.contains(proibido), "{proibido} no script");
     }
-    for esperado in ["navigator.clipboard.writeText", "Cupom copiado!", ".codigo"] {
+    for esperado in [
+        "navigator.clipboard.writeText",
+        "Cupom copiado!",
+        ".codigo",
+        "Copiar cupom e ir para a loja",
+    ] {
         assert!(js.contains(esperado), "{esperado}");
     }
 

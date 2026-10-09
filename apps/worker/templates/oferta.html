@@ -57,7 +57,7 @@
 {% if encerrada %}
 <a class="cta" aria-disabled="true">Acesse a oferta</a>
 {% elif copia %}
-<a class="cta" href="/ir/{{ o.id }}" target="_blank" rel="nofollow sponsored noopener">Copiar cupom e ir para a loja</a>
+<a class="cta" href="/ir/{{ o.id }}" target="_blank" rel="nofollow sponsored noopener">Ir para a loja</a>
 <p class="confirmacao" role="status"></p>
 {% else %}
 <a class="cta" href="/ir/{{ o.id }}" target="_blank" rel="nofollow sponsored noopener">Acesse a oferta</a>
@@ -104,6 +104,7 @@
   var codigo = document.querySelector(".cupom .codigo");
   var botao = document.querySelector(".copiar");
   var aviso = document.querySelector(".confirmacao");
+  var cta = document.querySelector(".cta");
   var timer;
   function avisar() {
     aviso.textContent = "Cupom copiado!";
@@ -130,7 +131,10 @@
   }
   botao.hidden = false;
   botao.addEventListener("click", function () { copiar(selecionar); });
-  document.querySelector(".cta").addEventListener("click", function () { copiar(function () {}); });
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    cta.textContent = "Copiar cupom e ir para a loja";
+    cta.addEventListener("click", function () { copiar(function () {}); });
+  }
 })();
 </script>
 {% endif %}
