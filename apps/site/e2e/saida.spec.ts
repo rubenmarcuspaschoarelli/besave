@@ -30,24 +30,28 @@ test('build sem fallback', () => {
 		.map((f) => f.replaceAll('\\', '/'))
 		.filter((f) => f.endsWith('.html'))
 		.sort();
+	// ARE-01: as 10 áreas do CONTRATO §2.3.
+	const areas = [
+		'tech',
+		'players',
+		'meu-lar',
+		'elas',
+		'eles',
+		'cultura',
+		'familia',
+		'pets',
+		'esporte-vida',
+		'outros'
+	];
+	// SUB-01 (BSV-33): as 40 combinações área × público.
+	const publicos = ['feminino', 'masculino', 'unissex', 'infantil'];
 	expect(htmls).toEqual(
 		[
 			'404.html',
 			'desejos/index.html',
 			'index.html',
-			// ARE-01: as 10 áreas do CONTRATO §2.3.
-			...[
-				'tech',
-				'players',
-				'meu-lar',
-				'elas',
-				'eles',
-				'cultura',
-				'familia',
-				'pets',
-				'esporte-vida',
-				'outros'
-			].map((s) => `${s}/index.html`)
+			...areas.map((s) => `${s}/index.html`),
+			...areas.flatMap((s) => publicos.map((p) => `${s}/${p}/index.html`))
 		].sort()
 	);
 });

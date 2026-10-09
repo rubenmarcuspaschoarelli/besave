@@ -1,5 +1,5 @@
 // Exibição: preço, tempo relativo e rótulos de área (CONTRATO §2.3, AD-032).
-import type { Area, OfertaCard } from './dados.ts';
+import type { Area, OfertaCard, Publico } from './dados.ts';
 
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
@@ -52,6 +52,17 @@ export const SLUG_AREA: Record<Area, string> = {
 	ESPORTE_VIDA: 'esporte-vida',
 	OUTROS: 'outros'
 };
+
+export const ROTULO_PUBLICO: Record<Publico, string> = {
+	FEMININO: 'Feminino',
+	MASCULINO: 'Masculino',
+	UNISSEX: 'Unissex',
+	INFANTIL: 'Infantil'
+};
+
+/** `/{slug}/` ou `/{slug}/{publico}/` (público em minúsculas, CONTRATO §2.3). */
+export const caminhoArea = (a: Area, p?: Publico) =>
+	`/${SLUG_AREA[a]}/${p ? `${p.toLowerCase()}/` : ''}`;
 
 /** Botões de área da home, na ordem do modelo A; `OUTROS` fica no menu "Mais". */
 export const AREAS_MENU: { valor: Area; rotulo: string }[] = (

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { ROTULO_AREA, SLUG_AREA } from '#lib/formato.ts';
+	import CabecalhoArea from '#lib/componentes/CabecalhoArea.svelte';
 	import PaginaOfertas from '#lib/componentes/PaginaOfertas.svelte';
 
 	let { data } = $props();
@@ -17,5 +18,9 @@
 
 <!-- Componente novo por área: busca e "Ver mais" voltam ao início ao trocar de área. -->
 {#key data.area}
-	<PaginaOfertas area={data.area} />
+	<PaginaOfertas area={data.area}>
+		{#snippet cabecalho()}
+			<CabecalhoArea area={data.area} />
+		{/snippet}
+	</PaginaOfertas>
 {/key}

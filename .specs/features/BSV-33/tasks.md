@@ -95,8 +95,8 @@ T3 → T4 → T5 → T6 → T7
 
 **Done when**:
 
-- [ ] `/elas/masculino/` 200 com h1, canonical e breadcrumb; grade só ELAS + MASCULINO
-- [ ] `/elas/xyz/` e `/xyz/feminino/` → 404
+- [x] `/elas/masculino/` 200 com h1, canonical e breadcrumb; grade só ELAS + MASCULINO
+- [x] `/elas/xyz/` e `/xyz/feminino/` → 404
 
 **Tests**: e2e
 **Gate**: full

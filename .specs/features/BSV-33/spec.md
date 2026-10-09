@@ -108,10 +108,10 @@ grade carregada por JavaScript. Não existem páginas por público, e o filtro d
 | SMP-04 | Sitemap | T1 | Done |
 | SMP-05 | Sitemap | T2 | Done |
 | SMP-06 | Sitemap | T1 | Done |
-| SUB-01 | Subpáginas | T3 | Pending |
-| SUB-02 | Subpáginas | T3 | Pending |
-| SUB-03 | Subpáginas | T3 | Pending |
-| SUB-04 | Subpáginas | T3 | Pending |
+| SUB-01 | Subpáginas | T3 | Done |
+| SUB-02 | Subpáginas | T3 | Done |
+| SUB-03 | Subpáginas | T3 | Done |
+| SUB-04 | Subpáginas | T3 | Done |
 | PUB-01 | Público | T4 | Pending |
 | PUB-02 | Público | T4 | Pending |
 | PUB-03 | Público | T4 | Pending |
