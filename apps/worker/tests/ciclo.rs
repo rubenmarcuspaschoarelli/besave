@@ -642,3 +642,33 @@ fn segundo_ciclo_sem_mudanca_nao_sobe_sitemap_de_paginas() {
     assert_eq!(r2.site.sitemaps_publicados, 0);
     assert_eq!(gravadas(&p, marca), ["manifest.prev.json", "manifest.json"]);
 }
+
+/// SMP-02/SMP-04 no ciclo: expirada (`x`) não conta para o volume nem para o `lastmod`. TECH com 9
+/// ativas + 1 expirada fica fora; a expirada mais recente não muda o `lastmod` da home.
+#[test]
+fn expirada_nao_conta_no_sitemap_de_paginas() {
+    let antiga = |l: LinhaOferta| LinhaOferta {
+        dt_publicacao_site: Some(AGORA - 3 * DIA),
+        ..l
+    };
+    let mut v: Vec<LinhaOferta> = (3001..=3009).map(|id| antiga(linha(id))).collect();
+    v.push(LinhaOferta {
+        ativo: false,
+        dt_desativacao: Some(AGORA - 60),
+        dt_publicacao_site: Some(AGORA - 60),
+        ..linha(3010)
+    });
+    let mut p = PublicadorMemoria::new();
+    rodar(&v, &mut p, &mapeamento(), AGORA).unwrap();
+    // A expirada está publicada (chunk e página), mas o sitemap de páginas a ignora.
+    assert!(p.existe("oferta/3010/index.html").unwrap());
+    let paginas = texto(&p, "sitemap-paginas.xml");
+    assert!(!paginas.contains("/tech/"), "{paginas}");
+    // dp das ativas = AGORA − 3 dias = 2026-09-21T12:40Z → 21/09 em Brasília; a expirada é 24/09.
+    assert!(
+        paginas
+            .contains("<url><loc>https://besave.com.br/</loc><lastmod>2026-09-21</lastmod></url>"),
+        "{paginas}"
+    );
+    assert!(!paginas.contains("2026-09-24"), "{paginas}");
+}

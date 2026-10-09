@@ -110,6 +110,27 @@ fn subpagina_com_noventa_e_um_por_cento_fica_fora() {
     );
 }
 
+/// SMP-03: os 90% são da área, não do total: com outra área grande, 91% de MEU_LAR (45% do total)
+/// continua fora.
+#[test]
+fn noventa_por_cento_e_da_area_e_nao_do_total() {
+    let mut a = n(Area::MeuLar, Publico::Unissex, 910, DP);
+    a.extend(n(Area::MeuLar, Publico::Feminino, 90, DP));
+    a.extend(n(Area::Elas, Publico::Feminino, 500, DP));
+    a.extend(n(Area::Elas, Publico::Unissex, 500, DP));
+    assert_eq!(
+        locs(&a),
+        [
+            "https://besave.com.br/",
+            "https://besave.com.br/meu-lar/",
+            "https://besave.com.br/meu-lar/feminino/",
+            "https://besave.com.br/elas/",
+            "https://besave.com.br/elas/feminino/",
+            "https://besave.com.br/elas/unissex/",
+        ]
+    );
+}
+
 /// SMP-03: path `/{slug}/{publico}/` com o público em minúsculas, na ordem do enum.
 #[test]
 fn todos_os_publicos_usam_o_slug_minusculo() {

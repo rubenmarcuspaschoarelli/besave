@@ -340,3 +340,14 @@ for (const [url, trilha] of [
 test('home sem BreadcrumbList', () => {
 	expect(jsonLd(ler('index.html'))).toHaveLength(0);
 });
+
+// PUB-01 (decisão da tabela): trocar de público na área é trocar de página; voltar retorna.
+test('voltar no navegador depois de "Masculino" retorna a /elas/', async ({ page }) => {
+	await abrir(page, '/elas/?loja=shopee');
+	await tocar(page, 'Masculino');
+	await expect(page).toHaveURL(/\/elas\/masculino\/\?loja=shopee$/);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/elas\/\?loja=shopee$/);
+	await expect(h1(page)).toHaveText('Ofertas de Elas');
+	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
+});
