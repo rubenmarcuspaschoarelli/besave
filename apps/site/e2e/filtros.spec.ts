@@ -374,6 +374,12 @@ test.describe('celular: teclado no painel (390 px)', () => {
 				return !!a && a !== document.body && !!a.closest('[role="dialog"], dialog');
 			});
 		expect(await dentro()).toBe(true);
+		// Grupos num lugar só: nada duplicado escondido na linha enquanto o painel está aberto.
+		for (const id of ['#filtro-ordem', '#filtro-publico', '#filtro-loja', '#filtro-preco'])
+			await expect(page.locator(id), id).toHaveCount(1);
+		// 3 de ordem + 5 de público + 4 de loja + 4 de preço + cupom.
+		await expect(page.locator('[data-filtros] button[aria-pressed]')).toHaveCount(17);
+		await expect(painel.locator('button[aria-pressed]')).toHaveCount(14);
 		// Mais Tabs que botões no painel: tem de dar a volta sem sair.
 		const vistos = new Set<string>();
 		for (let i = 0; i < 25; i++) {
