@@ -92,13 +92,13 @@ Feito e no ar:
 - Canal `@besaveofertas` no ar: até 180 ofertas por dia em lotes de 2 (8–22 h), "Oferta encerrada" na
   expiração e avisos programados com página `/avisos/{id}/` (BSV-40, BSV-41).
 - Cards com data de publicação no site (`dp`, contrato 1.5.0, BSV-36).
+- Página da oferta com "Copiar cupom e ir para a loja" (aba nova) e filtros compactos no computador
+  (BSV-37, BSV-38, 09/10).
 - Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
   medida em produção: 25 mil cards, busca p95 ~8 ms.
-- Contrato 1.5.0, 94 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
+- Contrato 1.5.0, 97 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
 
 Próximos, nesta ordem:
-- **BSV-37** (filtros compactos no computador, setas na faixa de descontos) e **BSV-38** (copiar o cupom e ir
-  para a loja em aba nova; cache de 5 min do `besave.css`), em paralelo.
 - **BSV-34** (página de busca), depois "dieta" do bundle se a home voltar a encostar no gate (AD-090).
 - **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
   do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono).
