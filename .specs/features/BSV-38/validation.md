@@ -1,10 +1,10 @@
 # Validation — BSV-38
 
-> As seções 1 a 4 registram a rodada 1, sobre `2acdad0..2e33dad`. A rodada 2, que dá o veredito atual, está na §7.
+> As seções 1 a 4 registram a rodada 1, sobre `2acdad0..2e33dad`; a rodada 2 está na §7; a rodada 3 (delta da revisão do dono, `4124c50..93e88c4`) está na §8. A rodada 3b (`4124c50..HEAD`, com `0b35f36`), que dá o veredito atual, está na §9.
 
 ## Validation: BSV-38 - PASS
 
-**Result**: PASS (rodada 2).
+**Result**: PASS (rodada 3b). A rodada 3 reprovou com os sobreviventes R6 e R8. O commit `0b35f36`, só de teste, fechou as duas lacunas, e os dois mutantes morreram (§9).
 
 A rodada 1 foi reprovada por 4 mutantes sobreviventes nos testes. O commit `e63af5b` (só testes) fechou as lacunas, e os 4 morreram junto com 4 mutantes novos (ver §7).
 
@@ -152,3 +152,104 @@ Controle M0 sem mutação: passou.
 
 ### Lacunas restantes
 Nenhuma que bloqueie. Continua bloqueando o merge só a execução real do dono (§5).
+
+## 8. Rodada 3 (delta da revisão do dono)
+
+**Veredito: FAIL.** Rodada 3 de 3. Pelo `docs/WORKFLOW-AGENTES.md` §1, sobe para o dono. O verificador é um sub-agente independente (autor ≠ verificador), modelo Claude Opus 5.5 (`claude-opus-5-5`), em 09/10/2026.
+
+- **Diff:** `4124c50..93e88c4` (um commit, `93e88c4`): template, golden `oferta-pagina-ok.html`, `template_oferta.rs`, `cupom.spec.ts`, README do template e spec.md.
+- **Pedido do dono:** (1) no HTML o botão com cupom diz "Ir para a loja", e o script troca para "Copiar cupom e ir para a loja" quando `navigator.clipboard.writeText` existe; (2) aprovado: se a cópia falha no botão principal, nada é selecionado e a loja abre do mesmo jeito.
+
+### Checagem ancorada na spec (só o delta)
+
+| Req. | Resultado definido pela spec | Evidência `file:line` (asserção) | Resultado |
+|---|---|---|---|
+| CUP-02 | CTA com cupom no HTML: `<a class="cta" href="/ir/{id}" target="_blank" rel="nofollow sponsored noopener">Ir para a loja</a>` | `apps/worker/tests/template_oferta.rs:605-608` (tag + texto inteiros), `:611` (o texto "Copiar cupom e ir para a loja" aparece 1 vez só) e `:612` (no script) | PASS |
+| CUP-03 (texto novo no script) | O script contém o texto da troca e nenhum dado da oferta | `apps/worker/tests/template_oferta.rs:628-635` | PASS |
+| CUP-07 (com API) | Com `writeText`, o CTA passa a "Copiar cupom e ir para a loja" | `apps/site/e2e/cupom.spec.ts:79` (`toHaveText`, casamento inteiro), `:81` e `:101` (`getByRole` com `exact: true`) | PASS |
+| CUP-07 (sem API) | Sem a API, continua "Ir para a loja", não tenta copiar e a loja abre | `apps/site/e2e/cupom.spec.ts:124` (`toHaveText(IR)`), `:125-127` (aba em `/ir/5412`), `:129` (aviso vazio com o relógio parado) | PASS |
+| CUP-09 | Com o clipboard recusado, a aba abre do mesmo jeito | `apps/site/e2e/cupom.spec.ts:101-104` | PASS |
+| CUP-10 | Sem JS: ícone oculto e link "Ir para a loja" para `/ir/{id}` | `apps/site/e2e/cupom.spec.ts:148` (ícone oculto), `:149-152` (`exact: true`, texto, `href`, `target`), `:153-155` (a aba abre) | PASS |
+| Decisão (2) do dono | Se a cópia falha no botão principal, nada fica selecionado | nenhuma asserção. Em `cupom.spec.ts:91-112` a seleção só é conferida (`:108`) depois do clique no ícone, que também seleciona | ❌ GAP (R6 sobreviveu) |
+
+Casamento por substring: as três chamadas `getByRole('link', …)` do delta usam `exact: true` (`cupom.spec.ts:81`, `:101`, `:149`). As asserções de texto usam `toHaveText` com string, que compara o texto inteiro e não é substring. `getByRole('button', { name: 'Copiar cupom' })` não casa o link, porque o papel é outro. Não há falso positivo por substring.
+
+### Gates
+| Gate | Resultado |
+|---|---|
+| `apps/worker`: `cargo fmt --check` | OK |
+| `apps/worker`: `cargo clippy --all-targets -- -D warnings` | OK, 0 avisos |
+| `apps/worker`: `cargo test --test template_oferta` | 26/26 |
+| Golden × render (`cargo run --bin render-oferta -- ../../packages/contract/fixtures/oferta-pagina-ok.json`, comparado com `cmp`) | idênticos byte a byte |
+| `npx html-validate tests/fixtures/paginas/*.html` | 0 erros |
+| `apps/site`: `pnpm lint` / `pnpm check` | OK / 0 erros, 0 avisos (468 arquivos) |
+| `apps/site`: `pnpm build` + `playwright test e2e/cupom.spec.ts` (`CI=1`; porta 4173 livre antes, servida pelo preview deste worktree) | 12/12 (celular e desktop) |
+
+O e2e completo fica com o autor, como pedido.
+
+### Sensor de discriminação
+Rodou num `git worktree` temporário (detached em `93e88c4`) no scratchpad da sessão, com `CARGO_TARGET_DIR` próprio, `CARGO_BUILD_JOBS=2` e `CI=1`. Cada mutante foi aplicado em `templates/oferta.html`; o golden `oferta-pagina-ok.html` foi regerado com `render-oferta`, como o autor faria; depois rodaram `cargo test --test template_oferta` e `playwright test e2e/cupom.spec.ts`. O controle R0, sem mutação, passou (26/26 e 12/12). No fim, o worktree temporário e o diretório de build foram removidos e rodou `git worktree prune`. O `git status --porcelain` do worktree real ficou vazio, igual ao de antes.
+
+| # | Mutante | Rust | e2e | Resultado |
+|---|---|---|---|---|
+| R1 | HTML volta a "Copiar cupom e ir para a loja" | 1 falha (CUP-02) | 4 falhas | morto |
+| R2 | O script não troca o texto | 2 falhas (CUP-02, CUP-03) | 4 falhas | morto |
+| R3 | O script troca o texto mesmo sem clipboard | passa | 2 falhas (`cupom.spec.ts:124`) | morto |
+| R4 | O listener de cópia no CTA é registrado mesmo sem clipboard (só a troca de texto fica no `if`) | passa | passa | **equivalente**: sem `navigator.clipboard`, `copiar` lança `TypeError`, o `catch` chama a função vazia e nada muda para quem vê a página |
+| R5 | CTA sem cupom passa a "Ir para a loja" | 1 falha (CUP-04) | passa | morto |
+| R6 | Falha de cópia no CTA seleciona o código (`copiar(selecionar)`) | passa | passa | **sobreviveu** |
+| R7 | CTA encerrado passa a "Ir para a loja" | 2 falhas (CUP-05, golden da encerrada) | passa | morto |
+| R8 | A troca exige só `navigator.clipboard`, sem conferir `writeText` | passa | passa | **sobreviveu** (prioridade baixa) |
+
+**Total: 8 mutantes, 5 mortos, 2 sobreviveram (R6, R8) e 1 equivalente (R4).**
+
+### Lacunas ranqueadas (só em teste)
+1. **R6, decisão (2) do dono.** Em `cupom.spec.ts`, no teste "com o clipboard negado" (`:91`), entre `loja.close()` (`:105`) e o clique no ícone (`:107`), falta asseverar que nada ficou selecionado: `expect(await selecao(page)).toBe('')`. A rejeição do `writeText` resolve antes de a aba nova carregar, então a asserção sem retry discrimina. O mesmo vale para o teste sem `navigator.clipboard`, depois de `:128`.
+2. **R8 (baixa).** CUP-07 diz "IF `navigator.clipboard.writeText` existe". Nenhum teste cobre `navigator.clipboard` presente sem `writeText`. Correção: um caso com `Object.defineProperty(Clipboard.prototype, 'writeText', { value: undefined })` que confira que o CTA diz "Ir para a loja". Esse navegador é raro entre os alvos, então a prioridade é baixa.
+
+O código de produção do delta atende ao pedido do dono. As lacunas são só de teste, todas em `apps/site/e2e/cupom.spec.ts`. Como esta é a 3ª rodada, a decisão de corrigir e reverificar, ou de aceitar a lacuna R6, é do dono.
+
+### Lição proposta (para o dono; não gravada em LESSONS)
+- **Decisão negativa ("não seleciona", "não mostra") precisa de asserção de ausência logo depois da ação que poderia causá-la**, antes de outra ação produzir o mesmo estado. No teste do clipboard negado, o clique seguinte no ícone mascarava a seleção indevida do CTA (R6).
+
+## 9. Rodada 3b (lacunas da rodada 3)
+
+**Veredito: PASS.** O verificador é o mesmo sub-agente independente da rodada 3 (autor ≠ verificador), em 09/10/2026.
+
+- **Diff:** `4124c50..HEAD` (`93e88c4` e `0b35f36`). O `0b35f36` só muda `apps/site/e2e/cupom.spec.ts` (+17 linhas, nenhuma asserção removida ou afrouxada).
+
+### Mudanças conferidas
+| Lacuna | Asserção nova | Evidência `file:line` | Resultado |
+|---|---|---|---|
+| R6, decisão (2) do dono: falha no botão principal não seleciona nada | `expect(await selecao(page)).toBe('')`, sem retry, logo depois de `loja.close()` e antes do clique no ícone | `apps/site/e2e/cupom.spec.ts:107` (clipboard negado), `:132` (sem API) | PASS |
+| R8, CUP-07 "IF `writeText` existe" | `Clipboard.prototype.writeText = undefined`; o ícone aparece (o script rodou) e o CTA continua "Ir para a loja" (`toHaveText`, casamento inteiro) | `apps/site/e2e/cupom.spec.ts:143-155` (`:153`, `:154`) | PASS |
+
+O `toBeVisible` do ícone (`:153`) evita falso positivo. Sem ele, um script que quebrasse antes da troca de texto também deixaria "Ir para a loja".
+
+### Gates (worktree real)
+| Gate | Resultado |
+|---|---|
+| `pnpm lint` / `pnpm check` | OK / 0 erros, 0 avisos (468 arquivos) |
+| `pnpm build` | OK |
+| `playwright test e2e/cupom.spec.ts` (`CI=1`, porta 4173 livre antes) | 1ª execução: 13/14. Falhou só "segundo clique antes de 2 s" `[celular]` (`:62`), um teste que o delta não tocou. Execuções seguintes: 14/14, e esse teste passou 20/20 com `--repeat-each 10`. Tratado como instabilidade de carga (outra sessão rodava Playwright em paralelo; lições 15 e 17), não como regressão |
+
+Os gates do worker não mudaram desde a rodada 3: o `0b35f36` não toca em `apps/worker`.
+
+### Sensor (worktree temporário detached em `0b35f36`, `node_modules` próprio via `pnpm install --frozen-lockfile --offline`, sem junção para o worktree real)
+Os mutantes de script foram aplicados direto no golden `oferta-pagina-ok.html`, que é o que o e2e lê. O script do golden é idêntico ao do template.
+
+| # | Mutante | e2e | Resultado |
+|---|---|---|---|
+| R0 | controle, sem mutação | 14/14 | passou |
+| R6 | Falha no CTA seleciona (`copiar(selecionar)`) | 2 falhas (`:91`, celular e desktop) | morto |
+| R9 (novo) | Listener do CTA sempre registrado e seleciona na falha (também sem API) | 4 falhas, nas asserções `:107` e `:132` | morto |
+| R8 | A troca exige só `navigator.clipboard` | 2 falhas (`:143`) | morto |
+| R3 (controle) | Troca o texto mesmo sem clipboard | 4 falhas (`:117`, `:143`) | morto |
+| R2 (controle) | O script não troca o texto | 4 falhas (`:77`, `:91`) | morto |
+
+**Rodadas 3 + 3b: 9 mutantes distintos (R1–R9). 8 mortos, 1 equivalente (R4) e nenhum sobrevivente.**
+
+Limpeza: o worktree temporário foi removido e rodou `git worktree prune`. Fora deste worktree não sobrou nada além de um diretório temporário vazio que uma regra de proteção do ambiente não deixou apagar. O `git status --porcelain` do worktree real mostra só este arquivo.
+
+### Lacunas restantes
+Nenhuma que bloqueie. Continua bloqueando o merge a execução real do dono (§5). Observação: a instabilidade isolada do teste do clique repetido (`cupom.spec.ts:62`) com a máquina carregada deve ser acompanhada no e2e completo do autor.
