@@ -193,6 +193,43 @@ figure {
 	color: var(--cor-texto);
 	letter-spacing: 0.05em;
 	overflow-wrap: anywhere;
+	margin-left: auto;
+}
+/* Copiar o cupom (BSV-38): o script tira o `hidden`; sem JS o botão não aparece. */
+.copiar {
+	flex: none;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 44px;
+	min-height: 44px;
+	padding: 0;
+	border: 1px solid var(--cor-marca);
+	border-radius: var(--raio);
+	background: var(--cor-fundo);
+	color: var(--cor-marca);
+	cursor: pointer;
+}
+.copiar[hidden] {
+	display: none;
+}
+.copiar:hover {
+	background: var(--cor-superficie);
+}
+.copiar:focus-visible {
+	outline: 3px solid var(--cor-foco);
+	outline-offset: 2px;
+}
+.copiar.copiado {
+	background: var(--cor-marca);
+	color: var(--cor-sobre-destaque);
+}
+.confirmacao {
+	min-height: 1.5rem;
+	margin-top: -0.5rem;
+	text-align: center;
+	font-weight: 700;
+	color: var(--cor-marca);
 }
 .cta {
 	display: block;

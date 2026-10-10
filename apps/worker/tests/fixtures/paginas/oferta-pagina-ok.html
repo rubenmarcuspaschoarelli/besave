@@ -46,8 +46,9 @@
 <p class="por"><strong>R$ 199,90</strong> <span class="desconto">-33%</span></p>
 <p class="data">publicada em <time datetime="2026-09-24T12:40:00Z">24/09/2026 às 09:40</time></p>
 </section>
-<p class="cupom">Cupom <code class="codigo">BESAVE10</code></p>
-<a class="cta" href="/ir/5412" rel="nofollow sponsored">Acesse a oferta</a>
+<p class="cupom">Cupom <code class="codigo">BESAVE10</code> <button class="copiar" type="button" aria-label="Copiar cupom" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button></p>
+<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Ir para a loja</a>
+<p class="confirmacao" role="status"></p>
 <p class="avaliacao">Nota <strong>4,6</strong> de 5 · 1.832 avaliações</p>
 </div>
 </div>
@@ -73,5 +74,43 @@
 <a href="/">Página inicial</a>
 </nav>
 </footer>
+<script>
+(function () {
+  var codigo = document.querySelector(".cupom .codigo");
+  var botao = document.querySelector(".copiar");
+  var aviso = document.querySelector(".confirmacao");
+  var cta = document.querySelector(".cta");
+  var timer;
+  function avisar() {
+    aviso.textContent = "Cupom copiado!";
+    botao.classList.add("copiado");
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      aviso.textContent = "";
+      botao.classList.remove("copiado");
+    }, 2000);
+  }
+  function selecionar() {
+    var r = document.createRange();
+    r.selectNodeContents(codigo);
+    var s = window.getSelection();
+    s.removeAllRanges();
+    s.addRange(r);
+  }
+  function copiar(falhou) {
+    try {
+      navigator.clipboard.writeText(codigo.textContent).then(avisar, falhou);
+    } catch (e) {
+      falhou();
+    }
+  }
+  botao.hidden = false;
+  botao.addEventListener("click", function () { copiar(selecionar); });
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    cta.textContent = "Copiar cupom e ir para a loja";
+    cta.addEventListener("click", function () { copiar(function () {}); });
+  }
+})();
+</script>
 </body>
 </html>
