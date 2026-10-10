@@ -28,12 +28,12 @@ No computador, a barra de filtros da BSV-31 ocupa até quatro linhas de botões 
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Tablet 640–1023 px: hoje mostra a barra larga (sem botão "Filtros"); a spec diz "< 1024 px: sem mudança (botão Filtros + painel)" | < 1024 px usa botão "Filtros" + painel (o painel e o botão passam de `sm` para `lg`) | O parêntese da spec descreve o comportamento desejado; a barra larga de quatro linhas é o problema que o ticket resolve; "a linha compacta é o único código de filtro no carregamento inicial" | n (dono valida no PR) |
-| Clique fora "devolve o foco ao item" | Devolve só se o clique não pôs o foco em outro elemento (campo de busca, link) | Não roubar o foco de onde o usuário clicou; Esc sempre devolve | n |
-| `Só com cupom` como interruptor | `button` com `aria-pressed`, desenhado como trilho + bolinha | Mesma semântica da BSV-31 (botão alternado); testes existentes leem `aria-pressed` | n |
-| Seta no início/fim | Some (`hidden`); se estava com foco, o foco vai para a seta oposta | Spec aceita "some ou desativa"; foco não se perde no `body` | n |
+| Tablet 640–1023 px: hoje mostra a barra larga (sem botão "Filtros"); a spec diz "< 1024 px: sem mudança (botão Filtros + painel)" | < 1024 px usa botão "Filtros" + painel (o painel e o botão passam de `sm` para `lg`) | O parêntese da spec descreve o comportamento desejado; a barra larga de quatro linhas é o problema que o ticket resolve; "a linha compacta é o único código de filtro no carregamento inicial" | y (dono, 09/10) |
+| Clique fora "devolve o foco ao item" | Devolve só se o clique não pôs o foco em outro elemento (campo de busca, link) | Não roubar o foco de onde o usuário clicou; Esc sempre devolve | y (dono, 09/10) |
+| `Só com cupom` como interruptor | `button` com `aria-pressed`, desenhado como trilho + bolinha | Mesma semântica da BSV-31 (botão alternado); testes existentes leem `aria-pressed` | y (dono, 09/10) |
+| Seta no início/fim | Some (`hidden`); se estava com foco, o foco vai para a seta oposta | Spec aceita "some ou desativa"; foco não se perde no `body` | y (dono, 09/10) |
 | "Computador" na faixa | `(hover: hover) and (pointer: fine)`, sem largura mínima | Texto da spec | y |
-| Contador "N ofertas" (`aria-live`) no computador | Continua no DOM só para leitor de tela (`sr-only`); o visível é "N de M ofertas" do título | Anúncio da mudança de filtro sem duplicar texto | n |
+| Contador "N ofertas" (`aria-live`) no computador | Continua no DOM só para leitor de tela (`sr-only`); o visível é "N de M ofertas" do título | Anúncio da mudança de filtro sem duplicar texto | y (dono, 09/10) |
 
 **Open questions:** none - all resolved or logged above.
 
