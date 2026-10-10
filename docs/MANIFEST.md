@@ -105,7 +105,8 @@ Regras:
 | `img/avisos/*` | `public, max-age=3600` (a imagem do aviso pode ser trocada no mesmo nome) | `image/webp` ou `image/jpeg` (`.jpg`) | — |
 | `_app/**` (build Svelte, nomes com hash) | `public, max-age=31536000, immutable` | conforme | — |
 | `index.html`, `sitemap*.xml`, `robots.txt` | `public, max-age=300` | conforme | — |
-| `assets/*.css` | `public, max-age=3600, stale-while-revalidate=86400` | `text/css; charset=utf-8` | — |
+| `assets/besave.css` | `public, max-age=300` (sem `stale-while-revalidate`: CSS novo da página de oferta chega em 5 min — AD-087, BSV-38) | `text/css; charset=utf-8` | — |
+| `assets/fontes/*`, `favicon.*` | `public, max-age=3600, stale-while-revalidate=86400` | conforme | — |
 | `_estado/*.json` | `no-store` | `application/json` | — |
 
 `_estado/` é legível pela borda (behavior padrão). Contém só ids, hashes, contagens e o estado

@@ -69,6 +69,21 @@ describe('besave.css', () => {
 		for (const c of usadas) expect(temRegra(c), `.${c}`).toBe(true);
 	});
 
+	// CUP-11 (BSV-38): ícone de copiar, estado copiado e aviso; toque ≥ 44 px; sem JS fica oculto.
+	it('estiliza a cópia do cupom', () => {
+		for (const c of ['copiar', 'copiado', 'confirmacao']) expect(temRegra(c), `.${c}`).toBe(true);
+		/** Corpo da regra cujo seletor é exatamente `seletor`. */
+		const regra = (seletor: string) =>
+			[...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].find(
+				(m) => m[1].trim() === seletor
+			)?.[2];
+		const copiar = regra('.copiar');
+		expect(copiar).toBeDefined();
+		expect(copiar).toMatch(/min-width:\s*44px/);
+		expect(copiar).toMatch(/min-height:\s*44px/);
+		expect(regra('.copiar[hidden]')).toMatch(/display:\s*none/);
+	});
+
 	// CSS-03
 	it('cabe em 20 KB com brotli', () => {
 		expect(css.length).toBeGreaterThan(1000);

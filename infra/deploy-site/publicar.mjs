@@ -10,6 +10,8 @@ const PREFIXOS = JSON.parse(readFileSync(new URL('./prefixos.json', import.meta.
 const IMUTAVEL = 'public, max-age=31536000, immutable';
 const CURTO = 'public, max-age=300';
 const ASSET = 'public, max-age=3600, stale-while-revalidate=86400';
+// CSS das páginas do worker: troca de layout chega em 5 min, sem stale (AD-087, BSV-38).
+const CSS_WORKER = 'assets/besave.css';
 const TIPOS = {
   html: 'text/html; charset=utf-8',
   css: 'text/css; charset=utf-8',
@@ -60,7 +62,9 @@ export function planejar(arquivos, { build, bucket, distribuicao, prefixos = PRE
   const comandos = [
     ...(temApp ? [sync] : []),
     ...(app.includes('_app/version.json') ? [copia(build, bucket, '_app/version.json', CURTO)] : []),
-    ...outros.map((c) => copia(build, bucket, c, c.startsWith('assets/') || c.startsWith('favicon.') ? ASSET : CURTO)),
+    ...outros.map((c) =>
+      copia(build, bucket, c, c !== CSS_WORKER && (c.startsWith('assets/') || c.startsWith('favicon.')) ? ASSET : CURTO),
+    ),
     ...htmlOrdenado.map((c) => copia(build, bucket, c, CURTO)),
     ['cloudfront', 'create-invalidation', '--distribution-id', distribuicao, '--paths', ...caminhos],
   ];

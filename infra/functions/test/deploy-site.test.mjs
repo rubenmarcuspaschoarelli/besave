@@ -13,7 +13,7 @@ const opcoes = { build: 'build', bucket: 'besave-site', distribuicao: 'EDIST0000
 const IMUTAVEL = 'public, max-age=31536000, immutable';
 const HTML_CC = 'public, max-age=300';
 const HTML_CT = 'text/html; charset=utf-8';
-const CSS_CC = 'public, max-age=3600, stale-while-revalidate=86400';
+const ASSET_CC = 'public, max-age=3600, stale-while-revalidate=86400';
 
 const buildBom = [
   '_app/immutable/entry/start.abc123.js',
@@ -155,23 +155,32 @@ test('PUB-05: cada HTML vai por arquivo com 300 s e text/html; charset=utf-8', (
   }
 });
 
-test('PUB-06: assets/besave.css com 1 h + swr de 1 dia e text/css; charset=utf-8', () => {
+// PUB-06 (BSV-38, AD-087): 300 s sem stale-while-revalidate; comando inteiro (lição 14).
+test('PUB-06: assets/besave.css com max-age=300 e text/css; charset=utf-8', () => {
   const { comandos } = planejar(buildBom, opcoes);
-  const c = comandos.find((x) => x[1] === 'cp' && x[3] === 's3://besave-site/assets/besave.css');
-  assert.ok(c);
-  assert.equal(valor(c, '--cache-control'), CSS_CC);
-  assert.equal(valor(c, '--content-type'), 'text/css; charset=utf-8');
+  const css = comandos.filter((x) => x.some((a) => a.includes('besave.css')));
+  assert.deepEqual(css, [
+    [
+      's3', 'cp', 'build/assets/besave.css', 's3://besave-site/assets/besave.css',
+      '--cache-control', 'public, max-age=300', '--content-type', 'text/css; charset=utf-8',
+    ],
+  ]);
 });
 
-// Cache de fontes e favicon: a spec não define; spec.md (suposições) fixa o mesmo do CSS.
-test('PUB: fontes e favicon vão por arquivo com tipo explícito e cache do CSS', () => {
+// Cache de fontes e favicon: a spec da BSV-17 não define; spec.md (suposições) fixou 1 h + swr de 1 dia.
+// A BSV-38 mantém esse cache (só o besave.css muda). Comando inteiro (lição 14).
+test('PUB: fontes e favicon vão por arquivo com tipo explícito e 1 h + swr de 1 dia', () => {
   const { comandos } = planejar(buildBom, opcoes);
   const fonte = comandos.find((x) => x[3] === 's3://besave-site/assets/fontes/lato-900.woff2');
-  assert.equal(valor(fonte, '--content-type'), 'font/woff2');
-  assert.equal(valor(fonte, '--cache-control'), CSS_CC);
+  assert.deepEqual(fonte, [
+    's3', 'cp', 'build/assets/fontes/lato-900.woff2', 's3://besave-site/assets/fontes/lato-900.woff2',
+    '--cache-control', ASSET_CC, '--content-type', 'font/woff2',
+  ]);
   const fav = comandos.find((x) => x[3] === 's3://besave-site/favicon.svg');
-  assert.equal(valor(fav, '--content-type'), 'image/svg+xml');
-  assert.equal(valor(fav, '--cache-control'), CSS_CC);
+  assert.deepEqual(fav, [
+    's3', 'cp', 'build/favicon.svg', 's3://besave-site/favicon.svg',
+    '--cache-control', ASSET_CC, '--content-type', 'image/svg+xml',
+  ]);
 });
 
 test('PUB-07: invalidação só de HTML e /assets/*, nunca /*', () => {

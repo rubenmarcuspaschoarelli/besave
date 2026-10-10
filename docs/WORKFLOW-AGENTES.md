@@ -129,3 +129,6 @@ Só PASS libera a PR.
 | 18 | **Mutante em rota/`entries` de site estático costuma ser equivalente** (o build segue os links); registrar como equivalente, não forçar teste. | BSV-30b: matcher e `entries` redundantes não mudavam o build. |
 | 19 | **Print é evidência, não enfeite: o autor olha os prints antes de abrir a PR.** | BSV-32: o botão de novas ofertas saía com altura zero; testes e mutantes passavam porque só mediam posição. O print mostrou, e o e2e passou a exigir altura mínima. |
 | 20 | **Em Sonnet, o prompt manda lançar o Verifier, sem pedir confirmação.** | BSV-14b e BSV-32 (Sonnet) entregaram sem Verifier e perguntaram se podiam lançá-lo, mesmo com "pedido explícito do dono" no prompt. |
+| 21 | **O Verifier roda todos os gates do job de CI que o ticket toca**, não só o principal. | BSV-18: o Verifier rodou só o `terraform test`; o `npm test` das Functions, no mesmo job `infra`, falhou só no CI. |
+| 22 | **Limite relativo ("≤ 90% da área") exige no teste um segundo grupo de dados**, senão calcular sobre o total também passa. | BSV-33: mutante W5 sobreviveu na 1ª rodada. |
+| 23 | **Filtro aplicado antes de uma função pura precisa de teste em quem chama.** No Windows, mutantes do worker rodam só os testes relevantes (`cargo test --test …`). | BSV-33: expiradas fora do sitemap não eram testadas; mutantes do worker levavam minutos cada. |

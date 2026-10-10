@@ -243,9 +243,10 @@ fn jsonld_product_com_offer() {
 fn ativa_sem_noindex_e_cta_para_redirect() {
     let html = render(&oferta_ok());
     assert!(!html.contains("noindex"));
+    // BSV-38: abre a loja em aba nova (CUP-02).
     assert_eq!(
         tag(&html, r#"<a class="cta""#),
-        r#"<a class="cta" href="/ir/5412" rel="nofollow sponsored">"#
+        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">"#
     );
     assert_eq!(tag(&html, "<body"), "<body>");
     assert!(!html.contains("Oferta expirada"));
@@ -293,11 +294,12 @@ fn cabecalho_com_10_areas_e_rodape() {
     assert!(rodape.contains(r#"<a href="/">"#));
 }
 
-// PAG-08
+// PAG-08 (BSV-38: sem cupom; com cupom há também o script de cópia, CUP-03)
 #[test]
 fn imagem_com_dimensoes_alt_e_fallback_como_unico_js() {
     let mut o = oferta_ok();
     o.area = Area::EsporteVida;
+    o.cupom = None;
     let html = render(&o);
     let img = tag(&html, "<img");
     for atributo in [
@@ -481,8 +483,12 @@ fn titulo_com_script_vira_texto() {
     o.titulo = titulo.into();
     o.produto.as_mut().unwrap().marca = Some("<b>XYZ</b>".into());
     let html = render(&o);
-    assert_eq!(ocorrencias(&html, "<script"), 1, "só o JSON-LD");
-    assert_eq!(ocorrencias(&html, "</script>"), 1);
+    // Só os scripts da página sem injeção: JSON-LD + cópia do cupom (BSV-38).
+    let base = render(&oferta_ok());
+    assert_eq!(ocorrencias(&base, "<script"), 2);
+    assert_eq!(ocorrencias(&html, "<script"), 2, "título não cria script");
+    assert_eq!(ocorrencias(&html, "</script>"), 2);
+    assert_eq!(scripts_js(&html), scripts_js(&base));
     assert!(html.contains(
         r#"<h1 class="titulo">&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt; &amp; &#x27;aspas&#x27;</h1>"#
     ));
@@ -555,5 +561,156 @@ fn hora_com_offset_fixo_menos_tres() {
             html.contains(&format!(r#"<time datetime="{iso}">{esperado}</time>"#)),
             "{iso}"
         );
+    }
+}
+
+// BSV-38 (docs/specs/BSV-38.md, .specs/features/BSV-38/spec.md)
+
+fn sem_cupom() -> OfertaPagina {
+    OfertaPagina {
+        cupom: None,
+        ..oferta_ok()
+    }
+}
+
+/// Conteúdo dos `<script>` sem `type` (JS executável).
+fn scripts_js(html: &str) -> Vec<&str> {
+    html.match_indices("<script>")
+        .map(|(i, _)| trecho(&html[i..], "<script>", "</script>"))
+        .collect()
+}
+
+// CUP-01
+#[test]
+fn cupom_ativo_tem_botao_de_copiar_oculto_ao_lado_do_codigo() {
+    let html = render(&oferta_ok());
+    let cupom = trecho(&html, r#"<p class="cupom">"#, "</p>");
+    assert!(cupom.contains(r#"<code class="codigo">BESAVE10</code>"#));
+    let botao = tag(cupom, "<button");
+    assert_eq!(
+        botao,
+        r#"<button class="copiar" type="button" aria-label="Copiar cupom" hidden>"#
+    );
+    let dentro = trecho(cupom, "<button", "</button>");
+    assert!(dentro.contains("<svg"), "ícone: {dentro}");
+    assert!(dentro.contains(r#"aria-hidden="true""#));
+    assert_eq!(ocorrencias(&html, "<button"), 1);
+}
+
+// CUP-02
+#[test]
+fn cupom_ativo_cta_ir_para_a_loja_em_aba_nova() {
+    let html = render(&oferta_ok());
+    let cta = trecho(&html, r#"<a class="cta""#, "</a>");
+    assert_eq!(
+        cta,
+        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Ir para a loja"#
+    );
+    assert!(!html.contains("Acesse a oferta"));
+    // "Copiar cupom e ir para a loja" só existe no script (revisão do dono): sem JS não promete cópia.
+    assert_eq!(ocorrencias(&html, "Copiar cupom e ir para a loja"), 1);
+    assert!(scripts_js(&html)[0].contains("Copiar cupom e ir para a loja"));
+}
+
+// CUP-03
+#[test]
+fn cupom_ativo_tem_status_e_script_sem_dado_da_oferta() {
+    let html = render(&oferta_ok());
+    assert!(html.contains(r#"<p class="confirmacao" role="status"></p>"#));
+    assert_eq!(ocorrencias(&html, r#"role="status""#), 1);
+    assert_eq!(ocorrencias(&html, "<script"), 2, "JSON-LD + cópia");
+    let js = scripts_js(&html);
+    assert_eq!(js.len(), 1);
+    let js = js[0];
+    for proibido in ["BESAVE10", "5412", "/ir/", "http", "Fone"] {
+        assert!(!js.contains(proibido), "{proibido} no script");
+    }
+    for esperado in [
+        "navigator.clipboard.writeText",
+        "Cupom copiado!",
+        ".codigo",
+        "Copiar cupom e ir para a loja",
+    ] {
+        assert!(js.contains(esperado), "{esperado}");
+    }
+
+    // O script é o mesmo para qualquer cupom: o código vem do DOM (AD-034).
+    let mut o = oferta_ok();
+    o.cupom = Some(r#"<X&"Y'>"#.into());
+    o.id = 77;
+    let outro = render(&o);
+    assert!(outro.contains(r#"<code class="codigo">&lt;X&amp;&quot;Y&#x27;&gt;</code>"#));
+    assert_eq!(scripts_js(&outro), vec![js]);
+}
+
+// CUP-04
+#[test]
+fn sem_cupom_acesse_a_oferta_sem_icone_status_nem_script() {
+    let html = render(&sem_cupom());
+    let cta = trecho(&html, r#"<a class="cta""#, "</a>");
+    assert_eq!(
+        cta,
+        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Acesse a oferta"#
+    );
+    for ausente in [
+        "<button",
+        "copiar",
+        "Copiar",
+        r#"role="status""#,
+        "confirmacao",
+        "<script>",
+    ] {
+        assert!(!html.contains(ausente), "{ausente}");
+    }
+}
+
+// CUP-05
+#[test]
+fn encerrada_com_ou_sem_cupom_sem_copia() {
+    for o in [
+        oferta_encerrada(),
+        OfertaPagina {
+            cupom: None,
+            ..oferta_encerrada()
+        },
+    ] {
+        let html = render(&o);
+        let cta = trecho(&html, r#"<a class="cta""#, "</a>");
+        assert_eq!(
+            cta,
+            r#"<a class="cta" aria-disabled="true">Acesse a oferta"#
+        );
+        for ausente in [
+            "<button",
+            "copiar",
+            "Copiar",
+            r#"role="status""#,
+            "confirmacao",
+            "<script>",
+            "/ir/",
+            "target=",
+        ] {
+            assert!(!html.contains(ausente), "{ausente}");
+        }
+    }
+    // O código continua visível como texto.
+    assert!(render(&oferta_encerrada()).contains(r#"<code class="codigo">BESAVE10</code>"#));
+}
+
+// CUP-06
+#[test]
+fn com_e_sem_cupom_orcamento_determinismo_e_sem_url_externa() {
+    for o in [oferta_ok(), sem_cupom(), oferta_encerrada()] {
+        let html = render(&o);
+        assert!(html.len() <= 30 * 1024, "HTML {} B", html.len());
+        assert_eq!(html, render(&o), "mesmo input, mesmos bytes");
+        for (i, _) in html.match_indices("http") {
+            let url = &html[i..];
+            assert!(
+                url.starts_with("https://besave.com.br/") || url.starts_with("https://schema.org"),
+                "URL externa: {}",
+                &url[..url.len().min(60)]
+            );
+        }
     }
 }
