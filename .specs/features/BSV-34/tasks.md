@@ -46,7 +46,7 @@ T5 → T6 → T7
 **Done when**: Vitest prova expiradas depois das ativas em todas as ordens e contagens com chunk ausente/presente.
 **Tests**: unit
 **Gate**: quick
-- [ ] done
+- [x] done
 
 ### T3: Campo do topo navega para `/busca/`; home e áreas não filtram mais
 

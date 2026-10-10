@@ -12,7 +12,7 @@ export type {
 	Publico
 } from './dados/tipos.ts';
 export { Catalogo, descontoPct, maioresDescontos, normalizar } from './dados/catalogo.ts';
-export { buscar } from './dados/busca.ts';
+export { ativasPrimeiro, buscar } from './dados/busca.ts';
 export type { ResultadoBusca } from './dados/busca.ts';
 export { INTERVALO_MS, criarSincronizador, diferenca } from './dados/sincronizador.ts';
 export type { Deps, Evento, Resposta, Sincronizador } from './dados/sincronizador.ts';

@@ -46,3 +46,8 @@ export function buscar(
 	const itens = achados.ordenar(f.ordem);
 	return { itens: itens.slice(0, limite), total: itens.length, completo: cat.completo };
 }
+
+/** Expiradas depois das ativas, cada grupo na ordem recebida (BSV-34). */
+export function ativasPrimeiro(itens: OfertaCard[]): OfertaCard[] {
+	return [...itens.filter((c) => !c.x), ...itens.filter((c) => c.x)];
+}

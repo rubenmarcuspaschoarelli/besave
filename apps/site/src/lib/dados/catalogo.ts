@@ -118,6 +118,7 @@ export function casaFiltro(c: OfertaCard, f: Filtro): boolean {
 export class Catalogo {
 	#porN = new Map<number, Trecho>();
 	#alvo: Map<number, string> | null = null;
+	#qtdAlvo = 0;
 	/** Ids exibidos; fixada no primeiro `completo` (regra 8). */
 	#base: Set<number> | null = null;
 	#pendentes = new Set<number>();
@@ -125,6 +126,7 @@ export class Catalogo {
 	/** Define os chunks esperados (manifest atual). */
 	alvo(m: Manifest): void {
 		this.#alvo = new Map(m.chunks.map((c) => [c.n, c.arquivo]));
+		this.#qtdAlvo = m.chunks.reduce((s, c) => s + c.qtd, 0);
 		this.#fixarBase();
 	}
 
@@ -214,6 +216,21 @@ export class Catalogo {
 	get carregados(): number {
 		let k = 0;
 		for (const [n, arquivo] of this.#alvo ?? []) if (this.#porN.get(n)?.arquivo === arquivo) k++;
+		return k;
+	}
+
+	/** Ofertas do manifest (soma de `qtd`), para "Buscando em X de Y ofertas…". */
+	get ofertasTotal(): number {
+		return this.#qtdAlvo;
+	}
+
+	/** Cards dos chunks já na versão do manifest. */
+	get ofertasCarregadas(): number {
+		let k = 0;
+		for (const [n, arquivo] of this.#alvo ?? []) {
+			const t = this.#porN.get(n);
+			if (t?.arquivo === arquivo) k += t.cards.length;
+		}
 		return k;
 	}
 
