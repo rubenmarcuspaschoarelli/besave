@@ -58,15 +58,33 @@ test.describe('com JavaScript', () => {
 		expect(new URL(page.url()).pathname).toBe(OFERTA);
 	});
 
-	// Edge case: clique repetido dentro de 2 s recomeça o temporizador.
+	// Edge case: clique repetido dentro de 2 s recomeça o temporizador. Clipboard falso que resolve na
+	// hora e conta as cópias concluídas: o relógio só avança depois que o `then(avisar)` de cada clique
+	// rodou, senão o temporizador do 2º clique nasce depois do runFor (corrida vista no CI, PR #61).
 	test('segundo clique antes de 2 s mantém o aviso por mais 2 s', async ({ page }) => {
+		await page.addInitScript(() => {
+			const copias: string[] = [];
+			Object.defineProperty(window, '__copias', { value: copias });
+			Object.defineProperty(Clipboard.prototype, 'writeText', {
+				value: (texto: string) => {
+					const feita = Promise.resolve();
+					// Registrado antes do `then(avisar)` do script: roda no mesmo checkpoint, antes dele.
+					void feita.then(() => copias.push(texto));
+					return feita;
+				}
+			});
+		});
+		const copias = () =>
+			page.evaluate(() => (window as unknown as { __copias: string[] }).__copias);
 		await page.goto(OFERTA);
 		const icone = page.getByRole('button', { name: 'Copiar cupom' });
 		const aviso = page.getByRole('status');
 		await icone.click();
+		await expect.poll(copias).toEqual([CODIGO]);
 		await expect(aviso).toHaveText('Cupom copiado!');
 		await page.clock.runFor(1500);
 		await icone.click();
+		await expect.poll(copias).toEqual([CODIGO, CODIGO]);
 		await page.clock.runFor(1000);
 		await expect(aviso).toHaveText('Cupom copiado!');
 		await page.clock.runFor(1100);
