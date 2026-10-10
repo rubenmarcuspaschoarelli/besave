@@ -132,3 +132,6 @@ Só PASS libera a PR.
 | 21 | **O Verifier roda todos os gates do job de CI que o ticket toca**, não só o principal. | BSV-18: o Verifier rodou só o `terraform test`; o `npm test` das Functions, no mesmo job `infra`, falhou só no CI. |
 | 22 | **Limite relativo ("≤ 90% da área") exige no teste um segundo grupo de dados**, senão calcular sobre o total também passa. | BSV-33: mutante W5 sobreviveu na 1ª rodada. |
 | 23 | **Filtro aplicado antes de uma função pura precisa de teste em quem chama.** No Windows, mutantes do worker rodam só os testes relevantes (`cargo test --test …`). | BSV-33: expiradas fora do sitemap não eram testadas; mutantes do worker levavam minutos cada. |
+| 24 | **Agente nunca apaga nada fora do próprio worktree.** Se algo foi criado fora por engano, lista o conteúdo e pergunta ao dono. | BSV-38: uma pasta `C:\c` (criada por um caminho errado do Playwright) foi apagada sem conferir. |
+| 25 | **Relógio artificial (`page.clock`) com operação assíncrona: esperar a operação terminar antes de avançar o relógio. "Não é intermitente" se prova com `--repeat-each` (dezenas de execuções), não com uma.** | BSV-38: o teste do clique repetido passou na PR e falhou na promoção para `main`. |
+| 26 | **Sessões em paralelo não compartilham servidor de testes** (AD-097). | BSV-37: a porta 4173 estava com o preview da BSV-38. |
