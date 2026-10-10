@@ -4,6 +4,7 @@ import { expect, test } from '@playwright/test';
 import type { Page } from '@playwright/test';
 import type { OfertaCard, Publico } from '../src/lib/dados.ts';
 import { catalogo, servir, todos } from './fixtura.ts';
+import { abrirNaLinha } from './linha-compacta.ts';
 import { TEXTO_AREA, TEXTO_SUBPAGINA } from '../src/lib/conteudo/areas.ts';
 
 const GRADE = '[data-grade] article';
@@ -50,8 +51,11 @@ const naGrade = async (page: Page) =>
 			.evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-id'))))
 	).map((id) => porId.get(id)!);
 
-const pressionado = (page: Page, nome: string) =>
-	page.locator('[data-filtros] button[aria-pressed]', { hasText: new RegExp(`^${nome}$`) });
+/** No computador, a opção só existe com a faixa do grupo aberta (BSV-37). */
+async function pressionado(page: Page, nome: string) {
+	await abrirNaLinha(page, nome);
+	return page.locator('[data-filtros] button[aria-pressed]', { hasText: new RegExp(`^${nome}$`) });
+}
 
 // SUB-01
 test('/elas/masculino/: 200, h1, title, description e canonical próprios', async ({ page }) => {
@@ -118,8 +122,8 @@ test('/elas/masculino/: grade só ELAS + MASCULINO, com o público marcado', asy
 	const grade = await naGrade(page);
 	expect(grade.length).toBe(esperados.length);
 	expect(new Set(grade.map((c) => `${c.a}/${c.p}`))).toEqual(new Set(['ELAS/MASCULINO']));
-	await expect(pressionado(page, 'Masculino')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'false');
+	await expect(await pressionado(page, 'Masculino')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'false');
 	// Faixa de descontos também só da subpágina (mesmo layout da área, com o público aplicado).
 	const faixa = await page
 		.locator('[data-faixa] a')
@@ -130,10 +134,13 @@ test('/elas/masculino/: grade só ELAS + MASCULINO, com o público marcado', asy
 	);
 });
 
-/** Botão de filtro pelo nome; no celular, abre o painel "Filtros" quando ele está lá dentro. */
+/**
+ * Botão de filtro pelo nome; no computador, abre a faixa do item na linha compacta (BSV-37);
+ * no celular, abre o painel "Filtros" quando ele está lá dentro.
+ */
 async function tocar(page: Page, nome: string) {
 	const botao = page.getByRole('button', { name: nome, exact: true });
-	if (!(await botao.isVisible()))
+	if (!(await botao.isVisible()) && !(await abrirNaLinha(page, nome)))
 		await page.getByRole('button', { name: 'Filtros', exact: true }).click();
 	await botao.click();
 }
@@ -155,7 +162,7 @@ test('em /elas/, "Masculino" leva a /elas/masculino/ mantendo ?loja=', async ({ 
 	expect(new Set(grade.map((c) => `${c.a}/${c.p}/${c.l}`))).toEqual(
 		new Set(['ELAS/MASCULINO/SHOPEE'])
 	);
-	await expect(pressionado(page, 'Shopee')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Shopee')).toHaveAttribute('aria-pressed', 'true');
 });
 
 // PUB-01: de uma subpágina para outra.
@@ -164,8 +171,8 @@ test('em /elas/masculino/, "Infantil" leva a /elas/infantil/', async ({ page }) 
 	await tocar(page, 'Infantil');
 	await expect(page).toHaveURL(/\/elas\/infantil\/\?ordem=preco$/);
 	await expect(h1(page)).toHaveText('Elas · Infantil');
-	await expect(pressionado(page, 'Infantil')).toHaveAttribute('aria-pressed', 'true');
-	await expect(pressionado(page, 'Menor preço')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Infantil')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Menor preço')).toHaveAttribute('aria-pressed', 'true');
 });
 
 // PUB-02
@@ -178,7 +185,7 @@ test('"Todos" volta a /elas/ mantendo ?loja=', async ({ page }) => {
 	const grade = await naGrade(page);
 	expect(new Set(grade.map((c) => `${c.a}/${c.l}`))).toEqual(new Set(['ELAS/SHOPEE']));
 	expect(new Set(grade.map((c) => c.p)).size).toBeGreaterThan(1);
-	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
 });
 
 // PUB-02
@@ -349,5 +356,5 @@ test('voltar no navegador depois de "Masculino" retorna a /elas/', async ({ page
 	await page.goBack();
 	await expect(page).toHaveURL(/\/elas\/\?loja=shopee$/);
 	await expect(h1(page)).toHaveText('Ofertas de Elas');
-	await expect(pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
+	await expect(await pressionado(page, 'Todos')).toHaveAttribute('aria-pressed', 'true');
 });
