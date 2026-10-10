@@ -5,7 +5,8 @@ import {
 	escreverFiltros,
 	foraDoPadrao,
 	lerFiltros,
-	temFiltro
+	temFiltro,
+	valorEscolhido
 } from './filtros.ts';
 import type { EstadoFiltros } from './filtros.ts';
 
@@ -162,5 +163,28 @@ describe('destinoArea (BSV-33)', () => {
 		expect(
 			destino('https://x/elas/?publico=infantil&utm_source=telegram', { publico: 'INFANTIL' })
 		).toBe('/elas/infantil/?utm_source=telegram');
+	});
+});
+
+// CMP-04 (BSV-37): o item da linha compacta mostra `Nome: Valor`; sem escolha, só o nome.
+describe('valorEscolhido', () => {
+	const e: EstadoFiltros = {
+		ordem: 'preco',
+		publico: 'FEMININO',
+		loja: 'MERCADO_LIVRE',
+		faixa: 'ate50',
+		soComCupom: false
+	};
+	it('rótulo do valor de cada grupo', () => {
+		expect(valorEscolhido(e, 'ordem')).toBe('Menor preço');
+		expect(valorEscolhido(e, 'publico')).toBe('Feminino');
+		expect(valorEscolhido(e, 'loja')).toBe('Mercado Livre');
+		expect(valorEscolhido(e, 'faixa')).toBe('Até R$ 50');
+		expect(valorEscolhido({ ...e, faixa: 'acima200' }, 'faixa')).toBe('Acima de R$ 200');
+	});
+	it('sem escolha: undefined; ordem padrão: "Recentes"', () => {
+		for (const g of ['publico', 'loja', 'faixa'] as const)
+			expect(valorEscolhido(PADRAO, g)).toBeUndefined();
+		expect(valorEscolhido(PADRAO, 'ordem')).toBe('Recentes');
 	});
 });

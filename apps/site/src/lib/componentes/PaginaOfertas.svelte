@@ -7,7 +7,7 @@
 	import { PADRAO, destinoArea, escreverFiltros, lerFiltros, temFiltro } from '#lib/filtros.ts';
 	import type { EstadoFiltros } from '#lib/filtros.ts';
 	import { vitrine } from '#lib/vitrine.svelte.ts';
-	import AvisoNovas from './AvisoNovas.svelte';
+	import type AvisoNovas from './AvisoNovas.svelte';
 	import Areas from './Areas.svelte';
 	import BarraFiltros from './BarraFiltros.svelte';
 	import BarraCanal from './BarraCanal.svelte';
@@ -79,6 +79,9 @@
 		});
 	}
 
+	/** Invisível até haver novas: fora do bundle inicial, carregado ao montar (BSV-37). */
+	let Aviso = $state<typeof AvisoNovas>();
+
 	onMount(() => {
 		const url = new URL(location.href);
 		const p = url.searchParams;
@@ -91,6 +94,7 @@
 		consulta = p.get('q') ?? '';
 		filtros = publico ? { ...lido, publico } : lido;
 		vitrine.iniciar();
+		void import('./AvisoNovas.svelte').then((m) => (Aviso = m.default));
 	});
 </script>
 
@@ -103,7 +107,9 @@
 		<Areas ativa={area} />
 	{/snippet}
 </Topo>
-<AvisoNovas {area} />
+{#if Aviso}
+	<Aviso {area} />
+{/if}
 
 <main class="mx-auto grid max-w-290 grid-cols-1 gap-5.5 px-3.5 pt-3.5 pb-8 sm:px-5 sm:pt-4.5">
 	{#if cabecalho}
@@ -120,20 +126,23 @@
 			<FaixaDescontos cards={faixa} />
 		{/if}
 		<section aria-labelledby="titulo-recentes" class="grid grid-cols-1 gap-3">
-			<h2
-				id="titulo-recentes"
-				class="flex flex-wrap items-baseline gap-x-2.5 text-lg leading-tight font-black text-marca"
-			>
-				{buscando ? `Resultados para “${consulta.trim()}”` : 'Mais recentes'}
-				{#if resultado}
-					<small class="font-sans text-xs font-normal text-suave" data-total
-						>{resultado.itens.length.toLocaleString('pt-BR')} de {resultado.total.toLocaleString(
-							'pt-BR'
-						)} ofertas</small
+			<BarraFiltros estado={filtros} total={resultado?.total ?? null} aoMudar={filtrar}>
+				{#snippet titulo()}
+					<h2
+						id="titulo-recentes"
+						class="mr-auto flex flex-wrap items-baseline gap-x-2.5 text-lg leading-tight font-black text-marca"
 					>
-				{/if}
-			</h2>
-			<BarraFiltros estado={filtros} total={resultado?.total ?? null} aoMudar={filtrar} />
+						{buscando ? `Resultados para “${consulta.trim()}”` : 'Mais recentes'}
+						{#if resultado}
+							<small class="font-sans text-xs font-normal text-suave" data-total
+								>{resultado.itens.length.toLocaleString('pt-BR')} de {resultado.total.toLocaleString(
+									'pt-BR'
+								)} ofertas</small
+							>
+						{/if}
+					</h2>
+				{/snippet}
+			</BarraFiltros>
 			{#if resultado && resultado.total === 0 && comFiltro}
 				<div class="grid justify-items-start gap-2" data-vazio>
 					<p class="text-sm text-suave">Nenhuma oferta com esses filtros</p>

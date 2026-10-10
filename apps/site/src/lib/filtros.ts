@@ -1,7 +1,7 @@
 // Filtros da grade no endereço (BSV-31): `?ordem=&publico=&loja=&preco=&cupom=1`, valores em minúsculas.
-import { FAIXAS, LOJAS, PUBLICOS } from './dados.ts';
+import { FAIXAS, LOJAS, PUBLICOS, ROTULO_LOJA } from './dados.ts';
 import type { Area, Faixa, Loja, Ordem, Publico } from './dados.ts';
-import { caminhoArea } from './formato.ts';
+import { ROTULO_PUBLICO, caminhoArea } from './formato.ts';
 
 export interface EstadoFiltros {
 	ordem: Ordem;
@@ -65,3 +65,45 @@ export function destinoArea(url: URL, area: Area, e: EstadoFiltros): string {
 	const { publico, ...resto } = e;
 	return escreverFiltros(new URL(caminhoArea(area, publico) + url.search + url.hash, url), resto);
 }
+
+/** Grupos da barra (BSV-37): a linha compacta mostra o valor escolhido de cada um. */
+export type Grupo = 'ordem' | 'publico' | 'loja' | 'faixa';
+
+export const ROTULO_ORDEM: Record<Ordem, string> = {
+	recentes: 'Recentes',
+	desconto: 'Maior desconto',
+	preco: 'Menor preço'
+};
+export const ROTULO_FAIXA: Record<Faixa, string> = {
+	ate50: 'Até R$ 50',
+	'50a100': 'R$ 50–100',
+	'100a200': 'R$ 100–200',
+	acima200: 'Acima de R$ 200'
+};
+
+/** Nome do grupo na linha compacta e no painel. */
+export const ROTULO_GRUPO: Record<Grupo, string> = {
+	ordem: 'Ordem',
+	publico: 'Público',
+	loja: 'Loja',
+	faixa: 'Preço'
+};
+
+/** Os valores dos quatro grupos não se repetem: um mapa só. */
+const ROTULOS: Record<string, string> = {
+	...ROTULO_ORDEM,
+	...ROTULO_PUBLICO,
+	...ROTULO_LOJA,
+	...ROTULO_FAIXA
+};
+
+/** Rótulo do valor escolhido no grupo; `undefined` sem escolha (ordem sempre tem). */
+export const valorEscolhido = (e: EstadoFiltros, g: Grupo): string | undefined =>
+	ROTULOS[e[g] ?? ''];
+
+/**
+ * Botão de opção (pílula), na linha do celular, no painel e na faixa do computador. O contorno
+ * de foco vem do `:focus-visible` base (app.css).
+ */
+export const BOTAO_FILTRO =
+	'min-h-11 flex-none rounded-full border border-borda bg-fundo px-3.5 text-[13px] whitespace-nowrap text-texto hover:border-suave aria-pressed:border-marca aria-pressed:bg-marca aria-pressed:text-white';
