@@ -68,7 +68,7 @@ T4 → T5 → T6
 **Done when**: Vitest do card e e2e da busca mostram expiradas por último com "Encerrada".
 **Tests**: e2e
 **Gate**: build
-- [ ] done
+- [x] done
 
 ### T5: Formulário de busca na página da oferta
 

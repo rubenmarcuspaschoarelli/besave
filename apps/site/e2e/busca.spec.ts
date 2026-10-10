@@ -178,3 +178,29 @@ test('catálogo carregando: "Buscando em X de Y ofertas…" e resultado parcial'
 	await expect(contagem(page)).toHaveText(`${completo.length} ofertas para “protetor”`);
 	await expect(page.locator('[data-progresso]')).toHaveCount(0);
 });
+
+// BUS-04: expiradas por último, em cinza, com "Encerrada"; só expiradas não é estado vazio.
+test('expiradas aparecem depois das ativas com "Encerrada"', async ({ page }) => {
+	const c = catalogo();
+	// 1000 e 10 (Protetor solar, ELAS) expiram: 1000 é o mais recente de todos.
+	const expiradas = [1000, 10];
+	for (const cards of c.values())
+		for (const card of cards) if (expiradas.includes(card.id)) card.x = 1;
+	await servir(page, c);
+	await page.goto('/busca/?q=protetor');
+	await expect(contagem(page)).toHaveText('32 ofertas para “protetor”');
+	const lista = await ids(page);
+	expect(lista.slice(-2)).toEqual(expiradas);
+	for (const id of lista.slice(0, -2)) expect(expiradas).not.toContain(id);
+	for (const id of expiradas) {
+		const card = page.locator(`${GRADE}[data-id="${id}"]`);
+		await expect(card).toContainText('Encerrada');
+		await expect(card.locator('img')).toHaveClass(/grayscale/);
+	}
+	await expect(page.locator(`${GRADE}[data-id="${lista[0]}"]`)).not.toContainText('Encerrada');
+
+	await page.goto('/busca/?q=protetor+solar+fps+1000');
+	await expect(contagem(page)).toHaveText('1 oferta para “protetor solar fps 1000”');
+	await expect(page.locator(GRADE)).toHaveCount(1);
+	await expect(page.locator('[data-vazio]')).toHaveCount(0);
+});
