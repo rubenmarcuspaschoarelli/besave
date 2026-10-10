@@ -103,6 +103,8 @@ test.describe('com JavaScript', () => {
 		await loja.waitForLoadState();
 		expect(new URL(loja.url()).pathname).toBe(LOJA);
 		await loja.close();
+		// Decisão do dono: falha no botão principal não seleciona nada (sem retry, antes do ícone).
+		expect(await selecao(page)).toBe('');
 
 		await page.getByRole('button', { name: 'Copiar cupom' }).click();
 		await expect.poll(() => selecao(page)).toBe(CODIGO);
@@ -127,6 +129,7 @@ test.describe('com JavaScript', () => {
 		expect(new URL(loja.url()).pathname).toBe(LOJA);
 		await loja.close();
 		await expect(page.getByRole('status')).toHaveText('');
+		expect(await selecao(page)).toBe('');
 
 		await page.getByRole('button', { name: 'Copiar cupom' }).click();
 		await expect.poll(() => selecao(page)).toBe(CODIGO);
@@ -134,6 +137,20 @@ test.describe('com JavaScript', () => {
 		await expect(page.getByRole('status')).toHaveText('');
 		await expect(page.locator('.copiar')).not.toContainClass('copiado');
 	});
+});
+
+// CUP-07: clipboard sem writeText não conta como cópia possível.
+test('com navigator.clipboard sem writeText, o botão continua "Ir para a loja"', async ({
+	page,
+	context
+}) => {
+	await servirOferta(context);
+	await page.addInitScript(() => {
+		Object.defineProperty(Clipboard.prototype, 'writeText', { value: undefined });
+	});
+	await page.goto(OFERTA);
+	await expect(page.getByRole('button', { name: 'Copiar cupom' })).toBeVisible();
+	await expect(page.locator('a.cta')).toHaveText(IR);
 });
 
 // CUP-10
