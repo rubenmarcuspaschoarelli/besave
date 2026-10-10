@@ -41,6 +41,9 @@ compartilhar "ofertas de protetor solar", e a página da oferta (HTML do worker)
 | Página da oferta | `<form class="busca" role="search" action="/busca/" method="get">` com `<label>` oculto, `input name="q"` e botão de lupa, entre o logo e as áreas; no celular ocupa a linha de baixo do cabeçalho (sem lupa que abre: a spec só aceita, não exige) | Sem JS; campo visível é mais simples e acessível | y |
 | Testes antigos da busca na home/área (HOM-05, ARE-05, busca < 2 na home) | Reescritos para o comportamento novo (navegar para `/busca/`) | A spec troca o comportamento; manter os antigos seria testar o que deixou de existir | y (spec) |
 
+| `area` no formulário sem JavaScript | Não vai: o campo oculto saiu (custava ~130 B no bundle da home) e a `/busca/` só mostra resultado com JS; com JS a navegação leva `&area=` | Gate do bundle (AD-090) | y |
+| Casca da `/busca/` | `PaginaOfertas` com `campo` e `conteudo` (barra, topo, rodapé da home) | Rota com módulos próprios dividia os chunks da home: +1,1 KB no bundle inicial sem nenhum código novo | y |
+
 **Open questions:** none — as propostas acima vão para revisão do dono no PR.
 
 ---
@@ -95,28 +98,28 @@ compartilhar "ofertas de protetor solar", e a página da oferta (HTML do worker)
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| BUS-01 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-02 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-03 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-04 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-05 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-06 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-07 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-08 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-09 | P1: Página /busca/ | T1–T5 | Pending |
-| BUS-10 | P1: Página /busca/ | T1–T5 | Pending |
-| TOP-01 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-02 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-03 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-04 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-05 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-06 | P1: Campo do topo | T3–T4 | Pending |
-| TOP-07 | P1: Campo do topo | T3–T4 | Pending |
-| OFE-01 | P1: Página da oferta | T6 | Pending |
-| OFE-02 | P1: Página da oferta | T6 | Pending |
-| OFE-03 | P1: Página da oferta | T6 | Pending |
-| OFE-04 | P1: Página da oferta | T6 | Pending |
-| BUD-01 | P1: Orçamento | T7 | Pending |
+| BUS-01 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-02 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-03 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-04 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-05 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-06 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-07 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-08 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-09 | P1: Página /busca/ | T1–T4 | Pending |
+| BUS-10 | P1: Página /busca/ | T1–T4 | Pending |
+| TOP-01 | P1: Campo do topo | T3 | Pending |
+| TOP-02 | P1: Campo do topo | T3 | Pending |
+| TOP-03 | P1: Campo do topo | T3 | Pending |
+| TOP-04 | P1: Campo do topo | T3 | Pending |
+| TOP-05 | P1: Campo do topo | T3 | Pending |
+| TOP-06 | P1: Campo do topo | T3 | Pending |
+| TOP-07 | P1: Campo do topo | T3 | Pending |
+| OFE-01 | P1: Página da oferta | T5 | Pending |
+| OFE-02 | P1: Página da oferta | T5 | Pending |
+| OFE-03 | P1: Página da oferta | T5 | Pending |
+| OFE-04 | P1: Página da oferta | T5 | Pending |
+| BUD-01 | P1: Orçamento | T3, T6 | Pending |
 
 **Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
 

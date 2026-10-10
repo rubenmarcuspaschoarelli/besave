@@ -114,21 +114,37 @@ test('links de área iguais na home, área, desejos e 404', async ({ page }) => 
 	}
 });
 
-// HOM-05
-test('busca "protetor" mostra só cards com a palavra', async ({ page }) => {
+// HOM-05 (BSV-34): digitar na home leva a /busca/ com o foco e o texto, inclusive o que foi
+// digitado durante a navegação; só cards com a palavra; voltar retorna à home (TOP-01, TOP-06).
+test('digitar "protetor" leva a /busca/?q=protetor com o foco no campo', async ({ page }) => {
 	const esperados = todos(catalogo())
 		.filter((c) => /\bprotetor/i.test(c.t))
 		.map((c) => c.id)
 		.sort((a, b) => a - b);
 	expect(esperados.length).toBeGreaterThan(1);
-	await page.getByRole('searchbox', { name: 'Buscar ofertas' }).fill('protetor');
-	await expect(page.locator('#titulo-recentes')).toContainText('Resultados para “protetor”');
-	await expect(page.locator(GRADE)).toHaveCount(esperados.length);
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+	await campo.pressSequentially('protetor', { delay: 40 });
+	await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
+	await expect(campo).toHaveValue('protetor');
+	await expect(campo).toBeFocused();
+	await expect(page.locator('[data-resultado]')).toHaveText(
+		`${esperados.length} ofertas para “protetor”`
+	);
 	const ids = (await atributos(page, 'data-id')).map(Number).sort((a, b) => a - b);
 	expect(ids).toEqual(esperados);
-	for (const t of await page.locator(`${GRADE} h3`).allTextContents()) {
-		expect(t).toMatch(/protetor/i);
-	}
+	await page.goBack();
+	await expect(page).toHaveURL(/\/$/);
+	await expect(page.locator('#titulo-recentes')).toContainText('Mais recentes');
+	await expect(page.locator(GRADE)).toHaveCount(40);
+});
+
+// TOP-04: Enter envia mesmo com 1 caractere (sugestões).
+test('Enter na home envia para /busca/', async ({ page }) => {
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+	await campo.fill('p');
+	await campo.press('Enter');
+	await expect(page).toHaveURL(/\/busca\/\?q=p$/);
+	await expect(page.locator('[data-sugestoes]')).toBeVisible();
 });
 
 // HOM-06

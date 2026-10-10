@@ -11,13 +11,13 @@ T1 → T2
 ### Phase 2 — Telas do site
 
 ```
-T2 → T3 → T4 → T5
+T2 → T3 → T4
 ```
 
 ### Phase 3 — Worker e entrega
 
 ```
-T5 → T6 → T7
+T4 → T5 → T6
 ```
 
 ---
@@ -48,55 +48,44 @@ T5 → T6 → T7
 **Gate**: quick
 - [x] done
 
-### T3: Campo do topo navega para `/busca/`; home e áreas não filtram mais
+### T3: Rota `/busca/` e campo do topo navegando para ela
 
-**What**: `Busca.svelte` com `action="/busca/"`, `area` (input oculto + `&area=`), navegação no cliente a partir de 2 caracteres, passagem do texto e do foco para a `/busca/`; `PaginaOfertas` sem busca; e2e antigos de busca reescritos.
-**Where**: `apps/site/src/lib/componentes/Busca.svelte`, `PaginaOfertas.svelte`, `src/lib/busca.ts`, `e2e/home.spec.ts`, `e2e/area.spec.ts`, `e2e/bordas.spec.ts`
+**What**: `src/routes/busca/+page.svelte` (prerender) sobre a casca do `PaginaOfertas` (`campo`, `conteudo`): contagem, área com botão para tirar, filtros e ordem, "Ver mais", parcial, sugestões, estado vazio, `noindex`, título, `replaceState` com espera. `Busca.svelte` navega para `/busca/` a partir de 2 caracteres (ou Enter) levando texto e foco (`destino-busca.ts`); home e áreas não filtram mais; e2e antigos de busca reescritos.
+**Where**: `apps/site/src/routes/busca/+page.svelte`, `apps/site/src/lib/componentes/Busca.svelte`, `PaginaOfertas.svelte`, `apps/site/src/lib/destino-busca.ts`, `apps/site/e2e/busca.spec.ts`, `e2e/home.spec.ts`, `e2e/area.spec.ts`, `e2e/bordas.spec.ts`, `e2e/saida.spec.ts`
 **Depends on**: T2
-**Requirement**: TOP-01, TOP-02, TOP-04, TOP-05, TOP-07
-**Done when**: e2e da home/área navegam para `/busca/`; 1 caractere não navega.
+**Requirement**: BUS-01..03, BUS-05..10, TOP-01..07, BUD-01
+**Done when**: e2e da spec (390 e 1280 px) verdes; bundle da home ≤ 150 KiB. Uma tarefa só porque a rota sozinha estoura o bundle (divisão de chunks) e só a casca compartilhada com a home o traz de volta.
 **Tests**: e2e
 **Gate**: full
-- [ ] done
+- [x] done
 
-### T4: Rota `/busca/`
-
-**What**: `src/routes/busca/+page.svelte` (prerender): contagem, área com botão para tirar, filtros e ordem, "Ver mais", parcial, sugestões, estado vazio, `noindex`, título, `replaceState` com espera.
-**Where**: `apps/site/src/routes/busca/+page.svelte`, `apps/site/e2e/busca.spec.ts`
-**Depends on**: T3
-**Requirement**: BUS-01..03, BUS-05..10, TOP-03, TOP-06, TOP-07
-**Done when**: e2e da spec (390 e 1280 px) verdes.
-**Tests**: e2e
-**Gate**: full
-- [ ] done
-
-### T5: Selo "Encerrada" no card
+### T4: Selo "Encerrada" no card
 
 **What**: card expirado mostra "Encerrada" (foto em cinza já existe); e2e de expiradas no fim da busca.
 **Where**: `apps/site/src/lib/componentes/Card.svelte`, `Card.test.ts`, `e2e/desejos.spec.ts`, `e2e/busca.spec.ts`
-**Depends on**: T4
+**Depends on**: T3
 **Requirement**: BUS-04
 **Done when**: Vitest do card e e2e da busca mostram expiradas por último com "Encerrada".
 **Tests**: e2e
 **Gate**: build
 - [ ] done
 
-### T6: Formulário de busca na página da oferta
+### T5: Formulário de busca na página da oferta
 
 **What**: `<form class="busca" role="search" action="/busca/" method="get">` no cabeçalho do template; classes no `besave.css` e no README; goldens regenerados; e2e enviando o formulário.
 **Where**: `apps/worker/templates/oferta.html`, `templates/README.md`, `tests/template_oferta.rs`, `tests/fixtures/paginas/*.html`, `apps/site/src/lib/estilo/besave.css`, `apps/site/e2e/oferta-busca.spec.ts`
-**Depends on**: T5
+**Depends on**: T4
 **Requirement**: OFE-01..04
 **Done when**: testes do template (form, ≤ 30 KB, determinismo, classes no CSS) e e2e verdes.
 **Tests**: integration
 **Gate**: build
 - [ ] done
 
-### T7: Bundle, prints e entrega
+### T6: Bundle, prints e entrega
 
 **What**: medir bundle depois; prints (resultados, sugestões, sem resultado; 390 e 1280 px; página da oferta); traceability.
 **Where**: `.specs/features/BSV-34/`
-**Depends on**: T6
+**Depends on**: T5
 **Requirement**: BUD-01
 **Done when**: BUD-01 verde com antes/depois anotados.
 **Tests**: none

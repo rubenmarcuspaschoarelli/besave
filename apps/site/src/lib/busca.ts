@@ -1,7 +1,7 @@
 // Busca no endereço (BSV-34): `/busca/?q=&area={slug}` + filtros da BSV-31 (`filtros.ts`).
 import { AREAS } from './dados.ts';
 import type { Area } from './dados.ts';
-import { PADRAO, escreverFiltros, lerFiltros } from './filtros.ts';
+import { escreverFiltros, lerFiltros } from './filtros.ts';
 import type { EstadoFiltros } from './filtros.ts';
 import { SLUG_AREA } from './formato.ts';
 
@@ -28,11 +28,3 @@ export function escreverBusca(url: URL, e: EstadoBusca): string {
 	u.search = p.toString();
 	return escreverFiltros(u, e.filtros);
 }
-
-/** Para onde o campo do topo leva (TOP-01, TOP-02). */
-export const destinoBusca = (q: string, area?: Area | null) =>
-	escreverBusca(new URL('/busca/', 'http://x'), {
-		q,
-		...(area ? { area } : {}),
-		filtros: PADRAO
-	});

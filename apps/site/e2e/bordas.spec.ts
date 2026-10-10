@@ -31,8 +31,9 @@ test('faixa de descontos vazia', async ({ page }) => {
 	await expect(page.locator(GRADE)).toHaveCount(40);
 });
 
-// Busca com menos de 2 caracteres (normalizados) não filtra: lista normal.
-test('busca com menos de 2 caracteres mostra a lista normal', async ({ page }) => {
+// Busca (BSV-34, TOP-01, TOP-05): 1 caractere (normalizado) não sai da home nem filtra a grade;
+// 2 caracteres levam a /busca/.
+test('menos de 2 caracteres fica na home com a lista normal', async ({ page }) => {
 	await servir(page);
 	await page.goto('/');
 	await expect(page.locator(GRADE)).toHaveCount(40);
@@ -42,15 +43,15 @@ test('busca com menos de 2 caracteres mostra a lista normal', async ({ page }) =
 	const busca = page.getByRole('searchbox', { name: 'Buscar ofertas' });
 	for (const q of ['p', ' p ', 'é', '-']) {
 		await busca.fill(q);
+		await expect(page).toHaveURL(/\/$/);
 		await expect(page.locator('#titulo-recentes')).toContainText('Mais recentes');
-		await expect(page.locator('#titulo-recentes')).not.toContainText('Resultados');
 		await expect(page.locator('[data-faixa]')).toBeVisible();
 		const ids = await page
 			.locator(GRADE)
 			.evaluateAll((els) => els.map((e) => e.getAttribute('data-id')));
 		expect(ids, q).toEqual(primeiros);
 	}
-	// Com 2 caracteres a busca já filtra (fronteira).
+	// Com 2 caracteres já vai para a busca (fronteira).
 	await busca.fill('pr');
-	await expect(page.locator('#titulo-recentes')).toContainText('Resultados para “pr”');
+	await expect(page).toHaveURL(/\/busca\/\?q=pr$/);
 });

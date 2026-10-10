@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { destinoBusca, escreverBusca, lerBusca } from './busca.ts';
+import { escreverBusca, lerBusca } from './busca.ts';
+import { destinoBusca } from './destino-busca.ts';
 import { PADRAO } from './filtros.ts';
 
 const ler = (q: string) => lerBusca(new URLSearchParams(q));
@@ -91,5 +92,12 @@ describe('destinoBusca', () => {
 
 	it('TOP-04: Enter com campo vazio vai para /busca/', () => {
 		expect(destinoBusca('')).toBe('/busca/');
+	});
+
+	it('mesmo formato de escreverBusca (espaço e acento)', () => {
+		const e = { q: 'sérum facial', area: 'MEU_LAR' as const, filtros: PADRAO };
+		expect(destinoBusca(e.q, e.area)).toBe(
+			escreverBusca(new URL('https://besave.com.br/busca/'), e)
+		);
 	});
 });
