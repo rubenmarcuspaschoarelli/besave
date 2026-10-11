@@ -60,6 +60,7 @@ usar classe sem regra no CSS. Renomear classe é mudança de contrato.
 |---|---|---|
 | `encerrada` | `<body>` | oferta expirada: imagem em cinza, preço apagado |
 | `topo`, `logo`, `menu` | cabeçalho | logo "Besave" e links das 10 áreas |
+| `busca`, `campo`, `buscar`, `oculto` | `<form>`, `<input>`, `<button>`, `<label>` | busca no topo (BSV-34): `GET /busca/?q=`, sem JS; `buscar` é a lupa de envio; `oculto` esconde o rótulo só visualmente. No celular as áreas descem para a linha de baixo |
 | `oferta` | `<main>` | contêiner da página |
 | `titulo` | `<h1>` | título integral |
 | `expirada` | `<p>` | faixa "Oferta expirada" (só encerrada) |

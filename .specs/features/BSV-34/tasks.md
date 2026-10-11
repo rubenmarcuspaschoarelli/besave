@@ -79,7 +79,7 @@ T4 → T5 → T6
 **Done when**: testes do template (form, ≤ 30 KB, determinismo, classes no CSS) e e2e verdes.
 **Tests**: integration
 **Gate**: build
-- [ ] done
+- [x] done
 
 ### T6: Bundle, prints e entrega
 

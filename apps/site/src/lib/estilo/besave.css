@@ -89,6 +89,69 @@ figure {
 .menu a:hover {
 	border-color: var(--cor-suave);
 }
+/* Busca no topo da página da oferta (BSV-34): GET /busca/, sem JS; lupa = botão de envio
+   (WCAG H32). No celular o campo fica ao lado do logo e as áreas descem para a linha
+   de baixo; a partir de 1024 px, tudo numa linha. */
+.topo:has(> .busca) {
+	flex-wrap: wrap;
+	row-gap: 0.625rem;
+}
+.busca {
+	flex: 1 1 10rem;
+	display: flex;
+	align-items: center;
+	min-width: 0;
+	padding: 0 0 0 1rem;
+	border: 1px solid var(--cor-borda);
+	border-radius: 999px;
+	background: var(--cor-superficie);
+}
+.busca:focus-within {
+	border-color: var(--cor-suave);
+	outline: 3px solid var(--cor-foco);
+	outline-offset: 2px;
+}
+.busca ~ .menu {
+	flex-basis: 100%;
+}
+.campo {
+	flex: 1;
+	min-width: 0;
+	min-height: 44px;
+	padding: 0;
+	border: 0;
+	background: transparent;
+	color: var(--cor-texto);
+	font: inherit;
+	outline: none;
+}
+.campo::placeholder {
+	color: var(--cor-suave);
+}
+.buscar {
+	flex: none;
+	display: grid;
+	place-items: center;
+	width: 44px;
+	height: 44px;
+	padding: 0;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--cor-suave);
+	cursor: pointer;
+}
+.buscar:hover {
+	color: var(--cor-texto);
+}
+.oculto {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
 
 /* Oferta */
 .oferta {
@@ -369,6 +432,15 @@ figure {
 	}
 	.topo {
 		padding: 0.75rem 1.5rem;
+	}
+	.topo:has(> .busca) {
+		flex-wrap: nowrap;
+	}
+	.busca {
+		flex: 0 1 22rem;
+	}
+	.busca ~ .menu {
+		flex-basis: auto;
 	}
 	.rodape nav {
 		padding: 0 1.5rem;
