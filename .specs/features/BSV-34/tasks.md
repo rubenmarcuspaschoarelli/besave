@@ -90,7 +90,7 @@ T4 → T5 → T6
 **Done when**: BUD-01 verde com antes/depois anotados.
 **Tests**: none
 **Gate**: build
-- [ ] done
+- [x] done
 
 ---
 

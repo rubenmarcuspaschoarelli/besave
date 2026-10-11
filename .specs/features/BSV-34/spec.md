@@ -98,34 +98,34 @@ compartilhar "ofertas de protetor solar", e a página da oferta (HTML do worker)
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| BUS-01 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-02 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-03 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-04 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-05 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-06 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-07 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-08 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-09 | P1: Página /busca/ | T1–T4 | Pending |
-| BUS-10 | P1: Página /busca/ | T1–T4 | Pending |
-| TOP-01 | P1: Campo do topo | T3 | Pending |
-| TOP-02 | P1: Campo do topo | T3 | Pending |
-| TOP-03 | P1: Campo do topo | T3 | Pending |
-| TOP-04 | P1: Campo do topo | T3 | Pending |
-| TOP-05 | P1: Campo do topo | T3 | Pending |
-| TOP-06 | P1: Campo do topo | T3 | Pending |
-| TOP-07 | P1: Campo do topo | T3 | Pending |
-| OFE-01 | P1: Página da oferta | T5 | Pending |
-| OFE-02 | P1: Página da oferta | T5 | Pending |
-| OFE-03 | P1: Página da oferta | T5 | Pending |
-| OFE-04 | P1: Página da oferta | T5 | Pending |
-| BUD-01 | P1: Orçamento | T3, T6 | Pending |
+| BUS-01 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-02 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-03 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-04 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-05 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-06 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-07 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-08 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-09 | P1: Página /busca/ | T1–T4 | Implemented |
+| BUS-10 | P1: Página /busca/ | T1–T4 | Implemented |
+| TOP-01 | P1: Campo do topo | T3 | Implemented |
+| TOP-02 | P1: Campo do topo | T3 | Implemented |
+| TOP-03 | P1: Campo do topo | T3 | Implemented |
+| TOP-04 | P1: Campo do topo | T3 | Implemented |
+| TOP-05 | P1: Campo do topo | T3 | Implemented |
+| TOP-06 | P1: Campo do topo | T3 | Implemented |
+| TOP-07 | P1: Campo do topo | T3 | Implemented |
+| OFE-01 | P1: Página da oferta | T5 | Implemented |
+| OFE-02 | P1: Página da oferta | T5 | Implemented |
+| OFE-03 | P1: Página da oferta | T5 | Implemented |
+| OFE-04 | P1: Página da oferta | T5 | Implemented |
+| BUD-01 | P1: Orçamento | T3, T6 | Implemented |
 
-**Coverage:** 22 total, 22 mapped to tasks, 0 unmapped.
+**Coverage:** 22 total, 22 mapped to tasks, 0 unmapped. Prints em `prints/` (resultados, resultados com área, sugestões, sem resultado, página da oferta; 390 e 1280 px).
 
 ---
 
 ## Success Criteria
 
-- [ ] Gates do site (`lint`, `check`, `test`, `build`, `e2e`) e do worker (`fmt`, `clippy`, `test`) verdes.
-- [ ] Bundle da home ≤ 153.600 B, com antes (153.245 B) e depois no PR.
+- [x] Gates do site (`lint`, `check`, `test`, `build`, `e2e`) e do worker (`fmt`, `clippy`, `test`) verdes.
+- [x] Bundle da home ≤ 153.600 B: antes 153.245 B (JS 130.739 + CSS 22.506), depois 153.553 B (JS 131.047 + CSS 22.506), +308 B.
