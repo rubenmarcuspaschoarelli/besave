@@ -35,7 +35,7 @@ const destinos = (cmds) => cmds.flatMap((c) => c.filter((a) => a.startsWith('s3:
 test('PUB: prefixos.json é exatamente a lista da spec', () => {
   const lista = JSON.parse(readFileSync(new URL('../../deploy-site/prefixos.json', import.meta.url), 'utf8'));
   assert.deepEqual(lista, [
-    '_app/*', 'index.html', '404.html', 'favicon.*', 'desejos/*', 'assets/besave.css', 'assets/fontes/*',
+    '_app/*', 'index.html', '404.html', 'favicon.*', 'desejos/*', 'busca/*', 'assets/besave.css', 'assets/fontes/*',
     'tech/*', 'players/*', 'meu-lar/*', 'elas/*', 'eles/*', 'cultura/*', 'familia/*', 'pets/*',
     'esporte-vida/*', 'outros/*',
   ]);
