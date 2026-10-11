@@ -594,7 +594,8 @@ fn cupom_ativo_tem_botao_de_copiar_oculto_ao_lado_do_codigo() {
     let dentro = trecho(cupom, "<button", "</button>");
     assert!(dentro.contains("<svg"), "ícone: {dentro}");
     assert!(dentro.contains(r#"aria-hidden="true""#));
-    assert_eq!(ocorrencias(&html, "<button"), 1);
+    // BSV-34: a lupa da busca no topo também é <button>; o de copiar é um só.
+    assert_eq!(ocorrencias(&html, r#"<button class="copiar""#), 1);
 }
 
 // CUP-02
@@ -653,7 +654,7 @@ fn sem_cupom_acesse_a_oferta_sem_icone_status_nem_script() {
         r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Acesse a oferta"#
     );
     for ausente in [
-        "<button",
+        r#"<button class="copiar""#,
         "copiar",
         "Copiar",
         r#"role="status""#,
@@ -681,7 +682,7 @@ fn encerrada_com_ou_sem_cupom_sem_copia() {
             r#"<a class="cta" aria-disabled="true">Acesse a oferta"#
         );
         for ausente in [
-            "<button",
+            r#"<button class="copiar""#,
             "copiar",
             "Copiar",
             r#"role="status""#,
@@ -712,5 +713,53 @@ fn com_e_sem_cupom_orcamento_determinismo_e_sem_url_externa() {
                 &url[..url.len().min(60)]
             );
         }
+    }
+}
+
+// BSV-34 (docs/specs/BSV-34.md, .specs/features/BSV-34/spec.md)
+
+// OFE-01: formulário GET /busca/ no topo, rotulado, sem JavaScript.
+#[test]
+fn topo_tem_formulario_de_busca_sem_js() {
+    for o in [oferta_ok(), sem_cupom(), oferta_encerrada()] {
+        let html = render(&o);
+        let topo = trecho(&html, "<header", "</header>");
+        assert_eq!(
+            tag(topo, "<form"),
+            r#"<form class="busca" role="search" action="/busca/" method="get">"#
+        );
+        let form = trecho(topo, "<form", "</form>");
+        // No topo: entre o logo e as áreas.
+        assert!(topo.find("<form").unwrap() > topo.find(r#"class="logo""#).unwrap());
+        assert!(topo.find("<form").unwrap() < topo.find(r#"<nav class="menu""#).unwrap());
+        let campo = tag(form, "<input");
+        assert!(campo.contains(r#"name="q""#), "{campo}");
+        assert!(campo.contains(r#"type="search""#), "{campo}");
+        assert!(campo.contains(r#"id="busca""#), "{campo}");
+        assert!(
+            form.contains(r#"<label class="oculto" for="busca">Buscar ofertas</label>"#),
+            "{form}"
+        );
+        // A lupa é o botão de envio (WCAG H32).
+        assert_eq!(
+            tag(form, "<button"),
+            r#"<button class="buscar" type="submit" aria-label="Buscar">"#
+        );
+        assert!(!form.contains("<script") && !form.contains(" on"), "{form}");
+        assert_eq!(ocorrencias(&html, "<form"), 1);
+        assert_eq!(ocorrencias(&html, r#"id="busca""#), 1);
+    }
+    // Sem cupom continua sem JS além do JSON-LD (o formulário não traz script).
+    assert!(scripts_js(&render(&sem_cupom())).is_empty());
+}
+
+// OFE-02
+#[test]
+fn com_formulario_html_no_orcamento_e_deterministico() {
+    for o in [oferta_ok(), sem_cupom(), oferta_encerrada()] {
+        let html = render(&o);
+        assert!(html.contains(r#"action="/busca/""#));
+        assert!(html.len() <= 30 * 1024, "HTML {} B", html.len());
+        assert_eq!(html, render(&o), "mesmo input, mesmos bytes");
     }
 }

@@ -70,13 +70,14 @@ describe('Card', () => {
 		expect(html({ ...BASE, l: 'MERCADO_LIVRE' })).toContain('Mercado Livre');
 	});
 
-	// CAR-06
+	// CAR-06 (BSV-34: selo "Encerrada", decisão do dono em 10/10)
 	it('expirada em cinza', () => {
 		const ativa = html(BASE);
-		expect(ativa).not.toContain('Expirada');
+		expect(ativa).not.toContain('Encerrada');
 		expect(ativa).not.toContain('grayscale');
 		const h = html({ ...BASE, x: 1 });
-		expect(h).toContain('Expirada');
+		expect(h).toContain('Encerrada');
+		expect(h).not.toContain('Expirada');
 		expect(h).toMatch(/<img[^>]*class="[^"]*grayscale/);
 	});
 

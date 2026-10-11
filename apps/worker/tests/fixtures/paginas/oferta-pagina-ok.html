@@ -18,6 +18,11 @@
 <body>
 <header class="topo">
 <a class="logo" href="/">Besave</a>
+<form class="busca" role="search" action="/busca/" method="get">
+<label class="oculto" for="busca">Buscar ofertas</label>
+<input class="campo" id="busca" name="q" type="search" autocomplete="off" enterkeyhint="search" placeholder="Buscar ofertas, marcas e lojas">
+<button class="buscar" type="submit" aria-label="Buscar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+</form>
 <nav class="menu" aria-label="Áreas">
 <ul>
 <li><a href="/tech/">Tech</a></li>

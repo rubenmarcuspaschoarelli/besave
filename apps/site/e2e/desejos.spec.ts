@@ -35,7 +35,7 @@ test('lista os favoritos do catálogo', async ({ page }) => {
 		.locator(CARD)
 		.evaluateAll((els) => els.map((e) => e.getAttribute('data-id')));
 	expect(ids).toEqual(['1003', '20', String(EXPIRADAS[0])]);
-	await expect(page.locator(CARD).nth(2)).toContainText('Expirada');
+	await expect(page.locator(CARD).nth(2)).toContainText('Encerrada');
 });
 
 // DES-02
