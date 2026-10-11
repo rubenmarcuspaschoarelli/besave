@@ -17,6 +17,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /data/busca/{hash}.json.br          ← reservado, não gerado: a busca é no cliente (AD-061)
 /oferta/{id}/index.html             ← página estática da oferta (OfertaPagina)
 /avisos/{id}/index.html             ← página do aviso programado (BSV-41; noindex)
+/busca/index.html                   ← página de busca do site (BSV-34; noindex)
 /{area}/index.html                  ← página de área, prerender (ex.: /elas/)
 /{area}/{publico}/index.html        ← ex.: /elas/feminino/
 /img/ofertas/{id}.webp

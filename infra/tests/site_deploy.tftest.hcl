@@ -15,7 +15,7 @@ variables {
 
   # Lista literal da spec (BSV-17 §2), independente de deploy-site/prefixos.json.
   prefixos_spec = [
-    "_app/*", "index.html", "404.html", "favicon.*", "desejos/*", "assets/besave.css", "assets/fontes/*",
+    "_app/*", "index.html", "404.html", "favicon.*", "desejos/*", "busca/*", "assets/besave.css", "assets/fontes/*",
     "tech/*", "players/*", "meu-lar/*", "elas/*", "eles/*", "cultura/*", "familia/*", "pets/*",
     "esporte-vida/*", "outros/*",
   ]

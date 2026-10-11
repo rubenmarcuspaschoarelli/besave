@@ -301,7 +301,7 @@ credencial temporária (OIDC): nenhuma chave de acesso no GitHub. O bucket é co
 há duas travas com a mesma lista de prefixos (`deploy-site/prefixos.json`):
 
 1. **Policy do papel** `besave-site-deploy`: `PutObject`/`DeleteObject` e `ListBucket` (`s3:prefix`) só em
-   `_app/*`, `index.html`, `404.html`, `favicon.*`, `desejos/*`, `assets/besave.css`, `assets/fontes/*` e
+   `_app/*`, `index.html`, `404.html`, `favicon.*`, `desejos/*`, `busca/*`, `assets/besave.css`, `assets/fontes/*` e
    `{slug}/*` das 10 áreas; `CreateInvalidation` só na distribuição do site. Nada em `data/`, `oferta/`,
    `img/`, `manifest*.json`, `sitemap*`, `robots.txt`, `_estado/`.
 2. **Script** `deploy-site/publicar.mjs`: recusa o build inteiro, antes de qualquer upload, se houver
