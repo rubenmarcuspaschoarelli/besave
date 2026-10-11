@@ -56,6 +56,12 @@ describe('escreverBusca', () => {
 		expect(escreverBusca(antes, { ...e, area: undefined })).toBe('/busca/?q=protetor&loja=shopee');
 	});
 
+	it('BUS-10, TOP-03: q de 1 caractere fica na URL (recarregar mantém o que foi digitado)', () => {
+		const base = new URL('https://besave.com.br/busca/?q=protetor');
+		expect(escreverBusca(base, { q: 'p', filtros: PADRAO })).toBe('/busca/?q=p');
+		expect(lerBusca(new URLSearchParams('q=p')).q).toBe('p');
+	});
+
 	it('q vazio sai da URL; acentos e espaços são codificados', () => {
 		const base = new URL('https://besave.com.br/busca/?q=a');
 		expect(escreverBusca(base, { q: '', filtros: PADRAO })).toBe('/busca/');

@@ -131,3 +131,29 @@ test('/elas/ mantém barra, topo, ♡, "Ver mais" e rodapé', async ({ page }) =
 	await page.getByRole('button', { name: 'Ver mais ofertas' }).click();
 	await expect(page.locator(GRADE)).toHaveCount(80);
 });
+
+// TOP-04: Enter numa área envia com a área.
+test('Enter em /elas/ envia para /busca/ com &area=elas', async ({ page }) => {
+	await servir(page);
+	await page.goto('/elas/');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+	await campo.fill('p');
+	await campo.press('Enter');
+	await expect(page).toHaveURL(/\/busca\/\?q=p&area=elas$/);
+	await expect(page.locator('[data-sugestoes]')).toBeVisible();
+});
+
+// TOP-04: sem JavaScript o campo do topo faz GET /busca/ (home e área).
+test.describe('sem JavaScript', () => {
+	test.use({ javaScriptEnabled: false });
+	for (const origem of ['/', '/elas/']) {
+		test(`Enter em ${origem} faz GET /busca/?q=`, async ({ page }) => {
+			await page.goto(origem);
+			const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+			await campo.fill('protetor');
+			await campo.press('Enter');
+			await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
+		});
+	}
+});

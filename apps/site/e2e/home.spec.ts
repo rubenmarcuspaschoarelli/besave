@@ -276,3 +276,23 @@ test('prioridade das fotos da grade', async ({ page }) => {
 	expect(faixa).toHaveLength(8);
 	for (const a of faixa) expect(a).toEqual(['lazy', null]);
 });
+
+// TOP-01: teclas digitadas enquanto a /busca/ ainda carrega vão junto (texto e URL).
+test('o que se digita durante a navegação chega à /busca/', async ({ page }) => {
+	let soltar: () => void = () => {};
+	const preso = new Promise<void>((r) => (soltar = r));
+	// Código da rota /busca/ ainda não baixado: segura até terminar de digitar.
+	await page.route('**/_app/immutable/**', async (r) => {
+		await preso;
+		await r.continue();
+	});
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+	await campo.pressSequentially('pr', { delay: 20 });
+	await campo.pressSequentially('otetor', { delay: 20 });
+	await expect(page).toHaveURL(/\/$/);
+	soltar();
+	await expect(campo).toHaveValue('protetor');
+	await expect(campo).toBeFocused();
+	await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
+	await expect(page.locator('[data-resultado]')).toContainText('para “protetor”');
+});

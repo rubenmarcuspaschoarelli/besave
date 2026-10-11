@@ -17,7 +17,7 @@ T2 → T3 → T4
 ### Phase 3 — Worker e entrega
 
 ```
-T4 → T5 → T6
+T4 → T5 → T6 → T7
 ```
 
 ---
@@ -93,6 +93,17 @@ T4 → T5 → T6
 - [x] done
 
 ---
+
+### T7: Testes das lacunas do Verifier (1ª rodada)
+
+**What**: e2e com a rota `/busca/` segurando o carregamento enquanto se digita (G1, TOP-01); Enter em `/elas/` (G4) e GET sem JavaScript na home e na área (G2, TOP-04); `q` de 1 caractere fica na URL (G3, BUS-10/TOP-03).
+**Where**: `apps/site/e2e/home.spec.ts`, `apps/site/e2e/area.spec.ts`, `apps/site/src/lib/busca.test.ts`
+**Depends on**: T6
+**Requirement**: TOP-01, TOP-03, TOP-04, BUS-10
+**Done when**: os mutantes B2, B11 e M3 do Verifier morrem; `--repeat-each=15` sem falha.
+**Tests**: e2e
+**Gate**: full
+- [x] done
 
 ## Test Coverage Matrix
 
