@@ -35,7 +35,7 @@
 		<div class="flex items-center gap-2 border-t border-borda pt-1 text-xs text-suave">
 			<span class="font-semibold text-texto">{ROTULO_LOJA[card.l]}</span>
 			{#if card.x}
-				<span class="font-semibold">Expirada</span>
+				<span class="font-semibold">Encerrada</span>
 			{:else}
 				<time datetime={card.dp ?? card.dt}>{haQuanto(card, agora)}</time>
 			{/if}

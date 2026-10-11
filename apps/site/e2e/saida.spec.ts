@@ -48,6 +48,8 @@ test('build sem fallback', () => {
 	expect(htmls).toEqual(
 		[
 			'404.html',
+			// BSV-34: rota própria, prerenderizada sem resultado.
+			'busca/index.html',
 			'desejos/index.html',
 			'index.html',
 			...areas.map((s) => `${s}/index.html`),

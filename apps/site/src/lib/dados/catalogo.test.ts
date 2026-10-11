@@ -279,3 +279,24 @@ describe('faixa de preço e cupom (BSV-31)', () => {
 		expect(ids(mix.lista(f))).toEqual([3, 2, 1]);
 	});
 });
+
+describe('Catalogo: ofertas carregadas (BSV-34, "Buscando em X de Y")', () => {
+	it('BUS-05: Y soma qtd do manifest; X conta cards dos chunks atuais', () => {
+		const cat = new Catalogo();
+		expect([cat.ofertasCarregadas, cat.ofertasTotal]).toEqual([0, 0]);
+		cat.alvo(
+			manifest([
+				{ ...ref(0), qtd: 3 },
+				{ ...ref(1), qtd: 2 }
+			])
+		);
+		expect([cat.ofertasCarregadas, cat.ofertasTotal]).toEqual([0, 5]);
+		cat.aplicarChunk(ref(1), [card(1001), card(1002)]);
+		expect([cat.ofertasCarregadas, cat.ofertasTotal]).toEqual([2, 5]);
+		// Chunk de arquivo antigo (fora do alvo) não conta.
+		cat.aplicarChunk(ref(0, 'z'), [card(1), card(2), card(3)]);
+		expect([cat.ofertasCarregadas, cat.ofertasTotal]).toEqual([2, 5]);
+		cat.aplicarChunk(ref(0), [card(1), card(2), card(3)]);
+		expect([cat.ofertasCarregadas, cat.ofertasTotal]).toEqual([5, 5]);
+	});
+});

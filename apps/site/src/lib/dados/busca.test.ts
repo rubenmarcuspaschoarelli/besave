@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { card, manifest, ref } from './apoio-teste.ts';
-import { buscar } from './busca.ts';
+import { ativasPrimeiro, buscar } from './busca.ts';
 import { Catalogo } from './catalogo.ts';
 import type { OfertaCard } from './tipos.ts';
 
@@ -108,5 +108,34 @@ describe('buscar com faixa e cupom (BSV-31)', () => {
 	it('DAD-02: buscar respeita soComCupom', () => {
 		expect(ids(buscar(c, 'serum', { soComCupom: true }).itens)).toEqual([2, 3]);
 		expect(buscar(c, 'serum', { soComCupom: true }).total).toBe(2);
+	});
+});
+
+describe('ativasPrimeiro (BSV-34)', () => {
+	const c = cat([
+		card(1, { t: 'Protetor A', dp: '2026-10-01T00:00:00Z', pp: 900, pd: 1000 }),
+		card(2, { t: 'Protetor B', dp: '2026-10-05T00:00:00Z', x: 1, pp: 100, pd: 1000 }),
+		card(3, { t: 'Protetor C', dp: '2026-10-03T00:00:00Z', pp: 500, pd: 1000 }),
+		card(4, { t: 'Protetor D', dp: '2026-10-04T00:00:00Z', x: 1, pp: 800, pd: 1000 }),
+		card(5, { t: 'Protetor E', dp: '2026-10-02T00:00:00Z', pp: 300, pd: 1000 })
+	]);
+	const ordem = (o: 'recentes' | 'desconto' | 'preco') =>
+		ativasPrimeiro(buscar(c, 'protetor', { ordem: o }, Infinity).itens).map((i) => i.id);
+
+	it('BUS-04: expiradas depois das ativas, cada grupo na ordem escolhida', () => {
+		// Ativas 3, 5, 1 por dp desc; expiradas 2, 4 por dp desc.
+		expect(ordem('recentes')).toEqual([3, 5, 1, 2, 4]);
+		// Desconto: ativas 5 (70%), 3 (50%), 1 (10%); expiradas 2 (90%), 4 (20%).
+		expect(ordem('desconto')).toEqual([5, 3, 1, 2, 4]);
+		// Preço: ativas 5 (300), 3 (500), 1 (900); expiradas 2 (100), 4 (800).
+		expect(ordem('preco')).toEqual([5, 3, 1, 2, 4]);
+	});
+
+	it('BUS-04: só expiradas ou só ativas não mudam de ordem', () => {
+		const exp = [card(9, { x: 1 }), card(8, { x: 1 })];
+		expect(ativasPrimeiro(exp)).toEqual(exp);
+		const atv = [card(7), card(6)];
+		expect(ativasPrimeiro(atv)).toEqual(atv);
+		expect(ativasPrimeiro([])).toEqual([]);
 	});
 });

@@ -63,31 +63,46 @@ test('/elas/: grade e faixa só com ELAS', async ({ page }) => {
 	expect(new Set(ids.map((id) => porId.get(id)))).toEqual(new Set(['ELAS']));
 });
 
-// ARE-05
-test('busca em /elas/ não traz outra área; na home traz', async ({ page }) => {
+// ARE-05 (BSV-34, TOP-02): a busca em /elas/ leva &area=elas e só traz Elas; o botão tira a
+// área; na home a busca não leva área.
+test('busca em /elas/ leva &area=elas; o botão tira a área', async ({ page }) => {
 	await servir(page);
-	const esperados = todos(catalogo())
-		.filter((c) => c.a === 'ELAS' && /\bprotetor/i.test(c.t) && !c.x)
+	const protetor = todos(catalogo()).filter((c) => /\bprotetor/i.test(c.t));
+	const esperados = protetor
+		.filter((c) => c.a === 'ELAS')
 		.map((c) => c.id)
 		.sort((a, b) => a - b);
 	expect(esperados.length).toBeGreaterThan(1);
-
-	await page.goto('/');
-	await expect(page.locator(GRADE).first()).toBeVisible();
-	await page.getByRole('searchbox', { name: 'Buscar ofertas' }).fill('protetor');
-	await expect(page.locator('#titulo-recentes')).toContainText('Resultados para');
-	expect(new Set(await areasDe(page, GRADE)).size).toBeGreaterThan(1);
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
 
 	await page.goto('/elas/');
 	await expect(page.locator(GRADE).first()).toBeVisible();
-	await page.getByRole('searchbox', { name: 'Buscar ofertas' }).fill('protetor');
-	await expect(page.locator('#titulo-recentes')).toContainText('Resultados para “protetor”');
-	await expect(page.locator(GRADE)).toHaveCount(esperados.length);
+	await campo.pressSequentially('protetor', { delay: 40 });
+	await expect(page).toHaveURL(/\/busca\/\?q=protetor&area=elas$/);
+	await expect(campo).toBeFocused();
+	await expect(page.locator('[data-resultado]')).toHaveText(
+		`${esperados.length} ofertas para “protetor” em Elas`
+	);
 	expect(new Set(await areasDe(page, GRADE))).toEqual(new Set(['ELAS']));
 	const ids = await page
 		.locator(GRADE)
 		.evaluateAll((els) => els.map((e) => Number(e.getAttribute('data-id'))));
 	expect(ids.sort((a, b) => a - b)).toEqual(esperados);
+	await page.getByRole('button', { name: 'Buscar em todas as áreas' }).click();
+	await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
+	await expect(page.locator(GRADE)).toHaveCount(protetor.length);
+	expect(new Set(await areasDe(page, GRADE)).size).toBeGreaterThan(1);
+
+	// Subpágina: leva só a área.
+	await page.goto('/elas/unissex/');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	await campo.pressSequentially('pr', { delay: 40 });
+	await expect(page).toHaveURL(/\/busca\/\?q=pr&area=elas$/);
+
+	await page.goto('/');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	await campo.pressSequentially('protetor', { delay: 40 });
+	await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
 });
 
 // ARE-06
@@ -115,4 +130,30 @@ test('/elas/ mantém barra, topo, ♡, "Ver mais" e rodapé', async ({ page }) =
 	await expect(page.locator(GRADE)).toHaveCount(40);
 	await page.getByRole('button', { name: 'Ver mais ofertas' }).click();
 	await expect(page.locator(GRADE)).toHaveCount(80);
+});
+
+// TOP-04: Enter numa área envia com a área.
+test('Enter em /elas/ envia para /busca/ com &area=elas', async ({ page }) => {
+	await servir(page);
+	await page.goto('/elas/');
+	await expect(page.locator(GRADE).first()).toBeVisible();
+	const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+	await campo.fill('p');
+	await campo.press('Enter');
+	await expect(page).toHaveURL(/\/busca\/\?q=p&area=elas$/);
+	await expect(page.locator('[data-sugestoes]')).toBeVisible();
+});
+
+// TOP-04: sem JavaScript o campo do topo faz GET /busca/ (home e área).
+test.describe('sem JavaScript', () => {
+	test.use({ javaScriptEnabled: false });
+	for (const origem of ['/', '/elas/']) {
+		test(`Enter em ${origem} faz GET /busca/?q=`, async ({ page }) => {
+			await page.goto(origem);
+			const campo = page.getByRole('searchbox', { name: 'Buscar ofertas' });
+			await campo.fill('protetor');
+			await campo.press('Enter');
+			await expect(page).toHaveURL(/\/busca\/\?q=protetor$/);
+		});
+	}
 });
