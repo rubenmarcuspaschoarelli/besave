@@ -30,8 +30,8 @@ compartilhar "ofertas de protetor solar", e a página da oferta (HTML do worker)
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
 | Selo da expirada no card | "Encerrada" em todo card (lista de desejos inclusive), no lugar de "Expirada"; as asserções antigas de "Expirada" (Card.test, desejos.spec) passam a "Encerrada" | Spec pede "Encerrada" na busca; o card é o mesmo componente e o status do contrato é `ENCERRADA`; dois textos para o mesmo estado confundem | y (dono, 10/10) |
-| Subpágina `/{slug}/{publico}/` | A busca leva só `&area={slug}` | Spec fala só da área; o público vira filtro na `/busca/` se a pessoa quiser | n (proposta) |
-| Filtros da home/área ao ir para a busca | Não são levados | Spec não pede; a busca começa no padrão "Recentes" | n (proposta) |
+| Subpágina `/{slug}/{publico}/` | A busca leva só `&area={slug}` | Spec fala só da área; o público vira filtro na `/busca/` se a pessoa quiser | y (dono, 11/10) |
+| Filtros da home/área ao ir para a busca | Não são levados | Spec não pede; a busca começa no padrão "Recentes" | y (dono, 11/10) |
 | `q` < 2 caracteres no topo fora da `/busca/` | Não navega; Enter navega sempre (mostra sugestões) | Spec: "digitar 2+ caracteres leva"; "Enter também envia" | y (spec) |
 | Espera entre teclas na `/busca/` | Resultados na hora; URL com `replaceState` 300 ms depois da última tecla; Enter grava na hora | Busca local é ≤ 20 ms (DES-02); a espera é para não encher o histórico/URL a cada tecla | y |
 | Botão para tirar a área | "Buscar em todas as áreas" | Texto direto, testável por nome | y |
@@ -44,7 +44,7 @@ compartilhar "ofertas de protetor solar", e a página da oferta (HTML do worker)
 | `area` no formulário sem JavaScript | Não vai: o campo oculto saiu (custava ~130 B no bundle da home) e a `/busca/` só mostra resultado com JS; com JS a navegação leva `&area=` | Gate do bundle (AD-090) | y |
 | Casca da `/busca/` | `PaginaOfertas` com `campo` e `conteudo` (barra, topo, rodapé da home) | Rota com módulos próprios dividia os chunks da home: +1,1 KB no bundle inicial sem nenhum código novo | y |
 
-**Open questions:** none — as propostas acima vão para revisão do dono no PR.
+**Open questions:** none — todas confirmadas pelo dono (11/10).
 
 ---
 
