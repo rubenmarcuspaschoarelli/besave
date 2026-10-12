@@ -4,6 +4,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+	// Sem o auxiliar de preload dos imports dinâmicos (~1,9 KB no carregamento inicial, BSV-39): o
+	// kit já pré-carrega o código da rota no hover, e os pedaços sob demanda são pequenos.
+	build: { modulePreload: false },
 	plugins: [
 		tailwindcss(),
 		sveltekit({
