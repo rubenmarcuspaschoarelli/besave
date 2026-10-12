@@ -14,7 +14,6 @@
 	import Busca from './Busca.svelte';
 	import FaixaDescontos from './FaixaDescontos.svelte';
 	import Grade from './Grade.svelte';
-	import Rodape from './Rodape.svelte';
 	import Topo from './Topo.svelte';
 
 	/**
@@ -169,5 +168,3 @@
 		{/if}
 	</main>
 {/if}
-
-<Rodape />

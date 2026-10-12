@@ -2,7 +2,6 @@
 	import { CONFIG } from '#lib/config.ts';
 	import Areas from '#lib/componentes/Areas.svelte';
 	import Busca from '#lib/componentes/Busca.svelte';
-	import Rodape from '#lib/componentes/Rodape.svelte';
 	import Topo from '#lib/componentes/Topo.svelte';
 </script>
 
@@ -34,5 +33,3 @@
 		>
 	</div>
 </main>
-
-<Rodape />
