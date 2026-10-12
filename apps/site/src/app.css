@@ -1,5 +1,9 @@
-@import 'tailwindcss' source('./');
-/* Testes citam classes em regex e fixtures: não geram CSS (BSV-39). */
+/* O `tailwindcss` por partes: preflight enxuto (BSV-39); classes só de src/, sem os testes, que
+   citam nomes de classe em regex e fixtures. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import './lib/estilo/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css' layer(utilities) source('./');
 @source not './**/*.test.ts';
 @import './lib/estilo/tokens.css';
 @import './lib/estilo/fontes.css';
