@@ -48,7 +48,7 @@
 	{#if n > 0}
 		<button
 			type="button"
-			class="pointer-events-auto mt-2 rounded-full bg-destaque px-4 py-2 text-sm font-bold text-sobre-destaque shadow-lg hover:brightness-95"
+			class="pointer-events-auto mt-2 rounded-full bg-destaque px-4 py-2 text-sm font-bold text-sobre-destaque sombra-lg hover:brilho-95"
 			onclick={mostrar}
 			>{n === 1 ? '1 nova oferta' : `${n.toLocaleString('pt-BR')} novas ofertas`}</button
 		>

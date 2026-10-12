@@ -54,7 +54,7 @@
 <dialog
 	bind:this={dialogo}
 	aria-label="Filtros"
-	class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto shadow-2xl backdrop:bg-black/40 open:grid lg:hidden"
+	class="m-0 mt-auto max-h-[85vh] w-full max-w-none gap-4 overflow-y-auto rounded-t-2xl bg-fundo px-4 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] text-texto sombra-2xl backdrop:bg-black/40 open:grid lg:hidden"
 	onclose={aoFechar}
 	onclick={tocouFora}
 	onkeydown={cicloTab}
@@ -63,7 +63,7 @@
 	<GruposFiltros {estado} grupos={['publico', 'loja', 'faixa', 'cupom']} {aoMudar} />
 	<button
 		type="button"
-		class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
+		class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brilho-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foco"
 		onclick={() => dialogo?.close()}
 		>{total === null ? 'Ver ofertas' : `Ver ${contagem(total)}`}</button
 	>
