@@ -11,6 +11,8 @@ export default defineConfig({
 		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
+				// Sem `window.__svelte.v` (só detecção de versão por extensões): bytes a menos (BSV-39).
+				discloseVersion: false,
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},
