@@ -1,4 +1,6 @@
-@import 'tailwindcss';
+@import 'tailwindcss' source('./');
+/* Testes citam classes em regex e fixtures: não geram CSS (BSV-39). */
+@source not './**/*.test.ts';
 @import './lib/estilo/tokens.css';
 @import './lib/estilo/fontes.css';
 
