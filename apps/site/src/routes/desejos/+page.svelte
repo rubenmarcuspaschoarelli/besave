@@ -6,7 +6,6 @@
 	import Areas from '#lib/componentes/Areas.svelte';
 	import Busca from '#lib/componentes/Busca.svelte';
 	import Card from '#lib/componentes/Card.svelte';
-	import Rodape from '#lib/componentes/Rodape.svelte';
 	import Topo from '#lib/componentes/Topo.svelte';
 
 	/** Favoritos na ordem da lista; `card` nulo = ainda não achado no catálogo. */
@@ -71,5 +70,3 @@
 		</div>
 	{/if}
 </main>
-
-<Rodape />

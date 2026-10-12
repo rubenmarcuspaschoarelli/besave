@@ -15,5 +15,5 @@
 >
 	<span class="overflow-hidden rounded-md"><FotoOferta {card} {pct} tamanho={160} /></span>
 	<span class="sr-only">{card.t}</span>
-	<b class="font-titulo text-[15px] font-black tabular-nums">{reais(card.pp)}</b>
+	<b class="font-titulo text-[15px] font-black numeros-tabulares">{reais(card.pp)}</b>
 </a>

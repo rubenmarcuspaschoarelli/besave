@@ -189,6 +189,11 @@ test(`bundle inicial da home ≤ ${ORCAMENTO_KIB} KiB`, () => {
 		type: 'bundle',
 		description: `JS ${jsBytes} B (${js.size} arquivos) + CSS ${css} B = ${total} B (${(total / 1024).toFixed(1)} KiB)`
 	});
+	// BSV-39: quanto ainda cabe até o limite.
+	test.info().annotations.push({
+		type: 'folga',
+		description: `${ORCAMENTO_KIB * 1024 - total} B (${((ORCAMENTO_KIB * 1024 - total) / 1024).toFixed(1)} KiB)`
+	});
 	// Sanidade da medida: entrada do kit e CSS da página entram na conta.
 	expect([...js.keys()].some((f) => f.includes('/entry/start.'))).toBe(true);
 	expect(js.size).toBeGreaterThan(5);

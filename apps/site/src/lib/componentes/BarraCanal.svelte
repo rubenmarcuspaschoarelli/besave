@@ -28,7 +28,7 @@
 	</p>
 	<button
 		type="button"
-		class="absolute top-1/2 right-1.5 grid size-8 -translate-y-1/2 place-items-center rounded-full text-lg leading-none hover:bg-marca-escura"
+		class="absolute top-1/2 right-1.5 grid size-8 meio-y place-items-center rounded-full text-lg leading-none hover:bg-marca-escura"
 		aria-label="Fechar aviso do canal"
 		onclick={fechar}>×</button
 	>

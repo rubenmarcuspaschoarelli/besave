@@ -14,7 +14,7 @@
 </script>
 
 <article
-	class="relative grid grid-rows-[auto_1fr] overflow-hidden rounded-cartao border border-borda bg-fundo has-focus-visible:ring-2 has-focus-visible:ring-foco"
+	class="relative grid grid-rows-[auto_1fr] overflow-hidden rounded-cartao border border-borda bg-fundo has-focus-visible:anel-foco"
 	data-id={card.id}
 	data-area={card.a}
 >
@@ -23,7 +23,7 @@
 		<h3 class="line-clamp-2 min-h-[2.7em] font-sans text-[13.5px] leading-[1.35]">
 			<a href="/oferta/{card.id}/" class="outline-none after:absolute after:inset-0">{card.t}</a>
 		</h3>
-		<p class="flex flex-wrap items-baseline gap-x-2 tabular-nums">
+		<p class="flex flex-wrap items-baseline gap-x-2 numeros-tabulares">
 			<strong
 				class={[
 					'font-titulo text-base leading-none font-black sm:text-lg',
