@@ -28,13 +28,13 @@
 		loading={prioridade ? undefined : 'lazy'}
 		fetchpriority={prioridade === 'alta' ? 'high' : undefined}
 		decoding="async"
-		class={['size-full object-contain', card.x && 'grayscale']}
+		class={['size-full object-contain', card.x && 'foto-grayscale']}
 		onerror={() => (falhou = true)}
 	/>
 	{#if pct}
 		<span
 			data-selo
-			class="absolute top-2 left-2 rounded-md bg-destaque px-1.5 py-1 font-titulo text-xs leading-none font-black text-sobre-destaque tabular-nums"
+			class="absolute top-2 left-2 rounded-md bg-destaque px-1.5 py-1 font-titulo text-xs leading-none font-black text-sobre-destaque numeros-tabulares"
 			>-{pct}%</span
 		>
 	{/if}

@@ -13,7 +13,8 @@
 		"format": "prettier --write .",
 		"test": "vitest --run",
 		"e2e": "playwright test",
-		"medir": "node --experimental-strip-types scripts/medir.ts"
+		"medir": "node --experimental-strip-types scripts/medir.ts",
+		"inventario": "node --experimental-strip-types scripts/inventario.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

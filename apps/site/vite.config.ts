@@ -4,10 +4,16 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+	// Sem o auxiliar de preload dos imports dinâmicos (~1,9 KB no carregamento inicial, BSV-39): o
+	// kit já pré-carrega o código da rota no hover, e os pedaços sob demanda são pequenos.
+	// `BESAVE_MAPAS=1` só para o `pnpm inventario` (BSV-39); o build de produção sai sem sourcemaps.
+	build: { modulePreload: false, sourcemap: process.env.BESAVE_MAPAS === '1' },
 	plugins: [
 		tailwindcss(),
 		sveltekit({
 			compilerOptions: {
+				// Sem `window.__svelte.v` (só detecção de versão por extensões): bytes a menos (BSV-39).
+				discloseVersion: false,
 				runes: ({ filename }) =>
 					filename.split(/[/\\]/).includes('node_modules') ? undefined : true
 			},

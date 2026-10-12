@@ -43,7 +43,7 @@
 			data-ativo={ativa === 'OUTROS' ? '' : undefined}>Mais ▾</summary
 		>
 		<div
-			class="absolute top-full right-0 z-20 mt-1.5 grid min-w-36 gap-1 rounded-cartao border border-borda bg-fundo p-2 shadow-lg"
+			class="absolute top-full right-0 z-20 mt-1.5 grid min-w-36 gap-1 rounded-cartao border border-borda bg-fundo p-2 sombra-lg"
 		>
 			{#each noMais as a (a.valor)}
 				{@render item(a.valor, a.rotulo)}

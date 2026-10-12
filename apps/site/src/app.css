@@ -1,4 +1,10 @@
-@import 'tailwindcss';
+/* O `tailwindcss` por partes: preflight enxuto (BSV-39); classes só de src/, sem os testes, que
+   citam nomes de classe em regex e fixtures. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import './lib/estilo/preflight.css' layer(base);
+@import 'tailwindcss/utilities.css' layer(utilities) source('./');
+@source not './**/*.test.ts';
 @import './lib/estilo/tokens.css';
 @import './lib/estilo/fontes.css';
 
@@ -35,4 +41,33 @@
 		outline: 2px solid var(--cor-foco);
 		outline-offset: 2px;
 	}
+}
+
+/*
+ * Mesmo desenho de shadow-lg, shadow-2xl, ring-2, brightness-95, grayscale, -translate-y-1/2 e
+ * tabular-nums, sem os conjuntos de variáveis --tw-* que esses utilitários puxam para o CSS
+ * embutido em toda página (BSV-39).
+ */
+@utility sombra-lg {
+	box-shadow:
+		0 10px 15px -3px rgb(0 0 0 / 0.1),
+		0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+@utility sombra-2xl {
+	box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+@utility anel-foco {
+	box-shadow: 0 0 0 2px var(--cor-foco);
+}
+@utility brilho-95 {
+	filter: brightness(95%);
+}
+@utility foto-grayscale {
+	filter: grayscale(100%);
+}
+@utility meio-y {
+	translate: 0 -50%;
+}
+@utility numeros-tabulares {
+	font-variant-numeric: tabular-nums;
 }

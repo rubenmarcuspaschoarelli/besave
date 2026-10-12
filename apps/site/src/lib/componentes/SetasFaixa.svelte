@@ -43,7 +43,7 @@
 	}
 
 	const seta =
-		'absolute top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-borda bg-fundo text-2xl leading-none text-marca shadow-lg hover:bg-superficie';
+		'absolute top-1/2 grid size-11 meio-y place-items-center rounded-full border border-borda bg-fundo text-2xl leading-none text-marca sombra-lg hover:bg-superficie';
 </script>
 
 <button

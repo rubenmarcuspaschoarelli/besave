@@ -2,7 +2,6 @@
 	import { CONFIG } from '#lib/config.ts';
 	import Areas from '#lib/componentes/Areas.svelte';
 	import Busca from '#lib/componentes/Busca.svelte';
-	import Rodape from '#lib/componentes/Rodape.svelte';
 	import Topo from '#lib/componentes/Topo.svelte';
 </script>
 
@@ -24,7 +23,7 @@
 	</p>
 	<div class="flex flex-wrap gap-3">
 		<a
-			class="rounded-full bg-destaque px-5 py-2.5 text-sm font-bold text-sobre-destaque hover:brightness-95"
+			class="rounded-full bg-destaque px-5 py-2.5 text-sm font-bold text-sobre-destaque hover:brilho-95"
 			href="/">Ir para o início</a
 		>
 		<a
@@ -34,5 +33,3 @@
 		>
 	</div>
 </main>
-
-<Rodape />

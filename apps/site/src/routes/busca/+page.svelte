@@ -182,7 +182,7 @@
 								{#if temFiltro(filtros)}
 									<button
 										type="button"
-										class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brightness-95"
+										class="min-h-11 rounded-full bg-destaque px-5 text-sm font-bold text-sobre-destaque hover:brilho-95"
 										onclick={() => filtrar(PADRAO)}>Limpar filtros</button
 									>
 								{/if}
@@ -195,7 +195,7 @@
 					{#if resultado && resultado.itens.length < resultado.total}
 						<button
 							type="button"
-							class="justify-self-center rounded-full bg-destaque px-5 py-2.5 text-sm font-bold text-sobre-destaque hover:brightness-95"
+							class="justify-self-center rounded-full bg-destaque px-5 py-2.5 text-sm font-bold text-sobre-destaque hover:brilho-95"
 							onclick={() => (limite += POR_VEZ)}>Ver mais ofertas</button
 						>
 					{/if}
