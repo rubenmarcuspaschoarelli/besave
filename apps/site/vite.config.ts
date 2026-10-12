@@ -6,7 +6,8 @@ import tailwindcss from '@tailwindcss/vite';
 export default defineConfig({
 	// Sem o auxiliar de preload dos imports dinâmicos (~1,9 KB no carregamento inicial, BSV-39): o
 	// kit já pré-carrega o código da rota no hover, e os pedaços sob demanda são pequenos.
-	build: { modulePreload: false },
+	// `BESAVE_MAPAS=1` só para o `pnpm inventario` (BSV-39); o build de produção sai sem sourcemaps.
+	build: { modulePreload: false, sourcemap: process.env.BESAVE_MAPAS === '1' },
 	plugins: [
 		tailwindcss(),
 		sveltekit({
