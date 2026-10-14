@@ -1,0 +1,85 @@
+-- =============================================================================
+-- STR_CUPOM_UPSERT (2026-09-06)
+-- Cadastra/atualiza um cupom em BESAVE.CUPOM. Chave de upsert = (CUPOM,
+-- DS_LOJA) -- o MESMO codigo de cupom se repete em lojas diferentes com
+-- condicoes diferentes (ver cabecalho de sql/CREATE_TABLE_CUPOM.sql), entao
+-- checar so por CUPOM juntaria cupons de lojas diferentes numa unica linha.
+-- Duas linhas com DS_LOJA NULL contam como a MESMA loja (NVL(...,'*')) --
+-- evita duplicar quando a loja do cupom nao pode ser resolvida.
+--
+-- Achou -> UPDATE (DS_CUPOM/descricao pode mudar de captura para captura, ex.
+-- o valor do desconto; DT_ULT_ATUALIZACAO = SYSDATE). Nao achou -> INSERT
+-- novo via SEQ_CUPOM (DT_CADASTRO = DT_ULT_ATUALIZACAO = SYSDATE).
+--
+-- P_CUPOM chega AQUI ja separado (2026-09-28): quando a origem manda mais de
+-- 1 codigo no mesmo campo unidos por " | " (ex.: "MODA2309 | LOJASOFICIAIS"),
+-- core/cupons.py chama esta SP UMA VEZ POR CODIGO -- cada chamada cria/acha
+-- sua PROPRIA linha (mesma DS_LOJA/DS_CUPOM/datas, CUPOM diferente). Esta SP
+-- em si nunca separa nada.
+-- P_ID_ULT_OFERTA: ID_OFERTA da ultima captura que usou este cupom.
+--
+-- Retorno (mesmo padrao das demais SPs deste projeto):
+--   PV_RETORNO = 'TRUE'  -> ok; P_ID_CUPOM tem o ID (novo ou existente)
+--   PV_RETORNO = 'FALSE' -> erro; PV_ERRO traz o motivo
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE BESAVE.STR_CUPOM_UPSERT (
+  P_CUPOM         IN  VARCHAR2,
+  P_DS_CUPOM      IN  VARCHAR2 DEFAULT NULL,
+  P_DS_LOJA       IN  VARCHAR2 DEFAULT NULL,
+  -- ID_OFERTA da ultima captura que gravou/atualizou este cupom (2026-09-28).
+  -- Sempre a oferta CORRENTE de quem esta chamando -- atribuicao direta no
+  -- INSERT; no UPDATE usa NVL pra nao apagar caso algum chamador futuro nao
+  -- informe (o fluxo normal sempre informa).
+  P_ID_ULT_OFERTA IN  NUMBER   DEFAULT NULL,
+  P_ID_CUPOM      OUT NUMBER,
+  PV_RETORNO      OUT VARCHAR2,
+  PV_ERRO         OUT VARCHAR2
+) AS
+  -- CHAR, nao byte: mesma armadilha ja documentada em STP_PRODUTO_UPSERT/
+  -- STP_COMUNIDADE_UPSERT -- sem o qualificador a variavel vale N BYTES neste
+  -- banco e um cupom/loja com acento pode estourar no SUBSTR antes mesmo de
+  -- bater no limite de caracteres da coluna.
+  V_CUPOM VARCHAR2(30 CHAR);
+  V_LOJA  VARCHAR2(100 CHAR);
+  V_ID    NUMBER;
+BEGIN
+  V_CUPOM := SUBSTR(TRIM(P_CUPOM), 1, 30);
+  IF V_CUPOM IS NULL THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := 'CUPOM vazio';
+    RETURN;
+  END IF;
+  V_LOJA := SUBSTR(TRIM(P_DS_LOJA), 1, 100);
+
+  BEGIN
+    SELECT ID_CUPOM INTO V_ID FROM CUPOM
+    WHERE UPPER(CUPOM) = UPPER(V_CUPOM)
+      AND NVL(UPPER(DS_LOJA), '*') = NVL(UPPER(V_LOJA), '*')
+      AND ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      V_ID := NULL;
+  END;
+
+  IF V_ID IS NULL THEN
+    V_ID := SEQ_CUPOM.NEXTVAL;
+    INSERT INTO CUPOM (ID_CUPOM, CUPOM, DS_CUPOM, DS_LOJA, DT_CADASTRO, DT_ULT_ATUALIZACAO, ID_ULT_OFERTA)
+    VALUES (V_ID, V_CUPOM, SUBSTR(P_DS_CUPOM, 1, 150), V_LOJA, SYSDATE, SYSDATE, P_ID_ULT_OFERTA);
+  ELSE
+    UPDATE CUPOM SET
+      DS_CUPOM           = SUBSTR(NVL(P_DS_CUPOM, DS_CUPOM), 1, 150),
+      DS_LOJA            = NVL(V_LOJA, DS_LOJA),
+      DT_ULT_ATUALIZACAO = SYSDATE,
+      ID_ULT_OFERTA      = NVL(P_ID_ULT_OFERTA, ID_ULT_OFERTA)
+    WHERE ID_CUPOM = V_ID;
+  END IF;
+
+  P_ID_CUPOM := V_ID;
+  PV_RETORNO := 'TRUE';
+  PV_ERRO    := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STR_CUPOM_UPSERT;
+/

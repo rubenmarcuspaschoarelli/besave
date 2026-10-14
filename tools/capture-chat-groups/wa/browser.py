@@ -7,6 +7,8 @@ contenteditable, #main) e nunca as classes ofuscadas (x1lliihq, xnpuxes...),
 pois a Meta rotaciona essas classes entre deploys.
 """
 
+import re
+import unicodedata
 from pathlib import Path
 
 WHATSAPP_URL = "https://web.whatsapp.com/"
@@ -64,10 +66,46 @@ def _achar_caixa_busca(page):
     return None
 
 
+class ConversaErrada(RuntimeError):
+    """A conversa aberta nao e o grupo pedido (nada foi lido dela)."""
+
+
+def normalizar_nome(texto: str) -> str:
+    """
+    Chave de comparacao de nome de conversa: sem acento, minusculo, so [a-z0-9].
+    Emoji some (e no DOM vira <img alt>, ausente do innerText), entao
+    '@achadinhoscomcarol 🛍️ 9' -> 'achadinhoscomcarol9'.
+    """
+    t = unicodedata.normalize("NFKD", texto or "")
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9]", "", t.lower())
+
+
+def _texto(page, seletor: str):
+    """innerText do 1o elemento do seletor, ou None se nao existir/nao der p/ ler."""
+    try:
+        loc = page.locator(seletor).first
+        if loc.count() == 0:
+            return None
+        return loc.inner_text(timeout=2_000)
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def abrir_grupo(page, nome_grupo: str, timeout: int = 30_000):
     """
     Pesquisa o grupo pelo nome, seleciona o primeiro resultado
     (data-testid="list-item-1") e espera o painel de mensagens (#main).
+
+    Confere o NOME duas vezes, porque o rodizio le como "nova" toda mensagem
+    nao vista da conversa aberta: em 31/08/2026 a busca ainda nao tinha
+    filtrado, o list-item-1 era a conversa mais recente da lista normal e 67
+    mensagens PESSOAIS (familia, grupo de trabalho) viraram ofertas dos grupos.
+      1) antes do clique, espera o 1o resultado conter o nome do grupo;
+      2) depois de abrir, o cabecalho da conversa tem que conter o nome.
+    Divergencia levanta ConversaErrada (o rodizio trata como falha e tenta de
+    novo na volta seguinte). Se o texto nao der para LER (seletor mudou numa
+    versao nova do WhatsApp), so avisa e segue — nao trava a captura.
     """
     print(f"[browser] Abrindo grupo: {nome_grupo!r}")
 
@@ -95,6 +133,22 @@ def abrir_grupo(page, nome_grupo: str, timeout: int = 30_000):
         item.wait_for(state="visible", timeout=timeout)
 
     page.wait_for_timeout(1200)  # deixa a lista de resultados estabilizar
+
+    # 2b) So clica quando o 1o resultado for o grupo (a busca pode ainda nao
+    # ter filtrado). Ate ~6s; o texto do item traz nome + ultima msg + hora.
+    chave = normalizar_nome(nome_grupo)
+    texto_item = None
+    for _ in range(12):
+        texto_item = _texto(page, '[data-testid="list-item-1"]') \
+            or _texto(page, '#pane-side [role="listitem"]')
+        if texto_item is None or chave in normalizar_nome(texto_item):
+            break
+        page.wait_for_timeout(500)
+    if texto_item is None:
+        print("[browser] AVISO: nao consegui ler o 1o resultado da busca; clicando sem conferir.")
+    elif chave not in normalizar_nome(texto_item):
+        raise ConversaErrada(
+            f"1o resultado da busca nao e {nome_grupo!r}: {texto_item[:80]!r}")
     item.click()
 
     # 3) Espera o painel de conversa carregar.
@@ -102,4 +156,12 @@ def abrir_grupo(page, nome_grupo: str, timeout: int = 30_000):
     page.wait_for_selector(
         '#main [data-testid="conversation-panel-messages"]', timeout=timeout
     )
+
+    # 4) Confere o cabecalho da conversa aberta.
+    cabecalho = _texto(page, "#main header")
+    if cabecalho is None:
+        print("[browser] AVISO: nao consegui ler o cabecalho da conversa; seguindo sem conferir.")
+    elif chave not in normalizar_nome(cabecalho):
+        raise ConversaErrada(
+            f"conversa aberta nao e {nome_grupo!r}: cabecalho {cabecalho[:80]!r}")
     print("[browser] Grupo aberto, painel de mensagens pronto.")

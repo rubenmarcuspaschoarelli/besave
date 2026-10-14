@@ -1,30 +1,51 @@
 {
-  "grupos": {},
-  "controle": {
-    "ultimo_id_processado": 0
-  },
-  "db": {
-    "habilitado": true,
-    "modo": "",
-    "instant_client_dir": "",
-    "host": "",
-    "porta": 0,
-    "servico": "",
-    "usuario": "",
-    "senha": ""
-  },
-  "imagem": {
-    "imagem_marca_dagua": "",
-    "marca_dagua_tecnica": "",
-    "marca_dagua_opacidade": 0,
-    "marca_dagua_largura_rel": 0,
-    "qualidade_jpeg": 0,
-    "resolucao_minima": 0,
-    "espera_imagem_s": 0
-  },
-  "publicacao_s3": {
-    "ativo": true,
-    "destino": "",
-    "qualidade": 0
-  }
+    "grupos": {
+        "Promos da Ly ✨": {
+            "ultima_data_hora": "",
+            "atualizado_em": "",
+            "ultimo_data_id": ""
+        },
+        "Achadinhos diaenoite #03 👩": {
+            "ultima_data_hora": "",
+            "atualizado_em": "",
+            "ultimo_data_id": ""
+        },
+        "@achadinhoscomcarol 🛍️ 9": {
+            "ultima_data_hora": "",
+            "atualizado_em": "",
+            "ultimo_data_id": ""
+        }
+    },
+    "controle": {
+        "ultimo_id_processado": 0
+    },
+    "db": {
+        "habilitado": true,
+        "modo": "thick",
+        "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
+        "host": "LOCALHOST",
+        "porta": 1521,
+        "servico": "XE",
+        "usuario": "",
+        "senha": ""
+    },
+    "imagem": {
+        "imagem_marca_dagua": "besave.jpg",
+        "marca_dagua_tecnica": "keyed",
+        "marca_dagua_opacidade": 0.23,
+        "marca_dagua_cor": "#505050",
+        "marca_dagua_largura_rel": 0.35,
+        "marca_dagua_adaptativa": true,
+        "marca_dagua_limiar_escuro": 120,
+        "qualidade_jpeg": 0.95,
+        "resolucao_minima": 400,
+        "espera_imagem_s": 8
+    },
+    "publicacao_s3": {
+        "ativo": true,
+        "destino": "E:\\Work\\besave\\server\\s3\\ofertas\\img",
+        "qualidade": 90,
+        "max_px": 480,
+        "max_kb": 200
+    }
 }

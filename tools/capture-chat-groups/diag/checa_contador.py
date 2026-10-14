@@ -21,7 +21,11 @@ sys.path.insert(0, RAIZ)
 
 def maior_id_nos_csvs():
     maior, arquivo = 0, None
-    for caminho in glob.glob(os.path.join(RAIZ, "captura", "*.csv")):
+    # CSVs dos runs ficam em captura/csv/ (desde 14/10/2026). A raiz de captura/
+    # ainda e lida para nao perder o CSV de um run lancado antes da mudanca.
+    caminhos = glob.glob(os.path.join(RAIZ, "captura", "csv", "*.csv"))
+    caminhos += glob.glob(os.path.join(RAIZ, "captura", "*.csv"))
+    for caminho in caminhos:
         nome = os.path.basename(caminho)
         if "bak" in nome or "backup" in nome:
             continue

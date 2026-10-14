@@ -1,10 +1,16 @@
-# tools/capture-store-pages — Python: detalhe, classificação e consolidação em OFERTA (existente)
+# capture-store-pages (Antiga CaptureAmazon) -- regras do projeto
 
-Código pré-existente. É a origem de `DS_LOJA`, `DS_COMUNIDADE`, `DS_PUBLICO`: qualquer valor novo precisa entrar em `packages/contract/mapeamento.json`, senão o worker rejeita.
-Preenche `DT_DESATIVACAO` quando `ST_ATIVO` vai a 0 (CONTRATO.md §7). `DS_SLUG` não existe mais (AD-018). Não alterar sem ticket explícito.
+Estrutura e regras completas em `README.md`. Resumo obrigatório:
 
-## Regras de classificação (AD-039)
-Oferta que não for classificada grava `DS_COMUNIDADE = 'Outros'` e `DS_PUBLICO = 'Unisex'`. Nunca deixar vazio: o worker rejeita.
-`DS_URL_AFILIADO` é obrigatória para a oferta ser publicada. `DS_CUPOM` deve conter **um** código (sem ` | ` concatenando vários); se houver mais de um, gravar o primeiro.
-`VL_PRECO_POR` é garantido pela captura (fallback `VR_PRECO_1` aqui, nunca no worker).
-
+- **Core x ajuste**: na raiz só o que roda todo dia (`main.py`,
+  `manutencao_arquivos.py`, `core/`, `stores/`). Todo programa de ajuste,
+  backfill, correção, diagnóstico, login manual ou teste novo vai em
+  `programas_ajuste/` e começa com `import _raiz` antes de importar
+  `core`/`main`/`stores`.
+- **Saídas**: usar `core/caminhos.py` -- CSV/log/TSV/dump em `em_log()`
+  (`destino/log/`), backups em `em_bkp()` (`destino/bkp/`), fotos em `IMG_DIR`
+  (`destino/img/`). Nunca gravar solto em `destino/` nem em `conf/`.
+- **Backup antes de alterar dados** (banco ou arquivos): sempre em `destino/bkp/`.
+- **Git**: `conf/config.json` (senha do banco), `destino/`, `.chrome_perfil*`
+  não são versionados. Config nova → refletir em `conf/config.example.json`.
+- **Um processo Playwright por vez** (`.chrome_perfil` compartilhado por todas as lojas).

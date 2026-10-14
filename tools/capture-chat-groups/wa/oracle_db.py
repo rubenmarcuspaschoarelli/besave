@@ -25,7 +25,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from .storage import CAPTURA_DIR, CONFIG_PATH
+from .storage import CAPTURA_DIR, CONFIG_PATH, LOG_DIR
 
 # --- Saneamento de texto para as colunas VARCHAR2 ---------------------------
 #
@@ -41,7 +41,7 @@ _LIMITE_BYTES = {
     "DS_ORIGEM": 100,
     "DS_TIPO_OFERTA": 30,
     "DS_DESCRICAO_PAGAMENTO": 50,
-    "DS_CUPOM": 30,
+    # DS_CUPOM saiu daqui em 28/09/2026: virou VARCHAR2(250 CHAR) - ver _cupom.
     "DS_CUPOM_COMENTARIO": 50,
     "DS_CUPOM_LOJA": 50,
     "DS_LOJA": 100,
@@ -91,6 +91,40 @@ def _texto(valor, coluna: str):
     if limite:
         s = _truncar_bytes(s, limite).strip()
     return s or None
+
+
+# DS_CUPOM: VARCHAR2(250 CHAR) desde 28/09/2026 (era 30 BYTE e cortava a lista
+# de cupons separada por ' | ' no meio). Outro processo separa os cupons, entao
+# o corte, se precisar acontecer, e no ULTIMO cupom inteiro que cabe - nunca no
+# meio de um codigo - e fica registrado em log/cupom_excedido.log para
+# ajustarmos o tamanho. O CSV sempre guarda a lista completa.
+LIMITE_CUPOM = 250
+_SEP_CUPOM = " | "
+LOG_CUPOM_EXCEDIDO = LOG_DIR / "cupom_excedido.log"
+
+
+def _cupom(valor, id_oferta):
+    """DS_CUPOM pronto para o bind (sem emoji, ate LIMITE_CUPOM caracteres)."""
+    if valor is None:
+        return None
+    s = _sem_emoji(str(valor))
+    if len(s) <= LIMITE_CUPOM:
+        return s or None
+    corte = s[:LIMITE_CUPOM + len(_SEP_CUPOM)].rfind(_SEP_CUPOM)
+    if corte <= 0 or corte > LIMITE_CUPOM:
+        cortado = s[:LIMITE_CUPOM].rstrip(" |")
+    else:
+        cortado = s[:corte]
+    msg = (f"ID {id_oferta}: DS_CUPOM com {len(s)} caracteres (limite {LIMITE_CUPOM}); "
+           f"gravado {len(cortado)}. Completo: {s}")
+    print(f"[oracle] AVISO {msg}")
+    try:
+        LOG_CUPOM_EXCEDIDO.parent.mkdir(parents=True, exist_ok=True)
+        with open(LOG_CUPOM_EXCEDIDO, "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%d/%m/%Y %H:%M:%S} {msg}\n")
+    except Exception:  # noqa: BLE001 - o aviso ja foi para o log do run
+        pass
+    return cortado or None
 
 try:                                 # sem a lib instalada -> seguimos so com CSV
     import oracledb
@@ -301,7 +335,7 @@ class OracleDB:
                 # URL tambem fica fora: emoji nao aparece e o corte estragaria o link.
                 "P_DS_URL_ORIGEM": linha.get("DS_URL_ORIGEM") or None,
                 "P_DS_MSG_FINAL": _texto(linha.get("DS_MSG_FINAL"), "DS_MSG_FINAL"),
-                "P_DS_CUPOM": _texto(linha.get("DS_CUPOM"), "DS_CUPOM"),
+                "P_DS_CUPOM": _cupom(linha.get("DS_CUPOM"), linha.get("ID_OFERTA")),
                 "P_DS_CUPOM_COMENTARIO": _texto(linha.get("DS_CUPOM_COMENTARIO"),
                                                 "DS_CUPOM_COMENTARIO"),
                 "P_DS_CUPOM_LOJA": _texto(linha.get("DS_CUPOM_LOJA"), "DS_CUPOM_LOJA"),
