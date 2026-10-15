@@ -234,7 +234,10 @@ class OracleDB:
                 # .strip() defensivo: espacos extras no caminho (ex.: vindos do
                 # editor) fariam o init apontar p/ pasta inexistente (DPI-1047).
                 lib = (self._cfg.get("instant_client_dir") or "").strip() or None
-                oracledb.init_oracle_client(lib_dir=lib)
+                # config_dir: pasta do tnsnames.ora/sqlnet.ora (wallet); sem ela vale
+                # ORACLE_HOME/TNS_ADMIN da maquina.
+                cfg_dir = (self._cfg.get("config_dir") or "").strip() or None
+                oracledb.init_oracle_client(lib_dir=lib, config_dir=cfg_dir)
                 _client_iniciado = True
             dsn = self._montar_dsn()
             self._conn = oracledb.connect(
