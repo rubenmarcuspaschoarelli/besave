@@ -302,10 +302,11 @@ Pré-requisitos:
 
 | variável | obrigatória | exemplo |
 |---|---|---|
-| `BESAVE_ORACLE_DSN` | sim | `localhost:1521/XE` |
+| `BESAVE_ORACLE_DSN` | sim | alias do `tnsnames.ora` da wallet, ex.: `bsvdb_tp` (AD-100) |
 | `BESAVE_ORACLE_USER` | sim | |
 | `BESAVE_ORACLE_PASS` | sim | |
-| `BESAVE_ORACLE_CLIENT_DIR` | não | `C:\oraclexe\app\instantclient_19_30` |
+| `BESAVE_ORACLE_CLIENT_DIR` | não | `C:\oracle\instantclient_23_26` |
+| `TNS_ADMIN` | com wallet | pasta do `tnsnames.ora`, `sqlnet.ora` e `cwallet.sso`; obrigatória quando o `ORACLE_HOME` da máquina aponta para outro Oracle (senão: `ORA-12154`) |
 | `BESAVE_ORACLE_TZ` | não | fuso das colunas `DATE`, só offset `±HH:MM`; padrão `-03:00` |
 | `BESAVE_FONTE` | não | `oracle` (padrão) ou `fake` |
 | `BESAVE_MAPEAMENTO` | não | override explícito do `mapeamento.json`; sem ela, vale o `packages/contract/mapeamento.json` embutido no binário no build (não depende da pasta de trabalho nem do repo) |
@@ -313,7 +314,7 @@ Pré-requisitos:
 
 ```sh
 cd apps/worker
-BESAVE_ORACLE_DSN=localhost:1521/XE BESAVE_ORACLE_USER=... BESAVE_ORACLE_PASS=... \
+BESAVE_ORACLE_DSN=bsvdb_tp TNS_ADMIN=... BESAVE_ORACLE_USER=... BESAVE_ORACLE_PASS=... \
   cargo run --release -- --dry-run
 ```
 
@@ -324,7 +325,9 @@ O worker lê `OFERTA` e `PRODUTO` do schema do usuário conectado, com o filtro 
 sem a coluna. As colunas `DATE` são tratadas como hora local no offset `BESAVE_ORACLE_TZ` e
 convertidas para UTC só com aritmética de `DATE` (sem `FROM_TZ`/`SYS_EXTRACT_UTC`, que dão
 `ORA-01882` com Instant Client 19 no XE 11.2). Offset fixo porque o arquivo de fuso do XE 11.2
-ainda aplica horário de verão em `America/Sao_Paulo`.
+ainda aplica horário de verão em `America/Sao_Paulo`. No Autonomous Database (AD-100) o banco
+está com `DBTIMEZONE = -03:00` e `SYSDATE_AT_DBTIMEZONE = TRUE`, para que o `SYSDATE` (expurgo,
+procedures dos robôs, `DEFAULT SYSDATE`) continue em hora de Brasília; sem isso ele sai em UTC.
 
 Rejeições saem no log (`WARN ... id=… motivo=…`) e no relatório. Erro de conexão ou de SQL
 encerra com código ≠ 0 e a mensagem do Oracle, sem panic.
@@ -368,10 +371,11 @@ simples**: sem aspas, `\` é lido como escape e o `.env` fica ilegível (código
 
 ```ini
 BESAVE_FONTE=oracle
-BESAVE_ORACLE_DSN=localhost:1521/XE
+BESAVE_ORACLE_DSN=bsvdb_tp
+TNS_ADMIN='C:\oracle\instantclient_23_26\network\admin'
 BESAVE_ORACLE_USER=...
 BESAVE_ORACLE_PASS=...
-BESAVE_ORACLE_CLIENT_DIR='C:\oracle\instantclient_19_25'
+BESAVE_ORACLE_CLIENT_DIR='C:\oracle\instantclient_23_26'
 BESAVE_IMAGENS_DIR='C:\robo\imagens'
 BESAVE_BUCKET=...
 BESAVE_KVS_ARN=arn:aws:cloudfront::...:key-value-store/...
