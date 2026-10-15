@@ -17,6 +17,7 @@
     "habilitado": true,
     "modo": "thick",
     "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
+    "dsn": "",
     "host": "LOCALHOST",
     "porta": 1521,
     "servico": "XE",

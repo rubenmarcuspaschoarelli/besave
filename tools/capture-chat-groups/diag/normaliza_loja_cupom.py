@@ -33,8 +33,9 @@ def conectar():
         oracledb.init_oracle_client(lib_dir=(cfg.get("instant_client_dir") or "").strip() or None)
     return oracledb.connect(
         user=cfg["usuario"], password=cfg["senha"],
-        dsn=oracledb.makedsn(cfg["host"], int(cfg.get("porta", 1521)),
-                             service_name=cfg.get("servico") or "XE"))
+        dsn=(cfg.get("dsn") or "").strip()
+        or oracledb.makedsn(cfg["host"], int(cfg.get("porta", 1521)),
+                            service_name=cfg.get("servico") or "XE"))
 
 
 def main() -> int:

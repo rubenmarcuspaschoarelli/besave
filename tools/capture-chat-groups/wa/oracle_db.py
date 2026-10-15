@@ -208,6 +208,10 @@ class OracleDB:
 
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
+        # 'dsn' (alias do tnsnames.ora; banco com wallet) vence host/porta/servico.
+        dsn = (self._cfg.get("dsn") or "").strip()
+        if dsn:
+            return dsn
         # .strip() defensivo: um espaco extra vindo do config (ex.: editor) nao
         # deve quebrar o host/servico.
         host = (self._cfg.get("host") or "LOCALHOST").strip()
