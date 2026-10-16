@@ -1,0 +1,62 @@
+-- =============================================================================
+-- STP_COMUNIDADE_UPSERT (2026-09-04)
+-- Cadastra/atualiza uma comunidade em BESAVE.COMUNIDADE. Mesmo padrao de
+-- STP_PRODUTO_UPSERT: busca por NOME EXATO (normalizado maiusculo/trim),
+-- achou -> UPDATE preservando o que ja existe (NVL(novo, atual) em
+-- OBS_COMUNIDADE/ST_ATIVO), nao achou -> INSERT novo via SEQ_COMUNIDADE.
+--
+-- Retorno (mesmo padrao das demais SPs deste projeto):
+--   PV_RETORNO = 'TRUE'  -> ok; P_ID_COMUNIDADE tem o ID (novo ou existente)
+--   PV_RETORNO = 'FALSE' -> erro; PV_ERRO traz o motivo
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE BESAVE.STP_COMUNIDADE_UPSERT (
+  P_DS_COMUNIDADE  IN  VARCHAR2,
+  P_OBS_COMUNIDADE IN  VARCHAR2 DEFAULT NULL,
+  P_ST_ATIVO       IN  INTEGER  DEFAULT NULL,
+  P_ID_COMUNIDADE  OUT NUMBER,
+  PV_RETORNO       OUT VARCHAR2,
+  PV_ERRO          OUT VARCHAR2
+) AS
+  -- CHAR, nao byte: mesma armadilha ja documentada em STP_PRODUTO_UPSERT --
+  -- sem o qualificador a variavel vale 50 BYTES neste banco e um nome com
+  -- acento pode estourar no SUBSTR antes mesmo de bater no limite de
+  -- caracteres da coluna.
+  V_NOME VARCHAR2(50 CHAR);
+  V_ID   NUMBER;
+BEGIN
+  V_NOME := SUBSTR(TRIM(P_DS_COMUNIDADE), 1, 50);
+  IF V_NOME IS NULL THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := 'DS_COMUNIDADE vazio';
+    RETURN;
+  END IF;
+
+  BEGIN
+    SELECT ID_COMUNIDADE INTO V_ID FROM COMUNIDADE
+    WHERE UPPER(DS_COMUNIDADE) = UPPER(V_NOME) AND ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      V_ID := NULL;
+  END;
+
+  IF V_ID IS NULL THEN
+    V_ID := SEQ_COMUNIDADE.NEXTVAL;
+    INSERT INTO COMUNIDADE (ID_COMUNIDADE, DS_COMUNIDADE, OBS_COMUNIDADE, ST_ATIVO)
+    VALUES (V_ID, V_NOME, SUBSTR(P_OBS_COMUNIDADE, 1, 300), NVL(P_ST_ATIVO, 1));
+  ELSE
+    UPDATE COMUNIDADE SET
+      DS_COMUNIDADE  = V_NOME,
+      OBS_COMUNIDADE = SUBSTR(NVL(P_OBS_COMUNIDADE, OBS_COMUNIDADE), 1, 300),
+      ST_ATIVO       = NVL(P_ST_ATIVO, ST_ATIVO)
+    WHERE ID_COMUNIDADE = V_ID;
+  END IF;
+
+  P_ID_COMUNIDADE := V_ID;
+  PV_RETORNO      := 'TRUE';
+  PV_ERRO         := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_COMUNIDADE_UPSERT;
+/

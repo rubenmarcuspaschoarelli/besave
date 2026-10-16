@@ -3,7 +3,7 @@
 Documento de contexto, em linguagem simples, para quem chega agora (pessoa ou agente).
 **Não é fonte de verdade.** Quando este texto e outro arquivo discordarem, valem, nesta ordem:
 `docs/CONTRATO.md` (dados), `docs/MANIFEST.md` (S3/CloudFront), `docs/DECISOES.md` (por que), e a
-spec do ticket em `docs/specs/`. Atualizado em 06/10/2026.
+spec do ticket em `docs/specs/`. Atualizado em 15/10/2026.
 
 ---
 
@@ -27,7 +27,9 @@ Referência de produto: promobit.com.br. Teto de custo na AWS: US$ 40/mês.
 ## 2. Como funciona, em uma frase por peça
 
 **Robôs (Python, já existem).** Capturam ofertas nas lojas e em grupos, classificam por área e
-público, baixam a imagem em dois tamanhos (natural e `-small`) e gravam tudo num Oracle local.
+público, baixam a imagem em dois tamanhos (natural e `-small`) e gravam tudo no Oracle. Desde
+15/10/2026 o banco é um Autonomous Database na Oracle Cloud (AD-100); robôs e worker ainda rodam
+no PC do dono, e a ida deles para uma VPS está em planejamento.
 Quando uma oferta morre, o robô marca `ST_ATIVO = 0` e a data de desativação.
 
 **Worker (Rust, roda na sua máquina a cada 5–10 min).** Lê o Oracle e publica na AWS:
@@ -42,7 +44,7 @@ o CloudFront entrega a partir de pontos de presença no Brasil, com cache. Não 
 nem servidor de aplicação no caminho de leitura. Isso é o que mantém o custo perto de zero e
 faz o site aguentar pico sem cair.
 
-**Site (SvelteKit, ainda não existe).** A home, as páginas de área e a busca. Ele baixa o
+**Site (SvelteKit, no ar).** A home, as páginas de área e a busca. Ele baixa o
 `manifest.json`, depois os chunks aos poucos, e mostra os cards. A busca roda no próprio
 navegador, sobre todos os ~25–30 mil registros, sem chamar servidor. As imagens dos cards
 carregam conforme a pessoa rola.
@@ -76,43 +78,46 @@ Canal (broadcast), nunca automação de grupos.
 7. **Nenhuma URL de loja no site.** Só `/ir/{id}`. Troca de rede de afiliado sem regerar 30 mil
    páginas, e o Google não vê link de afiliado.
 
-## 4. Onde estamos (06/10/2026)
+## 4. Onde estamos (15/10/2026)
 
 **O site está no ar em `besave.com.br`, indexável.** A cada 5 minutos o Agendador do Windows executa
-`C:esaveinesave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
-páginas de oferta, sitemap e redirects. Ciclo em regime: ~25 s. Hoje são ~25 mil ofertas válidas.
+`C:\besave\bin\besave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
+páginas de oferta, sitemap e redirects. Ciclo em regime: ~40 s desde que o banco foi para a nuvem
+(~10 s de leitura pela internet; antes ~20 s). Hoje são ~28,7 mil ofertas válidas.
 
 Feito e no ar:
-- `besave.com.br` na distribuição nova (`www` → 301 para o domínio sem www), `robots.txt` liberado,
-  sitemap e Google Search Console verificado. Home e 404 ainda provisórias (BSV-30).
+- **Banco na Oracle Cloud** (15/10): Autonomous Database Always Free (26ai, 20 GB), acesso por wallet,
+  fuso `-03:00`; cópia conferida tabela a tabela contra o XE antes da virada (AD-100). Robôs e worker
+  continuam no PC do dono.
+- `besave.com.br` na distribuição nova (`www` → 301 para o domínio sem www), sitemap e Google Search
+  Console verificado; home, áreas e 404 definitivas (BSV-30, BSV-30b).
 - Links curtos `besave.io/{id}` e `besave.me/{id}` → `/oferta/{id}/` (BSV-16).
-- Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom e botão `/ir/{id}`.
+- Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom, "Copiar cupom e ir para a
+  loja" e campo de busca (BSV-34, BSV-38).
 - Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
 - Alertas no Telegram: ciclo que falha, site parado (vigia na AWS) e nenhuma oferta nova em 24 h.
-- Canal `@besaveofertas` no ar: até 180 ofertas por dia em lotes de 2 (8–22 h), "Oferta encerrada" na
+- Canal `@besaveofertas`: até 180 ofertas por dia em lotes de 2 (8–22 h), "Oferta encerrada" na
   expiração e avisos programados com página `/avisos/{id}/` (BSV-40, BSV-41).
-- Cards com data de publicação no site (`dp`, contrato 1.5.0, BSV-36).
-- Página de busca `/busca/` e campo de busca nas páginas de oferta (BSV-34, 11/10).
-- Página da oferta com "Copiar cupom e ir para a loja" (aba nova) e filtros compactos no computador
-  (BSV-37, BSV-38, 09/10).
-- Camada de dados do site (BSV-35): manifest, chunks, sincronização e busca no cliente, sem UI;
-  medida em produção: 25 mil cards, busca p95 ~8 ms.
-- Contrato 1.5.0, 98 decisões registradas, CI funcionando desde 03/10 (YAML inválido até a PR #21).
+- Home com filtros, aviso de novas ofertas, favoritos no aparelho e busca `/busca/` (BSV-31 a 37);
+  carregamento inicial com 10 KiB de folga no gate de 150 KiB (BSV-39).
+- Código dos dois robôs no repositório (`tools/`, PR #75).
+- Contrato 1.5.0, 104 decisões registradas.
 
 Próximos, nesta ordem:
-- **BSV-39** (dieta do carregamento inicial da home: hoje a 47 B do gate de 150 KiB; meta ≥ 10 KiB de folga).
+- **Cupom com vários códigos** (AD-102): o worker separa `DS_CUPOM` por `|`; hoje ~150 ofertas saem sem
+  cupom porque o campo inteiro não cabe no padrão.
+- **VPS para worker e robôs** (AD-104): o dono detalha a máquina; depois, plano e ticket.
 - Página da oferta: trocar a faixa "Oferta expirada" por "Encerrada" (mesma palavra dos cards).
 - **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
-  do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono).
+  do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono); desligar o XE local
+  depois de alguns dias estáveis (fica como volta até lá).
 - **Tickets pequenos:** DES-02 com aquecimento e mediana; limpeza do worker (literal de caminho em
   `tests/alerta.rs`, avisos no `--publicar`/`--dry-run`, `META_CSS` sem uso, MANIFEST §6 com avisos).
-- **Robô:** código do robô das lojas no repositório (499 ofertas publicadas sem imagem, 1,9%); um cupom por
-  oferta; marcar expiradas (`ST_ATIVO = 0`); regra Elas/Eles revista pelo dono em 09/10.
 - Depois: usuários (F5), app (F6), admin (F7).
 
-Em aberto: tamanho da imagem `-small` (200 px hoje; subir
-até 320 px, o teto do contrato — AD-059), cupons da tabela CUPOM no site, e quando tirar o worker do
-PC do dono.
+Em aberto: acesso ao banco (só wallet ou também lista de IPs, AD-100); imagem da oferta com lado maior
+480 px em vez dos 1200 px do contrato (AD-103); tamanho da `-small` (200 px hoje, teto 320 px — AD-059);
+cupons da tabela CUPOM no site.
 
 ## 5. Como o trabalho é feito
 

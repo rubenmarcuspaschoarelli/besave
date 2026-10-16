@@ -1,0 +1,26 @@
+-- =============================================================================
+-- Adiciona ST_ATIVO: a oferta e de uma loja que ENTRA em producao?
+--
+--   '1' -> loja ativa      (esta em conf/config.json -> "lojas_ativas")
+--   '0' -> loja NAO ativa   (capturada e enriquecida do mesmo jeito, mas fora
+--                            da lista de lojas que vao ser publicadas hoje)
+--
+-- Decisao de 2026-07-31: por ora so Amazon, Mercado Livre e Shopee sao
+-- publicadas. As demais lojas (epoca, zzmall, belezanaweb, Natura, e o que vier)
+-- CONTINUAM sendo capturadas e mapeadas -- o trabalho de mapear a estrutura de
+-- cada uma fica pronto para quando forem ativadas; basta acrescentar o nome em
+-- "lojas_ativas" no config.json e reprocessar, sem tocar em codigo.
+--
+-- Quem grava: o CaptureAmazon, via as duas SPs (UPDATE e ERRO), a partir de
+-- registry.loja_ativa(). NAO ha DEFAULT na coluna de proposito: NULL significa
+-- "linha nunca processada por esta versao", e se distingue de um '0' decidido.
+--
+-- Seguro de rodar: coluna nova e anulavel, nao mexe nas linhas existentes.
+-- Para preencher o historico ja capturado, rode depois: backfill_st_ativo.py
+-- (classifica pelo dominio da URL usando o proprio registry do programa).
+--
+-- Reverter: UPDATE OFERTA_FILA_CAPTURA SET ST_ATIVO = NULL;  /  ALTER TABLE
+-- OFERTA_FILA_CAPTURA DROP COLUMN ST_ATIVO;
+-- Aplicado no ambiente local em 2026-07-31.
+-- =============================================================================
+ALTER TABLE OFERTA_FILA_CAPTURA ADD (ST_ATIVO VARCHAR2(1 CHAR));
