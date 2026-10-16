@@ -141,9 +141,9 @@ do PC.
 | INS-04 | Instalação | Execute | Done |
 | INS-05 | Instalação | Execute | Done |
 | INS-06 | Instalação | Execute | Done |
-| SYS-01 | Execução agendada | Execute | Pending |
+| SYS-01 | Execução agendada | Execute | Done |
 | SYS-02 | Execução agendada | Execute | Pending |
-| SYS-03 | Execução agendada | Execute | Pending |
+| SYS-03 | Execução agendada | Execute | Done |
 | SYS-04 | Execução agendada | Execute | Pending |
 | WF-01 | Binários ARM64 | Execute | Pending |
 | WF-02 | Binários ARM64 | Execute | Pending |

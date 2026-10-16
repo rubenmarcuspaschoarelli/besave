@@ -77,8 +77,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Unidades com os campos de SYS-01; modelo com as chaves de SYS-03 e sem segredo
-- [ ] Gate build passa (verificação por `systemd-analyze` no job `vps`, T3)
+- [x] Unidades com os campos de SYS-01; modelo com as chaves de SYS-03 e sem segredo
+- [x] Gate build passa (verificação por `systemd-analyze` no job `vps`, T3)
 
 **Tests**: none
 **Gate**: build
