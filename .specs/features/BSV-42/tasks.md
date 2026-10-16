@@ -93,9 +93,9 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Dois processos, perfil preso e contador atrasado recusam sem lançar
-- [ ] Caminho feliz lança o robô numa sessão `tmux` com `DISPLAY`
-- [ ] Gate build passa
+- [x] Dois processos, perfil preso e contador atrasado recusam sem lançar
+- [x] Caminho feliz lança o robô numa sessão `tmux` com `DISPLAY`
+- [x] Gate build passa
 
 **Tests**: unit
 **Gate**: build
