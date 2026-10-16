@@ -10,6 +10,8 @@ import pytest
 
 VPS = Path(__file__).resolve().parent.parent / "vps"
 BASH = shutil.which("bash")
+if BASH and "system32" in BASH.lower().replace("\\", "/"):  # bash.exe do WSL nao serve
+    BASH = None
 
 pytestmark = pytest.mark.skipif(BASH is None, reason="bash indisponivel")
 
@@ -63,6 +65,7 @@ exit 0
             "BESAVE_ESPERA": "0",
             "BESAVE_GRACA": "1",
             "XDG_RUNTIME_DIR": e,
+            "BESAVE_UNIDADE": "besave-unidade-inexistente-teste.service",
         }
 
     def pids(self, run=(), perfil=()):
@@ -182,3 +185,25 @@ def test_executar_inicia_e_devolve_o_codigo_do_robo(amb):
     tmux = amb.log("tmux.log")
     assert "-L besave-lojas new-session -d -s besave-lojas" in tmux
     assert "-L besave-lojas wait-for besave-besave-lojas" in tmux
+
+
+def test_sh05_encerrar_usa_sigint_antes_de_sigkill(amb):
+    amb.pids(run=[111])
+    amb.rodar("encerrar_captura.sh")
+    assert amb.log("kill.log").splitlines()[0] == "-INT 111"
+
+
+def test_sh01_pega_run_com_argumentos_e_sem_u(amb):
+    # o regex real (nao o glob do pgrep falso) casa as formas de linha de comando do robo
+    import re
+    padrao = None
+    for linha in (VPS / "iniciar_captura.sh").read_text(encoding="utf-8").splitlines():
+        if linha.startswith("PADRAO_RUN="):
+            padrao = re.compile(linha.split("'")[1])
+    assert padrao
+    casam = ["/srv/.venv/bin/python -u run_captura.py", "python3 run_captura.py --max 40",
+             "/x/python -u run_captura.py --seg-grupo 8"]
+    nao_casam = ["bash /v/rodar_em_tmux.sh interno s l /x/python -u run_captura.py",
+                 "tmux -L s new-session -d env DISPLAY=:1 /x/python -u run_captura.py", "vim run_captura.py"]
+    assert all(padrao.search(c) for c in casam)
+    assert not any(padrao.search(c) for c in nao_casam)

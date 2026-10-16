@@ -12,6 +12,7 @@ Type=simple
 WorkingDirectory=/srv/besave/repo/tools/capture-store-pages
 Environment=BESAVE_DISPLAY=:1
 ExecStart=/srv/besave/repo/tools/vps/rodar_em_tmux.sh executar besave-lojas /srv/besave/repo/tools/capture-store-pages /srv/besave/repo/tools/capture-store-pages/destino/log/main_monitorar.log /srv/besave/repo/tools/capture-store-pages/.venv/bin/python -u main.py --monitorar
+KillSignal=SIGINT
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=30

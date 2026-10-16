@@ -5,7 +5,7 @@
 # Cuidados:
 #   - filtra por 'run_captura.py' e pelo --user-data-dir do projeto.
 #     NUNCA matar todo python: o capture-store-pages roda na mesma maquina.
-#   - SIGTERM primeiro (o `finally` da captura salva o contador); SIGKILL so no
+#   - SIGINT primeiro (= Ctrl+C: o `finally` da captura salva o contador; SIGTERM nao roda); SIGKILL so no
 #     que sobrar depois de BESAVE_GRACA segundos.
 #   - se a unidade systemd estiver ativa, ela e parada antes; senao o
 #     Restart=on-failure subiria o robo de novo.
@@ -24,7 +24,7 @@ SESSAO=${BESAVE_SESSAO:-besave-whatsapp}
 UNIDADE=${BESAVE_UNIDADE:-besave-captura-whatsapp.service}
 GRACA=${BESAVE_GRACA:-10}
 
-PADRAO_RUN='^[^ ]*python[0-9.]* -u run_captura\.py$'
+PADRAO_RUN='^[^ ]*python[0-9.]* (-u )?run_captura\.py( |$)'
 PADRAO_PERFIL="--user-data-dir=$RAIZ/user_data"
 
 pids() { "$PGREP" -f -- "$1" 2>/dev/null || true; }
@@ -48,7 +48,7 @@ fi
 echo "Encerrando $(contar "$pythons") python (captura) e $(contar "$chromes") processo(s) do perfil..."
 for p in $pythons; do
     echo "  python PID $p"
-    "$KILL" -TERM "$p" 2>/dev/null || true
+    "$KILL" -INT "$p" 2>/dev/null || true
 done
 
 # espera o python sair (o finally salva o estado)
@@ -59,7 +59,7 @@ done
 for p in $(pids "$PADRAO_RUN"); do "$KILL" -KILL "$p" 2>/dev/null || true; done
 
 # o navegador pode ter ficado: ele trava o perfil
-for p in $(pids "$PADRAO_PERFIL"); do "$KILL" -TERM "$p" 2>/dev/null || true; done
+for p in $(pids "$PADRAO_PERFIL"); do "$KILL" -INT "$p" 2>/dev/null || true; done
 sleep 1
 for p in $(pids "$PADRAO_PERFIL"); do "$KILL" -KILL "$p" 2>/dev/null || true; done
 

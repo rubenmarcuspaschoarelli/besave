@@ -84,3 +84,12 @@ def test_por05_producao_sem_comandos_de_windows():
             if padrao.search(codigo):
                 achados.append(f"{arq.name}:{n}")
     assert achados == []
+
+
+def test_por02_partida_falha_no_linux_sem_destino(monkeypatch):
+    monkeypatch.setattr(storage, "_cfg_s3", dict)
+    monkeypatch.setattr(storage.sys, "platform", "linux")
+    with pytest.raises(storage.ConfigFaltando, match=r"publicacao_s3\.destino"):
+        storage.validar_destino_s3()
+    monkeypatch.setattr(storage, "_cfg_s3", lambda: {"ativo": False})
+    storage.validar_destino_s3()  # publicacao desligada: nada a exigir

@@ -68,7 +68,7 @@ systemctl --user stop besave-captura-lojas
 systemctl --user stop besave-captura-whatsapp     # ou: tools/vps/encerrar_captura.sh
 ```
 
-O `encerrar_captura.sh` para a unidade do WhatsApp, manda `SIGTERM` ao `run_captura.py` (o `finally` salva
+O `encerrar_captura.sh` para a unidade do WhatsApp, manda `SIGINT` (Ctrl+C) ao `run_captura.py` (o `finally` salva
 o contador), espera, usa `SIGKILL` no que sobrar, encerra o navegador do perfil e a sessão `tmux`.
 Filtra por `run_captura.py` e `--user-data-dir`: nunca mata todo `python`. Para desligar de vez no boot:
 `systemctl --user disable ...`.

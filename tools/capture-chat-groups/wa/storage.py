@@ -580,6 +580,15 @@ def publicar_s3(caminho_img: str, numero) -> str:
         return ""
 
 
+def validar_destino_s3() -> None:
+    """Falha na PARTIDA (ConfigFaltando) se a publicacao esta ativa e o destino
+    nao tem padrao na plataforma. Sem isso o erro cairia nos try/except do
+    salvamento e a imagem seria movida sem ser publicada."""
+    cfg = _cfg_s3()
+    if bool(cfg.get("ativo", True)):
+        destino_s3(cfg)
+
+
 def _finalizar_imagem(destino: Path, numero) -> str:
     """Marca d'agua + miniatura + publicacao no site. So roda no nome
     DEFINITIVO: as 'tmp<N>' do catch-up sao renomeadas (ou descartadas) depois

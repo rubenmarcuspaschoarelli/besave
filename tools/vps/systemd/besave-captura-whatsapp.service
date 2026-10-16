@@ -13,6 +13,7 @@ Type=simple
 WorkingDirectory=/srv/besave/repo/tools/capture-chat-groups
 Environment=BESAVE_DISPLAY=:1
 ExecStart=/srv/besave/repo/tools/vps/iniciar_captura.sh --aguardar
+KillSignal=SIGINT
 Restart=on-failure
 RestartSec=30
 TimeoutStopSec=30

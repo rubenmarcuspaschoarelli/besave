@@ -28,7 +28,7 @@ ESPERA=${BESAVE_ESPERA:-8}
 
 # python (qualquer caminho) -u run_captura.py, e so isso: nao casa o wrapper
 # bash nem a linha do tmux, que trazem o comando no meio.
-PADRAO_RUN='^[^ ]*python[0-9.]* -u run_captura\.py$'
+PADRAO_RUN='^[^ ]*python[0-9.]* (-u )?run_captura\.py( |$)'
 PADRAO_PERFIL="--user-data-dir=$RAIZ/user_data"
 
 falhar() {
