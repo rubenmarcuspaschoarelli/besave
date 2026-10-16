@@ -111,6 +111,13 @@ FAKE_RAMO=develop rodar 556
 [ "$codigo" = 0 ] || falhou "código $codigo"
 grep -q "teste" "$T/err" || falhou "sem aviso de teste: $(cat "$T/err")"
 
+# INS-02: main, mas disparo manual (não push) também avisa.
+caso="INS-02 main fora de push"; preparar
+FAKE_EVENTO=workflow_dispatch rodar 557
+[ "$codigo" = 0 ] || falhou "código $codigo"
+instalado 557
+grep -q "teste" "$T/err" || falhou "sem aviso de teste: $(cat "$T/err")"
+
 # INS-04: hash que não confere.
 caso="INS-04 hash errado"; preparar
 printf 'adulterado\n' >> "$T/art/besave-envio"

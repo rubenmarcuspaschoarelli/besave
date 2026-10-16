@@ -98,7 +98,7 @@ jobs:
           gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$NOME" -D "$d"
           cd "$d"
           ls -la
-          [ "$(find . -type f | sort | tr '\n' ' ')" = "./SHA256SUMS ./besave-ciclo ./besave-envio ./besave-worker " ]
+          [ "$(find . -type f | LC_ALL=C sort | tr '\n' ' ')" = "./SHA256SUMS ./besave-ciclo ./besave-envio ./besave-worker " ]
           sha256sum -c SHA256SUMS
           for b in besave-ciclo besave-envio besave-worker; do
             file "$b" | tee /dev/stderr | grep -q 'ELF 64-bit LSB .*ARM aarch64'

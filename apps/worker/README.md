@@ -746,8 +746,9 @@ ciclo roda, o timer não abre outro (e a trava continua valendo, como no PC).
 
 **Nunca os dois lugares ao mesmo tempo:** dois envios postam em dobro no canal.
 
-1. No PC: Agendador de Tarefas → desabilitar **Besave Worker** e **Besave Envio** (ou
-   `.\scripts\remover-tarefa.ps1`), e esperar a execução em andamento terminar.
+1. No PC: Agendador de Tarefas → desabilitar **as duas** tarefas, **Besave Worker** e **Besave Envio**
+   (ou removê-las: `.\scripts\remover-tarefa.ps1` e `.\scripts\remover-tarefa.ps1 -NomeTarefa 'Besave Envio'`;
+   sem o parâmetro o script remove só o worker), e esperar a execução em andamento terminar.
 2. Copiar as imagens recentes do PC para `/srv/besave/imagens/` (o envio usa a foto local, AD-080).
 3. Na VPS: `sudo systemctl enable --now besave-ciclo.timer besave-envio.timer`.
 4. Conferir: `systemctl list-timers 'besave-*'`; o primeiro ciclo tem zero escritas além dos
