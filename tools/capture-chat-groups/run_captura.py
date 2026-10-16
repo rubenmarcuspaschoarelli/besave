@@ -9,9 +9,9 @@ e cair em baseline (nao captura o passado). Lendo o nome do proprio config, o no
 usado e sempre identico a chave do estado.
 
 Uso:
-    .venv\\Scripts\\python.exe -u run_captura.py                 # catch-up dos 3 grupos
-    .venv\\Scripts\\python.exe -u run_captura.py --seg-grupo 8
-    .venv\\Scripts\\python.exe -u run_captura.py --max 40        # sweep (ignora datas)
+    python -u run_captura.py                 # catch-up dos 3 grupos (python do .venv)
+    python -u run_captura.py --seg-grupo 8
+    python -u run_captura.py --max 40        # sweep (ignora datas)
 """
 
 import argparse
