@@ -1,6 +1,32 @@
+# --- ambiente Python ---
 .venv/
-user_data/
-captura/
 __pycache__/
 *.pyc
+
+# --- IDE / ferramentas locais ---
 .idea/
+.vscode/
+.claude/settings.local.json
+
+# --- sessao do WhatsApp Web (equivale a credencial: quem tem a pasta entra na conta) ---
+user_data/
+
+# --- saida da captura (dados, nao codigo) ---
+# captura/: csv/, img/, img_old/, historico/  |  log/: run_captura_*.log/.err, cupom_excedido.log
+captura/
+log/
+*.log
+*.err
+
+# --- config: tem usuario/senha do Oracle e e estado vivo (contador + marcadores) ---
+# Versionado no lugar dele: conf/config.example.json
+conf/config.json
+conf/config.json.bak*
+conf/*.bak*
+
+# --- backups de dados tirados antes de limpezas no Oracle ---
+conf/backup_*.csv
+
+# --- lixo de SO ---
+Thumbs.db
+desktop.ini

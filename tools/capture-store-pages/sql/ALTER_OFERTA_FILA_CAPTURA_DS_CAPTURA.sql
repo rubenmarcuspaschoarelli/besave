@@ -1,0 +1,23 @@
+-- =============================================================================
+-- Adiciona DS_CAPTURA: descricao do resultado da captura da pagina da loja.
+--
+-- Acompanha a convencao de ST_CAPTURA (VARCHAR2):
+--   '0' -> ainda nao capturado (a fila le so estas linhas)
+--   '1' -> capturado com sucesso  -> DS_CAPTURA = 'ok'
+--   '9' -> erro/problema na captura -> DS_CAPTURA = o motivo, ex.:
+--          'erro: TimeoutError', 'bloqueado_ou_login', 'pagina_sem_produto',
+--          'loja_nao_implementada', 'loja_desconhecida', 'url_vazia'
+--
+-- Sem esta coluna as linhas com erro ficavam indistinguiveis das pendentes.
+-- Com ela da para reprocessar uma CLASSE de problema depois de corrigido, ex.:
+--   -- reenfileira o que caiu em captcha/sessao expirada da Shopee:
+--   UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA='0'
+--    WHERE ST_CAPTURA='9' AND DS_CAPTURA='bloqueado_ou_login';
+--   -- reenfileira as lojas que passaram a ser implementadas:
+--   UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA='0'
+--    WHERE ST_CAPTURA='9' AND DS_CAPTURA='loja_nao_implementada';
+--
+-- Seguro de rodar: coluna nova e anulavel, nao mexe nas linhas existentes.
+-- Aplicado no ambiente local em 2026-07-19.
+-- =============================================================================
+ALTER TABLE OFERTA_FILA_CAPTURA ADD (DS_CAPTURA VARCHAR2(400 CHAR));

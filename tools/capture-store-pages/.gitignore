@@ -1,0 +1,25 @@
+# Ambiente / IDE
+.idea/
+.venv/
+__pycache__/
+*.pyc
+
+# Perfis do Chrome (sessoes logadas das lojas -- nunca versionar)
+.chrome_perfil/
+.chrome_perfil*/
+user_data/
+
+# Dados gerados (log, bkp, img, arquivo) -- vao p/ backup, nao p/ o git
+origem/
+destino/
+captura/
+
+# Config real tem a senha do banco e o estado da fila; versionar so o exemplo
+conf/config.json
+conf/config.json.*
+conf/*_tentativas.json
+conf/*_feitas.json
+!conf/config.example.json
+
+# Settings locais do Claude Code (permissoes da maquina)
+.claude/settings.local.json

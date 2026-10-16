@@ -262,6 +262,7 @@ def _analisar_precos(linhas):
       - 'Por: R$ Y' -> preco_por (+ texto seguinte = descricao_pagamento)
       - Sem 'Por', usa o 1o 'R$' que nao seja o 'de' como preco_por
         (msgs que so tem o preco final, geralmente 'R$ Y via Pix / à vista').
+      - Se so houver o 'De', preco_por = preco_de (o 'De' e mantido).
     """
     preco_de = preco_por = desc_pag = ""
     idx_de = idx_por = -1
@@ -287,6 +288,12 @@ def _analisar_precos(linhas):
                 preco_por, idx_por = _limpar_preco(m.group(1)), i
                 desc_pag = _limpar_desc_pagamento(m.group(2))
                 break
+
+    # So veio o 'De' (sem 'Por' nem outro 'R$'): o preco final e o proprio 'De'
+    # (pedido do usuario, 28/09/2026). O 'De' e sempre mantido; o idx_ancora
+    # continua apontando a linha do 'De' (idx_por fica -1).
+    if preco_de and not preco_por:
+        preco_por = preco_de
 
     idx_ancora = idx_por if idx_por >= 0 else idx_de
     return preco_de, preco_por, desc_pag, idx_ancora
@@ -468,6 +475,15 @@ def _achar_nome(linhas, aviso):
     return max(candidatas, key=len) if candidatas else ""
 
 
+_RE_LINK_WHATSAPP = re.compile(
+    r"^https?://(?:[\w-]+\.)*(?:whatsapp\.com|wa\.me)(?:[/?#]|$)", re.IGNORECASE)
+
+
+def eh_link_whatsapp(url: str) -> bool:
+    """True para link do proprio WhatsApp (convite de grupo, canal, wa.me)."""
+    return bool(_RE_LINK_WHATSAPP.match((url or "").strip()))
+
+
 def _campos_vazios() -> dict:
     """Dicionario base com todos os campos vazios (garante colunas consistentes)."""
     return {
@@ -490,8 +506,10 @@ def parse_campos(bruto: dict) -> dict:
     """Classifica a mensagem (PRODUTO/CUPOM) e extrai os campos."""
     text = bruto.get("text", "") or ""
     linhas = _limpar_linhas(text)
-    links = bruto.get("links") or []
-    url = links[0] if links else ""          # 1o link (decisao do usuario)
+    # 1o link (decisao do usuario), pulando os do proprio WhatsApp: convite de
+    # grupo/canal nunca e a oferta (44 de 44 no historico eram divulgacao de grupo).
+    links = [ln for ln in (bruto.get("links") or []) if not eh_link_whatsapp(ln)]
+    url = links[0] if links else ""
 
     campos = _campos_vazios()
     campos["url"] = url

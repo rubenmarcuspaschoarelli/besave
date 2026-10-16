@@ -1,0 +1,138 @@
+-- =============================================================================
+-- STP_OFERTA_PUBLICAR
+-- Publica/atualiza 1 linha em BESAVE.OFERTA -- feed de ofertas APROVADAS
+-- (ST_CAPTURA='1' na fila E loja com afiliado ativo em BESAVE.LOJA_AFILIADA;
+-- essa checagem e feita pelo CHAMADOR, core/ofertas.publicar_oferta). MERGE
+-- (insere-ou-atualiza atomicamente): ID_OFERTA reaproveita o MESMO ID de
+-- OFERTA_FILA_CAPTURA (chave natural 1:1, sem sequence propria).
+--
+-- Retorno (o programa Python decide pelo PV_RETORNO), mesma convencao das
+-- demais SPs deste projeto: 'TRUE'/'FALSE' (nao BOOLEAN -- Oracle 11g nao
+-- permite bind de BOOLEAN por clientes OCI) + PV_ERRO com o motivo.
+--
+-- Observacoes:
+--   * ST_ATIVO/DT_DESATIVACAO (2026-09-24, criadas pelo usuario): esta SP
+--     SEMPRE grava ST_ATIVO=1 e DT_DESATIVACAO=NULL -- toda linha que o
+--     CaptureAmazon inclui ou altera fica ativa (recapturar REATIVA uma
+--     oferta desativada). Um processo futuro, separado, decide o que
+--     desativar (0 + data) -- nao e responsabilidade desta SP.
+--   * VL_PRECO_POR chega JA RESOLVIDO pelo chamador (core/ofertas.py): regra 1
+--     (VL_PRECO_POR ausente na origem -> usa VR_PRECO_1 capturado na pagina) e
+--     regra 2 (VR_RECORRENCIA > 0 e menor que o preco corrente -> vira o preco
+--     "por" final, 2026-09-28) -- esta SP so grava o valor que recebeu, sem
+--     comparar nada.
+--   * VR_RECORRENCIA/ST_RECORRENCIA/QT_MINIMA_RECORRENCIA (2026-09-28): copiados
+--     tal como capturados (RAW, sem a cascata de preco) -- informativo, mesmo
+--     papel do VR_PRECO_1. VR_RECORRENCIA e a uniao de VR_PRECO_RECORRENCIA_
+--     INTEIRO/FRACAO (ex.: 18 + 99 -> 18.99); ST_RECORRENCIA e 1 quando a
+--     oferta tem essa opcao (hoje so a Amazon: "Assine e economize"), 0 senao.
+--   * DS_COMUNIDADE/DS_CATEGORIA_PROD_AFILIADO chegam 'Outros' (nunca NULL)
+--     quando o classificador/widget nao identifica nada -- decisao do
+--     chamador (core/produtos.py / core/ofertas.py), nao desta SP.
+--   * Link oficial de afiliado + dados do mesmo widget: COPIADOS de
+--     OFERTA_FILA_CAPTURA, onde foram capturados por core/link_afiliado.py --
+--     aqui nao se recaptura nada.
+--   * Rodar este arquivo no schema dono da tabela OFERTA (BESAVE).
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE STP_OFERTA_PUBLICAR (
+  P_ID_OFERTA           IN  NUMBER,
+  P_ID_PRODUTO          IN  NUMBER,
+  P_DS_LOJA             IN  VARCHAR2 DEFAULT NULL,
+  P_DS_TITULO           IN  VARCHAR2 DEFAULT NULL,
+  P_DS_IMAGEM_OFERTA    IN  VARCHAR2 DEFAULT NULL,
+  P_DS_URL_BESAVE       IN  VARCHAR2 DEFAULT NULL,
+  P_DS_URL_FINAL        IN  VARCHAR2 DEFAULT NULL,
+  P_VL_PRECO_DE         IN  NUMBER   DEFAULT NULL,
+  P_VL_PRECO_POR        IN  NUMBER   DEFAULT NULL,
+  P_VR_PRECO_1          IN  NUMBER   DEFAULT NULL,
+  P_DS_CUPOM            IN  VARCHAR2 DEFAULT NULL,
+  P_DS_CUPOM_COMENTARIO IN  VARCHAR2 DEFAULT NULL,
+  P_NR_NOTA_AVALIACAO   IN  NUMBER   DEFAULT NULL,
+  P_QT_AVALIACAO        IN  NUMBER   DEFAULT NULL,
+  P_DT_OFERTA           IN  DATE     DEFAULT NULL,
+  P_DT_CAPTACAO         IN  DATE     DEFAULT NULL,
+  P_DS_COMUNIDADE       IN  VARCHAR2 DEFAULT NULL,  -- mesmo valor ja gravado em PRODUTO.DS_COMUNIDADE
+  P_DS_PUBLICO          IN  VARCHAR2 DEFAULT NULL,  -- mesmo valor ja gravado em PRODUTO.DS_PUBLICO
+  -- Link oficial do programa de afiliados da loja + dados do mesmo widget
+  -- (2026-09-10). Vem COPIADOS de OFERTA_FILA_CAPTURA, onde foram capturados
+  -- por core/link_afiliado.py -- aqui nao se recaptura nada.
+  P_DS_URL_AFILIADO     IN  VARCHAR2 DEFAULT NULL,
+  P_DS_CATEG_PROD_AFILIADO IN VARCHAR2 DEFAULT NULL,
+  P_DS_TAXA_COM_PROD_AFILIADO IN VARCHAR2 DEFAULT NULL,
+  P_DS_ID_PRODUTO_AFILIADO IN VARCHAR2 DEFAULT NULL,
+  -- Recorrencia ("Assine e economize", hoje so Amazon) -- ver observacoes
+  -- acima. 2026-09-28.
+  P_VR_RECORRENCIA         IN NUMBER DEFAULT NULL,
+  P_ST_RECORRENCIA         IN NUMBER DEFAULT NULL,
+  P_QT_MINIMA_RECORRENCIA  IN NUMBER DEFAULT NULL,
+  -- "Espere e economize" (Amazon) -- mesmo papel do par acima (2026-09-28).
+  P_VR_ESPERE_ECONOMIZE    IN NUMBER DEFAULT NULL,
+  P_ST_ESPERE_ECONOMIZE    IN NUMBER DEFAULT NULL,
+  PV_RETORNO            OUT VARCHAR2,
+  PV_ERRO               OUT VARCHAR2
+) AS
+BEGIN
+  MERGE INTO OFERTA o
+  USING (SELECT P_ID_OFERTA AS ID_OFERTA FROM DUAL) src
+  ON (o.ID_OFERTA = src.ID_OFERTA)
+  WHEN MATCHED THEN UPDATE SET
+    ID_PRODUTO          = P_ID_PRODUTO,
+    DS_LOJA             = SUBSTR(P_DS_LOJA, 1, 100),
+    DS_TITULO           = SUBSTR(P_DS_TITULO, 1, 400),
+    DS_IMAGEM_OFERTA    = SUBSTR(P_DS_IMAGEM_OFERTA, 1, 350),
+    DS_URL_BESAVE       = SUBSTR(P_DS_URL_BESAVE, 1, 600),
+    DS_URL_FINAL        = SUBSTR(P_DS_URL_FINAL, 1, 350),
+    VL_PRECO_DE         = P_VL_PRECO_DE,
+    VL_PRECO_POR        = P_VL_PRECO_POR,
+    VR_PRECO_1          = P_VR_PRECO_1,
+    DS_CUPOM            = SUBSTR(P_DS_CUPOM, 1, 30),
+    DS_CUPOM_COMENTARIO = SUBSTR(P_DS_CUPOM_COMENTARIO, 1, 50),
+    NR_NOTA_AVALIACAO   = P_NR_NOTA_AVALIACAO,
+    QT_AVALIACAO        = P_QT_AVALIACAO,
+    DT_OFERTA           = P_DT_OFERTA,
+    DT_CAPTACAO         = P_DT_CAPTACAO,
+    DS_COMUNIDADE       = SUBSTR(P_DS_COMUNIDADE, 1, 50),
+    DS_PUBLICO          = SUBSTR(P_DS_PUBLICO, 1, 30),
+    DS_URL_AFILIADO     = SUBSTR(P_DS_URL_AFILIADO, 1, 600),
+    DS_CATEGORIA_PROD_AFILIADO     = SUBSTR(P_DS_CATEG_PROD_AFILIADO, 1, 100),
+    DS_TAXA_COMISSAO_PROD_AFILIADO = SUBSTR(P_DS_TAXA_COM_PROD_AFILIADO, 1, 20),
+    DS_ID_PRODUTO_AFILIADO         = SUBSTR(P_DS_ID_PRODUTO_AFILIADO, 1, 50),
+    VR_RECORRENCIA          = P_VR_RECORRENCIA,
+    ST_RECORRENCIA          = P_ST_RECORRENCIA,
+    QT_MINIMA_RECORRENCIA   = P_QT_MINIMA_RECORRENCIA,
+    VR_ESPERE_ECONOMIZE     = P_VR_ESPERE_ECONOMIZE,
+    ST_ESPERE_ECONOMIZE     = P_ST_ESPERE_ECONOMIZE,
+    ST_ATIVO            = 1,
+    DT_DESATIVACAO      = NULL
+  WHEN NOT MATCHED THEN INSERT (
+    ID_OFERTA, ID_PRODUTO, DS_LOJA, DS_TITULO, DS_IMAGEM_OFERTA, DS_URL_BESAVE,
+    DS_URL_FINAL, VL_PRECO_DE, VL_PRECO_POR, VR_PRECO_1, DS_CUPOM,
+    DS_CUPOM_COMENTARIO, NR_NOTA_AVALIACAO, QT_AVALIACAO, DT_OFERTA,
+    DT_CAPTACAO, DT_PUBLICACAO, DS_COMUNIDADE, DS_PUBLICO,
+    DS_URL_AFILIADO, DS_CATEGORIA_PROD_AFILIADO,
+    DS_TAXA_COMISSAO_PROD_AFILIADO, DS_ID_PRODUTO_AFILIADO,
+    VR_RECORRENCIA, ST_RECORRENCIA, QT_MINIMA_RECORRENCIA,
+    VR_ESPERE_ECONOMIZE, ST_ESPERE_ECONOMIZE,
+    ST_ATIVO, DT_DESATIVACAO
+  ) VALUES (
+    P_ID_OFERTA, P_ID_PRODUTO, SUBSTR(P_DS_LOJA, 1, 100), SUBSTR(P_DS_TITULO, 1, 400),
+    SUBSTR(P_DS_IMAGEM_OFERTA, 1, 350), SUBSTR(P_DS_URL_BESAVE, 1, 600),
+    SUBSTR(P_DS_URL_FINAL, 1, 350), P_VL_PRECO_DE, P_VL_PRECO_POR, P_VR_PRECO_1,
+    SUBSTR(P_DS_CUPOM, 1, 30), SUBSTR(P_DS_CUPOM_COMENTARIO, 1, 50),
+    P_NR_NOTA_AVALIACAO, P_QT_AVALIACAO, P_DT_OFERTA, P_DT_CAPTACAO, SYSDATE,
+    SUBSTR(P_DS_COMUNIDADE, 1, 50), SUBSTR(P_DS_PUBLICO, 1, 30),
+    SUBSTR(P_DS_URL_AFILIADO, 1, 600), SUBSTR(P_DS_CATEG_PROD_AFILIADO, 1, 100),
+    SUBSTR(P_DS_TAXA_COM_PROD_AFILIADO, 1, 20),
+    SUBSTR(P_DS_ID_PRODUTO_AFILIADO, 1, 50),
+    P_VR_RECORRENCIA, P_ST_RECORRENCIA, P_QT_MINIMA_RECORRENCIA,
+    P_VR_ESPERE_ECONOMIZE, P_ST_ESPERE_ECONOMIZE,
+    1, NULL
+  );
+
+  PV_RETORNO := 'TRUE';
+  PV_ERRO    := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_OFERTA_PUBLICAR;
