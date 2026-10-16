@@ -9,7 +9,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 ---
 
 **Design**: inline (sem `design.md`; decisões em `spec.md` → Assumptions)
-**Status**: In progress
+**Status**: Done
 
 ---
 
@@ -113,8 +113,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Instalar, unidades, virada (PC desligado antes), logs, reversão
-- [ ] Gate build passa
+- [x] Instalar, unidades, virada (PC desligado antes), logs, reversão
+- [x] Gate build passa
 
 **Tests**: none
 **Gate**: build

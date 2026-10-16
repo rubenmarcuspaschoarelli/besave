@@ -151,7 +151,7 @@ do PC.
 | WF-03 | Binários ARM64 | Execute | Done |
 | WF-04 | Binários ARM64 | Execute | Done |
 | WF-05 | Binários ARM64 | Execute | Done |
-| DOC-01 | Documentação | Execute | Pending |
+| DOC-01 | Documentação | Execute | Done |
 
 ---
 
