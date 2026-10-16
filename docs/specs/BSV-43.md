@@ -16,8 +16,9 @@ Cada merge em `main` que toca o worker gera os binários Linux ARM64 rastreávei
 de 5 em 5 minutos com o mesmo comportamento do PC.
 
 ## Saídas
-1. **Workflow** `worker-arm64.yml`: em `push` para `main` com mudança em `apps/worker/**` ou
-   `packages/contract/**`, e manual (`workflow_dispatch`); `runs-on: ubuntu-24.04-arm` (grátis em
+1. **Workflow** `worker-arm64.yml`: em `push` para `main` e em `pull_request` para `develop`, com mudança
+   em `apps/worker/**`, `packages/contract/**` ou no próprio workflow, e manual (`workflow_dispatch`, que só
+   aparece depois que o arquivo chega ao branch padrão); `runs-on: ubuntu-24.04-arm` (grátis em
    repositório público); `cargo fmt --check`, `clippy -D warnings`, `cargo test` e
    `cargo build --release` de `besave-ciclo`, `besave-envio` e `besave-worker`; artefato
    `worker-linux-arm64-<sha curto>` com os 3 binários e um `SHA256SUMS`; retenção de 90 dias.
@@ -32,8 +33,8 @@ de 5 em 5 minutos com o mesmo comportamento do PC.
 
 ## Regras
 1. O comportamento no Windows não muda; o `windows_subsystem` continua.
-2. Produção roda binário de `main` (AD-060); o teste real antes do merge usa o artefato do
-   `workflow_dispatch` da branch da PR (lição 9), e o `instalar.sh` aceita o ID da execução. Nada de
+2. Produção roda binário de `main` (AD-060); o teste real antes do merge usa o artefato da execução do
+   `pull_request` (lição 9), e o `instalar.sh` aceita o ID da execução. Nada de
    compilar na VPS.
 3. O workflow não guarda segredo nenhum e não fala com AWS nem Oracle.
 4. **Virada sem sobreposição:** o roteiro do PR manda desabilitar `Besave Worker` e `Besave Envio` no PC
@@ -45,7 +46,7 @@ Robôs (BSV-42), backup do banco (plano da instância 2), mudança de lógica do
 Windows ARM.
 
 ## Critério de aceite
-- Workflow verde num PR de teste (`workflow_dispatch` na branch) com `cargo test` passando no ARM e o
+- Workflow verde na própria PR (execução de `pull_request`) com `cargo test` passando no ARM e o
   artefato com 3 binários e `SHA256SUMS` corretos (conferido com `sha256sum -c`).
 - `systemd-analyze verify` sem erros nas unidades; `shellcheck` limpo no `instalar.sh`.
 - **Real (dono):** na instância 1, `besave-worker --dry-run` lendo o Oracle; virada (PC desligado → timers
