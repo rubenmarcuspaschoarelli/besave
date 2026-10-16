@@ -95,8 +95,8 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] `actionlint` limpo
-- [ ] Gate build passa
+- [x] `actionlint` limpo
+- [x] Gate build passa (local: actionlint + ensaio do ciclo; execução no ARM depende do push)
 
 **Tests**: e2e
 **Gate**: build

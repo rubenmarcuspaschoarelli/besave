@@ -32,6 +32,7 @@ instale com conferência de integridade e quem o rode a cada 5 min no lugar do A
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
 | Sha curto do artefato | 7 primeiros hex de `github.sha` | Padrão do GitHub; o `instalar.sh` deriva o nome do `headSha` da execução | n |
+| Commit compilado na PR | A ponta da PR (`pull_request.head.sha`), não o merge sintético | O nome do artefato e o `VERSAO` apontam para um commit que existe; é o `headSha` que o `gh` devolve | n |
 | `instalar.sh` sem argumento | Última execução `success` de `worker-arm64.yml` em `main`, evento `push` | Produção roda binário de `main` (AD-060) | n |
 | `instalar.sh <id>` de execução que não é push em `main` | Instala e avisa (stderr) que é só para o teste real antes do merge | Regra 2 da spec (lição 9) | n |
 | Exigir `conclusion=success` com id explícito | Não: o artefato só é enviado depois de fmt/clippy/test no mesmo job; a conferência é o `SHA256SUMS` | Permite testar o script no próprio workflow, que ainda está em andamento | n |
@@ -142,14 +143,14 @@ do PC.
 | INS-05 | Instalação | Execute | Done |
 | INS-06 | Instalação | Execute | Done |
 | SYS-01 | Execução agendada | Execute | Done |
-| SYS-02 | Execução agendada | Execute | Pending |
+| SYS-02 | Execução agendada | Execute | Done |
 | SYS-03 | Execução agendada | Execute | Done |
-| SYS-04 | Execução agendada | Execute | Pending |
-| WF-01 | Binários ARM64 | Execute | Pending |
-| WF-02 | Binários ARM64 | Execute | Pending |
-| WF-03 | Binários ARM64 | Execute | Pending |
-| WF-04 | Binários ARM64 | Execute | Pending |
-| WF-05 | Binários ARM64 | Execute | Pending |
+| SYS-04 | Execução agendada | Execute | Done |
+| WF-01 | Binários ARM64 | Execute | Done |
+| WF-02 | Binários ARM64 | Execute | Done |
+| WF-03 | Binários ARM64 | Execute | Done |
+| WF-04 | Binários ARM64 | Execute | Done |
+| WF-05 | Binários ARM64 | Execute | Done |
 | DOC-01 | Documentação | Execute | Pending |
 
 ---
