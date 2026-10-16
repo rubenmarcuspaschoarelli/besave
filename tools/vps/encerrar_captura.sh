@@ -40,7 +40,7 @@ pythons=$(pids "$PADRAO_RUN")
 chromes=$(pids "$PADRAO_PERFIL")
 
 if [ -z "$pythons" ] && [ -z "$chromes" ]; then
-    "$TMUX_BIN" kill-session -t "$SESSAO" 2>/dev/null || true
+    "$TMUX_BIN" -L "$SESSAO" kill-session -t "$SESSAO" 2>/dev/null || true
     echo "Nada rodando - nenhum run_captura.py, nenhum navegador do perfil."
     exit 0
 fi
@@ -63,7 +63,7 @@ for p in $(pids "$PADRAO_PERFIL"); do "$KILL" -TERM "$p" 2>/dev/null || true; do
 sleep 1
 for p in $(pids "$PADRAO_PERFIL"); do "$KILL" -KILL "$p" 2>/dev/null || true; done
 
-"$TMUX_BIN" kill-session -t "$SESSAO" 2>/dev/null || true
+"$TMUX_BIN" -L "$SESSAO" kill-session -t "$SESSAO" 2>/dev/null || true
 sleep 1
 
 resta_py=$(contar "$(pids "$PADRAO_RUN")")

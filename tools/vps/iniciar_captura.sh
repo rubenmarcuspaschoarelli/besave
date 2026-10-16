@@ -96,7 +96,7 @@ echo
 echo "OK - captura rodando."
 echo "  PID    : $(echo "$vivos" | tr '\n' ' ')"
 echo "  log    : $log"
-echo "  tela   : tmux attach -t $SESSAO   (sair sem parar: Ctrl+b d)"
+echo "  tela   : tmux -L $SESSAO attach   (sair sem parar: Ctrl+b d)"
 echo "  acompanhar: tail -f '$log'"
 echo "  encerrar  : $AQUI/encerrar_captura.sh"
 

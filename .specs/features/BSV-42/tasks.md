@@ -111,9 +111,9 @@ T1 → T2 → T3 → T4
 
 **Done when**:
 
-- [ ] Unidades com `Restart=on-failure`, `rodar_em_tmux.sh` e sem segredo
-- [ ] README cobre os seis temas
-- [ ] Gate build passa
+- [x] Unidades com `Restart=on-failure`, `rodar_em_tmux.sh` e sem segredo
+- [x] README cobre os seis temas
+- [x] Gate build passa
 
 **Tests**: unit
 **Gate**: build

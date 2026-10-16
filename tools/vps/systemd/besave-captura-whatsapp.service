@@ -1,0 +1,21 @@
+# Captura dos grupos de WhatsApp (capture-chat-groups) - unidade de USUARIO.
+# Instalar em ~/.config/systemd/user/ (ver tools/vps/README.md).
+# O robo roda numa sessao tmux (tmux -L besave-whatsapp attach) com DISPLAY=:1.
+# As conferencias (um run so, perfil livre, contador em dia) ficam no
+# iniciar_captura.sh: se alguma falhar, a unidade falha em vez de subir errado.
+[Unit]
+Description=Besave - captura de grupos do WhatsApp
+StartLimitIntervalSec=900
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/besave/repo/tools/capture-chat-groups
+Environment=BESAVE_DISPLAY=:1
+ExecStart=/srv/besave/repo/tools/vps/iniciar_captura.sh --aguardar
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

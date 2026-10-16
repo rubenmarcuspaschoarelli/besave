@@ -44,7 +44,7 @@ esac
 exit 0
 ''')
         _script(bin_ / "tmux", f'''echo "$@" >> "{e}/tmux.log"
-[ "$1" = "new-session" ] && touch "{e}/lancado"
+case " $* " in *" new-session "*) touch "{e}/lancado";; esac
 exit 0
 ''')
         _script(bin_ / "kill", f'''echo "$@" >> "{e}/kill.log"
@@ -127,7 +127,7 @@ def test_sh04_tudo_ok_lanca_no_tmux_com_display(amb):
     r = amb.rodar("iniciar_captura.sh")
     assert r.returncode == 0, r.stderr
     tmux = amb.log("tmux.log")
-    assert "new-session -d -s besave-whatsapp" in tmux
+    assert "-L besave-whatsapp new-session -d -s besave-whatsapp" in tmux
     assert " -c " in tmux and "capture-chat-groups" in tmux
     assert "DISPLAY=:1" in tmux
     assert "run_captura.py" in tmux
@@ -149,7 +149,7 @@ def test_sh05_encerrar_mata_so_o_que_casa_e_informa(amb):
     mortos = amb.log("kill.log")
     for pid in ("111", "333", "334"):
         assert pid in mortos
-    assert "kill-session -t besave-whatsapp" in amb.log("tmux.log")
+    assert "-L besave-whatsapp kill-session -t besave-whatsapp" in amb.log("tmux.log")
     assert "Restantes: python=0  navegador=0" in r.stdout
 
 
@@ -173,3 +173,12 @@ def test_esperar_devolve_o_codigo_do_robo(amb):
     (amb.est / "besave-besave-whatsapp.rc").write_text("3\n", encoding="utf-8")
     r = amb.rodar("rodar_em_tmux.sh", "esperar", "besave-whatsapp")
     assert r.returncode == 3
+
+
+def test_executar_inicia_e_devolve_o_codigo_do_robo(amb):
+    (amb.est / "besave-besave-lojas.rc").write_text("0\n", encoding="utf-8")
+    r = amb.rodar("rodar_em_tmux.sh", "executar", "besave-lojas", str(amb.chat), str(amb.est / "x.log"), "/bin/true")
+    assert r.returncode == 1  # iniciar apaga o codigo antigo; o tmux falso nunca grava outro
+    tmux = amb.log("tmux.log")
+    assert "-L besave-lojas new-session -d -s besave-lojas" in tmux
+    assert "-L besave-lojas wait-for besave-besave-lojas" in tmux
