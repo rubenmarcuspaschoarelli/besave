@@ -107,3 +107,49 @@ def test_por03_windows_com_chave_vazia_cai_no_padrao(tmp_path):
     assert estado.ler_raiz_s3(_cfg(tmp_path, {"s3": {"raiz": ""}}), plataforma="win32") == WIN_S3
     assert storage.destino_s3({"destino": ""}, plataforma="win32") == Path(WIN_IMG)
     assert estado.ler_raiz_s3(_cfg(tmp_path, {"s3": {"raiz": "D:/x"}}), plataforma="win32") == "D:/x"
+
+
+def _importar_run_captura(monkeypatch, retorno_captura=0):
+    """Importa run_captura sem Playwright e sem deixar o stdout carimbado no pytest."""
+    import importlib
+    import sys
+    import types
+    chamadas = []
+    fake = types.ModuleType("wa.monitor")
+    fake.captura_msg_whatsapp = lambda **kw: chamadas.append(kw) or retorno_captura
+    monkeypatch.setitem(sys.modules, "wa.monitor", fake)
+    monkeypatch.delitem(sys.modules, "run_captura", raising=False)
+    saida, erro = sys.stdout, sys.stderr
+    try:
+        mod = importlib.import_module("run_captura")
+    finally:
+        sys.stdout, sys.stderr = saida, erro
+    monkeypatch.setattr(sys, "argv", ["run_captura.py"])
+    return mod, chamadas
+
+
+def test_por02_run_captura_sai_com_2_sem_destino(monkeypatch):
+    mod, chamadas = _importar_run_captura(monkeypatch)
+
+    def sem_destino():
+        raise mod.ConfigFaltando('Falta "publicacao_s3.destino"')
+    monkeypatch.setattr(mod, "validar_destino_s3", sem_destino)
+    monkeypatch.setattr(mod, "grupos_do_config", lambda: ["g"])
+    assert mod.main() == 2
+    assert chamadas == []  # nem chegou a abrir o navegador
+
+
+def test_por02_run_captura_com_destino_segue_e_devolve_o_codigo_da_captura(monkeypatch):
+    mod, chamadas = _importar_run_captura(monkeypatch, retorno_captura=3)
+    validados = []
+    monkeypatch.setattr(mod, "validar_destino_s3", lambda: validados.append(1))
+    monkeypatch.setattr(mod, "grupos_do_config", lambda: ["g"])
+    assert mod.main() == 3
+    assert validados == [1] and len(chamadas) == 1
+
+
+def test_main_de_lojas_usa_o_modulo_processos():
+    fonte = (TOOLS / "capture-store-pages" / "main.py").read_text(encoding="utf-8")
+    assert "processos.chrome_aberto(" in fonte
+    assert "processos.fechar_chrome_forcado(" in fonte
+    assert "tasklist" not in fonte and "taskkill" not in fonte

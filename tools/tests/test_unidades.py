@@ -89,3 +89,24 @@ def test_readme_explica_o_linger_e_a_unidade_do_vnc():
     assert "loginctl enable-linger besave" in leia
     assert "besave-vnc" in leia
     assert re.search(r"reboot", leia)
+
+
+@pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
+def test_robo_para_com_sigint_e_da_tempo_de_salvar(unidade):
+    servico = _ler(unidade)["Service"]
+    assert servico["KillSignal"] == "SIGINT"  # SIGTERM nao roda o finally que salva o contador
+    assert int(servico["TimeoutStopSec"]) >= 30
+
+
+@pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
+def test_robo_falha_se_a_tela_nao_aparece(unidade):
+    pre = _ler(unidade)["Service"]["ExecStartPre"]
+    assert not pre.startswith("-")  # sem '-': falha de verdade e o Restart= tenta de novo
+    assert pre.rstrip("'").endswith("exit 1")
+
+
+def test_vnc_detalhes_da_tela():
+    servico = _ler(VPS / "systemd" / "besave-vnc.service")["Service"]
+    assert servico["ExecStartPre"].startswith("-")  # limpa tela velha, mas nao falha se nao ha
+    assert "-geometry 1600x900" in servico["ExecStart"]
+    assert "-xstartup /usr/bin/startxfce4" in servico["ExecStart"]

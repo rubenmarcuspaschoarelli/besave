@@ -193,11 +193,12 @@ def test_sh05_encerrar_usa_sigint_antes_de_sigkill(amb):
     assert amb.log("kill.log").splitlines()[0] == "-INT 111"
 
 
-def test_sh01_pega_run_com_argumentos_e_sem_u(amb):
+@pytest.mark.parametrize("script", ["iniciar_captura.sh", "encerrar_captura.sh"])
+def test_sh01_pega_run_com_argumentos_e_sem_u(amb, script):
     # o regex real (nao o glob do pgrep falso) casa as formas de linha de comando do robo
     import re
     padrao = None
-    for linha in (VPS / "iniciar_captura.sh").read_text(encoding="utf-8").splitlines():
+    for linha in (VPS / script).read_text(encoding="utf-8").splitlines():
         if linha.startswith("PADRAO_RUN="):
             padrao = re.compile(linha.split("'")[1])
     assert padrao
@@ -287,3 +288,93 @@ def test_sh06_sem_aguardar_volta_sem_esperar(amb):
     r = amb.rodar("iniciar_captura.sh")
     assert r.returncode == 0
     assert "wait-for" not in amb.log("tmux.log")
+
+
+# --- sobreviventes da 2a rodada do Verifier -------------------------------------
+
+def _pgrep_regex(amb):
+    """pgrep falso que aplica o regex de verdade sobre linhas 'PID comando' fixas."""
+    e = amb.est.as_posix()
+    _script(amb.raiz / "bin" / "pgrep", f'''padrao="${{@: -1}}"
+while read -r pid cmd; do
+  echo "$cmd" | grep -Eq -- "$padrao" && echo "$pid"
+done < "{e}/ps.txt"
+exit 0
+''')
+
+
+def test_sh05_padroes_reais_so_pegam_o_robo_e_o_perfil_do_projeto(amb):
+    _pgrep_regex(amb)
+    chat = subprocess.run([BASH, "-c", f'cd "{amb.chat.as_posix()}" && pwd -P'],
+                          capture_output=True, text=True, check=True).stdout.strip()
+    (amb.est / "ps.txt").write_text(
+        "111 /srv/.venv/bin/python -u run_captura.py\n"
+        "222 bash /v/rodar_em_tmux.sh interno s l /x/python -u run_captura.py\n"
+        f"333 chrome --user-data-dir={chat}/user_data --no-sandbox\n"
+        "444 chrome --user-data-dir=/outro/robo/user_data --no-sandbox\n"
+        "555 /usr/bin/python main.py --monitorar\n", encoding="utf-8")
+    amb.rodar("encerrar_captura.sh")
+    mortos = {linha.split()[-1] for linha in amb.log("kill.log").splitlines()}
+    assert mortos == {"111", "333"}
+
+
+def test_sh05_sigkill_de_reserva_depois_do_sigint(amb):
+    amb.pids(run=[111], perfil=[333])
+    e = amb.est.as_posix()
+    _script(Path(amb.env["BESAVE_KILL"]), f'''echo "$@" >> "{e}/kill.log"
+[ "$1" = "-KILL" ] || exit 0
+alvo="${{@: -1}}"
+for f in "{e}/pids_run" "{e}/pids_perfil"; do
+  [ -e "$f" ] && grep -vx "$alvo" "$f" > "$f.tmp"; [ -e "$f.tmp" ] && mv "$f.tmp" "$f"
+done
+exit 0
+''')
+    r = amb.rodar("encerrar_captura.sh")
+    linhas = amb.log("kill.log").splitlines()
+    assert linhas.index("-INT 111") < linhas.index("-KILL 111")
+    assert linhas.index("-INT 333") < linhas.index("-KILL 333")
+    assert "Restantes: python=0  navegador=0" in r.stdout and r.returncode == 0
+
+
+def test_sh05_nada_rodando_ainda_derruba_a_sessao_tmux(amb):
+    amb.rodar("encerrar_captura.sh")
+    assert "-L besave-whatsapp kill-session -t besave-whatsapp" in amb.log("tmux.log")
+
+
+@pytest.mark.parametrize("unidade,esperada", [("", "besave-captura-whatsapp.service"), ("x.service", "x.service")])
+def test_sh05_para_a_unidade_antes_de_matar(amb, unidade, esperada):
+    _script(amb.raiz / "bin" / "systemctl", f'echo "$@" >> "{amb.est.as_posix()}/systemctl.log"\nexit 0\n')
+    amb.pids(run=[111])
+    amb.rodar("encerrar_captura.sh", BESAVE_UNIDADE=unidade,
+              PATH=str(amb.raiz / "bin") + os.pathsep + os.environ["PATH"])
+    assert amb.log("systemctl.log").strip() == f"--user stop {esperada}"
+
+
+def test_sh04_sem_python_do_venv_aborta_com_mensagem(amb):
+    amb.py.unlink()
+    r = amb.rodar("iniciar_captura.sh")
+    assert r.returncode != 0 and "python do venv nao encontrado" in r.stderr
+    assert "new-session" not in amb.log("tmux.log")
+
+
+def test_sh04_nao_reaproveita_log_do_mesmo_dia(amb):
+    from datetime import datetime
+    log = amb.chat / "log"
+    log.mkdir()
+    base = "run_captura_" + datetime.now().strftime("%d_%m")
+    (log / f"{base}.log").write_text("antigo")
+    amb.rodar("iniciar_captura.sh")
+    assert f"{base}_b.log" in amb.log("tmux.log")
+    (log / f"{base}_b.log").write_text("antigo")
+    (amb.est / "lancado").unlink()
+    amb.rodar("iniciar_captura.sh")
+    assert f"{base}_c.log" in amb.log("tmux.log")
+
+
+def test_sh06_iniciar_mata_sessao_velha_antes_e_cria_pasta_do_log(amb):
+    log = amb.est / "novo" / "dir" / "x.log"
+    amb.rodar("rodar_em_tmux.sh", "iniciar", "sess", amb.raiz.as_posix(), log.as_posix(), "echo", "oi")
+    linhas = amb.log("tmux.log").splitlines()
+    assert "-L sess kill-session -t sess" in linhas[0]
+    assert "new-session" in linhas[1]
+    assert log.parent.is_dir()
