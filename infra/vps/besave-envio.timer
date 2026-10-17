@@ -1,0 +1,11 @@
+# A cada 5 min, 2 min depois do ciclo (:02, :07, …): espalha a CPU da máquina de 1 OCPU.
+[Unit]
+Description=Besave: envio ao canal a cada 5 min
+
+[Timer]
+OnCalendar=*:2/5
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target
