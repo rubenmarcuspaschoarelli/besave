@@ -159,3 +159,14 @@ Fechadas na iteração 2: G1 (`apps/worker/README.md:749-751`), G3 (`infra/vps/t
 **Spec-anchored check**: 10/16 provados, 3/16 só estáticos, 3/16 só em CI não executado; nenhum gap aberto
 **Sensor**: 15 injetados, 12 mortos, 3 sobreviventes aceitos
 **Gate**: `teste_instalar.sh` ok (14 casos), `shellcheck` limpo, `actionlint` limpo
+
+## Execução do workflow na PR #80 (condição do PASS)
+
+- 1ª execução 38994162501 (26b0816): `build` ok; `vps` falhou em `shellcheck` — o shellcheck do Ubuntu 24.04 aponta SC2015 em `instalar.sh:27` (o 0.11 local não). Corrigido em 920c3e6 com `if`, sem desligar o aviso.
+- 2ª execução **38994769448** (920c3e6): `build` success (02:24:09–02:26:39Z), `vps` success (02:26:44–02:27:29Z). Todos os passos `success`, nenhum pulado:
+  - WF-04: `sha256sum -c` → `besave-ciclo: OK`, `besave-envio: OK`, `besave-worker: OK`; `file` → `ELF 64-bit LSB pie executable, ARM aarch64` nos 3.
+  - INS-02/03 com o `gh` real: AVISO de `pull_request`; `VERSAO` com `execucao=38994769448`, `commit=920c3e6fcdd5ebe897d55f052f2e8da32c8e9f80`.
+  - SYS-02: `systemd-analyze verify` das 4 unidades sem saída.
+  - SYS-04: `Result=success`, `ExecMainStatus=0`, linha `relatorio lidas=10 validas=3 …` no log; `manifest.json` e `worker.lock` presentes.
+  - SYS-01: timers habilitados e `active`; próximos disparos `02:30:00` (ciclo) e `02:32:00` (envio).
+- Os dois riscos previstos (download da própria execução em andamento; `systemd-analyze` reprovando unidades do runner) não ocorreram.
