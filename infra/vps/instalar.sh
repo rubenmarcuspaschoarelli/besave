@@ -24,7 +24,7 @@ if [ $# -eq 1 ]; then
 else
   id=$(gh run list -R "$REPO" --workflow "$WORKFLOW" --branch main --event push --status success \
     --limit 1 --json databaseId --jq '.[0].databaseId')
-  [ -n "$id" ] && [ "$id" != null ] || erro "nenhuma execução ok do $WORKFLOW em main"
+  if [ -z "$id" ] || [ "$id" = null ]; then erro "nenhuma execução ok do $WORKFLOW em main"; fi
 fi
 
 IFS=$'\t' read -r sha ramo evento < <(gh run view "$id" -R "$REPO" \
