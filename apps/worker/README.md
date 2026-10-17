@@ -701,7 +701,8 @@ o mesmo comportamento do Agendador do Windows. **Nada se compila na VPS** (BSV-4
   **Actions: read** neste repositório basta.
 - Credenciais AWS do perfil do worker em `~besave/.aws/` (o `AWS_PROFILE` do `.env`).
 - `.env`: copie `infra/vps/worker.env.example` para `/srv/besave/worker.env` (`chmod 600`, dono
-  `besave`) e preencha com os valores do `.env` do PC. É lido pelo `systemd` (`EnvironmentFile`):
+  `besave`) e preencha os `...` com os valores do `.env` do PC, **inclusive `AWS_REGION`** (a do PC,
+  hoje `us-east-1`; região errada faz o S3 e a KVS falharem). É lido pelo `systemd` (`EnvironmentFile`):
   `CHAVE=valor`, sem aspas. Sem `BESAVE_ORACLE_CLIENT_DIR` (a biblioteca vem do `ldconfig`). Sem
   `LOCALAPPDATA`, `alerta.json`, `alerta-envio.json` e `envio-estado.json` ficam em `/srv/besave/estado/`,
   ao lado das travas.
