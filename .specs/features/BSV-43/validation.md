@@ -20,6 +20,7 @@
 | T2 unidades + `worker.env.example` | ✅ Done | revisão estática; `systemd-analyze verify` só no job `vps` |
 | T3 workflow | ⏳ Done, não executado | `actionlint` limpo; `LC_ALL=C sort` em `d9cacff` |
 | T4 README | ✅ Done | virada desliga as duas tarefas (`d9cacff`) |
+| T5 variáveis do modelo da VPS | ✅ Done | iteração 3, abaixo (`dde6686`) |
 
 ---
 
@@ -159,6 +160,7 @@ Fechadas na iteração 2: G1 (`apps/worker/README.md:749-751`), G3 (`infra/vps/t
 **Spec-anchored check**: 10/16 provados, 3/16 só estáticos, 3/16 só em CI não executado; nenhum gap aberto
 **Sensor**: 15 injetados, 12 mortos, 3 sobreviventes aceitos
 **Gate**: `teste_instalar.sh` ok (14 casos), `shellcheck` limpo, `actionlint` limpo
+**Iteração 3 (T5, `dde6686`)**: ✅ PASS (SYS-03, ENV-01, DOC-01); sensor 11/13 mortos, 2 sobreviventes aceitos; CI da PR verde no mesmo sha. Detalhe no fim do arquivo.
 
 ## Execução do workflow na PR #80 (condição do PASS)
 
@@ -170,3 +172,64 @@ Fechadas na iteração 2: G1 (`apps/worker/README.md:749-751`), G3 (`infra/vps/t
   - SYS-04: `Result=success`, `ExecMainStatus=0`, linha `relatorio lidas=10 validas=3 …` no log; `manifest.json` e `worker.lock` presentes.
   - SYS-01: timers habilitados e `active`; próximos disparos `02:30:00` (ciclo) e `02:32:00` (envio).
 - Os dois riscos previstos (download da própria execução em andamento; `systemd-analyze` reprovando unidades do runner) não ocorreram.
+
+## Iteração 3 — T5 (dde6686)
+
+**Veredito T5: ✅ PASS.** O veredito geral não muda: PASS (as condições de CI da iteração 2 foram cumpridas na PR #80), e o merge continua dependendo da execução real do dono.
+**Verifier**: sub-agente independente do autor. Escopo: só o delta de `dde6686` (ACs SYS-03, ENV-01, DOC-01).
+**CI do commit**: `ci` 38996614113 (headSha `dde6686`) com `rust (worker)` e `infra` success, e o log mostra `varredura_acha_as_leituras_conhecidas ... ok` e `modelo_da_vps_traz_toda_variavel_lida ... ok` no Linux. `worker-arm64` 38996614108 (mesmo sha): `build` e `vps` success.
+
+### ACs
+
+| AC | `file:line` + asserção | Result |
+| -- | ---------------------- | ------ |
+| SYS-03 (delta) | `infra/vps/worker.env.example:20` `BESAVE_AVISOS_DIR=/srv/besave/imagens/avisos`, descomentada (comentário em `:19`); `:27` `BESAVE_INDEXAVEL=true` com o comentário em `:26` ("Sem ela (ou false) o robots.txt vira "Disallow: /" … o site sai do Google"). Confere com o código: `apps/worker/src/site.rs:219-221` (ausente/`false`/`0` → não indexável) e `:376-378` (`Allow: /` × `Disallow: /`). Itens da iteração 2 continuam lá (`:10,15-18`), `BESAVE_ORACLE_CLIENT_DIR` só no comentário `:4`, segredos com `...` (`:11-12,23-25,32-34`). Teste: `apps/worker/tests/worker_env_vps.rs:194` reprova sem as duas (M1, M2) | ✅ PASS |
+| ENV-01 | `worker_env_vps.rs:130-150` varre os literais de `src/` (`BESAVE_*`/`TELEGRAM_*` em qualquer posição, ou literal direto em `var(`, `var_os(`, `env =`); `:166-181` sanidade com um nome de cada forma; `:194` lida e ausente do modelo e de `OPCIONAIS`; `:200` em `OPCIONAIS` e no modelo; `:206` opcional que ninguém lê; `:216` modelo com variável que ninguém lê, fora `EXTERNAS` (`:43-47`). Motivos em `OPCIONAIS` (`:10-40`) conferidos no código, abaixo | ✅ PASS (M1–M8, M10b, M12, M13 mortos) |
+| DOC-01 (delta) | `apps/worker/README.md:697-698` cria `/srv/besave/imagens/avisos`; `:752-754` copia as imagens das ofertas **e todas as dos avisos**; `:758-762` após o primeiro ciclo e o cache de 5 min, `curl -s https://besave.com.br/robots.txt` com `grep -x 'Allow: /'`, que confere com a linha exata gerada em `site.rs:376` | ✅ PASS (revisão) |
+
+### Levantamento independente das variáveis (sem usar o teste)
+
+Grep em `apps/worker/src` por `env::var`, `var_os`, closures `env(k)`/`opc`/`obrig`, constantes, `#[arg(env = …)]`, `EnvFilter`, `load_from_env`, `env!`/`option_env!`:
+
+- No modelo e achadas pelo teste: `BESAVE_FONTE` (`ciclo.rs:318`, `main.rs:117`), `BESAVE_ORACLE_DSN/USER/PASS` (`oracle.rs:43-45`), `BESAVE_LOG_DIR`, `BESAVE_LOCK` (`ciclo.rs:136-141`), `BESAVE_ENVIO_LOCK` (`envio/binario.rs:82`), `BESAVE_IMAGENS_DIR` (`ciclo.rs:115`, `envio/binario.rs:326`, `main.rs:50`), `BESAVE_AVISOS_DIR` (`avisos/publicacao.rs:66`, `envio/binario.rs:327`), `BESAVE_BUCKET`, `BESAVE_KVS_ARN` (`aws.rs:51-52`), `BESAVE_BASE_URL`, `BESAVE_INDEXAVEL` (`site.rs:209,219`), `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (constantes, `alerta.rs:67-68`), `TELEGRAM_CANAL_BOT_TOKEN` (constante, `envio/http.rs:16`), `HOSTNAME` (`alerta.rs:111`).
+- Em `OPCIONAIS`, todas lidas e com o motivo correto: `LOCALAPPDATA` (`ciclo.rs:135`, `envio/binario.rs:78`), `COMPUTERNAME` (`alerta.rs:110`, tem precedência sobre `HOSTNAME`), `BESAVE_ORACLE_CLIENT_DIR` (`oracle.rs:48`), `BESAVE_ORACLE_TZ` (padrão `-03:00`, `oracle.rs:14,38`), `BESAVE_MAPEAMENTO` (embutido via `carregar_ou_embutido`, `ciclo.rs:306`, `envio/binario.rs:323`), `BESAVE_DESTINO_LOCAL` (`ciclo.rs:202`), `BESAVE_AGORA` (só com destino local, `ciclo.rs:209-212`), `BESAVE_ALERTA_SEM_NOVAS_HORAS`/`_LEMBRETE_HORAS` (padrão 24, `alerta.rs:180-181,200-201`; o motivo poderia citar que `0` desliga), `BESAVE_CANAL_URL` (`avisos/pagina.rs:10`, `avisos/publicacao.rs:67`), `BESAVE_ENVIO_CANAL` (padrão 1, `envio/binario.rs:24,98-102`).
+- `EXTERNAS`: `TNS_ADMIN` (Instant Client), `AWS_REGION`/`AWS_PROFILE` (`aws.rs:71` `aws_config::load_from_env`). Corretas.
+- **Fora da varredura**: `RUST_LOG`, lida por `EnvFilter::try_from_default_env()` (`ciclo.rs:91`), sem literal no código. É opcional (padrão `info`, já documentada em `apps/worker/README.md:313`) e lida por biblioteca, então não fura o objetivo do ENV-01, mas não aparece em `OPCIONAIS`. Ver G-T5-1.
+- `BESAVE_BASE_URL` e `BESAVE_FONTE` têm padrão (`site.rs:211`, `ciclo.rs:318`) e mesmo assim estão no modelo; está certo (explícito na VPS), e `BESAVE_BASE_URL=...` não preenchido falha alto (`site.rs:212-216`).
+
+**`HOSTNAME` no modelo é necessário.** O `systemd` não exporta `HOSTNAME` para o serviço (o ambiente de um serviço com `User=` tem `PATH`, `LANG`, `USER`, `LOGNAME`, `HOME`, `SHELL`, `INVOCATION_ID`, `JOURNAL_STREAM` etc., conforme `systemd.exec(5)`; `HOSTNAME` é variável do bash, não do systemd). Sem ela, `alerta.rs:109-113` cai em `sanitizar_host(None)` → `"desconhecido"` (`:101-102`). Alternativa mais robusta, não obrigatória: `Environment=HOSTNAME=%H` nas duas unidades, que segue o nome real da máquina em vez de um valor fixo no arquivo.
+
+### Sensor de discriminação (`cargo test --test worker_env_vps`, `CARGO_BUILD_JOBS=2`)
+
+| # | Mutação | Resultado | Pego por |
+| - | ------- | --------- | -------- |
+| M1 | remove `BESAVE_INDEXAVEL` do modelo | ✅ morto | `:194` `["BESAVE_INDEXAVEL"]` |
+| M2 | comenta `BESAVE_AVISOS_DIR` | ✅ morto | `:194` |
+| M3 | erro de digitação `BESAVE_INDEXAVL` | ✅ morto | `:194` (e `:216`) |
+| M4 | leitura nova por constante `const MUT_X: &str = "BESAVE_NOVA"` em `src/site.rs` | ✅ morto | `:194` `["BESAVE_NOVA"]` |
+| M5 | opcional obsoleta `BESAVE_VELHA` em `OPCIONAIS` | ✅ morto | `:206` |
+| M6 | `BESAVE_ORACLE_TZ` no modelo e em `OPCIONAIS` | ✅ morto | `:200` |
+| M7 | `std::env::var("NOVA_VAR")` sem prefixo em `src/` | ✅ morto | `:194` `["NOVA_VAR"]` |
+| M8 | remove `HOSTNAME` do modelo | ✅ morto | `:194` `["HOSTNAME"]` |
+| M9 | robustez: literal `"\""` em `alerta.rs` logo antes de `var("HOSTNAME")` | ✅ passa (esperado: o lexer respeita `\"`) | — |
+| M10a | lexer sem tratar `\` (`:117` → `j += 1`), `src/` atual | ⚠️ sobreviveu (equivalente no código de hoje) | — |
+| M10b | M10a + o literal de M9 | ✅ morto | pânico em `:116` nos dois testes |
+| M11 | sonda: `const MUT_K: &str = "NOVA_K"; std::env::var(MUT_K)` | ⚠️ sobreviveu (limite conhecido da varredura) | — |
+| M12 | troca `COMPUTERNAME` por outro nome em `OPCIONAIS` | ✅ morto | `:194` `["COMPUTERNAME"]` |
+| M13 | `BESAVE_FANTASMA=1` no modelo (ninguém lê) | ✅ morto | `:216` |
+
+11 mortos de 13 mutantes (M9 é sonda de robustez, não conta). Sobreviventes aceitos: M10a só discrimina com um literal que comece com `\"` antes de uma leitura (M10b mostra que o tratamento funciona); M11 é o limite declarado na spec ("literal direto em `var(`"): constante sem prefixo `BESAVE_`/`TELEGRAM_` passa despercebida. Depois do sensor, `git status --porcelain` limpo.
+
+### Gates (local, em `dde6686`)
+
+- `cargo fmt --check` → exit 0
+- `cargo clippy --all-targets -- -D warnings` → exit 0
+- `cargo test --test worker_env_vps` → 2 passed
+- `bash infra/vps/teste_instalar.sh` → `ok: teste_instalar`, exit 0
+
+### Achados da T5 (por gravidade, nenhum bloqueia)
+
+1. **G-T5-1 (baixa)**: `RUST_LOG` (`ciclo.rs:91`, via `EnvFilter`) é lida pelos dois binários e não aparece em `OPCIONAIS` nem na varredura. Sugestão: listar em `OPCIONAIS` ("padrão info, lida por EnvFilter") e acrescentar à varredura a forma `try_from_default_env` → `RUST_LOG`.
+2. **G-T5-2 (baixa)**: a varredura não vê `var(CONST)` com constante sem prefixo (M11). Hoje não acontece; aceito como limite declarado.
+3. **G-T5-3 (sugestão)**: `HOSTNAME=vps-instancia-1` fixo no modelo; `Environment=HOSTNAME=%H` nas unidades evitaria o nome errado se a máquina for trocada.
+4. **G-T5-4 (cosmético)**: o motivo das duas `BESAVE_ALERTA_SEM_NOVAS_*` poderia dizer que `0` desliga (`alerta.rs:189-190`).
