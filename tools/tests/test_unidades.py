@@ -7,6 +7,7 @@ import pytest
 
 VPS = Path(__file__).resolve().parent.parent / "vps"
 UNIDADES = sorted((VPS / "systemd").glob("*.service"))
+ROBOS = [u for u in UNIDADES if u.name.startswith("besave-captura-")]
 
 
 def _ler(caminho):
@@ -17,10 +18,12 @@ def _ler(caminho):
 
 
 def test_existem_as_duas_unidades():
-    assert [u.name for u in UNIDADES] == ["besave-captura-lojas.service", "besave-captura-whatsapp.service"]
+    assert [u.name for u in UNIDADES] == [
+        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-vnc.service",
+    ]
 
 
-@pytest.mark.parametrize("unidade", UNIDADES, ids=lambda u: u.name)
+@pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
 def test_reinicia_em_falha_e_roda_no_tmux_com_display(unidade):
     cfg = _ler(unidade)
     servico = cfg["Service"]
@@ -50,3 +53,39 @@ def test_lojas_roda_o_main_em_modo_monitor():
     assert partes[1:3] == ["executar", "besave-lojas"]
     assert partes[-3:] == ["-u", "main.py", "--monitorar"]
     assert partes[-4].endswith("/capture-store-pages/.venv/bin/python")
+
+
+@pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
+def test_robo_depende_da_tela_vnc(unidade):
+    unit = _ler(unidade)["Unit"]
+    assert unit["After"] == "besave-vnc.service"
+    assert unit["Requires"] == "besave-vnc.service"
+
+
+@pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
+def test_robo_nao_fica_failed_por_falha_de_partida(unidade):
+    cfg = _ler(unidade)
+    assert cfg["Unit"]["StartLimitIntervalSec"] == "0"  # sem limite: nunca 'start-limit-hit'
+    assert int(cfg["Service"]["RestartSec"]) >= 30
+    pre = cfg["Service"]["ExecStartPre"]
+    assert "/tmp/.X11-unix/X1" in pre  # espera a tela existir de fato
+    assert "$$(" in pre  # systemd consome '$' simples
+
+
+def test_vnc_e_a_tela_1_em_primeiro_plano_e_sobe_sozinha():
+    cfg = _ler(VPS / "systemd" / "besave-vnc.service")
+    servico = cfg["Service"]
+    assert servico["Restart"] == "on-failure"
+    partes = servico["ExecStart"].split()
+    assert partes[1:3] == [":1", "-fg"]
+    assert "-localhost yes" in servico["ExecStart"]  # tela so por tunel SSH
+    assert servico["ExecStop"].endswith("vncserver -kill :1")
+    assert cfg["Unit"]["StartLimitIntervalSec"] == "0"
+    assert cfg["Install"]["WantedBy"] == "default.target"
+
+
+def test_readme_explica_o_linger_e_a_unidade_do_vnc():
+    leia = (VPS / "README.md").read_text(encoding="utf-8")
+    assert "loginctl enable-linger besave" in leia
+    assert "besave-vnc" in leia
+    assert re.search(r"reboot", leia)

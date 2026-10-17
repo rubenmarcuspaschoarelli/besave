@@ -93,3 +93,17 @@ def test_por02_partida_falha_no_linux_sem_destino(monkeypatch):
         storage.validar_destino_s3()
     monkeypatch.setattr(storage, "_cfg_s3", lambda: {"ativo": False})
     storage.validar_destino_s3()  # publicacao desligada: nada a exigir
+
+
+def test_por03_windows_sem_chaves_nao_recusa_a_partida(monkeypatch):
+    """Regra 1 da spec: so o Linux recusa; no Windows vale o caminho padrao de hoje."""
+    monkeypatch.setattr(storage, "_cfg_s3", dict)
+    monkeypatch.setattr(storage.sys, "platform", "win32")
+    storage.validar_destino_s3()  # nao levanta
+    assert storage.destino_s3({}, plataforma="win32") == Path(WIN_IMG)
+
+
+def test_por03_windows_com_chave_vazia_cai_no_padrao(tmp_path):
+    assert estado.ler_raiz_s3(_cfg(tmp_path, {"s3": {"raiz": ""}}), plataforma="win32") == WIN_S3
+    assert storage.destino_s3({"destino": ""}, plataforma="win32") == Path(WIN_IMG)
+    assert estado.ler_raiz_s3(_cfg(tmp_path, {"s3": {"raiz": "D:/x"}}), plataforma="win32") == "D:/x"

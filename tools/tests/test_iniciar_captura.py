@@ -207,3 +207,83 @@ def test_sh01_pega_run_com_argumentos_e_sem_u(amb):
                  "tmux -L s new-session -d env DISPLAY=:1 /x/python -u run_captura.py", "vim run_captura.py"]
     assert all(padrao.search(c) for c in casam)
     assert not any(padrao.search(c) for c in nao_casam)
+
+
+# --- rodar_em_tmux.sh: o fluxo que faz o Restart=on-failure funcionar (A4) -----
+
+def _tmux_que_devolve(amb, rc):
+    """tmux falso: 'wait-for CANAL' (sem -S) grava o codigo de saida do robo, como
+    o `interno` faria, e acorda."""
+    e = amb.est.as_posix()
+    _script(amb.raiz / "bin" / "tmux", f'''echo "$@" >> "{e}/tmux.log"
+case " $* " in
+  *" new-session "*) touch "{e}/lancado";;
+  *" wait-for -S "*) ;;
+  *" wait-for "*) echo {rc} > "{e}/besave-besave-whatsapp.rc";;
+esac
+exit 0
+''')
+
+
+def test_sh06_interno_propaga_codigo_grava_log_e_sinaliza(amb):
+    log = amb.est / "robo.log"
+    r = amb.rodar("rodar_em_tmux.sh", "interno", "sess", log.as_posix(), "sh", "-c", "echo linha-do-robo; exit 7")
+    assert r.returncode == 7
+    assert (amb.est / "besave-sess.rc").read_text().strip() == "7"
+    assert "linha-do-robo" in log.read_text()
+    assert "-L sess wait-for -S besave-sess" in amb.log("tmux.log")
+
+
+def test_sh06_interno_acrescenta_ao_log(amb):
+    log = amb.est / "robo.log"
+    log.write_text("antes\n")
+    amb.rodar("rodar_em_tmux.sh", "interno", "sess", log.as_posix(), "echo", "depois")
+    assert log.read_text() == "antes\ndepois\n"
+
+
+def test_sh06_esperar_sai_com_o_codigo_do_robo(amb):
+    (amb.est / "besave-sess.rc").write_text("5\n")
+    r = amb.rodar("rodar_em_tmux.sh", "esperar", "sess")
+    assert r.returncode == 5
+    assert "-L sess wait-for besave-sess" in amb.log("tmux.log")
+
+
+def test_sh06_esperar_sem_arquivo_de_codigo_e_falha(amb):
+    assert amb.rodar("rodar_em_tmux.sh", "esperar", "sess").returncode == 1
+
+
+def test_sh06_iniciar_cria_sessao_propria_com_display_e_limpa_codigo_antigo(amb):
+    (amb.est / "besave-sess.rc").write_text("0\n")
+    r = amb.rodar("rodar_em_tmux.sh", "iniciar", "sess", amb.raiz.as_posix(), (amb.est / "x.log").as_posix(),
+                  "echo", "oi", BESAVE_DISPLAY=":7")
+    assert r.returncode == 0
+    assert not (amb.est / "besave-sess.rc").exists()
+    chamada = amb.log("tmux.log")
+    assert "-L sess new-session -d -s sess" in chamada
+    assert "DISPLAY=:7" in chamada and "interno" in chamada
+
+
+def test_sh06_executar_inicia_e_espera(amb):
+    (amb.est / "besave-sess.rc").write_text("0\n")
+    e = amb.est.as_posix()
+    _script(amb.raiz / "bin" / "tmux", f'''echo "$@" >> "{e}/tmux.log"
+case " $* " in *" wait-for "*) echo 3 > "{e}/besave-sess.rc";; esac
+exit 0
+''')
+    r = amb.rodar("rodar_em_tmux.sh", "executar", "sess", amb.raiz.as_posix(), (amb.est / "x.log").as_posix(), "echo", "oi")
+    assert r.returncode == 3
+    linhas = amb.log("tmux.log").splitlines()
+    assert any("new-session" in l for l in linhas) and any("wait-for besave-sess" in l for l in linhas)
+
+
+def test_sh06_aguardar_espera_e_devolve_o_codigo_do_robo(amb):
+    _tmux_que_devolve(amb, 9)
+    r = amb.rodar("iniciar_captura.sh", "--aguardar")
+    assert r.returncode == 9
+    assert "wait-for besave-besave-whatsapp" in amb.log("tmux.log").replace("-L besave-whatsapp ", "")
+
+
+def test_sh06_sem_aguardar_volta_sem_esperar(amb):
+    r = amb.rodar("iniciar_captura.sh")
+    assert r.returncode == 0
+    assert "wait-for" not in amb.log("tmux.log")

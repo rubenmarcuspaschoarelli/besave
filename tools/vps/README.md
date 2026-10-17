@@ -15,12 +15,25 @@ o operador responde com `tmux attach`. Cada robô tem o próprio servidor `tmux`
 
 ```bash
 sudo apt install -y tmux
-loginctl enable-linger besave                 # as unidades sobem no boot, sem login
+sudo loginctl enable-linger besave            # como root/sudo: ver o motivo abaixo
 cd /srv/besave/repo/tools/vps && chmod +x *.sh
 mkdir -p ~/.config/systemd/user && cp systemd/*.service ~/.config/systemd/user/
 systemctl --user daemon-reload
-systemctl --user enable besave-captura-whatsapp besave-captura-lojas
+systemctl --user enable besave-vnc besave-captura-whatsapp besave-captura-lojas
 ```
+
+**Por que `enable-linger`:** unidade `--user` só roda enquanto o usuário tem sessão aberta. Sem o linger,
+depois de `sudo reboot` nada sobe até alguém entrar por SSH. Com ele, o `systemd` do usuário `besave`
+sobe no boot e inicia as três unidades.
+
+**A tela vira unidade (`besave-vnc`).** Ela substitui o `vncserver :1` manual da Fase 3 (se estiver
+rodando à mão, `vncserver -kill :1` antes). Os dois robôs têm `Requires=` e `After=besave-vnc.service` e
+esperam o socket `/tmp/.X11-unix/X1` aparecer (até 60 s) antes de lançar: o `After=` só garante que o
+VNC foi *iniciado*, não que a tela já responde. Parar ou reiniciar o `besave-vnc` para os robôs junto.
+Falha de partida (tela ainda subindo, contador atrasado) não deixa a unidade em `failed`: tenta de novo a
+cada 30 s, sem limite (`StartLimitIntervalSec=0`). Um erro permanente, como o contador atrasado,
+repete a mensagem no `journalctl` a cada 30 s até ser corrigido; para parar o ciclo,
+`systemctl --user stop <unidade>`.
 
 Pré-requisitos (Fase 5 do roteiro): `.venv` em cada robô, `conf/config.json` preenchido e, no
 `capture-store-pages`, **`"navegador": {"canal": ""}`** (Chromium do Playwright; no Linux ARM64 não existe
@@ -31,6 +44,7 @@ Chrome). Chaves sem padrão no Linux, que o robô exige no `config.json`:
 ## Subir
 
 ```bash
+systemctl --user start besave-vnc                  # a tela (os robôs já puxam, mas assim fica explícito)
 systemctl --user start besave-captura-whatsapp     # confere antes de subir (abaixo)
 systemctl --user start besave-captura-lojas
 systemctl --user status besave-captura-whatsapp besave-captura-lojas
