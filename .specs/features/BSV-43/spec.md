@@ -44,6 +44,8 @@ instale com conferência de integridade e quem o rode a cada 5 min no lugar do A
 | Variáveis | `EnvironmentFile=/srv/besave/worker.env`, sem `--env-file` | Spec; evita ler o mesmo arquivo com dois parsers | n |
 | Trava, alerta e estado do envio | `BESAVE_LOCK=/srv/besave/estado/worker.lock`, `BESAVE_ENVIO_LOCK=/srv/besave/estado/envio.lock`; sem `LOCALAPPDATA`, `alerta.json`, `alerta-envio.json` e `envio-estado.json` ficam ao lado da trava | Código atual (`ciclo.rs` `pastas`, `envio/binario.rs` `pastas`); persistente, não `/run` | n |
 | Onde rodam as conferências de Linux | Job `vps` no próprio `worker-arm64.yml` (ARM, Ubuntu 24.04), com `infra/vps/**` nos `paths` | `systemd-analyze` e `shellcheck` precisam de Linux; o mesmo job testa o `instalar.sh` contra o artefato real | n |
+| Nome da máquina no alerta | `HOSTNAME=vps-instancia-1` no modelo | O `systemd` não exporta `HOSTNAME`; sem ela o alerta diz `desconhecido` (achado do ENV-01) | n |
+| Como o ENV-01 acha as leituras | Varredura dos literais de `src/`: `BESAVE_*`/`TELEGRAM_*` e literal direto em `var(`, `var_os(`, `env =` | Pega leitura por constante e por closure (`env("…")`); um teste de sanidade exige nomes conhecidos de cada forma | n |
 | Ajustes de portabilidade no Rust | Nenhum previsto: `cargo test` já roda em Linux x86 no `ci.yml` e não há `cfg(windows)` no worker | Só entram se o runner ARM reprovar algo (spec saída 3) | n |
 
 Open questions: none
@@ -110,7 +112,12 @@ do PC.
    `timers.target`.
 2. SYS-02: `systemd-analyze verify` SHALL passar sem erros nas 4 unidades, com os binários instalados.
 3. SYS-03: `worker.env.example` SHALL trazer `TNS_ADMIN`, `BESAVE_LOG_DIR`, `BESAVE_LOCK`,
-   `BESAVE_ENVIO_LOCK`, `BESAVE_IMAGENS_DIR`, sem `BESAVE_ORACLE_CLIENT_DIR` e sem segredo preenchido.
+   `BESAVE_ENVIO_LOCK`, `BESAVE_IMAGENS_DIR`, `BESAVE_AVISOS_DIR` (pasta na VPS), `BESAVE_INDEXAVEL=true`
+   (comentário: sem ela o `robots.txt` vira `Disallow: /`), sem `BESAVE_ORACLE_CLIENT_DIR` e sem segredo
+   preenchido.
+5. ENV-01: Um teste SHALL reprovar WHEN uma variável lida pelo worker (ciclo ou envio) não está no
+   `worker.env.example` nem na lista de opcionais do teste (cada uma com o motivo), WHEN uma opcional
+   não é mais lida, ou WHEN o modelo traz uma variável que ninguém lê (fora as lidas por biblioteca).
 4. SYS-04: WHEN o `besave-ciclo` instalado roda no ARM com `BESAVE_FONTE=fake`, `BESAVE_DESTINO_LOCAL`
    e as pastas de `worker.env.example` (sem `LOCALAPPDATA`) THEN SHALL sair com 0 e escrever
    `relatorio` no log de `BESAVE_LOG_DIR` e o `manifest.json` no destino.
@@ -120,8 +127,9 @@ do PC.
 ### P2: Documentação
 
 1. DOC-01: `apps/worker/README.md` SHALL ter a seção "Rodar no Linux (VPS)": pré-requisitos,
-   `instalar.sh`, unidades, virada **desligando as tarefas do PC antes** de ligar os timers, logs,
-   reversão.
+   `instalar.sh`, unidades, virada **desligando as tarefas do PC antes** de ligar os timers, cópia das
+   imagens das ofertas e dos avisos, conferência de `robots.txt` = `Allow: /` após o primeiro ciclo,
+   logs, reversão.
 
 ---
 
@@ -146,6 +154,7 @@ do PC.
 | SYS-02 | Execução agendada | Execute | Done |
 | SYS-03 | Execução agendada | Execute | Done |
 | SYS-04 | Execução agendada | Execute | Done |
+| ENV-01 | Execução agendada | Execute | Done |
 | WF-01 | Binários ARM64 | Execute | Done |
 | WF-02 | Binários ARM64 | Execute | Done |
 | WF-03 | Binários ARM64 | Execute | Done |

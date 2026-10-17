@@ -694,8 +694,8 @@ o mesmo comportamento do Agendador do Windows. **Nada se compila na VPS** (BSV-4
 ### Pré-requisitos (roteiro `docs/infra/VPS-INSTANCIA-1.md`)
 
 - Fases 2 e 4: usuário `besave`, `/srv/besave/{bin,logs,imagens,oracle}`, Instant Client no `ldconfig`,
-  wallet em `/srv/besave/oracle/wallet`. Mais a pasta das travas e do estado:
-  `sudo install -d -o besave -g besave /srv/besave/estado`.
+  wallet em `/srv/besave/oracle/wallet`. Mais a pasta das travas e do estado e a dos avisos:
+  `sudo install -d -o besave -g besave /srv/besave/estado /srv/besave/imagens/avisos`.
 - `gh` (`sudo apt install -y gh`) autenticado como `besave` (`sudo -iu besave gh auth login`). O
   artefato exige login mesmo com o repositório público; um token *fine-grained* só com
   **Actions: read** neste repositório basta.
@@ -749,10 +749,17 @@ ciclo roda, o timer não abre outro (e a trava continua valendo, como no PC).
 1. No PC: Agendador de Tarefas → desabilitar **as duas** tarefas, **Besave Worker** e **Besave Envio**
    (ou removê-las: `.\scripts\remover-tarefa.ps1` e `.\scripts\remover-tarefa.ps1 -NomeTarefa 'Besave Envio'`;
    sem o parâmetro o script remove só o worker), e esperar a execução em andamento terminar.
-2. Copiar as imagens recentes do PC para `/srv/besave/imagens/` (o envio usa a foto local, AD-080).
+2. Copiar do PC as imagens recentes das ofertas para `/srv/besave/imagens/ofertas/img/` (o envio usa a
+   foto local, AD-080) e **todas** as imagens dos avisos (a pasta do `BESAVE_AVISOS_DIR` do PC) para
+   `/srv/besave/imagens/avisos/`; sem elas, a página do aviso perde a imagem e o post sai sem foto.
 3. Na VPS: `sudo systemctl enable --now besave-ciclo.timer besave-envio.timer`.
 4. Conferir: `systemctl list-timers 'besave-*'`; o primeiro ciclo tem zero escritas além dos
    manifests e `t_leitura_fonte` menor que no PC; o próximo lote do envio sai no canal.
+5. Depois do primeiro ciclo (e dos 5 min de cache do `robots.txt` na borda), o site continua indexável (`BESAVE_INDEXAVEL=true` no `worker.env`):
+
+   ```bash
+   curl -s https://besave.com.br/robots.txt | grep -x 'Allow: /'   # sem saída = Disallow: desligar os timers e corrigir
+   ```
 
 Voltar para o PC: `sudo systemctl disable --now besave-ciclo.timer besave-envio.timer` **antes** de
 reabilitar as tarefas do Windows.

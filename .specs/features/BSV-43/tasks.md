@@ -24,6 +24,7 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 | Unidades `systemd` | static (`systemd-analyze verify`) | SYS-01, SYS-02 | `infra/vps/*.service`, `*.timer` | job `vps` |
 | Binário instalado (fumaça) | e2e (CI, ARM) | SYS-03, SYS-04 | job `vps` | execução do workflow |
 | Workflow | static (`actionlint`) | WF-01, WF-02, WF-05 | `.github/workflows/worker-arm64.yml` | `actionlint` |
+| Modelo `worker.env.example` × variáveis lidas | integration (Rust, lê `src/`) | SYS-03, ENV-01 | `apps/worker/tests/worker_env_vps.rs` | `cargo test --test worker_env_vps` |
 | Docs | none | DOC-01 | - | build gate only |
 
 ## Gate Check Commands
@@ -37,12 +38,12 @@ Implement these tasks with the `tlc-spec-driven` skill: **activate it by name an
 
 ## Execution Plan
 
-4 tarefas, um lote: execução inline, sem sub-agentes.
+5 tarefas, um lote: execução inline, sem sub-agentes.
 
 ### Phase 1: VPS e CI
 
 ```
-T1 → T2 → T3 → T4
+T1 → T2 → T3 → T4 → T5
 ```
 
 ---
@@ -117,4 +118,24 @@ T1 → T2 → T3 → T4
 - [x] Gate build passa
 
 **Tests**: none
+**Gate**: build
+
+---
+
+### T5: Variáveis do modelo da VPS (pedido do dono antes do teste real)
+
+**What**: `BESAVE_INDEXAVEL=true` e `BESAVE_AVISOS_DIR` no `worker.env.example`; virada copia as imagens
+dos avisos e confere o `robots.txt`; teste que compara o modelo com as variáveis lidas.
+**Where**: `infra/vps/worker.env.example`, `apps/worker/README.md`, `apps/worker/tests/worker_env_vps.rs`
+**Depends on**: T4
+**Reuses**: nenhum
+**Requirement**: SYS-03, ENV-01, DOC-01
+
+**Done when**:
+
+- [x] Teste reprova com o modelo antigo (falta `BESAVE_AVISOS_DIR`, `BESAVE_INDEXAVEL`, `HOSTNAME`), com
+      nome digitado errado e com leitura nova em `src/`
+- [x] Gate build passa (fmt, clippy, `cargo test`)
+
+**Tests**: integration
 **Gate**: build
