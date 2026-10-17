@@ -1,160 +1,320 @@
-name: ci
-
-on:
-  pull_request:
-    branches: [develop, main]
-  push:
-    branches: [develop, main]
-
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
-
-jobs:
-  changes:
-    runs-on: ubuntu-latest
-    outputs:
-      contract: ${{ steps.f.outputs.contract }}
-      worker:   ${{ steps.f.outputs.worker }}
-      api:      ${{ steps.f.outputs.api }}
-      site:     ${{ steps.f.outputs.site }}
-      infra:    ${{ steps.f.outputs.infra }}
-      tools:    ${{ steps.f.outputs.tools }}
-      workflows: ${{ steps.f.outputs.workflows }}
-    steps:
-      - uses: actions/checkout@v7
-      - id: f
-        uses: dorny/paths-filter@v4
-        with:
-          filters: |
-            contract: ['packages/contract/**']
-            worker:   ['apps/worker/**', 'packages/contract/**']
-            api:      ['apps/api/**', 'packages/contract/**']
-            site:     ['apps/site/**', 'packages/contract/**']
-            infra:    ['infra/**']
-            tools:    ['tools/**']
-            workflows: ['.github/**']
-
-  workflows:
-    needs: changes
-    if: needs.changes.outputs.workflows == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # actionlint fixado; usa o shellcheck já instalado no ubuntu-latest para os blocos `run`.
-      - name: actionlint
-        run: |
-          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
-          ./actionlint -color
-
-  contract:
-    needs: changes
-    if: needs.changes.outputs.contract == 'true'
-    runs-on: ubuntu-latest
-    defaults: { run: { working-directory: packages/contract } }
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with: { node-version: 22, cache: npm, cache-dependency-path: packages/contract/package-lock.json }
-      - run: npm ci
-      - run: npm run validate
-
-  rust:
-    needs: changes
-    if: needs.changes.outputs.worker == 'true' || needs.changes.outputs.api == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        app: [worker, api]
-    steps:
-      - uses: actions/checkout@v7
-      - id: exists
-        run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
-      - if: steps.exists.outputs.ok == 'true'
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - if: steps.exists.outputs.ok == 'true'
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: apps/${{ matrix.app }}
-      - if: steps.exists.outputs.ok == 'true'
-        working-directory: apps/${{ matrix.app }}
-        run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
-
-  site:
-    needs: changes
-    if: needs.changes.outputs.site == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - id: exists
-        run: test -f apps/site/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
-      - if: steps.exists.outputs.ok == 'true'
-        uses: pnpm/action-setup@v6
-        with: { version: 9 }
-      - if: steps.exists.outputs.ok == 'true'
-        uses: actions/setup-node@v7
-        with: { node-version: 22, cache: pnpm, cache-dependency-path: apps/site/pnpm-lock.yaml }
-      - if: steps.exists.outputs.ok == 'true'
-        working-directory: apps/site
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm lint
-          pnpm check
-          pnpm test
-          pnpm build
-      # Fluxos da spec (Playwright) sobre o build: só o Chromium, com as libs do sistema.
-      - if: steps.exists.outputs.ok == 'true'
-        working-directory: apps/site
-        run: |
-          pnpm exec playwright install --with-deps chromium
-          pnpm e2e
-
-  infra:
-    needs: changes
-    if: needs.changes.outputs.infra == 'true'
-    runs-on: ubuntu-latest
-    defaults: { run: { working-directory: infra } }
-    steps:
-      - uses: actions/checkout@v7
-      # Versão fixa: 1.16.4 dá panic ao renderizar a asserção de ACL em falha (infra/tests/buckets.tftest.hcl).
-      - uses: hashicorp/setup-terraform@v4
-        with: { terraform_version: "1.16.4" }
-      - run: terraform fmt -check -recursive
-      - run: terraform init -backend=false
-      - run: terraform validate
-      - run: terraform test
-      - uses: actions/setup-python@v7
-        with: { python-version: "3.12" }
-      - run: python -m unittest discover -s lambdas/vigia -v
-      - id: node
-        run: test -f functions/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
-      - if: steps.node.outputs.ok == 'true'
-        uses: actions/setup-node@v7
-        with: { node-version: 22 }
-      - if: steps.node.outputs.ok == 'true'
-        working-directory: infra/functions
-        run: npm ci && npm test
-
-  tools:
-    needs: changes
-    if: needs.changes.outputs.tools == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
-        with: { python-version: "3.12" }
-      - run: pip install -r tools/requirements-dev.txt
-      # pytest.ini fica em tools/: rodar de fora coletaria programas_ajuste/.
-      - name: pytest
-        working-directory: tools
-        run: pytest
-      # shellcheck já vem no ubuntu-latest.
-      - run: shellcheck tools/vps/*.sh
-      # Só o código novo; as violações antigas de main.py e wa/storage.py ficam fora.
-      - run: ruff check tools/vps/ tools/tests/
+name: ci
+
+
+
+on:
+
+  pull_request:
+
+    branches: [develop, main]
+
+  push:
+
+    branches: [develop, main]
+
+
+
+concurrency:
+
+  group: ci-${{ github.ref }}
+
+  cancel-in-progress: true
+
+
+
+jobs:
+
+  changes:
+
+    runs-on: ubuntu-latest
+
+    outputs:
+
+      contract: ${{ steps.f.outputs.contract }}
+
+      worker:   ${{ steps.f.outputs.worker }}
+
+      api:      ${{ steps.f.outputs.api }}
+
+      site:     ${{ steps.f.outputs.site }}
+
+      infra:    ${{ steps.f.outputs.infra }}
+
+      tools:    ${{ steps.f.outputs.tools }}
+
+      workflows: ${{ steps.f.outputs.workflows }}
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      - id: f
+
+        uses: dorny/paths-filter@v4
+
+        with:
+
+          filters: |
+
+            contract: ['packages/contract/**']
+
+            worker:   ['apps/worker/**', 'packages/contract/**']
+
+            api:      ['apps/api/**', 'packages/contract/**']
+
+            site:     ['apps/site/**', 'packages/contract/**']
+
+            infra:    ['infra/**']
+
+            tools:    ['tools/**']
+
+            workflows: ['.github/**']
+
+
+
+  workflows:
+
+    needs: changes
+
+    if: needs.changes.outputs.workflows == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      # actionlint fixado; usa o shellcheck já instalado no ubuntu-latest para os blocos `run`.
+
+      - name: actionlint
+
+        run: |
+
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+
+          ./actionlint -color
+
+
+
+  contract:
+
+    needs: changes
+
+    if: needs.changes.outputs.contract == 'true'
+
+    runs-on: ubuntu-latest
+
+    defaults: { run: { working-directory: packages/contract } }
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+
+        with: { node-version: 22, cache: npm, cache-dependency-path: packages/contract/package-lock.json }
+
+      - run: npm ci
+
+      - run: npm run validate
+
+
+
+  rust:
+
+    needs: changes
+
+    if: needs.changes.outputs.worker == 'true' || needs.changes.outputs.api == 'true'
+
+    runs-on: ubuntu-latest
+
+    strategy:
+
+      fail-fast: false
+
+      matrix:
+
+        app: [worker, api]
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      - id: exists
+
+        run: test -f apps/${{ matrix.app }}/Cargo.toml && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        uses: dtolnay/rust-toolchain@stable
+
+        with:
+
+          components: rustfmt, clippy
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        uses: Swatinem/rust-cache@v2
+
+        with:
+
+          workspaces: apps/${{ matrix.app }}
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        working-directory: apps/${{ matrix.app }}
+
+        run: |
+
+          cargo fmt --check
+
+          cargo clippy --all-targets -- -D warnings
+
+          cargo test
+
+
+
+  site:
+
+    needs: changes
+
+    if: needs.changes.outputs.site == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      - id: exists
+
+        run: test -f apps/site/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        uses: pnpm/action-setup@v6
+
+        with: { version: 9 }
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        uses: actions/setup-node@v7
+
+        with: { node-version: 22, cache: pnpm, cache-dependency-path: apps/site/pnpm-lock.yaml }
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        working-directory: apps/site
+
+        run: |
+
+          pnpm install --frozen-lockfile
+
+          pnpm lint
+
+          pnpm check
+
+          pnpm test
+
+          pnpm build
+
+      # Fluxos da spec (Playwright) sobre o build: só o Chromium, com as libs do sistema.
+
+      - if: steps.exists.outputs.ok == 'true'
+
+        working-directory: apps/site
+
+        run: |
+
+          pnpm exec playwright install --with-deps chromium
+
+          pnpm e2e
+
+
+
+  infra:
+
+    needs: changes
+
+    if: needs.changes.outputs.infra == 'true'
+
+    runs-on: ubuntu-latest
+
+    defaults: { run: { working-directory: infra } }
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      # Versão fixa: 1.16.4 dá panic ao renderizar a asserção de ACL em falha (infra/tests/buckets.tftest.hcl).
+
+      - uses: hashicorp/setup-terraform@v4
+
+        with: { terraform_version: "1.16.4" }
+
+      - run: terraform fmt -check -recursive
+
+      - run: terraform init -backend=false
+
+      - run: terraform validate
+
+      - run: terraform test
+
+      - uses: actions/setup-python@v7
+
+        with: { python-version: "3.12" }
+
+      - run: python -m unittest discover -s lambdas/vigia -v
+
+      - id: node
+
+        run: test -f functions/package.json && echo ok=true >> "$GITHUB_OUTPUT" || echo ok=false >> "$GITHUB_OUTPUT"
+
+      - if: steps.node.outputs.ok == 'true'
+
+        uses: actions/setup-node@v7
+
+        with: { node-version: 22 }
+
+      - if: steps.node.outputs.ok == 'true'
+
+        working-directory: infra/functions
+
+        run: npm ci && npm test
+
+
+
+  tools:
+
+    needs: changes
+
+    if: needs.changes.outputs.tools == 'true'
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+
+        with: { python-version: "3.12" }
+
+      - run: pip install -r tools/requirements-dev.txt
+
+      # pytest.ini fica em tools/: rodar de fora coletaria programas_ajuste/.
+
+      - name: pytest
+
+        working-directory: tools
+
+        run: pytest
+
+      # shellcheck já vem no ubuntu-latest.
+
+      - run: shellcheck tools/vps/*.sh
+
+      # Só o código novo; as violações antigas de main.py e wa/storage.py ficam fora.
+
+      - run: ruff check tools/vps/ tools/tests/
+
