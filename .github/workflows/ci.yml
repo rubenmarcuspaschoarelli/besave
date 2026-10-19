@@ -19,6 +19,7 @@ jobs:
       api:      ${{ steps.f.outputs.api }}
       site:     ${{ steps.f.outputs.site }}
       infra:    ${{ steps.f.outputs.infra }}
+      tools:    ${{ steps.f.outputs.tools }}
       workflows: ${{ steps.f.outputs.workflows }}
     steps:
       - uses: actions/checkout@v7
@@ -31,6 +32,7 @@ jobs:
             api:      ['apps/api/**', 'packages/contract/**']
             site:     ['apps/site/**', 'packages/contract/**']
             infra:    ['infra/**']
+            tools:    ['tools/**']
             workflows: ['.github/**']
 
   workflows:
@@ -138,3 +140,17 @@ jobs:
       - if: steps.node.outputs.ok == 'true'
         working-directory: infra/functions
         run: npm ci && npm test
+
+  tools:
+    needs: changes
+    if: needs.changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: tools/capture-chat-groups } }
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      # Só stdlib: os testes do parser não sobem Playwright nem Oracle. Rodam
+      # também quando o outro robô muda (os dois dividem o contrato da fila de
+      # captura, e por ora só este tem teste).
+      - run: python -m unittest discover -s tests -v

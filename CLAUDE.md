@@ -25,6 +25,7 @@ Uma tarefa = uma pasta principal. Não editar fora dela sem que a spec autorize.
 - contrato: `cd packages/contract && npm ci && npm run validate`
 - worker/api: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 - site: `pnpm install --frozen-lockfile && pnpm lint && pnpm check && pnpm test && pnpm build`
+- robôs (tools): `cd tools/capture-chat-groups && python -m unittest discover -s tests`
 
 ## Regras não negociáveis
 1. Testes derivam do critério de aceite da spec; nunca espelham a implementação. O runner decide, não a autoavaliação.
