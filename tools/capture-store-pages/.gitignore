@@ -15,8 +15,7 @@ destino/
 captura/
 
 # Config real tem a senha do banco e o estado da fila; versionar so o exemplo
-conf/config.json
-conf/config.json.*
+conf/config*.json*
 conf/*_tentativas.json
 conf/*_feitas.json
 !conf/config.example.json

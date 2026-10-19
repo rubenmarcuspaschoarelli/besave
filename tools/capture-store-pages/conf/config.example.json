@@ -27,10 +27,10 @@
   },
   "grupos": {
     "Promos da Ly": {
-      "usa_imagem_loja": false
+      "usa_imagem_loja": true
     },
     "Achadinhos diaenoite #03": {
-      "usa_imagem_loja": false
+      "usa_imagem_loja": true
     },
     "@achadinhoscomcarol 9": {
       "usa_imagem_loja": true
