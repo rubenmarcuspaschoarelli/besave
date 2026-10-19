@@ -78,12 +78,13 @@ Canal (broadcast), nunca automação de grupos.
 7. **Nenhuma URL de loja no site.** Só `/ir/{id}`. Troca de rede de afiliado sem regerar 30 mil
    páginas, e o Google não vê link de afiliado.
 
-## 4. Onde estamos (15/10/2026)
+## 4. Onde estamos (19/10/2026)
 
 **O site está no ar em `besave.com.br`, indexável.** A cada 5 minutos o Agendador do Windows executa
 `C:\besave\bin\besave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
 páginas de oferta, sitemap e redirects. Ciclo em regime: ~40 s desde que o banco foi para a nuvem
-(~10 s de leitura pela internet; antes ~20 s). Hoje são ~28,7 mil ofertas válidas.
+(~10 s de leitura pela internet; antes ~20 s). Hoje são ~26 mil ofertas válidas (25.963 no manifest
+de 19/10).
 
 Feito e no ar:
 - **Banco na Oracle Cloud** (15/10): Autonomous Database Always Free (26ai, 20 GB), acesso por wallet,
@@ -110,7 +111,9 @@ Próximos, nesta ordem:
   foto trocada no mesmo id nunca sobe — todo backfill de imagem exige apagar a chave no S3 à mão (foi o
   que aconteceu em 19/10). Troca por `_estado/imagens.json`, no molde do `paginas.json`, e de quebra tira
   60 `ListObjectsV2` de cada ciclo.
-- **VPS para worker e robôs** (AD-104): o dono detalha a máquina; depois, plano e ticket.
+- **VPS para worker e robôs** (AD-104): specs escritas e implementadas — BSV-42 (robôs no Linux ARM,
+  PR #81) e BSV-43 (binário ARM64 do worker e timers, PR #80), as duas com CI verde e Verifier. Falta a
+  execução real na instância 1, que bloqueia o merge das duas.
 - Página da oferta: trocar a faixa "Oferta expirada" por "Encerrada" (mesma palavra dos cards).
 - **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
   do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono); desligar o XE local
