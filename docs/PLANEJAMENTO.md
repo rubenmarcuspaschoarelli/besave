@@ -106,6 +106,10 @@ Feito e no ar:
 Próximos, nesta ordem:
 - **Cupom com vários códigos** (AD-102): o worker separa `DS_CUPOM` por `|`; hoje ~150 ofertas saem sem
   cupom porque o campo inteiro não cabe no padrão.
+- **Imagem reenviada por hash** (BSV-45): o worker decide o envio de imagem por existência de chave, então
+  foto trocada no mesmo id nunca sobe — todo backfill de imagem exige apagar a chave no S3 à mão (foi o
+  que aconteceu em 19/10). Troca por `_estado/imagens.json`, no molde do `paginas.json`, e de quebra tira
+  60 `ListObjectsV2` de cada ciclo.
 - **VPS para worker e robôs** (AD-104): o dono detalha a máquina; depois, plano e ticket.
 - Página da oferta: trocar a faixa "Oferta expirada" por "Encerrada" (mesma palavra dos cards).
 - **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
