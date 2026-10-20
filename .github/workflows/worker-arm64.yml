@@ -1,0 +1,143 @@
+# Binários Linux ARM64 do worker para a VPS (BSV-43). Nada se compila na VPS: ela instala o artefato
+# com infra/vps/instalar.sh (produção = push em main, AD-060; PR = teste real antes do merge).
+# Sem segredo, sem AWS, sem Oracle. O token só lê o próprio artefato.
+name: worker-arm64
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/worker/**'
+      - 'packages/contract/**'
+      - 'infra/vps/**'
+      - '.github/workflows/worker-arm64.yml'
+  pull_request:
+    branches: [develop]
+    paths:
+      - 'apps/worker/**'
+      - 'packages/contract/**'
+      - 'infra/vps/**'
+      - '.github/workflows/worker-arm64.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: worker-arm64-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Na PR, o commit da ponta (não o merge sintético): é o sha que o gh devolve como headSha e
+  # que dá nome ao artefato.
+  COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    outputs:
+      artefato: ${{ steps.art.outputs.nome }}
+    defaults: { run: { working-directory: apps/worker } }
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.COMMIT }}" }
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/worker
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test
+      - run: cargo build --release --bin besave-ciclo --bin besave-envio --bin besave-worker
+      - id: art
+        name: Binários e SHA256SUMS
+        run: |
+          d="$RUNNER_TEMP/artefato"
+          mkdir -p "$d"
+          cp target/release/besave-ciclo target/release/besave-envio target/release/besave-worker "$d/"
+          (cd "$d" && sha256sum besave-ciclo besave-envio besave-worker > SHA256SUMS && cat SHA256SUMS)
+          echo "nome=worker-linux-arm64-${COMMIT::7}" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.art.outputs.nome }}
+          path: ${{ runner.temp }}/artefato/
+          retention-days: 90
+          if-no-files-found: error
+
+  # Conferências que só um Linux ARM faz: o instalar.sh real contra o artefato desta execução,
+  # as unidades systemd e um ciclo de verdade pelo systemd (fonte fake, destino local).
+  vps:
+    needs: build
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with: { ref: "${{ env.COMMIT }}" }
+      - name: Ferramentas
+        run: |
+          faltam=""
+          for c in shellcheck file gh; do command -v "$c" >/dev/null || faltam="$faltam $c"; done
+          if [ -n "$faltam" ]; then
+            sudo apt-get update -q
+            # shellcheck disable=SC2086
+            sudo apt-get install -y -q $faltam
+          fi
+      - run: shellcheck infra/vps/*.sh
+      - run: bash infra/vps/teste_instalar.sh
+
+      - name: Artefato confere (sha256sum -c, 3 binários aarch64)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOME: ${{ needs.build.outputs.artefato }}
+        run: |
+          d="$RUNNER_TEMP/conferencia"
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" -n "$NOME" -D "$d"
+          cd "$d"
+          ls -la
+          [ "$(find . -type f | LC_ALL=C sort | tr '\n' ' ')" = "./SHA256SUMS ./besave-ciclo ./besave-envio ./besave-worker " ]
+          sha256sum -c SHA256SUMS
+          for b in besave-ciclo besave-envio besave-worker; do
+            file "$b" | tee /dev/stderr | grep -q 'ELF 64-bit LSB .*ARM aarch64'
+          done
+
+      - name: instalar.sh com o artefato desta execução
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BESAVE_REPO: ${{ github.repository }}
+        run: |
+          sudo useradd --system --create-home besave
+          sudo install -d -o "$USER" /srv/besave/bin
+          bash infra/vps/instalar.sh "$GITHUB_RUN_ID"
+          cat /srv/besave/bin/VERSAO
+          grep -qx "commit=$COMMIT" /srv/besave/bin/VERSAO
+          /srv/besave/bin/besave-worker --help > /dev/null
+
+      - name: systemd-analyze verify
+        run: systemd-analyze verify infra/vps/besave-ciclo.service infra/vps/besave-ciclo.timer infra/vps/besave-envio.service infra/vps/besave-envio.timer
+
+      - name: Ciclo pelo systemd (pastas do worker.env.example, fonte fake, destino local)
+        run: |
+          sudo install -d -o besave -g besave /srv/besave/logs /srv/besave/estado /srv/besave/imagens/ofertas/img /srv/besave/site
+          {
+            grep -E '^(BESAVE_LOG_DIR|BESAVE_LOCK|BESAVE_ENVIO_LOCK|BESAVE_IMAGENS_DIR)=' infra/vps/worker.env.example
+            echo BESAVE_FONTE=fake
+            echo BESAVE_DESTINO_LOCAL=/srv/besave/site
+            echo BESAVE_BASE_URL=https://exemplo.invalid
+          } > "$RUNNER_TEMP/worker.env"
+          sudo install -o besave -g besave -m 600 "$RUNNER_TEMP/worker.env" /srv/besave/worker.env
+          sudo cp infra/vps/besave-*.service infra/vps/besave-*.timer /etc/systemd/system/
+          sudo systemctl daemon-reload
+          sudo systemctl start besave-ciclo.service || true
+          systemctl show besave-ciclo.service -p Result -p ExecMainStatus
+          sudo cat /srv/besave/logs/besave-worker.*.log
+          [ "$(systemctl show besave-ciclo.service -p ExecMainStatus --value)" = 0 ]
+          sudo grep -q ' relatorio ' /srv/besave/logs/besave-worker.*.log
+          sudo test -f /srv/besave/site/manifest.json
+          sudo test -f /srv/besave/estado/worker.lock
+          sudo systemctl enable --now besave-ciclo.timer besave-envio.timer
+          systemctl list-timers 'besave-*' --all
+          systemctl is-active besave-ciclo.timer besave-envio.timer

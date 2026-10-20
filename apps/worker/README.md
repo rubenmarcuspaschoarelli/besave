@@ -683,6 +683,100 @@ o lote de ofertas segue; 429 encerra a execução como nas ofertas. `--sim` most
 - Só no canal (a página fica): `UPDATE AVISO_CANAL SET ST_ATIVO = 0 WHERE ID_AVISO = :id AND ID_CANAL = 1; COMMIT;`
 - Mudar a frequência: `UPDATE AVISO_CANAL SET NR_INTERVALO_MIN = 240 WHERE ID_AVISO = :id; COMMIT;`
 
+## Rodar no Linux (VPS)
+
+`besave-ciclo` e `besave-envio` rodam na instância 1 da OCI (Ubuntu 24.04 ARM64) pelo `systemd`, com
+o mesmo comportamento do Agendador do Windows. **Nada se compila na VPS** (BSV-43): o workflow
+`worker-arm64.yml` gera no runner ARM, a cada push em `main` que toca o worker (e em cada PR para
+`develop`), o artefato `worker-linux-arm64-<sha7>` com `besave-ciclo`, `besave-envio`,
+`besave-worker` e `SHA256SUMS` (90 dias). Arquivos em `infra/vps/`.
+
+### Pré-requisitos (roteiro `docs/infra/VPS-INSTANCIA-1.md`)
+
+- Fases 2 e 4: usuário `besave`, `/srv/besave/{bin,logs,imagens,oracle}`, Instant Client no `ldconfig`,
+  wallet em `/srv/besave/oracle/wallet`. Mais a pasta das travas e do estado e a dos avisos:
+  `sudo install -d -o besave -g besave /srv/besave/estado /srv/besave/imagens/avisos`.
+- `gh` (`sudo apt install -y gh`) autenticado como `besave` (`sudo -iu besave gh auth login`). O
+  artefato exige login mesmo com o repositório público; um token *fine-grained* só com
+  **Actions: read** neste repositório basta.
+- Credenciais AWS do perfil do worker em `~besave/.aws/` (o `AWS_PROFILE` do `.env`).
+- `.env`: copie `infra/vps/worker.env.example` para `/srv/besave/worker.env` (`chmod 600`, dono
+  `besave`) e preencha os `...` com os valores do `.env` do PC, **inclusive `AWS_REGION`** (a do PC,
+  hoje `us-east-1`; região errada faz o S3 e a KVS falharem). É lido pelo `systemd` (`EnvironmentFile`):
+  `CHAVE=valor`, sem aspas. Sem `BESAVE_ORACLE_CLIENT_DIR` (a biblioteca vem do `ldconfig`). Sem
+  `LOCALAPPDATA`, `alerta.json`, `alerta-envio.json` e `envio-estado.json` ficam em `/srv/besave/estado/`,
+  ao lado das travas.
+
+### Instalar ou atualizar os binários
+
+```bash
+sudo -iu besave /srv/besave/repo/infra/vps/instalar.sh          # último push ok em main (produção)
+sudo -iu besave /srv/besave/repo/infra/vps/instalar.sh 1234567  # uma execução: reverter ou testar a PR
+cat /srv/besave/bin/VERSAO                                      # execução, commit, ramo, data
+```
+
+O script baixa o artefato, confere o `SHA256SUMS` (recusa hash errado, binário ausente ou lista
+incompleta, sem tocar em `/srv/besave/bin`) e troca cada binário por `rename`: um timer nunca executa
+arquivo pela metade, e um ciclo em andamento termina com o binário antigo. Não precisa parar os
+timers. ID de execução de PR instala com aviso: só para o teste real antes do merge (AD-060).
+Reverter = rodar com o ID de uma execução anterior de `main` (Actions → worker-arm64).
+
+Conferir antes de ligar, à mão, lendo o Oracle:
+
+```bash
+sudo -iu besave /srv/besave/bin/besave-worker --dry-run --env-file /srv/besave/worker.env
+```
+
+### Unidades
+
+```bash
+sudo cp /srv/besave/repo/infra/vps/besave-{ciclo,envio}.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+```
+
+| unidade | o quê |
+|---|---|
+| `besave-ciclo.timer` | a cada 5 min no relógio (`:00`, `:05`, …) |
+| `besave-envio.timer` | a cada 5 min, 2 min depois (`:02`, `:07`, …) |
+| `besave-*.service` | `oneshot` como `besave`, `EnvironmentFile=/srv/besave/worker.env`, encerrado após 20 min |
+
+`Persistent=false`: execução perdida com a máquina desligada não é recuperada no boot. Enquanto um
+ciclo roda, o timer não abre outro (e a trava continua valendo, como no PC).
+
+### Virada do PC para a VPS
+
+**Nunca os dois lugares ao mesmo tempo:** dois envios postam em dobro no canal.
+
+1. No PC: Agendador de Tarefas → desabilitar **as duas** tarefas, **Besave Worker** e **Besave Envio**
+   (ou removê-las: `.\scripts\remover-tarefa.ps1` e `.\scripts\remover-tarefa.ps1 -NomeTarefa 'Besave Envio'`;
+   sem o parâmetro o script remove só o worker), e esperar a execução em andamento terminar.
+2. Copiar do PC as imagens recentes das ofertas para `/srv/besave/imagens/ofertas/img/` (o envio usa a
+   foto local, AD-080) e **todas** as imagens dos avisos (a pasta do `BESAVE_AVISOS_DIR` do PC) para
+   `/srv/besave/imagens/avisos/`; sem elas, a página do aviso perde a imagem e o post sai sem foto.
+3. Na VPS: `sudo systemctl enable --now besave-ciclo.timer besave-envio.timer`.
+4. Conferir: `systemctl list-timers 'besave-*'`; o primeiro ciclo tem zero escritas além dos
+   manifests e `t_leitura_fonte` menor que no PC; o próximo lote do envio sai no canal.
+5. Depois do primeiro ciclo (e dos 5 min de cache do `robots.txt` na borda), o site continua indexável (`BESAVE_INDEXAVEL=true` no `worker.env`):
+
+   ```bash
+   curl -s https://besave.com.br/robots.txt | grep -x 'Allow: /'   # sem saída = Disallow: desligar os timers e corrigir
+   ```
+
+Voltar para o PC: `sudo systemctl disable --now besave-ciclo.timer besave-envio.timer` **antes** de
+reabilitar as tarefas do Windows.
+
+### Logs
+
+Os mesmos arquivos do PC, em `BESAVE_LOG_DIR` (`/srv/besave/logs/besave-worker.AAAA-MM-DD.log` e
+`besave-envio.AAAA-MM-DD.log`), mesma linha `relatorio` e mesmo alerta no Telegram. O código de saída
+fica no `systemd`:
+
+```bash
+systemctl status besave-ciclo.service            # Result, código da última execução
+journalctl -u besave-ciclo.service -n 20         # início/fim e falha ao iniciar (.env ausente, binário)
+tail -f /srv/besave/logs/besave-worker.$(date +%F).log
+```
+
 ## Testes
 
 ```sh
