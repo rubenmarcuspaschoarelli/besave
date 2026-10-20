@@ -1,5 +1,9 @@
-# BSV-45 · Robô das lojas: captura local para lojas com captcha, imagens para a VPS
+# BSV-46 · Robô das lojas: captura local para lojas com captcha, imagens para a VPS
 
+
+**Situação (20/10):** em espera. Antes, contar por alguns dias os captchas da Shopee e as verificações do
+Mercado Livre na VPS; se o Mercado Livre também precisar, ele entra em `lojas_locais`. Renumerada de
+BSV-45 (o número ficou com a spec da PR #83).
 **Papel:** Python (+ configuração de SSH na VPS) · **Pastas:** `tools/capture-store-pages/` e `tools/vps/` ·
 **Depende de:** BSV-42 (PR #81) **mergeada** — mexe nos mesmos arquivos (`main.py`, `core/estado.py`,
 `core/browser.py`). AD-080, AD-100, AD-104; `docs/infra/VPS-INSTANCIA-1.md`
