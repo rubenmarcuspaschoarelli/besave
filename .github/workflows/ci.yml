@@ -19,6 +19,7 @@ jobs:
       api:      ${{ steps.f.outputs.api }}
       site:     ${{ steps.f.outputs.site }}
       infra:    ${{ steps.f.outputs.infra }}
+      tools:    ${{ steps.f.outputs.tools }}
       workflows: ${{ steps.f.outputs.workflows }}
     steps:
       - uses: actions/checkout@v7
@@ -31,6 +32,7 @@ jobs:
             api:      ['apps/api/**', 'packages/contract/**']
             site:     ['apps/site/**', 'packages/contract/**']
             infra:    ['infra/**']
+            tools:    ['tools/**']
             workflows: ['.github/**']
 
   workflows:
@@ -138,3 +140,21 @@ jobs:
       - if: steps.node.outputs.ok == 'true'
         working-directory: infra/functions
         run: npm ci && npm test
+
+  tools:
+    needs: changes
+    if: needs.changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - run: pip install -r tools/requirements-dev.txt
+      # pytest.ini fica em tools/: rodar de fora coletaria programas_ajuste/.
+      - name: pytest
+        working-directory: tools
+        run: pytest
+      # shellcheck já vem no ubuntu-latest.
+      - run: shellcheck tools/vps/*.sh
+      # Só o código novo; as violações antigas de main.py e wa/storage.py ficam fora.
+      - run: ruff check tools/vps/ tools/tests/

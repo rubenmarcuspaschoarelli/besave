@@ -1,0 +1,26 @@
+# Captura de paginas de loja (capture-store-pages, --monitorar) - unidade de USUARIO.
+# Instalar em ~/.config/systemd/user/ (ver tools/vps/README.md).
+# O robo roda numa sessao tmux (tmux -L besave-lojas attach) com DISPLAY=:1: o
+# pedido de login do Mercado Livre/Shopee aparece la, no input().
+[Unit]
+Description=Besave - captura de paginas de loja
+After=besave-vnc.service
+Requires=besave-vnc.service
+# Falha de partida (contador atrasado, tela ainda subindo) nao deixa a unidade em
+# 'failed': tenta de novo a cada RestartSec, sem limite.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/besave/repo/tools/capture-store-pages
+Environment=BESAVE_DISPLAY=:1
+# a tela :1 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
+ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
+ExecStart=/srv/besave/repo/tools/vps/rodar_em_tmux.sh executar besave-lojas /srv/besave/repo/tools/capture-store-pages /srv/besave/repo/tools/capture-store-pages/destino/log/main_monitorar.log /srv/besave/repo/tools/capture-store-pages/.venv/bin/python -u main.py --monitorar
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

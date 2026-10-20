@@ -37,7 +37,6 @@ import argparse
 import os
 import sys
 import time
-import subprocess
 from datetime import datetime
 
 from playwright.sync_api import sync_playwright
@@ -45,6 +44,7 @@ from playwright.sync_api import sync_playwright
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
                   validade)
+from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
 from core.caminhos import DESTINO_DIR, IMG_DIR, em_log
@@ -62,23 +62,11 @@ STATUS_MANTER_PENDENTE = {'loja_nao_implementada'}
 MARCAS_BLOQUEIO = ('verify/', 'account-verification')
 
 
-def _chrome_aberto():
-    # True se houver algum processo chrome.exe (janela do usuario) em execucao.
-    try:
-        out = subprocess.run(
-            ['tasklist', '/FI', 'IMAGENAME eq chrome.exe', '/NH'],
-            capture_output=True, text=True,
-        ).stdout.lower()
-        return 'chrome.exe' in out
-    except Exception:
-        return False
-
-
 def _gate_fechar_navegadores():
     # Antes de abrir o navegador de automacao, garante que NENHUM Chrome esteja
     # aberto — assim a unica janela na tela sera a da automacao (nao ha como
     # logar na janela errada) e nao ha conflito de perfil.
-    if not _chrome_aberto():
+    if not processos.chrome_aberto():
         return
     while True:
         print('\n' + '=' * 64)
@@ -90,9 +78,9 @@ def _gate_fechar_navegadores():
         if resp == 'q':
             sys.exit(0)
         if resp == 'f':
-            subprocess.run(['taskkill', '/IM', 'chrome.exe', '/F'], capture_output=True)
+            processos.fechar_chrome_forcado()
             time.sleep(2)
-        if not _chrome_aberto():
+        if not processos.chrome_aberto():
             print('OK: nenhum Chrome aberto.\n')
             return
         print('  ...ainda detectei Chrome aberto. Tente novamente.')
