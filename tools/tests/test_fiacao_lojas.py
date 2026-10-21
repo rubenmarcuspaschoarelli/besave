@@ -20,6 +20,9 @@ class Parar(Exception):
 def lojas(monkeypatch):
     antes = set(sys.modules)
     falsos.instalar(monkeypatch)
+    from core import estado
+    # no Linux o import dos modulos de imagem exige "s3.raiz" no config.json
+    monkeypatch.setattr(estado, "ler_raiz_s3", lambda *a, **k: "/s3-falso")
     yield falsos.importar(monkeypatch, "main_lojas", LOJAS / "main.py")
     for nome in set(sys.modules) - antes:  # nada importado com os falsos vaza para outros testes
         if nome != "core.janela":
