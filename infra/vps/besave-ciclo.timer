@@ -1,0 +1,12 @@
+# A cada 5 min, no relógio (:00, :05, …). Persistent=false: ciclo perdido com a máquina desligada não
+# é recuperado no boot; o próximo disparo basta. Enquanto um ciclo roda, o timer não abre outro.
+[Unit]
+Description=Besave: ciclo do worker a cada 5 min
+
+[Timer]
+OnCalendar=*:0/5
+AccuracySec=1s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+# Envio ao canal do Telegram (BSV-40) na VPS (BSV-43): um lote por disparo do besave-envio.timer.
+# Nunca ligar com a tarefa "Besave Envio" do PC ativa: os dois postariam em dobro no canal.
+[Unit]
+Description=Besave: envio ao canal do Telegram
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/worker.env
+ExecStart=/srv/besave/bin/besave-envio
+TimeoutStartSec=20min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full

@@ -9,9 +9,9 @@ e cair em baseline (nao captura o passado). Lendo o nome do proprio config, o no
 usado e sempre identico a chave do estado.
 
 Uso:
-    .venv\\Scripts\\python.exe -u run_captura.py                 # catch-up dos 3 grupos
-    .venv\\Scripts\\python.exe -u run_captura.py --seg-grupo 8
-    .venv\\Scripts\\python.exe -u run_captura.py --max 40        # sweep (ignora datas)
+    python -u run_captura.py                 # catch-up dos 3 grupos (python do .venv)
+    python -u run_captura.py --seg-grupo 8
+    python -u run_captura.py --max 40        # sweep (ignora datas)
 """
 
 import argparse
@@ -64,7 +64,7 @@ sys.stdout = _PrefixoHora(sys.stdout)
 sys.stderr = _PrefixoHora(sys.stderr)
 
 from wa.monitor import captura_msg_whatsapp
-from wa.storage import CONFIG_PATH
+from wa.storage import CONFIG_PATH, ConfigFaltando, validar_destino_s3
 
 
 def grupos_do_config():
@@ -82,6 +82,12 @@ def main():
     ap.add_argument("--seg-grupo", type=int, default=5, dest="seg_grupo",
                     help="Segundos parado em cada grupo antes de pular (padrao: 5).")
     args = ap.parse_args()
+
+    try:
+        validar_destino_s3()
+    except ConfigFaltando as e:
+        print(f"[run] {e}")
+        return 2
 
     grupos = grupos_do_config()
     if not grupos:

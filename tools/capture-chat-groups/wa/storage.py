@@ -16,6 +16,7 @@ import io
 import json
 import os
 import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -38,7 +39,26 @@ CONFIG_PATH = CONF_DIR / "config.json"
 
 # Pasta do site (bucket local) para onde a imagem final + miniatura de cada
 # oferta sao publicadas, calibravel em config.json -> "publicacao_s3".
-S3_IMG_DIR_PADRAO = r"E:\Work\besave\server\s3\ofertas\img"
+S3_IMG_DIR_PADRAO = r"E:\Work\besave\server\s3\ofertas\img"   # so Windows; no Linux a chave e obrigatoria
+
+
+class ConfigFaltando(RuntimeError):
+    """Chave obrigatoria ausente do config.json (sem padrao seguro na plataforma)."""
+
+
+def destino_s3(cfg: dict, plataforma: str | None = None) -> Path:
+    """Pasta de publicacao das imagens: 'publicacao_s3.destino' do config.json.
+    Ausente -> padrao no Windows; no Linux levanta erro citando a chave."""
+    destino = cfg.get("destino")
+    if destino:
+        return Path(destino)
+    if (plataforma or sys.platform) == "win32":
+        return Path(S3_IMG_DIR_PADRAO)
+    raise ConfigFaltando(
+        'Falta "publicacao_s3.destino" em conf/config.json: pasta local que '
+        "espelha ofertas/img do S3 (ex.: /home/ubuntu/s3/ofertas/img). "
+        "Sem padrao fora do Windows."
+    )
 
 # Nomes das colunas do CSV (nomes de saida; as chaves internas do dict `campos`
 # do parser continuam com os nomes antigos). DS_TIPO_ORIGEM e uma constante fixa.
@@ -514,7 +534,7 @@ def publicar_principal_s3(origem, numero, pasta: Path = None) -> str:
     de falha - quem chama decide se e best-effort. Devolve o caminho gravado."""
     qualidade, max_px, max_bytes = _cfg_s3_principal()
     if pasta is None:
-        pasta = Path(_cfg_s3().get("destino") or S3_IMG_DIR_PADRAO) / str(numero)
+        pasta = destino_s3(_cfg_s3()) / str(numero)
     pasta.mkdir(parents=True, exist_ok=True)
     with Image.open(origem) as im:
         im.load()
@@ -545,8 +565,7 @@ def publicar_s3(caminho_img: str, numero) -> str:
     if not origem.exists():
         return ""
     qualidade = int(cfg.get("qualidade", 90) or 90)
-    raiz = Path(cfg.get("destino") or S3_IMG_DIR_PADRAO)
-    pasta = raiz / str(numero)
+    pasta = destino_s3(cfg) / str(numero)
     try:
         publicar_principal_s3(origem, numero, pasta)
         thumb = caminho_thumbnail(origem)
@@ -559,6 +578,15 @@ def publicar_s3(caminho_img: str, numero) -> str:
     except Exception as e:  # noqa: BLE001
         print(f"[storage] Falha ao publicar imagem {numero} em {pasta}: {e}")
         return ""
+
+
+def validar_destino_s3() -> None:
+    """Falha na PARTIDA (ConfigFaltando) se a publicacao esta ativa e o destino
+    nao tem padrao na plataforma. Sem isso o erro cairia nos try/except do
+    salvamento e a imagem seria movida sem ser publicada."""
+    cfg = _cfg_s3()
+    if bool(cfg.get("ativo", True)):
+        destino_s3(cfg)
 
 
 def _finalizar_imagem(destino: Path, numero) -> str:

@@ -13,6 +13,7 @@ do dict lido) e e best-effort: falha ao salvar so imprime aviso.
 
 import json
 import os
+import sys
 
 CONFIG_PATH = os.path.join('conf', 'config.json')
 
@@ -93,12 +94,23 @@ def ler_validade_ofertas(caminho=CONFIG_PATH, padrao=45):
     return max(valor, 0)
 
 
-def ler_raiz_s3(caminho=CONFIG_PATH, padrao=PADRAO_RAIZ_S3):
+class ConfigFaltando(RuntimeError):
+    """Chave obrigatoria ausente do config.json (sem padrao seguro na plataforma)."""
+
+
+def ler_raiz_s3(caminho=CONFIG_PATH, padrao=PADRAO_RAIZ_S3, plataforma=None):
     """Pasta local que espelha o S3 do site ("s3.raiz" no config.json).
     Dentro dela: ofertas/img/<ID_OFERTA>/ e produtos/img/<ID_PRODUTO>/.
-    Ausente/vazio -> padrao (a pasta da maquina local)."""
+    Ausente/vazio -> padrao no Windows (a pasta da maquina local); no Linux nao
+    ha padrao e o robo para dizendo qual chave falta."""
     valor = (_ler_config(caminho).get('s3') or {}).get('raiz')
-    return str(valor).strip() if valor and str(valor).strip() else padrao
+    if valor and str(valor).strip():
+        return str(valor).strip()
+    if (plataforma or sys.platform) == 'win32':
+        return padrao
+    raise ConfigFaltando(
+        f'Falta "s3.raiz" em {caminho}: pasta local que espelha o S3 do site '
+        '(ex.: /home/ubuntu/s3). Sem padrao fora do Windows.')
 
 
 def usa_imagem_loja(ds_origem, caminho=CONFIG_PATH):

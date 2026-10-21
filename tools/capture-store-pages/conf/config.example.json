@@ -1,4 +1,8 @@
 {
+  "navegador": {
+    "canal": "chrome",
+    "_obs": "chrome = Google Chrome do PC (captcha da Shopee). Vazio (\"\") = Chromium do Playwright, para Linux ARM64."
+  },
   "controle": {
     "ultimo_id_processado": 0
   },
