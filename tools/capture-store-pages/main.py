@@ -387,6 +387,15 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
     gravadas = 0
     com_erro = 0
     tempos = {}  # loja -> [_Cronometro] (media do lote no fim, _resumo_tempos)
+    # Menor ID que ficou '0' (nao gravado) nesta execucao: o ponteiro de retomada
+    # nunca passa dele, senao a linha so seria relida com --desde.
+    trava = min(adiados) if adiados else None
+
+    def _travar(id_oferta):
+        nonlocal trava
+        trava = id_oferta if trava is None else min(trava, id_oferta)
+        if adiados is not None:
+            adiados.add(id_oferta)
 
     for row in rows:
         cron = _Cronometro()
@@ -522,9 +531,11 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 if ok:
                     gravadas += 1
                     status_db = ' | oracle=ok'
-                    # Ponteiro so avanca no sucesso: se o processo cair, a
-                    # proxima execucao recomeca da primeira linha nao gravada.
-                    estado.gravar_ultimo_id(id_oferta)
+                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
+                    # gravada: se o processo cair, a proxima execucao recomeca
+                    # da primeira linha nao gravada.
+                    if trava is None or id_oferta < trava:
+                        estado.gravar_ultimo_id(id_oferta)
                     # Cadastro consolidado de produtos (BESAVE.PRODUTO): le de
                     # volta a linha JA GRAVADA (numeros/LS_* ja convertidos,
                     # ver core/oracle_db.buscar_para_produto) e acha-ou-cria o
@@ -626,15 +637,13 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
-                    if adiados is not None:
-                        adiados.add(id_oferta)
+                    _travar(id_oferta)
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha
                 # quando a loja passar a ser suportada.
                 status_db = ' | oracle=pendente(0)'
-                if adiados is not None:
-                    adiados.add(id_oferta)
+                _travar(id_oferta)
             else:
                 ok, erro = db.marcar_erro(
                     id_oferta, out['status_captura'], out['url_final'], ativo=ativo)
@@ -644,8 +653,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 else:
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
-                    if adiados is not None:
-                        adiados.add(id_oferta)
+                    _travar(id_oferta)
 
         # Marca so quando a loja TEM fluxo de link de afiliado: '-' ali quer
         # dizer "tentou e nao veio" (sessao deslogada / layout mudou), nao
