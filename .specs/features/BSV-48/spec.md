@@ -38,6 +38,8 @@ por quê, e a CPU de 1 OCPU saturou. O dono pediu captura a cada 2 h das 22h às
 | Janela lida | No arranque do robô | Simples; documentado no README | n |
 | Código de saída da recusa sem senha | 78 + `RestartPreventExitStatus=78` | Sem laço de reinício; falha visível no `journalctl` | n |
 | `iniciar_captura.sh` à mão | Padrão `BESAVE_DISPLAY=:2` | É o WhatsApp; `:1` é das lojas | n |
+| Senha do VNC | Dois caminhos padrão; `~/.vncpasswd` não vale | TigerVNC 1.13 vs. antigos; arquivo da VPS é `~/.vnc/passwd` | y |
+| Tela do WhatsApp | `xfwm4` sozinho, barramento próprio por tela | Evita 2ª sessão Xfce competindo no mesmo usuário | y |
 | Exemplos de config | Bloco `janela_noturna` com campos vazios | Copiar o exemplo não liga a janela | n |
 
 Open questions: none
@@ -58,8 +60,8 @@ Open questions: none
 
 **Acceptance Criteria**:
 
-1. VNC-01: WHEN `~/.vnc/passwd` falta ou está vazio THEN `iniciar_vnc.sh` SHALL sair com 78, escrever mensagem citando `vncpasswd` e não chamar o `vncserver`.
-2. VNC-02: WHEN há senha THEN SHALL executar `vncserver :N -fg -localhost yes -geometry 1600x900 -xstartup /usr/bin/startxfce4`.
+1. VNC-01: WHEN nem `~/.config/tigervnc/passwd` (TigerVNC 1.13) nem `~/.vnc/passwd` (versões antigas) existem com conteúdo THEN `iniciar_vnc.sh` SHALL sair com 78, escrever mensagem citando `vncpasswd` e não chamar o `vncserver`.
+2. VNC-02: WHEN há senha THEN SHALL executar `vncserver :N -fg -localhost yes -geometry 1600x900 -xstartup <xstartup da tela>` com a senha em qualquer um dos dois caminhos; a tela 1 usa `xstartup-xfce.sh` (Xfce, `dbus-run-session`) e as demais `xstartup-leve.sh` (`xfwm4` sozinho, `dbus-run-session`).
 3. VNC-03: WHEN N não é número de 1 a 99 THEN SHALL sair com 2 sem chamar o `vncserver`.
 4. VNC-04: A unidade SHALL ter `RestartPreventExitStatus=78` e o README o passo `vncpasswd` à parte.
 
@@ -79,7 +81,7 @@ Open questions: none
 2. JAN-02: WHEN `agora` está antes de `inicio` THEN SHALL estar fora; em `inicio` e depois, dentro; em `fim` e depois, fora; também com janela que cruza a meia-noite.
 3. JAN-03: WHEN dentro da janela THEN a pausa entre rodadas SHALL ser `min(intervalo_minutos, tempo até o fim)`; fora, o ritmo normal.
 4. JAN-04: WHEN o robô das lojas está na janela THEN SHALL dormir também depois de processar um lote.
-5. JAN-05: WHEN o WhatsApp termina uma rodada dentro da janela THEN SHALL dormir em fatias de até 5 s sem fechar processo ou navegador, e o estado SHALL continuar sendo salvo no `finally`.
+5. JAN-05: (testado nos laços com módulos falsos e relógio injetado, como o JAN-04) WHEN o WhatsApp termina uma rodada dentro da janela THEN SHALL dormir em fatias de até 5 s sem fechar processo ou navegador, e o estado SHALL continuar sendo salvo no `finally`.
 6. JAN-06: Os `config.example.json` SHALL documentar a chave sem ligar a janela.
 
 ---

@@ -19,6 +19,11 @@ próprio servidor `tmux` (`-L <sessão>`).
 | lojas | `:1` | `5901` | `besave-vnc@1` |
 | WhatsApp | `:2` | `5902` | `besave-vnc@2` |
 
+A tela `:1` roda o Xfce completo; a `:2` roda **só o gerenciador de janelas (`xfwm4`)**, sem painel nem
+segunda sessão Xfce. Cada tela sobe sob o seu próprio barramento (`dbus-run-session`), para as duas
+não dividirem o `dbus` do usuário (`xstartup-xfce.sh` e `xstartup-leve.sh`, escolhidos pelo
+`iniciar_vnc.sh`). Falta conferir na prática as duas telas ao mesmo tempo (item do aceite da BSV-48).
+
 ## Instalar (uma vez, como o usuário `besave`)
 
 ```bash
@@ -33,10 +38,12 @@ systemctl --user enable besave-vnc@1 besave-vnc@2 besave-captura-whatsapp besave
 **Senha do VNC (passo próprio, interativo — uma vez, antes de subir as telas):**
 
 ```bash
-vncpasswd        # pede a senha duas vezes; grava ~/.vnc/passwd (vale para as duas telas)
+vncpasswd        # pede a senha duas vezes (vale para as duas telas)
 ```
 
-Sem `~/.vnc/passwd` a tela **recusa subir**: o `journalctl --user -u besave-vnc@1` mostra
+O TigerVNC 1.13 (Ubuntu 24.04) grava em `~/.config/tigervnc/passwd`; versões antigas usam `~/.vnc/passwd`
+(na VPS o arquivo está em `/home/besave/.vnc/passwd`). A checagem aceita os **dois** caminhos e não
+`~/.vncpasswd`. Sem nenhum dos dois (ou com o arquivo vazio) a tela **recusa subir**: o `journalctl --user -u besave-vnc@1` mostra
 `ABORTADO: sem senha do VNC` e a unidade fica em `failed` (código 78, sem reinício em laço). Rode o
 `vncpasswd` e suba de novo.
 

@@ -64,12 +64,14 @@ def carregar(caminho):
         return None
 
 
-def dormir_ate_proxima_rodada(janela, agora=datetime.now, dormir=time.sleep):
+def dormir_ate_proxima_rodada(janela, agora=None, dormir=None):
     """Dentro da janela, dorme ate a proxima rodada (fatias de 5 s: Ctrl+C responde).
 
     Devolve os segundos dormidos (0 fora da janela). O relogio e o dormir entram
     por parametro para teste.
     """
+    agora = agora or datetime.now
+    dormir = dormir or time.sleep
     inicio = agora()
     total = espera_s(janela, inicio, 0) if dentro(janela, inicio) else 0
     restante = total
