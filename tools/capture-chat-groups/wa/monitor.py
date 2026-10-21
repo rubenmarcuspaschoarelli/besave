@@ -23,7 +23,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from . import browser, estado as estado_mod, oracle_db, parser, storage
+from . import browser, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
 
 SELETOR_MENSAGENS = '#main [data-testid="conversation-panel-messages"] div[data-id]'
 
@@ -1182,6 +1182,10 @@ def captura_msg_whatsapp(
 
             # --- Fase 2: RODIZIO ao vivo ---
             print(f"[monitor] Rodizio ao vivo ({seg_grupo}s/grupo). Ctrl+C para parar.")
+            janela = janela_mod.carregar(estado_mod.ESTADO_PATH)
+            if janela:
+                print(f"[monitor] Janela noturna {janela[0]:%H:%M}-{janela[1]:%H:%M}: "
+                      f"uma rodada a cada {janela[2] / 60:g} min dentro dela.")
             # Relogio de PAREDE de proposito: time.monotonic() nao conta o tempo
             # em que a maquina fica suspensa no Windows, que e exatamente o caso
             # que precisamos detectar (ver _recuperar_lacuna).
@@ -1245,6 +1249,13 @@ def captura_msg_whatsapp(
                     print(f"[monitor] Rodizio destravado apos {voltas_cegas} volta(s) cega(s).")
                     voltas_cegas = 0
                     inicio_do_cegueira = None
+
+                # Janela noturna: dorme entre as rodadas. A pausa conta como parada
+                # logo abaixo, e a lacuna (>= LACUNA_RECAPTURA_S) dispara o catch-up
+                # pelo marcador de cada grupo: nada do que chegou dormindo se perde.
+                dormido = janela_mod.dormir_ate_proxima_rodada(janela)
+                if dormido:
+                    print(f"[monitor] Janela noturna: rodada concluida; dormiu {dormido / 60:g} min.")
 
                 agora = datetime.now()
                 parado = (agora - fim_da_volta).total_seconds()

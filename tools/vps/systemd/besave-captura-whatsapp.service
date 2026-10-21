@@ -1,12 +1,12 @@
 # Captura dos grupos de WhatsApp (capture-chat-groups) - unidade de USUARIO.
 # Instalar em ~/.config/systemd/user/ (ver tools/vps/README.md).
-# O robo roda numa sessao tmux (tmux -L besave-whatsapp attach) com DISPLAY=:1.
+# O robo roda numa sessao tmux (tmux -L besave-whatsapp attach) com DISPLAY=:2.
 # As conferencias (um run so, perfil livre, contador em dia) ficam no
 # iniciar_captura.sh: se alguma falhar, a unidade falha em vez de subir errado.
 [Unit]
 Description=Besave - captura de grupos do WhatsApp
-After=besave-vnc.service
-Requires=besave-vnc.service
+After=besave-vnc@2.service
+Requires=besave-vnc@2.service
 # Falha de partida (contador atrasado, tela ainda subindo) nao deixa a unidade em
 # 'failed': tenta de novo a cada RestartSec, sem limite.
 StartLimitIntervalSec=0
@@ -14,9 +14,9 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 WorkingDirectory=/srv/besave/repo/tools/capture-chat-groups
-Environment=BESAVE_DISPLAY=:1
-# a tela :1 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
-ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
+Environment=BESAVE_DISPLAY=:2
+# a tela :2 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
+ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X2 ] && exit 0; sleep 1; done; exit 1'
 ExecStart=/srv/besave/repo/tools/vps/iniciar_captura.sh --aguardar
 KillSignal=SIGINT
 Restart=on-failure

@@ -80,7 +80,8 @@ done
 # --- 5. lancar ---------------------------------------------------------------
 echo
 echo "Lancando... log: $(basename "$log")"
-"$AQUI/rodar_em_tmux.sh" iniciar "$SESSAO" "$RAIZ" "$log" "$PY" -u run_captura.py ||
+# o WhatsApp tem a tela :2 (a :1 e do robo das lojas)
+BESAVE_DISPLAY=${BESAVE_DISPLAY:-:2} "$AQUI/rodar_em_tmux.sh" iniciar "$SESSAO" "$RAIZ" "$log" "$PY" -u run_captura.py ||
     falhar "nao consegui criar a sessao tmux $SESSAO."
 
 # --- 6. conferir que subiu DE VERDADE ----------------------------------------

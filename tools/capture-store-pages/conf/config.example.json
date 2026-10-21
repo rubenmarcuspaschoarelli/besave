@@ -1,7 +1,14 @@
 {
   "navegador": {
     "canal": "chrome",
+    "user_agent": "",
     "_obs": "chrome = Google Chrome do PC (captcha da Shopee). Vazio (\"\") = Chromium do Playwright, para Linux ARM64."
+  },
+  "janela_noturna": {
+    "inicio": "",
+    "fim": "",
+    "intervalo_minutos": 0,
+    "_obs": "Vazio = sem janela (ritmo normal). Preencha inicio/fim (HH:MM, relogio do sistema; pode cruzar a meia-noite) e intervalo_minutos, ex.: 22:00, 08:00, 120. Dentro dela o robo faz uma rodada a cada intervalo."
   },
   "controle": {
     "ultimo_id_processado": 0

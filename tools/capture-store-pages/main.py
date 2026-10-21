@@ -43,7 +43,7 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade)
+                  validade, janela as janela_mod)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -708,7 +708,7 @@ def _varrer_validade(db):
         print(f'[validade] falhou: {e}')
 
 
-def _monitorar(context, page, db, args, header, img_root, intervalo_min):
+def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None):
     """Varre a fila ate o usuario interromper (Ctrl+C).
 
     Cada varredura que encontra pendentes vira um lote normal, com seu proprio
@@ -724,10 +724,17 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
     ciclos = 0
     total_grav = 0
     total_erro = 0
-    espera_s = intervalo_min * 60
+    normal_s = intervalo_min * 60
+
+    def espera_s():
+        # Na janela noturna a pausa e a da janela (cortada no fim dela).
+        return janela_mod.espera_s(janela, datetime.now(), normal_s)
 
     print(f'\n[monitor] ligado: varredura a cada {intervalo_min:g} min '
           f'(conf/config.json -> monitor.intervalo_minutos). Ctrl+C para sair.\n')
+    if janela:
+        print(f'[monitor] janela noturna {janela[0]:%H:%M}-{janela[1]:%H:%M}: '
+              f'varredura a cada {janela[2] / 60:g} min dentro dela.')
     ult_validade = 0.0
     try:
         while True:
@@ -736,13 +743,13 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
                 ult_validade = time.monotonic()
             rows = _ler_pendentes_resiliente(db, ultimo_id, args.limite, adiados)
             if rows is None:  # banco fora do ar: tenta na proxima varredura
-                print(f'[monitor] nova tentativa em {intervalo_min:g} min.')
-                _esperar(espera_s)
+                print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
                 continue
             if not rows:
                 print(f'[{datetime.now():%H:%M:%S}] fila vazia; proxima leitura '
-                      f'em {intervalo_min:g} min.')
-                _esperar(espera_s)
+                      f'em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
                 continue
 
             ciclos += 1
@@ -762,6 +769,9 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
             if adiados:
                 print(f'[monitor] {len(adiados)} linha(s) adiada(s) nesta execucao '
                       f'(seguem ST_CAPTURA=0): {sorted(adiados)}')
+            if janela_mod.dentro(janela, datetime.now()):  # na janela nao rele a fila na hora
+                print(f'[monitor] janela noturna: proxima rodada em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
     except KeyboardInterrupt:
         print('\n[monitor] interrompido (Ctrl+C).')
     finally:
@@ -891,7 +901,8 @@ def main():
             # 3) Logins dos programas de afiliado (so p/ o DS_URL_AFILIADO).
             if capturar_link:
                 _gates_login_afiliados(page)
-            _monitorar(context, page, db, args, header, img_root, intervalo_min)
+            _monitorar(context, page, db, args, header, img_root, intervalo_min,
+                       janela_mod.ler_janela(estado._ler_config()))
         else:
             # 2) Login manual da Shopee (so quando o lote tem produtos da Shopee).
             if tem_shopee:
