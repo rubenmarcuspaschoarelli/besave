@@ -816,7 +816,7 @@ def _gravar_cronologico(itens, nome_grupo, caminho_csv, numero_inicial: int, est
         print(
             f"[captura #{numero}] ({nome_grupo}) {campos['nome_do_produto'][:45]!r} | "
             f"por={campos['preco_por']} | cupom={campos['cupom']} | "
-            f"img={'ok' if img_final else '-'}{_marca_db(db_ok)}"
+            f"img={'ok' if img_final else '-'}{_marca_db(db_ok, db)}"
         )
     return numero
 
@@ -1301,11 +1301,13 @@ def _tem_conteudo(campos: dict) -> bool:
     return any(campos.get(c) for c in ("preco_por", "preco_de", "url", "cupom"))
 
 
-def _marca_db(db_ok) -> str:
+def _marca_db(db_ok, db=None) -> str:
     """Sufixo do log com o resultado da gravacao no Oracle (None = DB desligado)."""
     if db_ok is None:
         return ""
-    return " | db=ok" if db_ok else " | db=ERRO"
+    if db_ok:
+        return " | db=ok"
+    return " | db=ERRO (sem conexão)" if getattr(db, "sem_conexao", False) else " | db=ERRO"
 
 
 def _rotulo_imagem(campos: dict) -> str:
@@ -1378,6 +1380,6 @@ def _processar(msg, nome_grupo: str, numero: int, caminho_csv, data_id: str, est
     print(
         f"[captura #{numero}] {campos['nome_do_produto'][:50]!r} | "
         f"por={campos['preco_por']} | cupom={campos['cupom']} | "
-        f"img={'ok' if caminho_img else '-'}{_marca_db(db_ok)}"
+        f"img={'ok' if caminho_img else '-'}{_marca_db(db_ok, db)}"
     )
     return numero

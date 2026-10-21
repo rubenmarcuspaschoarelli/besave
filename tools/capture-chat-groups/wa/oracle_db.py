@@ -136,6 +136,22 @@ _client_iniciado = False
 
 NOME_SP = "STP_OFERTA_FILA_CAPTURA_INSERT"
 
+# Erros de CONEXAO (sessao morta, rede, banco fora): vale reconectar e repetir.
+# Erro de dados (ORA-01400, PLS-...) nao entra: repetir nao resolve.
+_ERROS_CONEXAO = re.compile(
+    r"DPY-1001|DPY-4011|DPI-1010|DPI-1080|"
+    r"ORA-0(?:3113|3114|3135|3136|1012|2396|0028)|"
+    r"ORA-01033|ORA-01034|ORA-12(?:170|514|537|541|543|571)"
+)
+
+
+class ErroSemConexao(RuntimeError):
+    """Nao ha conexao Oracle utilizavel (nem depois de reconectar)."""
+
+
+def _erro_conexao(exc) -> bool:
+    return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
+
 
 # --- Conversores de tipo (str do CSV -> tipo Oracle) ------------------------
 def _preco_para_numero(s):
@@ -200,6 +216,9 @@ class OracleDB:
         # So esta "habilitado" se pedido no config E a lib estiver disponivel.
         self.habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
         self._conn = None
+        # True se o ULTIMO inserir_oferta falhou por falta de conexao (o log do
+        # monitor mostra "db=ERRO (sem conexao)").
+        self.sem_conexao = False
         # A SP passou a receber a loja DA OFERTA em 22/09/2026. Se o banco ainda
         # estiver com a versao antiga, mandar o parametro faria TODO insert
         # falhar (PLS-00306) -- entao perguntamos ao dicionario e so mandamos se
@@ -257,6 +276,16 @@ class OracleDB:
             self._conn = None
             return False
 
+    def _reconectar(self) -> bool:
+        """Fecha e reabre a conexao apos uma queda. Diferente de conectar() no
+        arranque, uma falha aqui NAO desliga o banco: a proxima oferta tenta de novo."""
+        self.desconectar()
+        self.habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
+        ok = self.conectar()
+        if not ok:
+            self.habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
+        return ok
+
     def _sp_aceita(self, parametro: str) -> bool:
         """True se a stored procedure tem o parametro (consulta o dicionario)."""
         try:
@@ -297,8 +326,19 @@ class OracleDB:
         `out_vars` (dict nome->tipo oracledb, ex.: oracledb.DB_TYPE_VARCHAR). Faz
         commit no sucesso; devolve dict {nome_out: valor}. Levanta em erro.
         """
+        try:
+            return self._executar_sp(nome, params, out_vars)
+        except Exception as e:  # noqa: BLE001
+            if not _erro_conexao(e):
+                raise
+            print(f"[oracle] Conexao perdida ({e}). Reconectando...")
+        if not self._reconectar():
+            raise ErroSemConexao("sem conexao Oracle")
+        return self._executar_sp(nome, params, out_vars)
+
+    def _executar_sp(self, nome, params, out_vars):
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cur = self._conn.cursor()
         try:
             binds = dict(params)
@@ -320,7 +360,8 @@ class OracleDB:
         do CSV) via a SP. Retorna True se a SP devolveu 'TRUE'. Best-effort:
         qualquer falha e logada e retorna False (nunca propaga).
         """
-        if not self.habilitado or self._conn is None:
+        self.sem_conexao = False
+        if not self.habilitado:
             return False
         try:
             params = {
@@ -360,6 +401,7 @@ class OracleDB:
                       f"{out.get('PV_ERRO')}")
             return ok
         except Exception as e:  # noqa: BLE001
+            self.sem_conexao = _erro_conexao(e)
             print(f"[oracle] Erro ao inserir ID {linha.get('ID_OFERTA')}: {e}")
             try:
                 self._conn.rollback()
