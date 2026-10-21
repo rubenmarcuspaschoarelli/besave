@@ -145,10 +145,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.tools == 'true'
     runs-on: ubuntu-latest
+    defaults: { run: { working-directory: tools/capture-chat-groups } }
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
+      # Só stdlib: os testes do parser não sobem Playwright nem Oracle. Rodam
+      # também quando o outro robô muda (os dois dividem o contrato da fila de
+      # captura, e por ora só este tem teste).
+      - run: python -m unittest discover -s tests -v
       - run: pip install -r tools/requirements-dev.txt
       # pytest.ini fica em tools/: rodar de fora coletaria programas_ajuste/.
       - name: pytest
