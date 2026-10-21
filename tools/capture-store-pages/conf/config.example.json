@@ -16,6 +16,10 @@
   "monitor": {
     "intervalo_minutos": 3
   },
+  "afiliados": {
+    "confirmar_no_arranque": true,
+    "_obs": "false = o robo nao pergunta (input) pelos logins de afiliado no arranque; so avisa no log se o login nao estiver ativo. Use na VPS."
+  },
   "link_afiliado": {
     "habilitado": true
   },

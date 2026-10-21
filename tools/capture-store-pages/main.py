@@ -198,6 +198,17 @@ def _gate_login_shopee_arranque(page):
             return
 
 
+# Pedacos de URL de tela de login: se a pagina do programa de afiliados caiu
+# numa delas, a sessao nao esta ativa.
+MARCAS_LOGIN = ('login', 'signin', 'sign-in', 'authenticate')
+
+
+def _pode_perguntar():
+    """Confirma os logins de afiliado pelo teclado? So com terminal e se o
+    config.json nao desligar (afiliados.confirmar_no_arranque=false)."""
+    return sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
+
+
 def _gate_login_afiliado(page, titulo, url, instrucao):
     """Gate generico de login num PROGRAMA DE AFILIADOS: abre a pagina da loja
     na janela da automacao e espera o usuario confirmar que esta logado.
@@ -211,6 +222,15 @@ def _gate_login_afiliado(page, titulo, url, instrucao):
         page.goto(url, wait_until='domcontentloaded', timeout=60000)
     except Exception:  # noqa: BLE001
         pass
+    if not _pode_perguntar():
+        # Sem ninguem para responder (reboot/queda na VPS): segue e so avisa.
+        atual = (page.url or '').lower()
+        if any(m in atual for m in MARCAS_LOGIN):
+            print(f'[login] AVISO: {titulo} sem login ativo ({page.url[:70]}); '
+                  f'as ofertas desta loja ficarao sem DS_URL_AFILIADO.')
+            return False
+        print(f'[login] {titulo}: sem confirmacao interativa; seguindo.')
+        return True
     print('\n' + '=' * 64)
     print(f'{titulo}')
     print(instrucao)
@@ -387,13 +407,17 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
     gravadas = 0
     com_erro = 0
     tempos = {}  # loja -> [_Cronometro] (media do lote no fim, _resumo_tempos)
-    # Menor ID que ficou '0' (nao gravado) nesta execucao: o ponteiro de retomada
-    # nunca passa dele, senao a linha so seria relida com --desde.
-    trava = min(adiados) if adiados else None
+    # Menor ID cuja GRAVACAO falhou por erro de conexao: o ponteiro de retomada
+    # nunca passa dele, senao a linha so seria relida com --desde. Linha deixada
+    # em '0' de proposito (loja nao implementada) NAO segura o ponteiro.
+    # Guardada no db para valer tambem nos lotes seguintes do monitor.
+    trava = getattr(db, 'trava_ponteiro', None)
 
-    def _travar(id_oferta):
+    def _adiar(id_oferta, perdida_por_conexao=False):
         nonlocal trava
-        trava = id_oferta if trava is None else min(trava, id_oferta)
+        if perdida_por_conexao:
+            trava = id_oferta if trava is None else min(trava, id_oferta)
+            db.trava_ponteiro = trava
         if adiados is not None:
             adiados.add(id_oferta)
 
@@ -637,13 +661,13 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
-                    _travar(id_oferta)
+                    _adiar(id_oferta, db.sem_conexao)
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha
                 # quando a loja passar a ser suportada.
                 status_db = ' | oracle=pendente(0)'
-                _travar(id_oferta)
+                _adiar(id_oferta)
             else:
                 ok, erro = db.marcar_erro(
                     id_oferta, out['status_captura'], out['url_final'], ativo=ativo)
@@ -653,7 +677,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 else:
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
-                    _travar(id_oferta)
+                    _adiar(id_oferta, db.sem_conexao)
 
         # Marca so quando a loja TEM fluxo de link de afiliado: '-' ali quer
         # dizer "tentou e nao veio" (sessao deslogada / layout mudou), nao

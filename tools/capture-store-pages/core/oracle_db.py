@@ -335,6 +335,11 @@ class OracleDB:
         # So esta "habilitado" se pedido no config E a lib estiver disponivel.
         self.habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
         self._conn = None
+        # True se a ULTIMA gravacao (_chamar_sp) falhou por falta de conexao.
+        self.sem_conexao = False
+        # Menor ID cuja gravacao falhou por falta de conexao nesta execucao: o
+        # ponteiro de retomada (main.py) nunca passa dele.
+        self.trava_ponteiro = None
 
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
@@ -565,6 +570,7 @@ class OracleDB:
         """Executa a SP e traduz PV_RETORNO/PV_ERRO em (ok, erro). Best-effort:
         nunca propaga excecao -- o CSV e a rede de seguranca e o lote nao pode
         parar por causa do banco."""
+        self.sem_conexao = False
         if not self.habilitado:
             return False, 'sem conexao Oracle'
         try:
@@ -577,6 +583,7 @@ class OracleDB:
             ok = (out.get("PV_RETORNO") or "").upper() == "TRUE"
             return ok, (None if ok else out.get("PV_ERRO"))
         except Exception as e:  # noqa: BLE001
+            self.sem_conexao = _erro_conexao(e)
             try:
                 self._conn.rollback()
             except Exception:  # noqa: BLE001

@@ -1,10 +1,7 @@
 """Lojas: a conexao Oracle cai durante a gravacao. A linha e regravada depois da volta
 e o ponteiro de retomada nunca passa de uma linha nao gravada (perda de 38132-38136, 21/10)."""
-import sys
 
-import falsos
-import pytest
-from conftest import LOJAS
+from conftest import Loja
 
 
 class Var:
@@ -73,54 +70,11 @@ class Banco:
         pass
 
 
-class Loja:
-    ready_selector = None
-    post_load_wait = 0
-    baixar_imagens = False
-
-    def prepare(self, page):
-        pass
-
-    def pagina_sem_produto(self, page):
-        return False
-
-    def status_descarte(self, page):
-        return None
-
-    def capture(self, page):
-        return {}
-
-
 class Pagina:
     url = "https://loja.exemplo/produto"
 
     def wait_for_timeout(self, ms):
         pass
-
-
-@pytest.fixture
-def lojas(monkeypatch):
-    antes = set(sys.modules)
-    falsos.instalar(monkeypatch)
-    from core import estado
-    monkeypatch.setattr(estado, "ler_raiz_s3", lambda *a, **k: "/s3-falso")
-    mod = falsos.importar(monkeypatch, "main_lojas", LOJAS / "main.py")
-    for nome, valor in [("resolver_loja", lambda url: "AMAZON"), ("get_store", lambda loja: Loja()),
-                        ("loja_ativa", lambda *a: True)]:
-        monkeypatch.setattr(mod.registry, nome, valor)
-    monkeypatch.setattr(mod, "_goto_robusto", lambda *a, **k: None)
-    monkeypatch.setattr(mod.afiliados, "gerar_url", lambda *a: "")
-    monkeypatch.setattr(mod.afiliados, "loja_ativa", lambda *a: False)
-    monkeypatch.setattr(mod.link_afiliado, "capturar", lambda *a: {})
-    monkeypatch.setattr(mod.link_afiliado, "habilitado", lambda: False)
-    monkeypatch.setattr(mod.imagens_oferta, "tem_imagem_publicada", lambda i: True)
-    monkeypatch.setattr(mod.estado, "usa_imagem_loja", lambda g: False)
-    mod.ponteiro = []
-    monkeypatch.setattr(mod.estado, "gravar_ultimo_id", mod.ponteiro.append)
-    yield mod
-    for nome in set(sys.modules) - antes:
-        if nome != "core.janela":
-            sys.modules.pop(nome, None)
 
 
 def _db(monkeypatch, *fila):
@@ -168,15 +122,31 @@ def test_ponteiro_continua_travado_no_lote_seguinte(lojas, monkeypatch):
     assert lojas.ponteiro == [38132]
 
 
-def test_loja_nao_implementada_tambem_trava_o_ponteiro(lojas, monkeypatch):
+def test_loja_nao_implementada_nao_segura_o_ponteiro(lojas, monkeypatch):
+    # '0' de proposito (ex.: Shopee no PC) nao e perda: o ponteiro segue
+    monkeypatch.setattr(lojas.registry, "resolver_loja",
+                        lambda url: "SHOPEE" if "nao.impl" in url else "AMAZON")
+    monkeypatch.setattr(lojas.registry, "get_store",
+                        lambda loja: None if loja == "SHOPEE" else Loja())
     db, _ = _db(monkeypatch, Conn())
-    lojas_antes = lojas.registry.get_store
-    monkeypatch.setattr(lojas.registry, "get_store", lambda loja: None)
+    linhas = _linhas(38132, 38133, 38134)
+    linhas[1]["url"] = "https://nao.impl/p"
     adiados = set()
-    lojas._processar_lote(Pagina(), _linhas(38133), db, True, "img", adiados)
-    monkeypatch.setattr(lojas.registry, "get_store", lojas_antes)
-    lojas._processar_lote(Pagina(), _linhas(38134), db, True, "img", adiados)
-    assert adiados == {38133} and lojas.ponteiro == []
+    lojas._processar_lote(Pagina(), linhas, db, True, "img", adiados)
+    assert adiados == {38133}              # nao e relida a cada varredura
+    assert lojas.ponteiro == [38132, 38134]
+
+
+def test_falha_de_gravacao_sem_conexao_segura_o_ponteiro_mesmo_com_pendente_intencional(lojas, monkeypatch):
+    monkeypatch.setattr(lojas.registry, "resolver_loja",
+                        lambda url: "SHOPEE" if "nao.impl" in url else "AMAZON")
+    monkeypatch.setattr(lojas.registry, "get_store",
+                        lambda loja: None if loja == "SHOPEE" else Loja())
+    db, _ = _db(monkeypatch, Conn(cai_em={38134}), RuntimeError("rede fora"), Conn())
+    linhas = _linhas(38132, 38133, 38134, 38135)
+    linhas[1]["url"] = "https://nao.impl/p"
+    lojas._processar_lote(Pagina(), linhas, db, True, "img", set())
+    assert lojas.ponteiro == [38132]       # 38133 (pendente) nao trava, 38134 (conexao) trava
 
 
 def test_erro_de_dado_nao_reconecta(lojas, monkeypatch):
@@ -215,3 +185,19 @@ def test_leitura_da_fila_tambem_reconecta(lojas, monkeypatch):
     db, banco = _db(monkeypatch, morta, viva)
     assert db.ler_fila() == [{"ID_OFERTA": 7}]
     assert banco.conexoes == 2
+
+
+def test_sp_que_devolve_false_nao_trava_o_ponteiro(lojas, monkeypatch):
+    class VarFalse(Var):
+        def getvalue(self):
+            return "FALSE"
+
+    class CursorFalse(Cursor):
+        def var(self, tipo, tam):
+            return VarFalse()
+    conn = Conn()
+    conn.cursor = lambda: CursorFalse(conn)
+    db, _ = _db(monkeypatch, conn)
+    adiados = set()
+    lojas._processar_lote(Pagina(), _linhas(38132, 38133), db, True, "img", adiados)
+    assert adiados == {38132, 38133} and lojas.ponteiro == []
