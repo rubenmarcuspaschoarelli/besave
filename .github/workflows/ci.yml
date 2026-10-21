@@ -32,7 +32,7 @@ jobs:
             api:      ['apps/api/**', 'packages/contract/**']
             site:     ['apps/site/**', 'packages/contract/**']
             infra:    ['infra/**']
-            tools:    ['tools/**']
+            tools:    ['tools/**', '.github/workflows/ci.yml']
             workflows: ['.github/**']
 
   workflows:
