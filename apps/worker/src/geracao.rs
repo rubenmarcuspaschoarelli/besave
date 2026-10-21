@@ -372,7 +372,19 @@ pub fn gerar(
 
     // Expurgo (CONTRATO §7): depois do manifest, só na janela, em lotes (BSV-47).
     let t = Instant::now();
-    let expurgo = fila.executar(&site.expurgo, agora, pub_, &mut redirects)?;
+    // Falha aqui não derruba o ciclo: o site já foi publicado e os ids seguem na fila. O erro vira
+    // WARN e `expurgo_falhou`, e quem chama avisa com a variante `Expurgo`.
+    let expurgo = match fila.executar(&site.expurgo, agora, pub_, &mut redirects) {
+        Ok(r) => r,
+        Err(e) => {
+            warn!(erro = %e, pendente = fila.len(), "expurgo falhou; ids seguem na fila para o próximo ciclo");
+            RelatorioExpurgo {
+                pendente: fila.len() as u64,
+                falhou: true,
+                ..Default::default()
+            }
+        }
+    };
     rel.expurgo = RelatorioExpurgo {
         enfileirados: rel.expurgo.enfileirados,
         ..expurgo

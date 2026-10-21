@@ -202,7 +202,8 @@ Regras:
   Fora da janela nada é apagado: uma desativação em massa não segura a publicação de ofertas
   novas. Até a janela, a URL da oferta expurgada ainda responde (a página some da lista e do
   sitemap); depois dela responde 404 (410 via função de borda fica para depois). Oferta que
-  volta ao conjunto publicado antes de ser apagada sai da fila.
+  volta ao conjunto publicado antes de ser apagada sai da fila. Falha do expurgo não derruba o ciclo: vira
+  aviso e os ids seguem na fila.
 
 ### 7.1 Página de oferta expirada
 - Renderizada **pelo worker** com `status: ENCERRADA` (não por JavaScript: o worker sabe o status

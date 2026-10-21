@@ -214,7 +214,14 @@ Agora o apagamento nunca segura a publicação:
   cortado ao meio pela fronteira do lote pode reenviar até 2 chaves). Fora da janela, nenhuma chamada de remoção.
 - **Reconciliação única:** na primeira execução (fila ausente ou ilegível), imagens de `img/ofertas/` e páginas de
   `oferta/` de ids fora do conjunto publicado entram na fila; `reconciliado` evita repetir.
-- **Relatório:** `expurgo_enfileirados`, `expurgo_removidos`, `expurgo_pendente` (ainda na fila) e `t_expurgo`.
+- **KVS em lote:** as chaves dos ids apagados saem da KVS com `UpdateKeys` de até 50 chaves por chamada (o limite da
+  API: "50 keys or 3 MB payload, whichever is reached first", CloudFront Developer Guide, *Quotas on key value stores*),
+  encadeando o `ETag`. Por lote de 1000 chaves do S3 (333 ids) são 7 `UpdateKeys`; 14,5 mil ids = ~44 `DeleteObjects` e
+  290 `UpdateKeys`. O tempo real por lote aparece em `t_expurgo` na primeira noite na VPS.
+- **Falha do expurgo não falha o ciclo:** erro (inclusive `DeleteObjects` parcial: o S3 responde 200 com `Errors`, e
+  as chaves com erro vão ao log em WARN) vira `expurgo_falhou=1` e um aviso no Telegram com a variante `Expurgo`
+  (1 por 2 h, sem contar como falha do ciclo). Os ids ficam na fila; `DT_PUBLICACAO_SITE`, avisos e relatório seguem.
+- **Relatório:** `expurgo_enfileirados`, `expurgo_removidos`, `expurgo_pendente` (ainda na fila), `expurgo_falhou` e `t_expurgo`.
   Fila acima do máximo continua nas noites seguintes e aparece em `expurgo_pendente`.
 
 ## Limites de tempo (BSV-47)
@@ -769,7 +776,7 @@ sudo systemctl daemon-reload
 | `besave-ciclo.timer` | a cada 5 min no relógio (`:00`, `:05`, …) |
 | `besave-envio.timer` | a cada 5 min, 2 min depois (`:02`, `:07`, …) |
 | `besave-{ciclo,envio}.service` | `oneshot` como `besave`, `EnvironmentFile=/srv/besave/worker.env`, encerrado após 15 min (`TimeoutStartSec`) |
-| `besave-alerta@.service` | disparada por `OnFailure=besave-alerta@%n.service` das duas acima; roda `besave-worker --alerta-encerrado <unidade>` e avisa no Telegram (mesmo bot, no máximo 1 aviso por 2 h) quando o sistema encerra a unidade (timeout, sinal, falha ao iniciar). Lê só o `worker.env`, nenhum segredo na unidade |
+| `besave-alerta@.service` | disparada por `OnFailure=besave-alerta@%n.service` das duas acima; roda `besave-worker --alerta-encerrado <unidade>` e avisa no Telegram (mesmo bot, no máximo 1 aviso por 2 h) quando o sistema encerra a unidade (só quando `systemctl show -p Result` da unidade é `timeout`, `signal`, `core-dump` ou `watchdog`; `exit-code` o próprio worker já avisou). Lê só o `worker.env`, nenhum segredo na unidade |
 
 `Persistent=false`: execução perdida com a máquina desligada não é recuperada no boot. Enquanto um
 ciclo roda, o timer não abre outro (e a trava continua valendo, como no PC).

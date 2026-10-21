@@ -30,7 +30,9 @@ resposta e um modelo de `.env` que levou a credencial errada.
 | Chave da KVS do id na fila | Fica na KVS e no índice `_estado/redirects.json` até a janela | O `UpdateKeys` é de 50 em 50; 14,5 mil deletes seriam centenas de chamadas |
 | Id cortado ao meio pela fronteira do lote | Fica na fila até a última chave; reenvia no máximo 2 chaves | `DeleteObjects` de chave ausente não falha; evita estado por chave |
 | Unidade de alerta | `besave-alerta@.service`, `besave-worker --alerta-encerrado <unidade>`, variante `EncerradoPeloSistema` | Sem segredo na unidade; reusa `Alertas::falha` (2 h por variante) |
-| Falha no expurgo | Erro do ciclo (alerta normal), depois do manifest | Rodou depois dos passos 1–5; o site já foi publicado |
+| Falha no expurgo | WARN + aviso com variante `Expurgo`; o ciclo segue (decisão do dono) | O site já foi publicado; `DT_PUBLICACAO_SITE` e avisos não podem esperar o expurgo |
+| Alerta da unidade | Só avisa se `systemctl show -p Result` é `timeout`, `signal`, `core-dump` ou `watchdog` (decisão do dono) | `exit-code` o worker já alertou; sem `SuccessExitStatus` |
+| KVS no expurgo | `UpdateKeys` com até 50 exclusões por chamada (quota da API) | Fonte: CloudFront Developer Guide, "Quotas on key value stores" |
 
 ## Requirements
 
@@ -52,11 +54,15 @@ resposta e um modelo de `.env` que levou a credencial errada.
 | UNI-03 | O subcomando DEVE avisar no Telegram pelo mesmo bot e com a regra de repetição do alerta do worker (1 envio por variante a cada 2 h). |
 | ENV-01 | O modelo do `.env` DEVE trazer `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, documentar aspas simples e NÃO ter `AWS_PROFILE`. |
 | ENV-02 | SEM credenciais AWS, O worker DEVE falhar com "credenciais AWS ausentes" em vez de usar o serviço de metadados. |
+| EXP-10 | SE a execução da fila do expurgo falhar, ENTÃO o ciclo DEVE seguir (`DT_PUBLICACAO_SITE`, avisos, relatório com `expurgo_falhou=1`), os ids DEVEM continuar na fila e o Telegram DEVE receber um aviso com a variante `Expurgo` (1 por 2 h, sem contar falha do ciclo). |
+| EXP-11 | SE o `DeleteObjects` responder 200 com `Errors`, ENTÃO o lote DEVE falhar, com a contagem e as chaves afetadas no erro e no log, e os ids do lote DEVEM continuar na fila. |
+| EXP-12 | As chaves da KVS dos ids apagados DEVEM sair em `UpdateKeys` de até 50 por chamada. |
+| UNI-04 | A unidade de alerta DEVE consultar `systemctl show -p Result <unidade>` e só avisar para `timeout`, `signal`, `core-dump` ou `watchdog`; `exit-code` não avisa de novo. |
 | DOC-01 | CONTRATO §7 e MANIFEST §1 e §6 DEVEM descrever a fila, a janela e a chave `_estado/expurgo.json` na mesma PR. |
 
 ## Cobertura
 
 Testes: `tests/expurgo.rs` (EXP-01..09), `tests/aws_limites.rs` (LIM-01, ENV-02), `tests/oracle.rs` (LIM-02),
-`tests/unidade.rs` e `tests/unidades_vps.rs` (UNI-01..03, ENV-01). Ajustados para o novo
+`tests/unidade.rs` e `tests/unidades_vps.rs` (UNI-01..04, ENV-01), `tests/expurgo_falha.rs` (EXP-10), `tests/aws_limites.rs` (EXP-11). Ajustados para o novo
 comportamento: `tests/ciclo.rs`, `tests/geracao.rs`, `tests/indice_redirects.rs`, `tests/plano.rs`,
 `tests/paginas.rs`, `tests/site.rs`, `tests/dry_run.rs`, `tests/worker_env_vps.rs`.

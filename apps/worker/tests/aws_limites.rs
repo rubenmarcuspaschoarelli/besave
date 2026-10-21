@@ -133,3 +133,137 @@ fn com_credenciais_a_verificacao_passa() {
     rt().block_on(exigir_credenciais(&sdk, Duration::from_secs(5)))
         .unwrap();
 }
+
+// ---- M44/M45: a carga aplica os limites e exige credenciais ----
+
+/// M44: a configuração que `ContextoAws::carregar` usa já traz os limites padrão.
+#[test]
+fn config_padrao_do_carregar_traz_os_limites_de_tempo() {
+    let sdk = rt().block_on(
+        worker::aws::config_padrao()
+            .region(aws_config::Region::new("us-east-1"))
+            .credentials_provider(Credentials::new("id", "s", None, None, "teste"))
+            .load(),
+    );
+    let c = sdk.timeout_config().expect("sem TimeoutConfig");
+    let esperado = LimitesTempo::default();
+    assert_eq!(c.connect_timeout(), Some(esperado.conexao));
+    assert_eq!(c.read_timeout(), Some(esperado.leitura));
+    assert_eq!(c.operation_attempt_timeout(), Some(esperado.tentativa));
+    assert_eq!(c.operation_timeout(), Some(esperado.operacao));
+}
+
+/// M45: a carga do contexto falha por região ausente e por credenciais ausentes.
+#[test]
+fn contexto_sem_regiao_ou_sem_credenciais_nao_carrega() {
+    let sem_credenciais = SdkConfig::builder()
+        .region(aws_config::Region::new("us-east-1"))
+        .build();
+    assert!(matches!(
+        ContextoAws::com_sdk(sem_credenciais),
+        Err(ErroAws::CredenciaisAusentes)
+    ));
+    let sem_regiao = SdkConfig::builder()
+        .credentials_provider(SharedCredentialsProvider::new(Credentials::new(
+            "id", "s", None, None, "teste",
+        )))
+        .build();
+    assert!(matches!(
+        ContextoAws::com_sdk(sem_regiao),
+        Err(ErroAws::RegiaoAusente)
+    ));
+    let completo = SdkConfig::builder()
+        .region(aws_config::Region::new("us-east-1"))
+        .credentials_provider(SharedCredentialsProvider::new(Credentials::new(
+            "id", "s", None, None, "teste",
+        )))
+        .build();
+    assert!(ContextoAws::com_sdk(completo).is_ok());
+}
+
+// ---- M46: DeleteObjects com falha parcial ----
+
+/// Servidor que responde 200 a qualquer requisição com o corpo `xml` (como o S3 faz no
+/// `DeleteObjects` com `Errors`), depois de ler a requisição.
+fn servidor_s3_com_corpo(xml: &'static str) -> (String, std::thread::JoinHandle<()>) {
+    use std::io::{Read, Write};
+    let l = TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}", l.local_addr().unwrap());
+    let t = std::thread::spawn(move || {
+        let (mut s, _) = l.accept().unwrap();
+        s.set_read_timeout(Some(Duration::from_millis(400)))
+            .unwrap();
+        let mut buf = [0u8; 8192];
+        while let Ok(n) = s.read(&mut buf) {
+            if n == 0 {
+                break;
+            }
+        }
+        let resposta = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/xml\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{xml}",
+            xml.len()
+        );
+        s.write_all(resposta.as_bytes()).unwrap();
+    });
+    (url, t)
+}
+
+const DELETE_RESULT_PARCIAL: &str = r#"<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Error><Key>oferta/2/index.html</Key><Code>AccessDenied</Code><Message>Access Denied</Message></Error><Error><Key>img/ofertas/3-small.webp</Key><Code>InternalError</Code><Message>We encountered an internal error</Message></Error></DeleteResult>"#;
+
+#[derive(Clone, Default)]
+struct Buffer(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for Buffer {
+    fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(b);
+        Ok(b.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+/// M46: o S3 responde 200 com `Errors` → erro do lote com a contagem e as chaves com falha, e as
+/// chaves aparecem no log (WARN). O expurgo as mantém na fila porque `remover_lote` devolve erro.
+#[test]
+fn delete_objects_com_erros_parciais_vira_erro_com_as_chaves_e_vai_ao_log() {
+    let (url, t) = servidor_s3_com_corpo(DELETE_RESULT_PARCIAL);
+    let ctx = ContextoAws::com_endpoint(&url, &LimitesTempo::default()).unwrap();
+    let mut p = PublicadorS3::new(&ctx, "bucket-de-ensaio");
+    let chaves = vec![
+        "oferta/1/index.html".to_owned(),
+        "oferta/2/index.html".to_owned(),
+        "img/ofertas/3-small.webp".to_owned(),
+    ];
+    let buf = Buffer::default();
+    let saida = buf.clone();
+    let sub = tracing_subscriber::fmt()
+        .with_writer(move || saida.clone())
+        .with_ansi(false)
+        .with_max_level(tracing::Level::WARN)
+        .finish();
+    let erro = tracing::subscriber::with_default(sub, || p.remover_lote(&chaves))
+        .expect_err("falha parcial do S3 tem de ser erro")
+        .to_string();
+    t.join().unwrap();
+    assert!(erro.contains("DeleteObjects"), "{erro}");
+    assert!(erro.contains("2 erro(s) no lote"), "{erro}");
+    assert!(erro.contains("oferta/2/index.html"), "{erro}");
+    assert!(erro.contains("img/ofertas/3-small.webp"), "{erro}");
+    assert!(!erro.contains("oferta/1/index.html"), "{erro}");
+    let log = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+    assert!(log.contains("oferta/2/index.html"), "{log}");
+    assert!(log.contains("img/ofertas/3-small.webp"), "{log}");
+}
+
+/// Lote sem `Errors` (resposta vazia do modo quieto) é sucesso.
+#[test]
+fn delete_objects_sem_erros_e_sucesso() {
+    let (url, t) = servidor_s3_com_corpo(
+        r#"<?xml version="1.0" encoding="UTF-8"?><DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></DeleteResult>"#,
+    );
+    let ctx = ContextoAws::com_endpoint(&url, &LimitesTempo::default()).unwrap();
+    let mut p = PublicadorS3::new(&ctx, "bucket-de-ensaio");
+    p.remover_lote(&["oferta/1/index.html".to_owned()]).unwrap();
+    t.join().unwrap();
+}

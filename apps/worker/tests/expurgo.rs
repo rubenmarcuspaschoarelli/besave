@@ -552,3 +552,19 @@ fn expurgo_de_um_ciclo_cabe_no_tempo_na_mediana() {
         tempos[2]
     );
 }
+
+/// M49: `ConfigSite` lê `BESAVE_EXPURGO_JANELA` e `BESAVE_EXPURGO_MAX` do ambiente.
+#[test]
+fn config_do_site_le_a_janela_e_o_maximo_do_expurgo() {
+    let env = |k: &str| match k {
+        "BESAVE_EXPURGO_JANELA" => Some("22:00-23:30".to_owned()),
+        "BESAVE_EXPURGO_MAX" => Some("17".to_owned()),
+        _ => None,
+    };
+    let c = ConfigSite::de(env).unwrap();
+    assert_eq!(c.expurgo.max, 17);
+    assert_eq!(c.expurgo.janela, Janela::analisar("22:00-23:30").unwrap());
+    // Sem as variáveis: os padrões.
+    let padrao = ConfigSite::de(|_| None).unwrap();
+    assert_eq!(padrao.expurgo, ConfigExpurgo::default());
+}

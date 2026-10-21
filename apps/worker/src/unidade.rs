@@ -68,6 +68,55 @@ pub fn arquivo_de_estado(
     Ok(trava.with_file_name(d.arquivo))
 }
 
+/// `Result` da unidade (`systemctl show -p Result`) que o worker não avisou sozinho: o sistema
+/// matou o processo. `exit-code` o próprio worker já alertou (erro com nome e fase); outros
+/// valores (`success`, `resources`…) não são fim anormal por tempo ou sinal.
+pub fn encerrado_pelo_sistema(result: &str) -> bool {
+    matches!(
+        result.trim(),
+        "timeout" | "signal" | "core-dump" | "watchdog"
+    )
+}
+
+/// `systemctl show -p Result --value <unidade>`.
+pub fn ler_result(unidade: &str) -> std::io::Result<String> {
+    let saida = std::process::Command::new("systemctl")
+        .args(["show", "-p", "Result", "--value", unidade])
+        .output()?;
+    if !saida.status.success() {
+        return Err(std::io::Error::other(format!(
+            "systemctl show saiu com {}",
+            saida.status
+        )));
+    }
+    Ok(String::from_utf8_lossy(&saida.stdout).trim().to_owned())
+}
+
+/// Consulta o motivo do fim da unidade com `ler` e avisa só se foi o sistema que a encerrou.
+/// Sem conseguir ler o motivo, avisa (melhor um alerta a mais que silêncio). Devolve se avisou.
+pub fn alertar_se_encerrada(
+    unidade: &str,
+    estado: PathBuf,
+    telegram: &dyn Telegram,
+    host: String,
+    agora: i64,
+    ler: impl Fn(&str) -> std::io::Result<String>,
+) -> Result<bool, ErroUnidade> {
+    match ler(unidade) {
+        Ok(result) if !encerrado_pelo_sistema(&result) => {
+            info!(
+                unidade,
+                result, "unidade falhou por exit-code; o worker já avisou"
+            );
+            return Ok(false);
+        }
+        Ok(_) => {}
+        Err(e) => warn!(unidade, erro = %e, "motivo do fim da unidade ilegível; avisando"),
+    }
+    alertar(unidade, estado, telegram, host, agora)?;
+    Ok(true)
+}
+
 /// Avisa que `unidade` foi encerrada pelo sistema. Repetição: no máximo uma mensagem por 2 h.
 pub fn alertar(
     unidade: &str,
@@ -90,7 +139,7 @@ pub fn executar(unidade: &str, agora: i64) -> u8 {
         let estado = arquivo_de_estado(unidade, |k| std::env::var_os(k))?;
         let cfg = ConfigTelegram::do_env()?.ok_or(ErroUnidade::SemTelegram)?;
         let tg = TelegramHttp::new(cfg).map_err(|e| ErroUnidade::Cliente(e.to_string()))?;
-        alertar(unidade, estado, &tg, host_do_env(), agora)
+        alertar_se_encerrada(unidade, estado, &tg, host_do_env(), agora, ler_result).map(|_| ())
     })();
     match r {
         Ok(()) => {

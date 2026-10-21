@@ -109,15 +109,16 @@ pub struct ContextoAws {
 }
 
 impl ContextoAws {
-    /// Cadeia padrão do SDK (env `AWS_*`, perfil, SSO…).
+    /// Cadeia padrão do SDK (env `AWS_*`, perfil, SSO…) com os limites de tempo.
     pub fn carregar() -> Result<Self, ErroAws> {
         let rt = runtime()?;
-        let sdk = rt.block_on(
-            aws_config::defaults(BehaviorVersion::latest())
-                .timeout_config(LimitesTempo::default().timeout_config())
-                .load(),
-        );
-        Self::validar(rt, sdk)
+        let sdk = rt.block_on(config_padrao().load());
+        Self::com_sdk_em(rt, sdk)
+    }
+
+    /// Valida (região e credenciais) e monta o contexto sobre um `SdkConfig` pronto.
+    pub fn com_sdk(sdk: SdkConfig) -> Result<Self, ErroAws> {
+        Self::com_sdk_em(runtime()?, sdk)
     }
 
     /// Endpoint fixo e credenciais estáticas, para ensaio com um servidor local (sem rede real).
@@ -131,10 +132,10 @@ impl ContextoAws {
                 .timeout_config(limites.timeout_config())
                 .load(),
         );
-        Self::validar(rt, sdk)
+        Self::com_sdk_em(rt, sdk)
     }
 
-    fn validar(rt: Runtime, sdk: SdkConfig) -> Result<Self, ErroAws> {
+    fn com_sdk_em(rt: Runtime, sdk: SdkConfig) -> Result<Self, ErroAws> {
         if sdk.region().is_none() {
             return Err(ErroAws::RegiaoAusente);
         }
@@ -144,6 +145,12 @@ impl ContextoAws {
             sdk,
         })
     }
+}
+
+/// Cadeia padrão do SDK com os `LimitesTempo` padrão (o que `carregar` usa).
+pub fn config_padrao() -> aws_config::ConfigLoader {
+    aws_config::defaults(BehaviorVersion::latest())
+        .timeout_config(LimitesTempo::default().timeout_config())
 }
 
 fn runtime() -> Result<Runtime, ErroAws> {
@@ -167,6 +174,44 @@ pub async fn exigir_credenciais(sdk: &SdkConfig, espera: Duration) -> Result<(),
 
 fn texto_erro(e: impl std::error::Error) -> String {
     DisplayErrorContext(e).to_string()
+}
+
+/// Quantas chaves com erro vão por extenso no log e no erro de um `DeleteObjects` parcial.
+const CHAVES_NO_LOG: usize = 20;
+
+/// `DeleteObjects` responde 200 mesmo quando parte das chaves falha (`Errors`). Devolve o erro do
+/// lote com a contagem e as chaves afetadas (até `CHAVES_NO_LOG`, com código e mensagem), e loga
+/// cada uma em WARN. `None` se `Errors` está vazio.
+fn erro_de_lote(erros: &[aws_sdk_s3::types::Error], primeira: &str) -> Option<ErroPublicador> {
+    let primeiro = erros.first()?;
+    let detalhe: Vec<String> = erros
+        .iter()
+        .take(CHAVES_NO_LOG)
+        .map(|e| {
+            let chave = e.key().unwrap_or("?");
+            let motivo = e.message().or(e.code()).unwrap_or("sem detalhe");
+            warn!(
+                chave,
+                motivo, "DeleteObjects: chave não apagada; segue na fila do expurgo"
+            );
+            format!("{chave} ({motivo})")
+        })
+        .collect();
+    let resto = erros.len().saturating_sub(CHAVES_NO_LOG);
+    let mais = if resto > 0 {
+        format!(" e mais {resto}")
+    } else {
+        String::new()
+    };
+    Some(ErroPublicador::Aws {
+        operacao: "DeleteObjects",
+        chave: primeiro.key().unwrap_or(primeira).to_owned(),
+        fonte: format!(
+            "{} erro(s) no lote: {}{mais}",
+            erros.len(),
+            detalhe.join(", ")
+        ),
+    })
 }
 
 pub struct PublicadorS3 {
@@ -292,16 +337,8 @@ impl Publicador for PublicadorS3 {
                         .send(),
                 )
                 .map_err(|e| erro_s3("DeleteObjects", primeira, e))?;
-            if let Some(e) = saida.errors().first() {
-                return Err(ErroPublicador::Aws {
-                    operacao: "DeleteObjects",
-                    chave: e.key().unwrap_or(primeira).to_owned(),
-                    fonte: format!(
-                        "{} ({} erro(s) no lote)",
-                        e.message().or(e.code()).unwrap_or("sem detalhe"),
-                        saida.errors().len()
-                    ),
-                });
+            if let Some(erro) = erro_de_lote(saida.errors(), primeira) {
+                return Err(erro);
             }
         }
         Ok(())

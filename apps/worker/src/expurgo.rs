@@ -157,6 +157,9 @@ impl ConfigExpurgo {
     }
 }
 
+/// Variante do aviso quando a execução da fila falha (o ciclo segue; BSV-47).
+pub const VARIANTE_EXPURGO: &str = "Expurgo";
+
 /// O que o expurgo fez neste ciclo (`expurgo_*` no relatório).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct RelatorioExpurgo {
@@ -168,6 +171,8 @@ pub struct RelatorioExpurgo {
     pub chaves: u64,
     /// Ids ainda na fila ao fim do ciclo.
     pub pendente: u64,
+    /// A execução da fila falhou (o ciclo seguiu; os ids continuam na fila).
+    pub falhou: bool,
 }
 
 /// Conteúdo de `_estado/expurgo.json`: id → data de entrada (ISO 8601 UTC).

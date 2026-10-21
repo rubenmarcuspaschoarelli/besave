@@ -263,6 +263,7 @@ fn imprimir_relatorio(rel: &Relatorio) {
     println!("expurgo_enfileirados: {}", exp.enfileirados);
     println!("expurgo_removidos: {}", exp.removidos);
     println!("expurgo_pendente: {}", exp.pendente);
+    println!("expurgo_falhou: {}", u8::from(exp.falhou));
     let t = &rel.tempos;
     for (nome, v) in [
         ("t_leitura_fonte", t.leitura_fonte),

@@ -98,7 +98,17 @@ pub(crate) fn conectar(cfg: &ConfigOracle) -> Result<Connection> {
     if let Some(dir) = &cfg.client_dir {
         InitParams::new().oracle_client_lib_dir(dir)?.init()?;
     }
-    let conn = Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?;
+    abrir_limitada(cfg, |c| {
+        Ok(Connection::connect(&c.usuario, &c.senha, &c.dsn)?)
+    })
+}
+
+/// Abre a conexão com `abrir` e aplica `cfg.timeout_chamada` (o teste usa uma conexão falsa).
+pub fn abrir_limitada<C: LimiteDeChamada>(
+    cfg: &ConfigOracle,
+    abrir: impl FnOnce(&ConfigOracle) -> Result<C>,
+) -> Result<C> {
+    let conn = abrir(cfg)?;
     limitar_chamadas(&conn, cfg.timeout_chamada)?;
     Ok(conn)
 }

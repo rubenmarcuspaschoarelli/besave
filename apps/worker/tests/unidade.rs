@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use worker::alerta::{ErroTelegram, TITULO_CICLO, TITULO_ENVIO, Telegram};
-use worker::unidade::{ErroUnidade, FASE, VARIANTE, alertar, arquivo_de_estado};
+use worker::unidade::{
+    ErroUnidade, FASE, VARIANTE, alertar, alertar_se_encerrada, arquivo_de_estado,
+};
 
 #[derive(Default)]
 struct TelegramFake {
@@ -185,4 +187,62 @@ fn subcomando_com_unidade_desconhecida_sai_com_2() {
         .output()
         .unwrap();
     assert_eq!(o.status.code(), Some(2));
+}
+
+// ---- R1 (dono): só avisa quando o sistema encerrou a unidade ----
+
+/// M29: o texto da mensagem é o combinado, não só a constante do código.
+#[test]
+fn texto_da_variante_e_da_fase_e_o_combinado() {
+    assert_eq!(VARIANTE, "EncerradoPeloSistema");
+    assert_eq!(FASE, "systemd");
+}
+
+fn avisar(unidade: &str, arquivo: &str, result: &str, tg: &TelegramFake) -> (bool, PathBuf) {
+    let d = dir_temp("result");
+    let r = result.to_owned();
+    let avisou = alertar_se_encerrada(unidade, d.join(arquivo), tg, "h".into(), AGORA, |u| {
+        assert_eq!(u, unidade);
+        Ok(r.clone())
+    })
+    .unwrap();
+    (avisou, d.join(arquivo))
+}
+
+#[test]
+fn result_de_timeout_sinal_core_dump_e_watchdog_avisa() {
+    for r in ["timeout", "signal", "core-dump", "watchdog", "timeout\n"] {
+        let tg = TelegramFake::default();
+        let (avisou, _) = avisar("besave-ciclo.service", "alerta.json", r, &tg);
+        assert!(avisou, "{r:?}");
+        assert_eq!(tg.enviados.borrow().len(), 1, "{r:?}");
+    }
+}
+
+#[test]
+fn result_exit_code_nao_avisa_porque_o_worker_ja_avisou() {
+    for r in ["exit-code", "success", "resources", ""] {
+        let tg = TelegramFake::default();
+        let (avisou, estado) = avisar("besave-envio.service", "alerta-envio.json", r, &tg);
+        assert!(!avisou, "{r:?}");
+        assert!(tg.enviados.borrow().is_empty(), "{r:?}");
+        assert!(!estado.exists());
+    }
+}
+
+#[test]
+fn sem_conseguir_ler_o_result_avisa_mesmo_assim() {
+    let d = dir_temp("result-erro");
+    let tg = TelegramFake::default();
+    let avisou = alertar_se_encerrada(
+        "besave-ciclo.service",
+        d.join("alerta.json"),
+        &tg,
+        "h".into(),
+        AGORA,
+        |_| Err(std::io::Error::other("systemctl ausente")),
+    )
+    .unwrap();
+    assert!(avisou);
+    assert_eq!(tg.enviados.borrow().len(), 1);
 }

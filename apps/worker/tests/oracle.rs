@@ -260,3 +260,26 @@ fn limite_da_config_chega_na_conexao() {
     worker::oracle::limitar_chamadas(&conn, c.timeout_chamada).unwrap();
     assert_eq!(*conn.0.borrow(), [std::time::Duration::from_secs(45)]);
 }
+
+/// M47/M48: `conectar` aplica à conexão aberta exatamente `timeout_chamada` da configuração.
+#[test]
+fn abrir_limitada_aplica_o_timeout_da_config_na_conexao_aberta() {
+    let abrir = |_: &ConfigOracle| Ok(ConexaoFalsa(Default::default()));
+    let c = ConfigOracle::de(env(&com(&[("BESAVE_ORACLE_TIMEOUT_S", "45")]))).unwrap();
+    let conn = worker::oracle::abrir_limitada(&c, abrir).unwrap();
+    assert_eq!(*conn.0.borrow(), [std::time::Duration::from_secs(45)]);
+    // Sem BESAVE_ORACLE_TIMEOUT_S: o padrão de 120 s.
+    let c = ConfigOracle::de(env(&COMPLETO)).unwrap();
+    let conn = worker::oracle::abrir_limitada(&c, abrir).unwrap();
+    assert_eq!(*conn.0.borrow(), [std::time::Duration::from_secs(120)]);
+}
+
+/// Conexão que não abre: o erro sobe e nada é limitado.
+#[test]
+fn abrir_limitada_propaga_o_erro_de_abertura() {
+    let c = ConfigOracle::de(env(&COMPLETO)).unwrap();
+    let r = worker::oracle::abrir_limitada::<ConexaoFalsa>(&c, |_| {
+        Err(ErroFonte::ConfigInvalida("X", "não abriu".into()))
+    });
+    assert!(r.is_err());
+}

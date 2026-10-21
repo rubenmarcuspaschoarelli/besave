@@ -8,6 +8,7 @@ use tracing::{error, info, warn};
 
 use crate::alerta::{Alertas, horas_sem_novas};
 use crate::avisos::publicacao::{ConfigAvisos, publicar_avisos};
+use crate::expurgo::VARIANTE_EXPURGO;
 use crate::fonte::FonteOfertas;
 use crate::geracao::{ErroGeracao, Relatorio};
 use crate::logs::iso_brasilia;
@@ -169,7 +170,7 @@ pub fn dt_max_texto(dt: Option<i64>) -> String {
 pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 38] = [
+    let pares: [(&str, String); 39] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -200,6 +201,7 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("expurgo_enfileirados", rel.expurgo.enfileirados.to_string()),
         ("expurgo_removidos", rel.expurgo.removidos.to_string()),
         ("expurgo_pendente", rel.expurgo.pendente.to_string()),
+        ("expurgo_falhou", u8::from(rel.expurgo.falhou).to_string()),
         ("paginas_falhas", pag.falhas.len().to_string()),
         (
             "publicacao_site_marcadas",
@@ -246,6 +248,9 @@ pub fn concluir(
         Ok((rel, tempo_ms)) => {
             info!("relatorio {}", linha_relatorio(&rel, tempo_ms, agora));
             if let Some(a) = alertas {
+                if rel.expurgo.falhou {
+                    a.aviso(VARIANTE_EXPURGO, "expurgo", agora);
+                }
                 a.sucesso(agora);
                 a.avaliar_novas(rel.dt_mais_recente, rel.validas, agora);
             }

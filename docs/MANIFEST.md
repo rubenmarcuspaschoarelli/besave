@@ -164,7 +164,7 @@ depois; o dado já existe).
    fila é regravada depois de cada chamada (ciclo interrompido retoma dali). O id que saiu do conjunto
    publicado entra na fila nos passos 1–3, **antes** do manifest (a fila é gravada antes de qualquer
    upload do ciclo), e some de chunks, sitemap e contagem no mesmo ciclo; o manifest nunca espera o
-   expurgo. Na primeira execução, uma reconciliação única põe na fila as páginas e imagens de ids fora
+   expurgo. Falha do expurgo não falha o ciclo: vira aviso (variante `Expurgo`) e os ids seguem na fila. Na primeira execução, uma reconciliação única põe na fila as páginas e imagens de ids fora
    do conjunto publicado (sobras de execuções interrompidas).
 
 Se falhar antes do passo 5, o manifest antigo continua válido e aponta para arquivos que
