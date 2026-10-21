@@ -73,6 +73,7 @@ impl Falha {
             ErroGeracao::Imagens(_) => "imagens",
             ErroGeracao::Chunk(_) | ErroGeracao::ChunkAcimaDoOrcamento { .. } => "chunks",
             ErroGeracao::Site(_) => "paginas",
+            ErroGeracao::Expurgo(_) => "expurgo",
             ErroGeracao::Redirects(_) => "redirects",
             ErroGeracao::ManifestAnteriorInvalido(_)
             | ErroGeracao::Manifest(_)
@@ -168,7 +169,7 @@ pub fn dt_max_texto(dt: Option<i64>) -> String {
 pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
     let t = &rel.tempos;
     let pag = &rel.site.paginas;
-    let pares: [(&str, String); 35] = [
+    let pares: [(&str, String); 38] = [
         ("lidas", rel.lidas.to_string()),
         ("validas", rel.validas.to_string()),
         (
@@ -196,7 +197,9 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("imagens_publicadas", rel.imagens.publicadas.to_string()),
         ("imagens_falhas", rel.imagens.falhas.len().to_string()),
         ("paginas_publicadas", pag.publicadas.to_string()),
-        ("paginas_removidas", pag.removidas.to_string()),
+        ("expurgo_enfileirados", rel.expurgo.enfileirados.to_string()),
+        ("expurgo_removidos", rel.expurgo.removidos.to_string()),
+        ("expurgo_pendente", rel.expurgo.pendente.to_string()),
         ("paginas_falhas", pag.falhas.len().to_string()),
         (
             "publicacao_site_marcadas",
@@ -221,6 +224,7 @@ pub fn linha_relatorio(rel: &Relatorio, tempo_ms: u64, agora: i64) -> String {
         ("t_redirects_listagem", t.redirects_listagem.to_string()),
         ("t_manifest", t.manifest.to_string()),
         ("t_orfaos", t.orfaos.to_string()),
+        ("t_expurgo", t.expurgo.to_string()),
         ("t_avisos", rel.avisos.tempo_ms.to_string()),
         ("tempo_ms", tempo_ms.to_string()),
     ];

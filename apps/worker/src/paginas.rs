@@ -1,10 +1,11 @@
-//! Páginas de oferta em massa (BSV-21): render, só sobe o que mudou, expurgo (MANIFEST §1, §4, §7).
+//! Páginas de oferta em massa (BSV-21): render e só sobe o que mudou (MANIFEST §1, §4). A remoção
+//! das páginas de ofertas expurgadas é da fila (`expurgo`, BSV-47).
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
 
 use sha2::{Digest, Sha256};
-use tracing::{debug, warn};
+use tracing::warn;
 
 use crate::modelo::OfertaPagina;
 use crate::pagina_html::TemplateOferta;
@@ -32,7 +33,6 @@ pub struct RelatorioPaginas {
     pub renderizadas: u64,
     pub publicadas: u64,
     pub inalteradas: u64,
-    pub removidas: u64,
     /// Ids cujo render falhou (não publicados nesta execução).
     pub falhas: Vec<i64>,
     /// Maior HTML renderizado, em bytes.
@@ -60,9 +60,9 @@ pub fn checar_orcamento_html(id: i64, bytes: usize) -> Result<(), ErroPaginas> {
 }
 
 /// Renderiza cada página e sobe, em lotes de `TAMANHO_BLOCO`, só as que têm hash diferente do
-/// `anterior`; depois remove as páginas de ids do `anterior` que saíram de `paginas` (expurgo,
-/// CONTRATO §7). Erro de render: loga o id, não publica e segue (mantém o hash anterior, se havia).
-/// Página acima do orçamento ou falha de upload aborta.
+/// `anterior`. Ids do `anterior` que saíram de `paginas` ficam fora do índice novo; a página deles
+/// é apagada pela fila do expurgo, na janela (CONTRATO §7). Erro de render: loga o id, não publica
+/// e segue (mantém o hash anterior, se havia). Página acima do orçamento ou falha de upload aborta.
 pub fn publicar_paginas(
     paginas: &[OfertaPagina],
     t: &TemplateOferta,
@@ -106,12 +106,6 @@ pub fn publicar_paginas(
         }
     }
 
-    let atuais: HashSet<i64> = paginas.iter().map(|o| o.id).collect();
-    for id in anterior.0.keys().filter(|id| !atuais.contains(id)) {
-        pub_.remover(&chave_pagina(*id))?;
-        rel.removidas += 1;
-        debug!(id, "página expurgada");
-    }
     rel.tempo_render_ms = u64::try_from(tempo.as_millis()).unwrap_or(u64::MAX);
     Ok((IndicePaginas(novo), rel))
 }

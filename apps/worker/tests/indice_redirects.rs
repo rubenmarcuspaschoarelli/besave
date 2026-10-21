@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use comum::{AGORA, dir_imagens_vazio, linha, mapeamento};
 use sha2::{Digest, Sha256};
 use worker::conversao::LinhaOferta;
+use worker::expurgo::ConfigExpurgo;
 use worker::fonte::FakeFonte;
 use worker::geracao::{ErroGeracao, Relatorio, gerar};
 use worker::imagens::{chave_grande, chave_small};
@@ -29,7 +30,11 @@ fn rodar(
         p,
         kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &ConfigSite {
+            // Sem janela: estes testes verificam a KVS e o índice, não quando o expurgo roda.
+            expurgo: ConfigExpurgo::sempre(),
+            ..ConfigSite::default()
+        },
         AGORA,
     )
 }
@@ -102,8 +107,11 @@ fn diff_de_seis_chaves_so_aplica_elas_e_atualiza_o_indice() {
     let r = rodar(&l, &mut p, &mut kvs).unwrap();
 
     assert_eq!(kvs.listar_chamadas(), listar, "listar no modo indice");
-    assert_eq!(kvs.aplicados().len(), aplicados + 1);
-    let (put, del) = kvs.aplicados().last().unwrap().clone();
+    // BSV-47: puts na sincronização; os deletes de quem saiu, na fila do expurgo (outro `aplicar`).
+    assert_eq!(kvs.aplicados().len(), aplicados + 2);
+    let (put, sem_del) = kvs.aplicados()[aplicados].clone();
+    let (sem_put, del) = kvs.aplicados().last().unwrap().clone();
+    assert!(sem_del.is_empty() && sem_put.is_empty());
     assert_eq!(
         put,
         [
@@ -117,8 +125,9 @@ fn diff_de_seis_chaves_so_aplica_elas_e_atualiza_o_indice() {
     assert_eq!(r.redirects.modo, ModoRedirects::Indice);
     assert_eq!(
         (r.redirects.puts, r.redirects.dels, r.redirects.total),
-        (4, 2, 7)
+        (4, 0, 7)
     );
+    assert_eq!(r.expurgo.removidos, 2);
 
     let depois = kvs.descrever().unwrap();
     let i = indice(&p);

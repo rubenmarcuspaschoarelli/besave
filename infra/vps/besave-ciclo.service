@@ -4,6 +4,8 @@
 Description=Besave: ciclo do worker (Oracle -> S3)
 Wants=network-online.target
 After=network-online.target
+# Encerrado pelo sistema (timeout, sinal, falha ao iniciar): o processo não avisa sozinho (BSV-47).
+OnFailure=besave-alerta@%n.service
 
 [Service]
 Type=oneshot
@@ -11,8 +13,8 @@ User=besave
 Group=besave
 EnvironmentFile=/srv/besave/worker.env
 ExecStart=/srv/besave/bin/besave-ciclo
-# Igual à tarefa do Windows: execução que passa de 20 min é encerrada.
-TimeoutStartSec=20min
+# O ciclo normal leva ~20 s; passou de 15 min, o systemd encerra e o OnFailure avisa (BSV-47).
+TimeoutStartSec=15min
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full

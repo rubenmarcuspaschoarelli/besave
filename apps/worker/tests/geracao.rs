@@ -11,6 +11,7 @@ use comum::{
     texto_aleatorio, validar_schema,
 };
 use worker::conversao::{LinhaOferta, Rejeicao};
+use worker::expurgo::{ConfigExpurgo, RelatorioExpurgo};
 use worker::fonte::FakeFonte;
 use worker::geracao::{ErroGeracao, Relatorio, Tempos, checar_orcamento, contar_paginas, gerar};
 use worker::imagens::{ErroImagens, RelatorioImagens};
@@ -39,7 +40,7 @@ fn rodar_com(
         p,
         kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA,
     )
 }
@@ -57,7 +58,7 @@ fn rodar_com_imagens(
         p,
         kvs,
         dir_imagens,
-        &ConfigSite::default(),
+        &site_base(),
         agora,
     )
 }
@@ -271,6 +272,14 @@ impl Publicador for DiscoCheio {
     }
 }
 
+/// Expurgo sem janela: estes testes verificam o que o ciclo apaga, não quando (ver `tests/expurgo.rs`).
+fn site_base() -> ConfigSite {
+    ConfigSite {
+        expurgo: ConfigExpurgo::sempre(),
+        ..ConfigSite::default()
+    }
+}
+
 #[test]
 fn falha_em_chunk_nao_grava_manifest() {
     let mut p = DiscoCheio {
@@ -340,17 +349,18 @@ fn relatorio_com_contagens() {
                     renderizadas: 5,
                     publicadas: 5,
                     inalteradas: 0,
-                    removidas: 0,
                     falhas: vec![],
                     maior_html,
                     // Tempo de relógio: o único campo sem valor fixo.
                     tempo_render_ms: rel.site.paginas.tempo_render_ms,
                 },
+                saidas: 0,
                 sitemaps_publicados: 3,
                 sitemaps_removidos: 0,
                 robots_publicado: true,
                 indice_gravado: true,
             },
+            expurgo: RelatorioExpurgo::default(),
             // BSV-40: ids válidos na ordem da fonte; a marcação é fora de `gerar`.
             ids_publicados: vec![5412, 5413, 5420, 1500, 1001],
             publicacao_site_marcadas: 0,
@@ -502,7 +512,8 @@ fn falha_na_kvs_nao_grava_manifest() {
             || c.starts_with("oferta/")
             || c.starts_with("sitemap")
             || c == "robots.txt"
-            || c == "_estado/paginas.json"),
+            || c == "_estado/paginas.json"
+            || c == "_estado/expurgo.json"),
         "{:?}",
         p.gravacoes()
     );
@@ -747,7 +758,7 @@ fn produtos_em_lote_sem_n_mais_1() {
         &mut p,
         &mut RedirectsMemoria::new(),
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA,
     )
     .unwrap();
@@ -840,7 +851,7 @@ fn listagem_de_imagens_falhando_aborta_sem_manifest() {
     }
 }
 
-/// TMP-01 (BSV-13b): o relatório traz as 9 medidas (desestruturação exaustiva: campo a mais ou a
+/// TMP-01 (BSV-13b): o relatório traz as 10 medidas (desestruturação exaustiva: campo a mais ou a
 /// menos não compila) e cada sub-medida cabe na fase que a contém. Não confere valores.
 #[test]
 fn relatorio_traz_tempo_por_fase() {
@@ -856,6 +867,7 @@ fn relatorio_traz_tempo_por_fase() {
         redirects_listagem,
         manifest: _,
         orfaos: _,
+        expurgo: _,
     } = rel.tempos;
     assert!(imagens_listagem <= imagens, "{:?}", rel.tempos);
     assert!(redirects_listagem <= redirects, "{:?}", rel.tempos);

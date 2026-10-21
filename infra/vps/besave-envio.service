@@ -4,6 +4,8 @@
 Description=Besave: envio ao canal do Telegram
 Wants=network-online.target
 After=network-online.target
+# Encerrado pelo sistema (timeout, sinal, falha ao iniciar): o processo não avisa sozinho (BSV-47).
+OnFailure=besave-alerta@%n.service
 
 [Service]
 Type=oneshot
@@ -11,7 +13,7 @@ User=besave
 Group=besave
 EnvironmentFile=/srv/besave/worker.env
 ExecStart=/srv/besave/bin/besave-envio
-TimeoutStartSec=20min
+TimeoutStartSec=15min
 NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=full

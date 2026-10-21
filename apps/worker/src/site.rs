@@ -1,11 +1,12 @@
 //! Sitemap, robots.txt e índice `_estado/` do site (BSV-21, MANIFEST §1, CONTRATO §7.1). O CSS das
 //! páginas (`/assets/besave.css`) é gerado e publicado pelo site (BSV-30, AD-078).
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 
 use tracing::{debug, warn};
 
+use crate::expurgo::{ConfigExpurgo, ErroConfigExpurgo, ErroExpurgo, FilaExpurgo};
 use crate::modelo::{Area, OfertaPagina, Publico, Status};
 use crate::pagina_html::{ErroTemplate, TemplateOferta, data_brasilia};
 use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
@@ -31,6 +32,8 @@ pub enum ErroSite {
     #[error(transparent)]
     Paginas(#[from] ErroPaginas),
     #[error(transparent)]
+    Expurgo(#[from] ErroExpurgo),
+    #[error(transparent)]
     Template(#[from] ErroTemplate),
     #[error("serializando {CHAVE_ESTADO}: {0}")]
     Estado(serde_json::Error),
@@ -39,6 +42,8 @@ pub enum ErroSite {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RelatorioSite {
     pub paginas: RelatorioPaginas,
+    /// Ids de páginas que saíram do conjunto e entraram na fila do expurgo (BSV-47).
+    pub saidas: u64,
     pub sitemaps_publicados: u64,
     pub sitemaps_removidos: u64,
     pub robots_publicado: bool,
@@ -94,7 +99,7 @@ impl EstadoSite {
 
 /// Estado sem índice: só as páginas `oferta/{id}/index.html` que já estão no bucket, com hash vazio
 /// (nunca igual a um hash16, então todas sobem de novo; as de ids fora do conjunto atual são
-/// expurgadas por `publicar_paginas`).
+/// vão para a fila do expurgo).
 fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador> {
     let mut e = EstadoSite::default();
     for chave in pub_.listar("oferta/")? {
@@ -109,7 +114,8 @@ fn paginas_no_bucket(pub_: &dyn Publicador) -> Result<EstadoSite, ErroPublicador
     Ok(e)
 }
 
-/// MANIFEST §6 passo 3, na ordem: páginas (com expurgo), sitemaps (ofertas só ATIVAS com página no
+/// MANIFEST §6 passo 3, na ordem: páginas (as de ids que saíram vão para a fila do expurgo, gravada
+/// antes de qualquer upload; a remoção é na janela, BSV-47), sitemaps (ofertas só ATIVAS com página no
 /// bucket; páginas do site a partir de `ativas_site`, os cards sem `x`), robots e, por último, o
 /// índice. Cada objeto só sobe se o hash difere do índice
 /// anterior. Índice ausente ou ilegível: tudo sobe (páginas são idempotentes) e o conjunto anterior
@@ -118,6 +124,8 @@ pub fn publicar_site(
     paginas: &[OfertaPagina],
     ativas_site: &[AtivaPagina],
     cfg: &ConfigSite,
+    fila: &mut FilaExpurgo,
+    agora: i64,
     pub_: &mut dyn Publicador,
 ) -> Result<RelatorioSite, ErroSite> {
     let lido = pub_.ler(CHAVE_ESTADO)?;
@@ -132,6 +140,11 @@ pub fn publicar_site(
     };
     let mut rel = RelatorioSite::default();
     let mut novo = EstadoSite::default();
+
+    let atuais: HashSet<i64> = paginas.iter().map(|o| o.id).collect();
+    let saidas = anterior.paginas.0.keys().filter(|id| !atuais.contains(id));
+    rel.saidas = fila.registrar(saidas.copied(), agora);
+    fila.salvar(pub_)?;
 
     let t = TemplateOferta::novo()?;
     let (indice, rel_paginas) = publicar_paginas(paginas, &t, pub_, &anterior.paginas)?;
@@ -184,11 +197,19 @@ pub enum ErroConfigSite {
     Invalida(&'static str, String),
 }
 
-/// `BESAVE_BASE_URL` (sem `/` final) e `BESAVE_INDEXAVEL`.
+impl From<ErroConfigExpurgo> for ErroConfigSite {
+    fn from(e: ErroConfigExpurgo) -> Self {
+        Self::Invalida(e.var, e.motivo)
+    }
+}
+
+/// `BESAVE_BASE_URL` (sem `/` final) e `BESAVE_INDEXAVEL`; leva junto a política do expurgo
+/// (`BESAVE_EXPURGO_*`, BSV-47), que `gerar` recebe por aqui.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigSite {
     pub base: String,
     pub indexavel: bool,
+    pub expurgo: ConfigExpurgo,
 }
 
 impl Default for ConfigSite {
@@ -196,6 +217,7 @@ impl Default for ConfigSite {
         Self {
             base: BASE_PADRAO.to_owned(),
             indexavel: false,
+            expurgo: ConfigExpurgo::default(),
         }
     }
 }
@@ -229,6 +251,7 @@ impl ConfigSite {
         Ok(Self {
             base: base.trim_end_matches('/').to_owned(),
             indexavel,
+            expurgo: ConfigExpurgo::de(&env)?,
         })
     }
 }

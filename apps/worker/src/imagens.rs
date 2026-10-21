@@ -1,7 +1,7 @@
 //! Imagens WebP do robô → S3 (BSV-13). O robô já entrega `{dir}/{id}/{id}[-small].webp`;
 //! o worker copia com verificação de orçamento (MANIFEST §1, §6, §7).
 
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use image::{
@@ -256,6 +256,19 @@ impl ImagensExistentes {
             placeholders,
             estranhas,
         })
+    }
+}
+
+impl ImagensExistentes {
+    /// Ids que têm ao menos uma imagem em `img/ofertas/` (reconciliação do expurgo, BSV-47).
+    pub fn ids_de_oferta(&self) -> BTreeSet<i64> {
+        self.ofertas
+            .iter()
+            .filter_map(|c| {
+                let nome = c.strip_prefix(PREFIXO_OFERTAS)?.strip_suffix(".webp")?;
+                nome.strip_suffix("-small").unwrap_or(nome).parse().ok()
+            })
+            .collect()
     }
 }
 

@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use worker::expurgo::FilaExpurgo;
 use worker::site::{ConfigSite, ErroConfigSite, MAX_URLS_SITEMAP, robots, sitemaps};
 
 const BASE: &str = "https://besave.com.br";
@@ -254,8 +255,15 @@ fn pagina_acima_do_orcamento_aborta_sem_indice() {
     let mut grande = pagina(7001);
     grande.titulo = "x".repeat(40_000);
     let mut p = PublicadorMemoria::new();
-    let erro =
-        publicar_site(&[pagina(5412), grande], &[], &ConfigSite::default(), &mut p).unwrap_err();
+    let erro = publicar_site(
+        &[pagina(5412), grande],
+        &[],
+        &ConfigSite::default(),
+        &mut FilaExpurgo::default(),
+        0,
+        &mut p,
+    )
+    .unwrap_err();
     assert!(
         matches!(
             erro,
@@ -283,6 +291,8 @@ fn ativa_sem_pagina_fica_fora_do_sitemap() {
         &[pagina(5412), quebrada],
         &[],
         &ConfigSite::default(),
+        &mut FilaExpurgo::default(),
+        0,
         &mut p,
     )
     .unwrap();

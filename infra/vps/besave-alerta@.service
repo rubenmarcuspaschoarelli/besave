@@ -1,0 +1,16 @@
+# Alerta de unidade encerrada pelo sistema (BSV-47). Disparado por `OnFailure=besave-alerta@%n.service`
+# das unidades besave-ciclo e besave-envio; %i é o nome da unidade que falhou (ex.: besave-ciclo.service).
+# Nenhum segredo aqui: o token e o chat do bot de alertas vêm do mesmo worker.env.
+[Unit]
+Description=Besave: alerta de %i encerrada pelo sistema
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/worker.env
+ExecStart=/srv/besave/bin/besave-worker --alerta-encerrado %i
+TimeoutStartSec=2min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full

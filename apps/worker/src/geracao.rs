@@ -1,7 +1,7 @@
 //! Fonte → chunks + manifest publicados (MANIFEST §2, §3, §6).
 
 use std::cell::Cell;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::Path;
 use std::time::{Duration, Instant};
 
@@ -12,6 +12,7 @@ use crate::chunks::{ErroChunk, chave_chunk, comprimir_br, particionar, serializa
 use crate::conversao::{
     LinhaOferta, Rejeicao, data_publicacao, instante_ciclo, iso_utc, para_pagina, validar_card,
 };
+use crate::expurgo::{ErroExpurgo, FilaExpurgo, RelatorioExpurgo};
 use crate::fonte::{ErroFonte, FonteOfertas};
 use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
@@ -46,6 +47,8 @@ pub enum ErroGeracao {
     Redirects(#[from] ErroRedirects),
     #[error(transparent)]
     Site(#[from] ErroSite),
+    #[error(transparent)]
+    Expurgo(#[from] ErroExpurgo),
     #[error("chunk {n} tem {bytes} bytes comprimido; orçamento é {ORCAMENTO_CHUNK}")]
     ChunkAcimaDoOrcamento { n: u64, bytes: u64 },
     #[error("manifest.json anterior inválido: {0}")]
@@ -77,6 +80,8 @@ pub struct Relatorio {
     pub imagens: RelatorioImagens,
     /// CSS, páginas, sitemaps, robots e índice `_estado/` (BSV-21).
     pub site: RelatorioSite,
+    /// Fila e execução do expurgo (BSV-47).
+    pub expurgo: RelatorioExpurgo,
     pub tempos: Tempos,
     /// Ids do conjunto publicado (cards válidos, ativos e expirados).
     pub ids_publicados: Vec<i64>,
@@ -107,8 +112,10 @@ pub struct Tempos {
     pub redirects_listagem: u64,
     /// Leitura do manifest anterior + gravação de `manifest.prev.json` e `manifest.json`.
     pub manifest: u64,
-    /// Chunks órfãos + expurgo de imagens.
+    /// Chunks órfãos.
     pub orfaos: u64,
+    /// Execução da fila do expurgo (só na janela).
+    pub expurgo: u64,
 }
 
 fn ms(d: Duration) -> u64 {
@@ -238,6 +245,22 @@ pub fn gerar(
     let ids_publicaveis: Vec<i64> = cards.iter().map(|c| c.id).collect();
     let existentes = ImagensExistentes::listar(pub_)?;
     let d_imagens_listagem = t.elapsed();
+
+    // Fila do expurgo (BSV-47), gravada antes de qualquer upload e do manifest: ciclo que cai
+    // depois não perde id que saiu. Quem voltou ao conjunto (reativado) sai da fila.
+    let publicados: HashSet<i64> = ids_publicaveis.iter().copied().collect();
+    let mut fila = FilaExpurgo::carregar(pub_)?;
+    fila.devolver_publicados(&publicados);
+    rel.expurgo.enfileirados += fila.registrar(
+        ids_anteriores
+            .iter()
+            .filter(|id| !publicados.contains(id))
+            .copied(),
+        agora,
+    );
+    rel.expurgo.enfileirados +=
+        fila.reconciliar(pub_, existentes.ids_de_oferta(), &publicados, agora)?;
+    fila.salvar(pub_)?;
     rel.imagens = imagens::publicar_imagens_com(&existentes, &ids_publicaveis, dir_imagens, pub_)?;
     let d_imagens = t.elapsed();
 
@@ -302,11 +325,13 @@ pub fn gerar(
             dp,
         })
         .collect();
-    rel.site = publicar_site(&paginas, &ativas_site, site, pub_)?;
+    rel.site = publicar_site(&paginas, &ativas_site, site, &mut fila, agora, pub_)?;
+    rel.expurgo.enfileirados += rel.site.saidas;
     let d_paginas = t.elapsed();
 
     let t = Instant::now();
-    rel.redirects = sincronizar_com_indice(&urls, base_redirects, &mut redirects, pub_)?;
+    let retidos: BTreeSet<i64> = fila.ids().collect();
+    rel.redirects = sincronizar_com_indice(&urls, base_redirects, &retidos, &mut redirects, pub_)?;
     d_redirects += t.elapsed();
 
     let t = Instant::now();
@@ -343,13 +368,16 @@ pub fn gerar(
         }
     }
 
-    // Expurgo de imagens (CONTRATO §7): id publicado no ciclo anterior e ausente neste.
-    let ids_publicaveis: HashSet<i64> = ids_publicaveis.into_iter().collect();
-    for id in ids_anteriores.difference(&ids_publicaveis) {
-        pub_.remover(&imagens::chave_small(*id))?;
-        pub_.remover(&imagens::chave_grande(*id))?;
-        debug!(id, "imagens expurgadas");
-    }
+    let d_orfaos = t.elapsed();
+
+    // Expurgo (CONTRATO §7): depois do manifest, só na janela, em lotes (BSV-47).
+    let t = Instant::now();
+    let expurgo = fila.executar(&site.expurgo, agora, pub_, &mut redirects)?;
+    rel.expurgo = RelatorioExpurgo {
+        enfileirados: rel.expurgo.enfileirados,
+        ..expurgo
+    };
+    let d_expurgo = t.elapsed();
     rel.tempos = Tempos {
         leitura_fonte: ms(d_leitura_fonte),
         imagens: ms(d_imagens),
@@ -359,7 +387,8 @@ pub fn gerar(
         redirects: ms(d_redirects),
         redirects_listagem: ms(redirects.gasto.get()),
         manifest: ms(d_manifest),
-        orfaos: ms(t.elapsed()),
+        orfaos: ms(d_orfaos),
+        expurgo: ms(d_expurgo),
     };
 
     info!(
@@ -374,7 +403,9 @@ pub fn gerar(
         redirects_put = rel.redirects.puts,
         redirects_del = rel.redirects.dels,
         paginas_publicadas = rel.site.paginas.publicadas,
-        paginas_removidas = rel.site.paginas.removidas,
+        expurgo_enfileirados = rel.expurgo.enfileirados,
+        expurgo_removidos = rel.expurgo.removidos,
+        expurgo_pendente = rel.expurgo.pendente,
         versao,
         "manifest publicado"
     );

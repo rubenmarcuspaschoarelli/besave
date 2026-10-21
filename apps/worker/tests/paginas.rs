@@ -90,7 +90,6 @@ fn sem_indice_anterior_publica_todas() {
     assert_eq!(rel.renderizadas, 3);
     assert_eq!(rel.publicadas, 3);
     assert_eq!(rel.inalteradas, 0);
-    assert_eq!(rel.removidas, 0);
     assert!(rel.falhas.is_empty());
     assert_eq!(rel.maior_html, maior);
 }
@@ -139,17 +138,17 @@ fn oferta_encerrada_reenvia_so_ela() {
     assert!(html.contains("noindex"), "página encerrada sem noindex");
 }
 
-/// PAG-06: id do índice anterior fora do conjunto → removido do bucket e do índice.
+/// PAG-06 (BSV-47): id do índice anterior fora do conjunto sai do índice, mas `publicar_paginas`
+/// não apaga a página: quem apaga é a fila do expurgo, na janela.
 #[test]
-fn expurgo_remove_pagina_e_tira_do_indice() {
+fn id_fora_do_conjunto_sai_do_indice_sem_apagar_a_pagina() {
     let mut p = PublicadorMemoria::new();
     let (indice, _) = publicar(&tres(), &mut p, &IndicePaginas::default());
-    let (indice2, rel) = publicar(&tres()[..2], &mut p, &indice);
-    assert_eq!(p.remocoes(), ["oferta/5420/index.html"]);
-    assert!(!p.existe("oferta/5420/index.html").unwrap());
+    let (indice2, _) = publicar(&tres()[..2], &mut p, &indice);
+    assert!(p.remocoes().is_empty(), "{:?}", p.remocoes());
+    assert!(p.existe("oferta/5420/index.html").unwrap());
     assert!(!indice2.0.contains_key(&5420));
     assert_eq!(indice2.0.len(), 2);
-    assert_eq!(rel.removidas, 1);
 }
 
 /// PAG-07: acima de 30 KB → erro nomeado com id e bytes; nada daquela página sobe.

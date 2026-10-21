@@ -1,6 +1,7 @@
 //! `FonteOfertas` sobre Oracle XE 11.2 (crate `oracle`, OCI via Instant Client ≥ 19).
 
 use std::collections::{BTreeSet, HashMap};
+use std::time::Duration;
 
 use oracle::sql_type::ToSql;
 use oracle::{Connection, InitParams, Row};
@@ -25,7 +26,13 @@ pub struct ConfigOracle {
     /// `BESAVE_ORACLE_CLIENT_DIR`, opcional: pasta do Instant Client; se definida, o `PATH`
     /// não é consultado.
     pub client_dir: Option<String>,
+    /// `BESAVE_ORACLE_TIMEOUT_S`, opcional (padrão 120 s): limite de cada chamada ao banco
+    /// (BSV-47). Estourou, a chamada falha com ORA-03136/ORA-03156 e o ciclo alerta.
+    pub timeout_chamada: Duration,
 }
+
+/// Padrão de `BESAVE_ORACLE_TIMEOUT_S`.
+pub const TIMEOUT_CHAMADA_PADRAO: Duration = Duration::from_secs(120);
 
 impl ConfigOracle {
     pub fn do_env() -> Result<Self> {
@@ -39,6 +46,21 @@ impl ConfigOracle {
         let fuso_segundos = offset_segundos(&fuso).ok_or_else(|| {
             ErroFonte::ConfigInvalida("BESAVE_ORACLE_TZ", format!("{fuso:?}, esperado ±HH:MM"))
         })?;
+        let timeout_chamada = match opc("BESAVE_ORACLE_TIMEOUT_S") {
+            None => TIMEOUT_CHAMADA_PADRAO,
+            Some(v) => v
+                .trim()
+                .parse::<u64>()
+                .ok()
+                .filter(|s| *s >= 1)
+                .map(Duration::from_secs)
+                .ok_or_else(|| {
+                    ErroFonte::ConfigInvalida(
+                        "BESAVE_ORACLE_TIMEOUT_S",
+                        format!("{v:?}, esperado inteiro ≥ 1 (segundos)"),
+                    )
+                })?,
+        };
         Ok(Self {
             dsn: obrig("BESAVE_ORACLE_DSN")?,
             usuario: obrig("BESAVE_ORACLE_USER")?,
@@ -46,6 +68,7 @@ impl ConfigOracle {
             fuso,
             fuso_segundos,
             client_dir: opc("BESAVE_ORACLE_CLIENT_DIR"),
+            timeout_chamada,
         })
     }
 }
@@ -75,7 +98,27 @@ pub(crate) fn conectar(cfg: &ConfigOracle) -> Result<Connection> {
     if let Some(dir) = &cfg.client_dir {
         InitParams::new().oracle_client_lib_dir(dir)?.init()?;
     }
-    Ok(Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?)
+    let conn = Connection::connect(&cfg.usuario, &cfg.senha, &cfg.dsn)?;
+    limitar_chamadas(&conn, cfg.timeout_chamada)?;
+    Ok(conn)
+}
+
+/// Tempo máximo por chamada ao banco (BSV-47): sem ele uma conexão sem resposta prende o ciclo.
+/// Não cobre a abertura da conexão: para ela, `SQLNET.OUTBOUND_CONNECT_TIMEOUT` no `sqlnet.ora`
+/// da wallet (README, "Rodar no Linux").
+pub fn limitar_chamadas(conn: &impl LimiteDeChamada, tempo: Duration) -> Result<()> {
+    conn.limitar(tempo)
+}
+
+/// O que `limitar_chamadas` pede à conexão (a real é `oracle::Connection`; o teste usa um fake).
+pub trait LimiteDeChamada {
+    fn limitar(&self, tempo: Duration) -> Result<()>;
+}
+
+impl LimiteDeChamada for Connection {
+    fn limitar(&self, tempo: Duration) -> Result<()> {
+        Ok(self.set_call_timeout(Some(tempo))?)
+    }
 }
 
 impl OracleFonte {
