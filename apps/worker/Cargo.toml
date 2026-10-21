@@ -64,3 +64,8 @@ opt-level = 3
 
 [profile.dev.package.image-webp]
 opt-level = 3
+
+# Panic sai por SIGABRT (Result=core-dump no systemd): com unwind sairia com 101 (exit-code) e o
+# besave-alerta@ não avisaria (BSV-47).
+[profile.release]
+panic = "abort"
