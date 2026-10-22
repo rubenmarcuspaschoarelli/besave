@@ -1,0 +1,223 @@
+-- =============================================================================
+-- STP_OFERTA_FILA_CAPTURA_UPDATE
+-- Complementa uma linha de OFERTA_FILA_CAPTURA com os dados capturados pelo
+-- CaptureAmazon (Playwright) na pagina do produto. A linha ja existe: foi criada
+-- pelo AgenteCapturaWhatsapp via STP_OFERTA_FILA_CAPTURA_INSERT com ST_CAPTURA='0'.
+--
+-- ST_CAPTURA e FORCADO para '1' aqui (constante, nao vem de parametro): marca a
+-- linha como ja enriquecida para que as proximas leituras da fila
+-- (WHERE ST_CAPTURA = '0') nao a devolvam de novo. Convencao do campo:
+--   '0' pendente | '1' capturado com sucesso | '9' erro (ver a SP _ERRO)
+-- DS_CAPTURA recebe a descricao do resultado ('ok' aqui).
+--
+-- Esta procedure so e chamada quando a captura deu certo; os casos de erro vao
+-- para STP_OFERTA_FILA_CAPTURA_ERRO.
+--
+-- Retorno (o programa Python decide pelo PV_RETORNO):
+--   PV_RETORNO = 'TRUE'  -> update OK (commit feito pelo cliente)
+--   PV_RETORNO = 'FALSE' -> erro ou ID inexistente; PV_ERRO traz o motivo
+-- Nao usamos BOOLEAN de PL/SQL porque ele nao pode ser vinculado por clientes OCI
+-- no Oracle 11g -> devolvemos VARCHAR2 'TRUE'/'FALSE'.
+--
+-- Observacoes:
+--   * As 5 colunas LS_* sao CLOB (2026-07-23, ver
+--     sql/ALTER_OFERTA_FILA_CAPTURA_LS_CLOB.sql): gravadas INTEIRAS, sem corte --
+--     antes eram VARCHAR2(600 CHAR) e (a) truncavam listas longas e (b) davam
+--     ORA-01461 no bind quando o texto passava de 4000 bytes. Os params
+--     correspondentes desta SP sao IN CLOB.
+--   * Truncamento defensivo nas demais colunas de texto evita ORA-12899 (valor
+--     grande demais). ATENCAO as duas semanticas da tabela (banco AL32UTF8):
+--       - DS_TITULO, DS_URL_FINAL, DS_PRODUTO sao CHAR semantics -> o limite e
+--         em CARACTERES (400 / 350 / 600) e SUBSTR resolve;
+--       - DS_PAIS_ORIGEM, DS_CONDICOES_*, DS_*_POR etc. sao BYTE semantics -> o
+--         limite e em BYTES e cada acento custa 2. Por isso a funcao local
+--         CORTA_BYTES, que corta ate caber sem partir caractere (SUBSTRB
+--         sozinho pode devolver meio caractere).
+--     DS_TITULO foi ampliada para VARCHAR2(400 CHAR) em 2026-07-19 (era 100
+--     BYTES, que truncava quase todo titulo de Amazon/Mercado Livre) -- ver
+--     sql/ALTER_OFERTA_FILA_CAPTURA_DS_TITULO.sql. DS_PRODUTO foi de 350 para
+--     600 CHAR em 2026-07-23.
+--   * ST_ATIVO ('1' loja em producao / '0' loja mapeada mas ainda fora do ar)
+--     vem do programa (registry.loja_ativa(), que le conf/config.json ->
+--     "lojas_ativas"). Parametro com DEFAULT NULL + NVL no UPDATE: nao informar
+--     preserva o valor atual. Ver sql/ALTER_OFERTA_FILA_CAPTURA_ST_ATIVO.sql.
+--   * DS_URL_BESAVE (2026-09-02): URL do produto com o NOSSO codigo de
+--     afiliado (BESAVE.LOJA_AFILIADA) no lugar do divulgador que originou a
+--     oferta, calculada pelo programa (core/afiliados.py) a partir da
+--     DS_URL_FINAL. So e informada para Amazon/Mercado Livre/Shopee (as
+--     lojas com afiliado ativo agora); demais lojas mandam NULL, e o NVL
+--     preserva o valor atual (mesmo padrao do ST_ATIVO).
+--   * QT_OPINIOES / DS_AVALIACAO_GERAL (2026-09-02): especificos do Mercado
+--     Livre (contagem de comentarios + resumo de IA das opinioes). As demais
+--     lojas mandam NULL (atribuicao direta, sem NVL -- colunas novas, sem
+--     dado previo a preservar). DS_AVALIACAO_GERAL e CLOB (texto livre, sem
+--     limite pratico) igual as LS_*.
+--   * DS_URL_AFILIADO / DS_CATEGORIA_PROD_AFILIADO /
+--     DS_TAXA_COMISSAO_PROD_AFILIADO / DS_ID_PRODUTO_AFILIADO (2026-09-10):
+--     link OFICIAL gerado pelo programa de afiliados da loja (SiteStripe da
+--     Amazon, barra do Mercado Livre, custom_link da Shopee) e os dados que
+--     o mesmo widget entrega de brinde -- capturados por
+--     core/link_afiliado.py. NAO confundir com DS_URL_BESAVE, que e
+--     CALCULADA a partir da DS_URL_FINAL. Todos com NVL(..., coluna): uma
+--     recaptura que falhe (sessao de afiliado expirada, widget ausente)
+--     manda NULL e PRESERVA o que ja tinha sido capturado antes, em vez de
+--     apagar. Ver sql/ALTER_OFERTA_FILA_CAPTURA_AFILIADO.sql.
+--   * As listas chegam como texto ja unido por " | " pelo programa Python.
+--   * A procedure NAO faz COMMIT: o cliente confirma 1 linha por vez, para nao
+--     perder trabalho se o processo cair no meio de um lote longo.
+--   * SQL%ROWCOUNT = 0 -> o ID nao existe (ou ja foi apagado): devolve FALSE em
+--     vez de sucesso silencioso.
+--   * Rodar este arquivo no schema dono da tabela OFERTA_FILA_CAPTURA.
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE STP_OFERTA_FILA_CAPTURA_UPDATE (
+  P_ID_OFERTA                    IN  NUMBER,
+  P_DS_URL_FINAL                 IN  VARCHAR2,
+  P_LS_CATEGORIA                 IN  CLOB,
+  P_LS_DETALHES_PRODUTO          IN  CLOB,
+  P_LS_DETALHES_TECNICOS         IN  CLOB,
+  P_LS_INFO_ADICIONAIS           IN  CLOB,
+  P_LS_COMPLEMENTO_PRODUTO       IN  CLOB,
+  P_DS_TITULO                    IN  VARCHAR2,
+  P_DS_PRODUTO                   IN  VARCHAR2,
+  P_DS_PAIS_ORIGEM               IN  VARCHAR2,
+  P_NR_NOTA_AVALIACAO            IN  NUMBER,
+  P_QT_AVALIACAO                 IN  NUMBER,
+  P_VR_DESCONTO_INTEIRO          IN  NUMBER,
+  P_VR_DESCONTO_FRACAO           IN  NUMBER,
+  P_VR_PRECO_1                   IN  NUMBER,
+  P_VR_PRECO_2                   IN  NUMBER,
+  P_DS_SIMBOLO_MOEDA             IN  VARCHAR2,
+  P_VR_PRECO_ORIGINAL            IN  NUMBER,
+  P_VR_PRECO_POR_UNIDADE         IN  NUMBER,
+  P_DS_TIPO_UNIDADE              IN  VARCHAR2,
+  P_DS_CONDICOES_1               IN  VARCHAR2,
+  P_DS_CONDICOES_2               IN  VARCHAR2,
+  P_VR_PRECO_RECORRENCIA_INTEIRO IN  NUMBER,
+  P_VR_PRECO_RECORRENCIA_FRACAO  IN  NUMBER,
+  P_QT_MINIMA_RECORRENCIA        IN  NUMBER,
+  P_DS_ENVIADO_POR               IN  VARCHAR2,
+  P_DS_VENDIDO_POR               IN  VARCHAR2,
+  P_NR_QUANTIDADE_VENDIDA        IN  NUMBER,
+  P_DS_CAPTURA                   IN  VARCHAR2,
+  P_ST_ATIVO                     IN  VARCHAR2 DEFAULT NULL,
+  P_DS_URL_BESAVE                IN  VARCHAR2 DEFAULT NULL,
+  P_QT_OPINIOES                  IN  NUMBER   DEFAULT NULL,
+  P_DS_AVALIACAO_GERAL           IN  CLOB     DEFAULT NULL,
+  P_DS_URL_AFILIADO              IN  VARCHAR2 DEFAULT NULL,
+  P_DS_CATEGORIA_PROD_AFILIADO   IN  VARCHAR2 DEFAULT NULL,
+  P_DS_TAXA_COMISSAO_PROD_AFIL   IN  VARCHAR2 DEFAULT NULL,
+  P_DS_ID_PRODUTO_AFILIADO       IN  VARCHAR2 DEFAULT NULL,
+  -- Uniao de VR_PRECO_RECORRENCIA_INTEIRO/FRACAO (P_VR_RECORRENCIA) + flag
+  -- derivada (P_ST_RECORRENCIA) -- ver core/oracle_db._recorrencia (2026-09-28).
+  P_VR_RECORRENCIA               IN  NUMBER   DEFAULT NULL,
+  P_ST_RECORRENCIA               IN  NUMBER   DEFAULT NULL,
+  -- "Espere e economize" (escolher entrega mais lenta por um preco menor,
+  -- Amazon) -- mesmo papel do par acima (2026-09-28).
+  P_VR_ESPERE_ECONOMIZE          IN  NUMBER   DEFAULT NULL,
+  P_ST_ESPERE_ECONOMIZE          IN  NUMBER   DEFAULT NULL,
+  PV_RETORNO                     OUT VARCHAR2,
+  PV_ERRO                        OUT VARCHAR2
+) AS
+  -- Valores das colunas BYTE ja cortados. Sao calculados ANTES do UPDATE porque
+  -- no Oracle 11g uma funcao local nao pode ser chamada de dentro de um comando
+  -- SQL (PLS-00231) -- so de PL/SQL puro. As variaveis vem antes da FUNCTION:
+  -- num bloco declarativo, declaracoes de itens precedem as de subprogramas.
+  V_PAIS_ORIGEM    VARCHAR2(4000);
+  V_SIMBOLO_MOEDA  VARCHAR2(4000);
+  V_TIPO_UNIDADE   VARCHAR2(4000);
+  V_CONDICOES_1    VARCHAR2(4000);
+  V_CONDICOES_2    VARCHAR2(4000);
+  V_ENVIADO_POR    VARCHAR2(4000);
+  V_VENDIDO_POR    VARCHAR2(4000);
+
+  -- Corta o texto ate caber em p_bytes BYTES (colunas BYTE semantics), sem
+  -- partir caractere multibyte: primeiro limita por caractere (nunca mais
+  -- caracteres que bytes disponiveis) e depois remove 1 caractere por vez
+  -- enquanto LENGTHB nao couber.
+  FUNCTION CORTA_BYTES(p_valor IN VARCHAR2, p_bytes IN PLS_INTEGER)
+    RETURN VARCHAR2 IS
+    v VARCHAR2(32767);
+  BEGIN
+    IF p_valor IS NULL THEN
+      RETURN NULL;
+    END IF;
+    v := SUBSTR(p_valor, 1, p_bytes);
+    WHILE LENGTHB(v) > p_bytes LOOP
+      v := SUBSTR(v, 1, LENGTH(v) - 1);
+    END LOOP;
+    RETURN v;
+  END CORTA_BYTES;
+BEGIN
+  V_PAIS_ORIGEM   := CORTA_BYTES(P_DS_PAIS_ORIGEM, 100);
+  V_SIMBOLO_MOEDA := CORTA_BYTES(P_DS_SIMBOLO_MOEDA, 4);
+  V_TIPO_UNIDADE  := CORTA_BYTES(P_DS_TIPO_UNIDADE, 100);
+  V_CONDICOES_1   := CORTA_BYTES(P_DS_CONDICOES_1, 100);
+  V_CONDICOES_2   := CORTA_BYTES(P_DS_CONDICOES_2, 100);
+  V_ENVIADO_POR   := CORTA_BYTES(P_DS_ENVIADO_POR, 100);
+  V_VENDIDO_POR   := CORTA_BYTES(P_DS_VENDIDO_POR, 100);
+
+  UPDATE OFERTA_FILA_CAPTURA SET
+    DS_URL_FINAL                 = SUBSTR(P_DS_URL_FINAL, 1, 350),
+    -- LS_* sao CLOB: gravadas inteiras, sem corte.
+    LS_CATEGORIA                 = P_LS_CATEGORIA,
+    LS_DETALHES_PRODUTO          = P_LS_DETALHES_PRODUTO,
+    LS_DETALHES_TECNICOS         = P_LS_DETALHES_TECNICOS,
+    LS_INFO_ADICIONAIS           = P_LS_INFO_ADICIONAIS,
+    LS_COMPLEMENTO_PRODUTO       = P_LS_COMPLEMENTO_PRODUTO,
+    DS_TITULO                    = SUBSTR(P_DS_TITULO, 1, 400),
+    DS_PRODUTO                   = SUBSTR(P_DS_PRODUTO, 1, 600),
+    DS_PAIS_ORIGEM               = V_PAIS_ORIGEM,
+    NR_NOTA_AVALIACAO            = P_NR_NOTA_AVALIACAO,
+    QT_AVALIACAO                 = P_QT_AVALIACAO,
+    VR_DESCONTO_INTEIRO          = P_VR_DESCONTO_INTEIRO,
+    VR_DESCONTO_FRACAO           = P_VR_DESCONTO_FRACAO,
+    VR_PRECO_1                   = P_VR_PRECO_1,
+    VR_PRECO_2                   = P_VR_PRECO_2,
+    DS_SIMBOLO_MOEDA             = V_SIMBOLO_MOEDA,
+    VR_PRECO_ORIGINAL            = P_VR_PRECO_ORIGINAL,
+    VR_PRECO_POR_UNIDADE         = P_VR_PRECO_POR_UNIDADE,
+    DS_TIPO_UNIDADE              = V_TIPO_UNIDADE,
+    DS_CONDICOES_1               = V_CONDICOES_1,
+    DS_CONDICOES_2               = V_CONDICOES_2,
+    VR_PRECO_RECORRENCIA_INTEIRO = P_VR_PRECO_RECORRENCIA_INTEIRO,
+    VR_PRECO_RECORRENCIA_FRACAO  = P_VR_PRECO_RECORRENCIA_FRACAO,
+    QT_MINIMA_RECORRENCIA        = P_QT_MINIMA_RECORRENCIA,
+    DS_ENVIADO_POR               = V_ENVIADO_POR,
+    DS_VENDIDO_POR               = V_VENDIDO_POR,
+    NR_QUANTIDADE_VENDIDA        = P_NR_QUANTIDADE_VENDIDA,
+    DS_CAPTURA                   = SUBSTR(NVL(P_DS_CAPTURA, 'ok'), 1, 400),
+    -- NVL(..., ST_ATIVO): quem nao informa nao mexe na coluna (o parametro tem
+    -- DEFAULT NULL para nao quebrar chamadas antigas).
+    ST_ATIVO                     = NVL(P_ST_ATIVO, ST_ATIVO),
+    DS_URL_BESAVE                = SUBSTR(NVL(P_DS_URL_BESAVE, DS_URL_BESAVE), 1, 600),
+    QT_OPINIOES                  = P_QT_OPINIOES,
+    DS_AVALIACAO_GERAL           = P_DS_AVALIACAO_GERAL,
+    -- Link oficial do programa de afiliados (+ dados do mesmo widget).
+    -- NVL(..., coluna): captura que falhou manda NULL e preserva o anterior.
+    DS_URL_AFILIADO              = SUBSTR(NVL(P_DS_URL_AFILIADO, DS_URL_AFILIADO), 1, 600),
+    DS_CATEGORIA_PROD_AFILIADO   = SUBSTR(NVL(P_DS_CATEGORIA_PROD_AFILIADO,
+                                              DS_CATEGORIA_PROD_AFILIADO), 1, 100),
+    DS_TAXA_COMISSAO_PROD_AFILIADO = SUBSTR(NVL(P_DS_TAXA_COMISSAO_PROD_AFIL,
+                                                DS_TAXA_COMISSAO_PROD_AFILIADO), 1, 20),
+    DS_ID_PRODUTO_AFILIADO       = SUBSTR(NVL(P_DS_ID_PRODUTO_AFILIADO,
+                                              DS_ID_PRODUTO_AFILIADO), 1, 50),
+    VR_RECORRENCIA                = P_VR_RECORRENCIA,
+    ST_RECORRENCIA                = P_ST_RECORRENCIA,
+    VR_ESPERE_ECONOMIZE           = P_VR_ESPERE_ECONOMIZE,
+    ST_ESPERE_ECONOMIZE           = P_ST_ESPERE_ECONOMIZE,
+    ST_CAPTURA                   = '1'
+  WHERE ID_OFERTA = P_ID_OFERTA;
+
+  IF SQL%ROWCOUNT = 0 THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := 'ID_OFERTA ' || TO_CHAR(P_ID_OFERTA) || ' nao encontrado.';
+  ELSE
+    PV_RETORNO := 'TRUE';
+    PV_ERRO    := NULL;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_OFERTA_FILA_CAPTURA_UPDATE;
+/

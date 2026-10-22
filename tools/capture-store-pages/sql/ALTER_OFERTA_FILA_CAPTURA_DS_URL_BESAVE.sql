@@ -1,0 +1,24 @@
+-- =============================================================================
+-- Adiciona DS_URL_BESAVE: a URL da oferta com o NOSSO codigo de afiliado.
+--
+-- A ideia (implementacao AINDA NAO FEITA, so a coluna existe -- 2026-07-31):
+-- decodificar a DS_URL_FINAL (a URL real do produto, depois dos redirects do
+-- encurtador/previa) e trocar o codigo de afiliado de quem divulgou pelo codigo
+-- da Besave, para que a compra seja atribuida a nos.
+--
+-- Por que coluna nova, e nao sobrescrever DS_URL_FINAL: a URL de destino
+-- ORIGINAL e a prova do que foi capturado (e como se chega ao produto quando a
+-- reescrita falha ou o programa de afiliados muda as regras). Sobrescrever
+-- perderia isso sem ganho.
+--
+-- 600 CHAR (DS_URL_FINAL tem 350): a URL reescrita costuma ficar MAIOR que a
+-- original -- o parametro de afiliado entra sem que os de tracking saiam.
+--
+-- Fica NULL ate a reescrita ser implementada; quem consumir deve tratar
+-- NVL(DS_URL_BESAVE, DS_URL_FINAL).
+--
+-- Seguro de rodar: coluna nova e anulavel, nao mexe nas linhas existentes.
+-- Reverter: ALTER TABLE OFERTA_FILA_CAPTURA DROP COLUMN DS_URL_BESAVE;
+-- Aplicado no ambiente local em 2026-07-31.
+-- =============================================================================
+ALTER TABLE OFERTA_FILA_CAPTURA ADD (DS_URL_BESAVE VARCHAR2(600 CHAR));

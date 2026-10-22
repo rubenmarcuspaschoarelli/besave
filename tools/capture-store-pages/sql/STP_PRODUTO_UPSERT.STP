@@ -1,0 +1,199 @@
+-- =============================================================================
+-- STP_PRODUTO_UPSERT
+-- Cadastra/atualiza o produto consolidado (BESAVE.PRODUTO) a partir de UMA
+-- oferta ja capturada em OFERTA_FILA_CAPTURA (ST_CAPTURA='1'). Chamada por
+-- cadastrar_produtos.py (script NOVO e SEPARADO -- nao mexe no fluxo de
+-- captura do main.py). A extracao dos atributos (marca/modelo/dimensoes/etc.)
+-- a partir dos 4 campos LS_* e feita em Python (core/produto_extrator.py,
+-- mineracao de texto livre) ANTES de chamar esta SP; aqui so entram valores
+-- ja prontos.
+--
+-- Busca o produto por TITULO EXATO (normalizado: maiusculo, sem espacos nas
+-- pontas, truncado a 250 CHAR -- limite de PRODUTO.DS_PRODUTO). SEM LIKE por
+-- enquanto (decisao do usuario, 2026-09-02): titulos de Amazon/ML sao longos
+-- e especificos o bastante para um match exato ser confiavel, e um LIKE por
+-- substring arriscaria mesclar produtos DIFERENTES (ex.: mesmo perfume em
+-- tamanhos diferentes) sem controle.
+--
+-- Achou -> UPDATE (politica "preserva o que ja existe": um campo so e
+-- sobrescrito quando o valor novo vier preenchido -- NVL(novo, atual) em
+-- TODOS os campos de enriquecimento, para o cadastro nao ir perdendo dado
+-- conforme ofertas mais pobres em atributos v3m depois). VR_PRECO_MINIMO/
+-- MAXIMO sao a excecao "ativa": sempre comparam com o preco desta oferta.
+-- Nao achou -> INSERT novo (ID_PRODUTO pela SEQ_PRODUTO).
+-- Em AMBOS os casos, grava OFERTA_FILA_CAPTURA.ID_PRODUTO = ID_PRODUTO.
+--
+-- Truncamento defensivo (SUBSTR) em TODOS os campos VARCHAR2, no tamanho
+-- exato da coluna: vendedores de marketplace as vezes enfiam o titulo
+-- inteiro no campo "Marca"/"Modelo" (SEO abusivo, confirmado ao vivo em
+-- 2026-09-02 -- ex.: "Marca: Veronz Superior Qualidade Camiseta Camisa...").
+-- Sem SUBSTR o INSERT/UPDATE dessa 1 oferta falha com ORA-12899 (valor grande
+-- demais p/ a coluna) e a linha fica sem produto, silenciosamente.
+--
+-- Retorno (mesmo padrao das SPs de OFERTA_FILA_CAPTURA):
+--   PV_RETORNO = 'TRUE'  -> ok; P_ID_PRODUTO tem o ID (novo ou existente)
+--   PV_RETORNO = 'FALSE' -> erro; PV_ERRO traz o motivo
+-- BOOLEAN de PL/SQL nao e usado (nao pode ser bind por cliente OCI no 11g).
+--
+-- DS_ULT_URL (2026-09-24): vem de P_DS_URL_AFILIADO -- o link OFICIAL que o
+-- programa de afiliados da loja gera (core/link_afiliado.py). Antes vinha de
+-- DS_URL_BESAVE (calculada por regex em core/afiliados.py), abandonada como
+-- fonte por decisao do usuario. NVL no UPDATE: oferta sem link oficial nao
+-- apaga o link que o produto ja tinha. Historico: backfill_url_afiliado.py.
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE BESAVE.STP_PRODUTO_UPSERT (
+  P_ID_OFERTA              IN  NUMBER,
+  P_DS_PRODUTO             IN  VARCHAR2,   -- titulo final (DS_TITULO ou DS_OFERTA), resolvido no Python
+  P_DS_DESCRICAO_PRODUTO   IN  VARCHAR2,   -- DS_PRODUTO (descricao) da oferta de origem
+  P_VL_PRECO_POR           IN  NUMBER,     -- preco de origem (WhatsApp), p/ VR_PRECO_MINIMO/MAXIMO
+  P_DS_URL_AFILIADO        IN  VARCHAR2,   -- link OFICIAL clicado (DS_URL_AFILIADO), nunca o calculado
+  P_LS_CATEGORIA           IN  CLOB,
+  P_QT_OPINIOES            IN  NUMBER,
+  P_DS_AVALIACAO_GERAL     IN  CLOB,
+  P_LS_DETALHES_PRODUTO    IN  CLOB,
+  P_LS_DETALHES_TECNICOS   IN  CLOB,
+  P_LS_INFO_ADICIONAIS     IN  CLOB,
+  P_LS_COMPLEMENTO_PRODUTO IN  CLOB,
+  P_ID_COD_EAN             IN  VARCHAR2 DEFAULT NULL,
+  P_ID_COD_ASIN            IN  VARCHAR2 DEFAULT NULL,
+  P_DS_PAIS_ORIGEM         IN  VARCHAR2 DEFAULT NULL,
+  P_DS_MARCA               IN  VARCHAR2 DEFAULT NULL,
+  P_DS_FABRICANTE          IN  VARCHAR2 DEFAULT NULL,
+  P_DS_MODELO              IN  VARCHAR2 DEFAULT NULL,
+  P_DS_PESO_LIQUIDO        IN  VARCHAR2 DEFAULT NULL,
+  P_DS_PESO                IN  VARCHAR2 DEFAULT NULL,
+  P_DS_VOLUME              IN  VARCHAR2 DEFAULT NULL,
+  P_DS_GENERO              IN  VARCHAR2 DEFAULT NULL,
+  P_NR_NOTA_AVALIACAO      IN  NUMBER   DEFAULT NULL,
+  P_QT_AVALIACAO           IN  NUMBER   DEFAULT NULL,
+  P_NR_RANKING             IN  VARCHAR2 DEFAULT NULL,
+  P_DS_CATEGORIA_RANKING   IN  VARCHAR2 DEFAULT NULL,
+  P_DS_FAIXA_ETARIA        IN  VARCHAR2 DEFAULT NULL,
+  P_DS_LINHA               IN  VARCHAR2 DEFAULT NULL,
+  P_DS_ALTURA              IN  VARCHAR2 DEFAULT NULL,
+  P_DS_LARGURA             IN  VARCHAR2 DEFAULT NULL,
+  P_DS_COMPRIMENTO         IN  VARCHAR2 DEFAULT NULL,
+  P_DS_UNIDADES            IN  VARCHAR2 DEFAULT NULL,
+  P_DS_COMUNIDADE          IN  VARCHAR2 DEFAULT NULL,  -- comunidade de maior score (core/classificador.py)
+  P_DS_PUBLICO             IN  VARCHAR2 DEFAULT NULL,  -- Masculino/Feminino/Unisex/Menino/Menina/Bebes
+  P_ID_PRODUTO             OUT NUMBER,
+  PV_RETORNO               OUT VARCHAR2,
+  PV_ERRO                  OUT VARCHAR2
+) AS
+  -- CHAR, nao byte: sem isso a variavel vale 250 BYTES (default do banco) e
+  -- um titulo de 250 CARACTERES com acentos (ex.: "...Sensíveis...", 295
+  -- chars/299 bytes) estoura no SUBSTR (ORA-06502 "buffer too small") --
+  -- confirmado ao vivo em 2026-09-02, mesma armadilha ja documentada p/
+  -- OFERTA_FILA_CAPTURA (ver STP_OFERTA_FILA_CAPTURA_UPDATE.STP).
+  V_TITULO VARCHAR2(250 CHAR);
+  V_ID     NUMBER;
+BEGIN
+  V_TITULO := SUBSTR(TRIM(P_DS_PRODUTO), 1, 250);
+  IF V_TITULO IS NULL THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := 'titulo vazio (DS_TITULO e DS_OFERTA ambos nulos/vazios)';
+    RETURN;
+  END IF;
+
+  BEGIN
+    SELECT ID_PRODUTO INTO V_ID FROM PRODUTO
+    WHERE UPPER(DS_PRODUTO) = UPPER(V_TITULO) AND ROWNUM = 1;
+  EXCEPTION
+    WHEN NO_DATA_FOUND THEN
+      V_ID := NULL;
+  END;
+
+  IF V_ID IS NULL THEN
+    V_ID := SEQ_PRODUTO.NEXTVAL;
+    INSERT INTO PRODUTO (
+      ID_PRODUTO, DS_PRODUTO, DS_DESCRICAO_PRODUTO, ID_COD_EAN, ID_COD_ASIN,
+      DS_PAIS_ORIGEM, DS_MARCA, DS_FABRICANTE, DS_MODELO, DS_PESO_LIQUIDO,
+      DS_PESO, DS_VOLUME, DS_GENERO, NR_NOTA_AVALIACAO, QT_AVALIACAO,
+      NR_RANKING, DS_CATEGORIA_RANKING, DS_FAIXA_ETARIA, DS_LINHA,
+      DS_ALTURA, DS_LARGURA, DS_COMPRIMENTO, DS_UNIDADES,
+      DT_CADASTRO, DT_ULT_ATUALIZACAO, ID_ULT_OFERTA, DS_ULT_URL,
+      VR_PRECO_MINIMO, VR_PRECO_MAXIMO, QT_OPINIOES, LS_CATEGORIA,
+      DS_AVALIACAO_GERAL, LS_DETALHES_PRODUTO, LS_DETALHES_TECNICOS,
+      LS_INFO_ADICIONAIS, LS_COMPLEMENTO_PRODUTO, DS_COMUNIDADE, DS_PUBLICO
+    ) VALUES (
+      V_ID, V_TITULO, SUBSTR(P_DS_DESCRICAO_PRODUTO, 1, 600),
+      SUBSTR(P_ID_COD_EAN, 1, 20), SUBSTR(P_ID_COD_ASIN, 1, 20),
+      SUBSTR(P_DS_PAIS_ORIGEM, 1, 40), SUBSTR(P_DS_MARCA, 1, 40),
+      SUBSTR(P_DS_FABRICANTE, 1, 80), SUBSTR(P_DS_MODELO, 1, 200),
+      SUBSTR(P_DS_PESO_LIQUIDO, 1, 20), SUBSTR(P_DS_PESO, 1, 20),
+      SUBSTR(P_DS_VOLUME, 1, 20), SUBSTR(P_DS_GENERO, 1, 20),
+      P_NR_NOTA_AVALIACAO, P_QT_AVALIACAO,
+      SUBSTR(P_NR_RANKING, 1, 20), SUBSTR(P_DS_CATEGORIA_RANKING, 1, 20),
+      SUBSTR(P_DS_FAIXA_ETARIA, 1, 20), SUBSTR(P_DS_LINHA, 1, 20),
+      SUBSTR(P_DS_ALTURA, 1, 20), SUBSTR(P_DS_LARGURA, 1, 20),
+      SUBSTR(P_DS_COMPRIMENTO, 1, 20), SUBSTR(P_DS_UNIDADES, 1, 20),
+      SYSDATE, SYSDATE, P_ID_OFERTA, SUBSTR(P_DS_URL_AFILIADO, 1, 500),
+      P_VL_PRECO_POR, P_VL_PRECO_POR, P_QT_OPINIOES, P_LS_CATEGORIA,
+      P_DS_AVALIACAO_GERAL, P_LS_DETALHES_PRODUTO, P_LS_DETALHES_TECNICOS,
+      P_LS_INFO_ADICIONAIS, P_LS_COMPLEMENTO_PRODUTO,
+      SUBSTR(P_DS_COMUNIDADE, 1, 50), SUBSTR(P_DS_PUBLICO, 1, 30)
+    );
+  ELSE
+    -- LEAST/GREATEST com NVL cruzado: cobre os 4 casos (ambos preenchidos,
+    -- so o existente, so o novo, nenhum) sem precisar de IF -- ver
+    -- resumo.md / memoria da sessao p/ a tabela-verdade.
+    UPDATE PRODUTO SET
+      DT_ULT_ATUALIZACAO     = SYSDATE,
+      ID_ULT_OFERTA          = P_ID_OFERTA,
+      DS_ULT_URL             = SUBSTR(NVL(P_DS_URL_AFILIADO, DS_ULT_URL), 1, 500),
+      VR_PRECO_MINIMO        = LEAST(NVL(VR_PRECO_MINIMO, P_VL_PRECO_POR), NVL(P_VL_PRECO_POR, VR_PRECO_MINIMO)),
+      VR_PRECO_MAXIMO        = GREATEST(NVL(VR_PRECO_MAXIMO, P_VL_PRECO_POR), NVL(P_VL_PRECO_POR, VR_PRECO_MAXIMO)),
+      QT_OPINIOES            = NVL(P_QT_OPINIOES, QT_OPINIOES),
+      LS_CATEGORIA           = NVL(P_LS_CATEGORIA, LS_CATEGORIA),
+      DS_AVALIACAO_GERAL     = NVL(P_DS_AVALIACAO_GERAL, DS_AVALIACAO_GERAL),
+      LS_DETALHES_PRODUTO    = NVL(P_LS_DETALHES_PRODUTO, LS_DETALHES_PRODUTO),
+      LS_DETALHES_TECNICOS   = NVL(P_LS_DETALHES_TECNICOS, LS_DETALHES_TECNICOS),
+      LS_INFO_ADICIONAIS     = NVL(P_LS_INFO_ADICIONAIS, LS_INFO_ADICIONAIS),
+      LS_COMPLEMENTO_PRODUTO = NVL(P_LS_COMPLEMENTO_PRODUTO, LS_COMPLEMENTO_PRODUTO),
+      DS_DESCRICAO_PRODUTO   = SUBSTR(NVL(P_DS_DESCRICAO_PRODUTO, DS_DESCRICAO_PRODUTO), 1, 600),
+      ID_COD_EAN             = SUBSTR(NVL(P_ID_COD_EAN, ID_COD_EAN), 1, 20),
+      ID_COD_ASIN            = SUBSTR(NVL(P_ID_COD_ASIN, ID_COD_ASIN), 1, 20),
+      DS_PAIS_ORIGEM         = SUBSTR(NVL(P_DS_PAIS_ORIGEM, DS_PAIS_ORIGEM), 1, 40),
+      DS_MARCA               = SUBSTR(NVL(P_DS_MARCA, DS_MARCA), 1, 40),
+      DS_FABRICANTE          = SUBSTR(NVL(P_DS_FABRICANTE, DS_FABRICANTE), 1, 80),
+      DS_MODELO              = SUBSTR(NVL(P_DS_MODELO, DS_MODELO), 1, 200),
+      DS_PESO_LIQUIDO        = SUBSTR(NVL(P_DS_PESO_LIQUIDO, DS_PESO_LIQUIDO), 1, 20),
+      DS_PESO                = SUBSTR(NVL(P_DS_PESO, DS_PESO), 1, 20),
+      DS_VOLUME              = SUBSTR(NVL(P_DS_VOLUME, DS_VOLUME), 1, 20),
+      DS_GENERO              = SUBSTR(NVL(P_DS_GENERO, DS_GENERO), 1, 20),
+      NR_NOTA_AVALIACAO      = NVL(P_NR_NOTA_AVALIACAO, NR_NOTA_AVALIACAO),
+      QT_AVALIACAO           = NVL(P_QT_AVALIACAO, QT_AVALIACAO),
+      NR_RANKING             = SUBSTR(NVL(P_NR_RANKING, NR_RANKING), 1, 20),
+      DS_CATEGORIA_RANKING   = SUBSTR(NVL(P_DS_CATEGORIA_RANKING, DS_CATEGORIA_RANKING), 1, 20),
+      DS_FAIXA_ETARIA        = SUBSTR(NVL(P_DS_FAIXA_ETARIA, DS_FAIXA_ETARIA), 1, 20),
+      DS_LINHA               = SUBSTR(NVL(P_DS_LINHA, DS_LINHA), 1, 20),
+      DS_ALTURA              = SUBSTR(NVL(P_DS_ALTURA, DS_ALTURA), 1, 20),
+      DS_LARGURA             = SUBSTR(NVL(P_DS_LARGURA, DS_LARGURA), 1, 20),
+      DS_COMPRIMENTO         = SUBSTR(NVL(P_DS_COMPRIMENTO, DS_COMPRIMENTO), 1, 20),
+      DS_UNIDADES            = SUBSTR(NVL(P_DS_UNIDADES, DS_UNIDADES), 1, 20),
+      -- 'Outros' (2026-09-28) e um valor "fraco": so entra quando a coluna
+      -- ainda esta NULL ou ja era 'Outros' -- nunca sobrescreve uma
+      -- comunidade REAL ja identificada antes, e ainda assim deixa a porta
+      -- aberta para uma classificacao real chegar depois e substituir o
+      -- 'Outros' (o NVL puro travaria 'Outros' para sempre, ja que ele nunca
+      -- e NULL).
+      DS_COMUNIDADE          = CASE
+                                  WHEN DS_COMUNIDADE IS NULL OR DS_COMUNIDADE = 'Outros'
+                                  THEN SUBSTR(NVL(P_DS_COMUNIDADE, DS_COMUNIDADE), 1, 50)
+                                  ELSE DS_COMUNIDADE
+                                END,
+      DS_PUBLICO             = SUBSTR(NVL(P_DS_PUBLICO, DS_PUBLICO), 1, 30)
+    WHERE ID_PRODUTO = V_ID;
+  END IF;
+
+  UPDATE OFERTA_FILA_CAPTURA SET ID_PRODUTO = V_ID WHERE ID_OFERTA = P_ID_OFERTA;
+
+  P_ID_PRODUTO := V_ID;
+  PV_RETORNO   := 'TRUE';
+  PV_ERRO      := NULL;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_PRODUTO_UPSERT;
+/

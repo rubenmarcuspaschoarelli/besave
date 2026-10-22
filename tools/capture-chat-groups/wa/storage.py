@@ -14,26 +14,51 @@ import base64
 import csv
 import io
 import json
+import os
 import re
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
 try:                                 # Pillow so e necessario para a marca d'agua.
-    from PIL import Image, ImageChops
+    from PIL import Image, ImageChops, ImageColor, ImageStat
 except Exception:                    # noqa: BLE001 - sem Pillow, seguimos sem marca
     Image = None
     ImageChops = None
+    ImageColor = None
+    ImageStat = None
 
 RAIZ_DIR = Path(__file__).resolve().parent.parent
 CAPTURA_DIR = RAIZ_DIR / "captura"
+CSV_DIR = CAPTURA_DIR / "csv"        # um CSV por run (DD_MM_AAAA_HH_MM.csv)
 IMG_DIR = CAPTURA_DIR / "img"        # imagens ficam separadas do CSV
+LOG_DIR = RAIZ_DIR / "log"           # logs dos runs (iniciar_captura.ps1) + cupom_excedido.log
 CONF_DIR = RAIZ_DIR / "conf"         # config.json + arquivo da marca d'agua
 CONFIG_PATH = CONF_DIR / "config.json"
 
 # Pasta do site (bucket local) para onde a imagem final + miniatura de cada
 # oferta sao publicadas, calibravel em config.json -> "publicacao_s3".
-S3_IMG_DIR_PADRAO = r"E:\Work\besave\server\s3\ofertas\img"
+S3_IMG_DIR_PADRAO = r"E:\Work\besave\server\s3\ofertas\img"   # so Windows; no Linux a chave e obrigatoria
+
+
+class ConfigFaltando(RuntimeError):
+    """Chave obrigatoria ausente do config.json (sem padrao seguro na plataforma)."""
+
+
+def destino_s3(cfg: dict, plataforma: str | None = None) -> Path:
+    """Pasta de publicacao das imagens: 'publicacao_s3.destino' do config.json.
+    Ausente -> padrao no Windows; no Linux levanta erro citando a chave."""
+    destino = cfg.get("destino")
+    if destino:
+        return Path(destino)
+    if (plataforma or sys.platform) == "win32":
+        return Path(S3_IMG_DIR_PADRAO)
+    raise ConfigFaltando(
+        'Falta "publicacao_s3.destino" em conf/config.json: pasta local que '
+        "espelha ofertas/img do S3 (ex.: /home/ubuntu/s3/ofertas/img). "
+        "Sem padrao fora do Windows."
+    )
 
 # Nomes das colunas do CSV (nomes de saida; as chaves internas do dict `campos`
 # do parser continuam com os nomes antigos). DS_TIPO_ORIGEM e uma constante fixa.
@@ -68,10 +93,10 @@ def _sanitizar(nome: str, limite: int = 60) -> str:
 
 
 def novo_csv() -> Path:
-    """Cria o CSV do run em ./captura/DD_MM_AAAA_HH_MM.csv e escreve o cabecalho."""
-    CAPTURA_DIR.mkdir(parents=True, exist_ok=True)
+    """Cria o CSV do run em ./captura/csv/DD_MM_AAAA_HH_MM.csv e escreve o cabecalho."""
+    CSV_DIR.mkdir(parents=True, exist_ok=True)
     nome = datetime.now().strftime("%d_%m_%Y_%H_%M") + ".csv"
-    caminho = CAPTURA_DIR / nome
+    caminho = CSV_DIR / nome
     if not caminho.exists():
         # utf-8-sig para o Excel abrir emojis/acentos corretamente.
         with open(caminho, "w", newline="", encoding="utf-8-sig") as f:
@@ -221,6 +246,12 @@ def _esperar_img_carregar(msg, timeout_s: float = 20.0, grace_sem_img_s: float =
 #                             branca) ou "flat" (logo inteira sobreposta fraca).
 #   marca_dagua_opacidade   : 0..1 (forca; keyed ~0.30, flat ~0.10).
 #   marca_dagua_largura_rel : largura da marca como fracao da largura da imagem.
+#   marca_dagua_adaptativa  : true = em foto escura sob a logo, tinta BRANCA
+#                             (so keyed). Padrao true.
+#   marca_dagua_limiar_escuro: brilho medio 0..255 sob a tinta abaixo do qual a
+#                             foto conta como escura. Padrao 100.
+#   marca_dagua_cor         : cor unica da tinta em foto clara/media (ex.
+#                             "#808080" = cinza). Vazio = cores da propria logo.
 #
 # O mesmo bloco calibra a extracao da foto (a resolucao vem sempre da origem, nao
 # de um tamanho fixo -- cada grupo posta na sua: 500, 640, 1024...):
@@ -280,32 +311,60 @@ def aplicar_marca_dagua(caminho_img: str) -> None:
     if not alvo.exists():
         return
     try:
-        base = Image.open(alvo).convert("RGBA")
-        wm = _marca_escalada(cfg, base.width)
-        if wm is None:
+        with Image.open(alvo) as im:
+            final = _compor_marca(im, cfg)
+        if final is None:
             return
-
-        if (cfg.get("marca_dagua_tecnica") or "keyed") == "flat":
-            # Logo inteira (com fundo) sobreposta com opacidade uniforme.
-            camada_wm = wm.convert("RGBA")
-            camada_wm.putalpha(int(255 * opacidade))
-        else:
-            # keyed: alpha por pixel = distancia do branco (branco->0, tinta->forte),
-            # entao so a tinta da logo aparece, sem caixa branca sobre a foto.
-            r, g, b = wm.split()
-            minc = ImageChops.darker(ImageChops.darker(r, g), b)   # min(r,g,b) por pixel
-            alpha = ImageChops.invert(minc).point(lambda v: int(v * opacidade))
-            camada_wm = wm.convert("RGBA")
-            camada_wm.putalpha(alpha)
-
-        pos = ((base.width - camada_wm.width) // 2,
-               (base.height - camada_wm.height) // 2)
-        camada = Image.new("RGBA", base.size, (0, 0, 0, 0))
-        camada.paste(camada_wm, pos, camada_wm)
-        final = Image.alpha_composite(base, camada).convert("RGB")
         final.save(alvo, quality=90)
     except Exception as e:  # noqa: BLE001
         print(f"[storage] Falha ao aplicar marca d'agua em {alvo.name}: {e}")
+
+
+def _compor_marca(im, cfg: dict):
+    """
+    Devolve a imagem (RGB) com a marca d'agua no centro, ou None se nao ha logo.
+    Em memoria, sem tocar em disco (a folha de conferencia usa a mesma funcao).
+
+    keyed + marca_dagua_adaptativa: mede o brilho da foto SOB a tinta da logo;
+    abaixo de marca_dagua_limiar_escuro (0..255) a tinta vira BRANCA - a tinta
+    roxa escura da logo nao contrasta com foto escura, por mais opacidade que
+    se de. Acima do limiar fica a cor original da logo.
+    """
+    opacidade = float(cfg.get("marca_dagua_opacidade", 0.30))
+    base = im.convert("RGBA")
+    wm = _marca_escalada(cfg, base.width)
+    if wm is None:
+        return None
+    pos = ((base.width - wm.width) // 2, (base.height - wm.height) // 2)
+
+    if (cfg.get("marca_dagua_tecnica") or "keyed") == "flat":
+        # Logo inteira (com fundo) sobreposta com opacidade uniforme.
+        camada_wm = wm.convert("RGBA")
+        camada_wm.putalpha(int(255 * opacidade))
+    else:
+        # keyed: alpha por pixel = distancia do branco (branco->0, tinta->forte),
+        # entao so a tinta da logo aparece, sem caixa branca sobre a foto.
+        r, g, b = wm.split()
+        minc = ImageChops.darker(ImageChops.darker(r, g), b)   # min(r,g,b) por pixel
+        tinta = ImageChops.invert(minc)
+        alpha = tinta.point(lambda v: int(v * opacidade))
+        cor = cfg.get("marca_dagua_cor")          # ex. "#808080"; vazio = cores da logo
+        if cor:
+            wm = Image.new("RGB", wm.size, ImageColor.getrgb(cor))
+        if bool(cfg.get("marca_dagua_adaptativa", True)):
+            limiar = float(cfg.get("marca_dagua_limiar_escuro", 100))
+            sob = base.convert("L").crop((pos[0], pos[1], pos[0] + wm.width, pos[1] + wm.height))
+            if ImageStat.Stat(sob, mask=tinta.point(lambda v: 255 if v > 64 else 0)).mean[0] < limiar:
+                wm = Image.new("RGB", wm.size, (255, 255, 255))
+        camada_wm = wm.convert("RGBA")
+        camada_wm.putalpha(alpha)
+
+    # Colar SEM mascara: com a propria marca como mascara (versao ate 28/09/2026)
+    # o alpha era aplicado 2x e a tinta puxada para o preto da camada vazia -
+    # a marca ficava fraca e escura, e sumia em foto escura.
+    camada = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    camada.paste(camada_wm, pos)
+    return Image.alpha_composite(base, camada).convert("RGB")
 
 
 # --- Miniatura "_small" ------------------------------------------------------
@@ -388,11 +447,14 @@ def apagar_thumbnail(caminho_img: str) -> None:
 # Alem do arquivo definitivo em captura/img/ (que e o dado, nunca alterado),
 # cada oferta e publicada tambem em <destino>/<id_oferta>/ com dois arquivos
 # de nome fixo, os dois SEMPRE em WEBP:
-#     <id_oferta>.webp         <- imagem principal, mesma resolucao do original
+#     <id_oferta>.webp         <- imagem principal, 480x480 (ver _webp_principal)
 #     <id_oferta>-small.webp   <- a miniatura "_small" ja gerada
-# Calibravel em config.json -> "publicacao_s3" (ativo, destino, qualidade),
-# sem mexer no codigo; ausente = usa os padroes abaixo.
+# Calibravel em config.json -> "publicacao_s3" (ativo, destino, qualidade,
+# max_px, max_kb), sem mexer no codigo; ausente = usa os padroes abaixo.
 _cfg_s3_cache = None
+S3_MAX_PX_PADRAO = 480
+S3_MAX_KB_PADRAO = 200
+_S3_QUALIDADE_MIN = 60     # abaixo disso reduz o lado em vez de a qualidade
 
 
 def _cfg_s3() -> dict:
@@ -407,11 +469,87 @@ def _cfg_s3() -> dict:
     return _cfg_s3_cache
 
 
+def _cfg_s3_principal():
+    """(qualidade, max_px, max_bytes) da imagem principal publicada."""
+    cfg = _cfg_s3()
+    qualidade = int(cfg.get("qualidade", 90) or 90)
+    max_px = int(cfg.get("max_px", S3_MAX_PX_PADRAO) or S3_MAX_PX_PADRAO)
+    max_kb = int(cfg.get("max_kb", S3_MAX_KB_PADRAO) or S3_MAX_KB_PADRAO)
+    return qualidade, max_px, max_kb * 1024
+
+
+def dimensao_principal_s3(w: int, h: int, max_px: int = None):
+    """Dimensao esperada da imagem principal publicada para uma origem w x h:
+    maior que max_px -> quadrado max_px x max_px; senao a original (nao amplia
+    nem preenche). Usado tambem pelo backfill para saber o que ja esta pronto."""
+    if max_px is None:
+        max_px = _cfg_s3_principal()[1]
+    return (max_px, max_px) if max(w, h) > max_px else (w, h)
+
+
+def _webp_principal(im, qualidade: int, max_px: int, max_bytes: int) -> bytes:
+    """
+    Imagem principal do site em WEBP (bytes):
+      - maior lado > max_px: reduz mantendo a proporcao para caber em
+        max_px x max_px e completa com FUNDO BRANCO, centralizada, ate o
+        quadrado exato (ex.: 1024x1024 -> 480x480; 1200x486 -> 480x194 no
+        centro de um 480x480 branco);
+      - menor ou igual: fica na resolucao ORIGINAL (nao amplia, nao preenche).
+    Teto de tamanho: se passar de max_bytes, baixa a qualidade de 5 em 5 ate
+    _S3_QUALIDADE_MIN; se ainda passar, reduz o lado em 10% e repete.
+    """
+    im = im.convert("RGB")
+    if max(im.size) > max_px:
+        im.thumbnail((max_px, max_px), Image.LANCZOS)
+        if im.size != (max_px, max_px):
+            fundo = Image.new("RGB", (max_px, max_px), (255, 255, 255))
+            fundo.paste(im, ((max_px - im.width) // 2, (max_px - im.height) // 2))
+            im = fundo
+    while True:
+        q = qualidade
+        while True:
+            buf = io.BytesIO()
+            im.save(buf, format="WEBP", quality=q, method=6)
+            dados = buf.getvalue()
+            if len(dados) <= max_bytes or q <= _S3_QUALIDADE_MIN:
+                break
+            q = max(_S3_QUALIDADE_MIN, q - 5)
+        if len(dados) <= max_bytes or min(im.size) <= 16:
+            return dados
+        im = im.resize((max(1, int(im.width * 0.9)), max(1, int(im.height * 0.9))),
+                       Image.LANCZOS)
+
+
+def _gravar_atomico(destino: Path, dados: bytes) -> None:
+    """Grava em <destino>.tmp e troca de uma vez: o site nunca le arquivo pela
+    metade e a versao anterior some na propria troca."""
+    tmp = destino.with_name(destino.name + ".tmp")
+    tmp.write_bytes(dados)
+    os.replace(tmp, destino)
+
+
+def publicar_principal_s3(origem, numero, pasta: Path = None) -> str:
+    """Grava SO a imagem principal <destino>/<numero>/<numero>.webp a partir
+    de `origem` (JPEG da captura ou o proprio webp publicado). Levanta em caso
+    de falha - quem chama decide se e best-effort. Devolve o caminho gravado."""
+    qualidade, max_px, max_bytes = _cfg_s3_principal()
+    if pasta is None:
+        pasta = destino_s3(_cfg_s3()) / str(numero)
+    pasta.mkdir(parents=True, exist_ok=True)
+    with Image.open(origem) as im:
+        im.load()
+        dados = _webp_principal(im, qualidade, max_px, max_bytes)
+    destino = pasta / f"{numero}.webp"
+    _gravar_atomico(destino, dados)
+    return str(destino)
+
+
 def publicar_s3(caminho_img: str, numero) -> str:
     """
     Copia a imagem final (+ miniatura, se existir) para a pasta do site,
-    convertendo para WEBP e renomeando para <id_oferta>.webp /
-    <id_oferta>-small.webp em <destino>/<id_oferta>/. O arquivo original em
+    convertendo para WEBP e renomeando para <id_oferta>.webp (480x480, ate
+    200 KB - ver _webp_principal) / <id_oferta>-small.webp em
+    <destino>/<id_oferta>/. O arquivo original em
     captura/img/ nunca e tocado (so leitura). Best-effort, igual a marca
     d'agua e a miniatura: qualquer falha e logada e a captura segue - o dado
     (a foto em captura/img/) ja esta salvo.
@@ -427,14 +565,9 @@ def publicar_s3(caminho_img: str, numero) -> str:
     if not origem.exists():
         return ""
     qualidade = int(cfg.get("qualidade", 90) or 90)
-    raiz = Path(cfg.get("destino") or S3_IMG_DIR_PADRAO)
-    pasta = raiz / str(numero)
+    pasta = destino_s3(cfg) / str(numero)
     try:
-        pasta.mkdir(parents=True, exist_ok=True)
-        with Image.open(origem) as im:
-            im.convert("RGB").save(
-                pasta / f"{numero}.webp", format="WEBP", quality=qualidade, method=6
-            )
+        publicar_principal_s3(origem, numero, pasta)
         thumb = caminho_thumbnail(origem)
         if thumb.exists():
             with Image.open(thumb) as im:
@@ -445,6 +578,15 @@ def publicar_s3(caminho_img: str, numero) -> str:
     except Exception as e:  # noqa: BLE001
         print(f"[storage] Falha ao publicar imagem {numero} em {pasta}: {e}")
         return ""
+
+
+def validar_destino_s3() -> None:
+    """Falha na PARTIDA (ConfigFaltando) se a publicacao esta ativa e o destino
+    nao tem padrao na plataforma. Sem isso o erro cairia nos try/except do
+    salvamento e a imagem seria movida sem ser publicada."""
+    cfg = _cfg_s3()
+    if bool(cfg.get("ativo", True)):
+        destino_s3(cfg)
 
 
 def _finalizar_imagem(destino: Path, numero) -> str:

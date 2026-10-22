@@ -1,0 +1,19 @@
+-- =============================================================================
+-- Amplia DS_TITULO de VARCHAR2(100 BYTE) para VARCHAR2(400 CHAR).
+--
+-- Motivo: o titulo capturado na pagina do produto (Amazon / Mercado Livre /
+-- Shopee) passa facilmente de 100 caracteres, e a coluna original era em BYTES
+-- num banco AL32UTF8 -- cada acento custa 2 bytes, entao cabiam ~50 letras
+-- acentuadas. Praticamente todo titulo era truncado.
+--
+-- CHAR semantics (e nao BYTE) para que o limite de 400 seja em CARACTERES,
+-- independentemente de acentuacao.
+--
+-- Seguro de rodar: e um alargamento (widening) -- nao perde dados existentes e
+-- nao invalida a tabela. Aplicado no ambiente local em 2026-07-19 (a coluna
+-- estava vazia nas 430 linhas da fila).
+--
+-- Apos rodar este script, recompilar sql/STP_OFERTA_FILA_CAPTURA_UPDATE.STP,
+-- que passa a cortar DS_TITULO com SUBSTR(..., 1, 400).
+-- =============================================================================
+ALTER TABLE OFERTA_FILA_CAPTURA MODIFY (DS_TITULO VARCHAR2(400 CHAR));

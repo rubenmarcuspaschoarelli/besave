@@ -1278,8 +1278,16 @@ def captura_msg_whatsapp(
 
 
 def _tem_conteudo(campos: dict) -> bool:
-    """True se a mensagem parece util (promocao de produto OU anuncio de cupom)."""
-    return any(campos.get(c) for c in ("nome_do_produto", "preco_por", "preco_de", "url", "cupom"))
+    """
+    True se a mensagem parece util (promocao de produto OU anuncio de cupom).
+
+    Exige um sinal de OFERTA: preco, cupom ou link de loja. So texto (nome) nao
+    basta -- ate 10/2026 qualquer frase com 10+ letras virava "nome" e o
+    bate-papo do grupo entrava como PRODUTO (557 linhas no historico: "Bom dia",
+    audios, conversas; nenhuma oferta real ficava so com o nome). Link do
+    WhatsApp nem chega aqui: o parser ja o descarta ao escolher a url.
+    """
+    return any(campos.get(c) for c in ("preco_por", "preco_de", "url", "cupom"))
 
 
 def _marca_db(db_ok) -> str:

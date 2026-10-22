@@ -19,6 +19,15 @@ Uso (do diretorio do projeto):
 Pode rodar com a captura no ar: so LE as fotos de captura/img/ (nunca altera)
 e escreve na pasta do site. E interrompivel (Ctrl+C) e retomavel - a oferta
 cuja pasta ja tem o <id_oferta>.webp e pulada.
+
+--reconverter (28/09/2026): a imagem principal publicada passou de resolucao
+nativa para 480x480 (fundo branco se nao for quadrada; menor que 480 fica
+como esta) e ate 200 KB. Este modo SUBSTITUI o <id_oferta>.webp de cada pasta
+ja publicada, regerando a partir do JPEG de captura/img/ (ou do proprio webp,
+se o JPEG nao existir mais). O <id_oferta>-small.webp NAO e tocado. Retomavel:
+pula o que ja esta no formato novo.
+    .venv\Scripts\python.exe diag\publicar_s3.py --reconverter --dry-run
+    .venv\Scripts\python.exe diag\publicar_s3.py --reconverter
 """
 
 import argparse
@@ -30,6 +39,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from wa import storage  # noqa: E402
+
+try:
+    from PIL import Image
+except Exception:  # noqa: BLE001
+    Image = None
 
 _NOME_OK = re.compile(r"^(\d+)_")   # so o numero DEFINITIVO; ignora 'tmp<N>_...'
 
@@ -48,6 +62,112 @@ def imagens_definitivas(pasta: Path):
     return achadas
 
 
+def _ja_convertida(alvo: Path, dim_origem, max_px: int, max_bytes: int) -> bool:
+    """True se o webp publicado ja esta no formato novo (dimensao esperada para
+    a origem e dentro do teto de tamanho)."""
+    try:
+        if alvo.stat().st_size > max_bytes:
+            return False
+        with Image.open(alvo) as im:
+            return im.size == storage.dimensao_principal_s3(*dim_origem, max_px)
+    except Exception:  # noqa: BLE001 - ilegivel -> refazer
+        return False
+
+
+def reconverter(lista, destino_raiz: Path, dry_run: bool, refazer: bool, limite: int) -> int:
+    """Substitui o <id>.webp de cada oferta publicada pelo formato novo."""
+    _q, max_px, max_bytes = storage._cfg_s3_principal()
+    print(f"Formato : ate {max_px}x{max_px} (fundo branco), ate {max_bytes // 1024} KB; "
+          f"-small.webp intocado\n")
+    feitas = puladas = falhas = sem_pasta = plano_b = apertadas = 0
+    antes = depois = 0
+    t0 = time.perf_counter()
+    com_origem = set()
+
+    def converter(origem: Path, numero: int, alvo: Path) -> bool:
+        nonlocal feitas, falhas, antes, depois, apertadas
+        if dry_run:
+            feitas += 1
+            return True
+        try:
+            tam_antes = alvo.stat().st_size
+            storage.publicar_principal_s3(origem, numero, alvo.parent)
+            tam_depois = alvo.stat().st_size
+            antes += tam_antes
+            depois += tam_depois
+            if tam_depois > max_bytes * 0.9:
+                apertadas += 1
+            feitas += 1
+            return True
+        except Exception as e:  # noqa: BLE001
+            print(f"  falha em {numero}: {e}")
+            falhas += 1
+            return False
+
+    try:
+        # 1) Ofertas com a foto original em captura/img/ (fonte de melhor qualidade).
+        total = len(lista)
+        for i, (numero, foto) in enumerate(lista, 1):
+            if limite and feitas >= limite:
+                break
+            com_origem.add(numero)
+            alvo = destino_raiz / str(numero) / f"{numero}.webp"
+            if not alvo.exists():
+                sem_pasta += 1          # nunca publicada: e caso do modo normal
+            else:
+                try:
+                    with Image.open(foto) as im:
+                        dim = im.size
+                except Exception as e:  # noqa: BLE001
+                    print(f"  origem ilegivel {foto.name}: {e}")
+                    falhas += 1
+                    continue
+                if not refazer and _ja_convertida(alvo, dim, max_px, max_bytes):
+                    puladas += 1
+                else:
+                    converter(foto, numero, alvo)
+            if i % 1000 == 0:
+                print(f"  {i:6d}/{total} | {feitas} convertidas, {puladas} puladas, "
+                      f"{falhas} falhas | {time.perf_counter() - t0:.0f}s")
+
+        # 2) Plano B: pastas publicadas cujo JPEG de origem nao existe mais ->
+        #    reduz o proprio webp publicado.
+        if not (limite and feitas >= limite):
+            for pasta in sorted(destino_raiz.iterdir(), key=lambda p: p.name):
+                if limite and feitas >= limite:
+                    break
+                if not pasta.is_dir() or not pasta.name.isdigit():
+                    continue
+                numero = int(pasta.name)
+                if numero in com_origem:
+                    continue
+                alvo = pasta / f"{numero}.webp"
+                if not alvo.exists():
+                    continue
+                try:
+                    with Image.open(alvo) as im:
+                        dim = im.size
+                except Exception as e:  # noqa: BLE001
+                    print(f"  webp ilegivel {alvo}: {e}")
+                    falhas += 1
+                    continue
+                if not refazer and _ja_convertida(alvo, dim, max_px, max_bytes):
+                    puladas += 1
+                elif converter(alvo, numero, alvo):
+                    plano_b += 1
+    except KeyboardInterrupt:
+        print("\nInterrompido - o que ficou pronto esta no disco; rodar de novo retoma.")
+
+    seg = time.perf_counter() - t0
+    print(f"\n{'[DRY-RUN] a converter' if dry_run else 'Convertidas'} {feitas} "
+          f"(plano B, a partir do webp: {plano_b}) | puladas {puladas} | falhas {falhas} | "
+          f"sem publicacao {sem_pasta} | {seg:.0f}s")
+    if not dry_run and feitas:
+        print(f"Tamanho: {antes / 1048576:.1f} MB -> {depois / 1048576:.1f} MB | "
+              f"perto do teto (>90%): {apertadas}")
+    return 0 if not falhas else 2
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Publica no site as fotos que faltam.")
     ap.add_argument("--dry-run", action="store_true", help="so conta, nao grava")
@@ -55,6 +175,9 @@ def main() -> int:
     ap.add_argument("--limite", type=int, default=0,
                      help="publica no maximo N ofertas NOVAS (o que ja existe e pulado "
                           "de graca e NAO conta no limite - seguro rodar em lotes)")
+    ap.add_argument("--reconverter", action="store_true",
+                    help="substitui o <id>.webp ja publicado pelo formato novo "
+                         "(480x480, ate 200 KB); nao toca o -small.webp")
     args = ap.parse_args()
 
     pasta = storage.IMG_DIR
@@ -71,6 +194,13 @@ def main() -> int:
     print(f"Destino : {destino_raiz}\\<id_oferta>\\")
     print(f"Modo    : {'DRY-RUN' if args.dry_run else 'gravando'}"
           f"{' (republicando existentes)' if args.refazer else ''}\n")
+
+    if args.reconverter:
+        if Image is None:
+            print("Pillow nao instalado.")
+            return 1
+        return reconverter(imagens_definitivas(pasta), destino_raiz,
+                           args.dry_run, args.refazer, args.limite)
 
     feitas = puladas = falhas = ignoradas_tmp = 0
     t0 = time.perf_counter()

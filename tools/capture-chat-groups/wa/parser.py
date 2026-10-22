@@ -98,9 +98,10 @@ _JS_EXTRAIR = r"""
 # ---------------------------------------------------------------------------
 _RE_PRECO_DE = re.compile(r"De\s*:?\s*R\$\s*([\d.,]+)", re.IGNORECASE)
 _RE_PRECO_POR = re.compile(r"po+r\s*:?\s*R\$\s*([\d.,]+)", re.IGNORECASE)
-# Preco "cru": qualquer 'R$ valor'. group(1)=valor, group(2)=resto da linha
-# (usado p/ msgs que so tem o preco final, ex.: 'R$ 141,55 via Pix').
-_RE_PRECO_GEN = re.compile(r"R\$\s*([\d.,]+)\s*(.*)$")
+# Preco "cru": qualquer 'R$ valor' da linha (usado p/ msgs que so tem o preco
+# final, ex.: 'R$ 141,55 via Pix'). Percorrido com finditer porque a POSICAO do
+# valor decide se ele e preco ou regra de cupom (_regra_cupom_no_valor).
+_RE_VALOR_RS = re.compile(r"R\$\s*([\d.,]+)")
 # A palavra 'cupom' e case-insensitive, mas o TOKEN fica case-sensitive (so
 # MAIUSCULAS/digitos) -> evita 'podem', 'usar'. O lookahead (?![A-Za-zÀ-ÿ])
 # garante token COMPLETO: 'CUPOM DISPONÍVEL' nao vira 'DISPON' (cortado no Í).
@@ -129,6 +130,23 @@ _RE_SELO_OFF = re.compile(r"^\d{1,3}\s*%\s*off\s*!*\.?\s*$", re.IGNORECASE)
 _RE_CUPOM_ENTRY = re.compile(r"(?P<kw>(?i:cupom|c[óo]digo))\s*:\s*\*?(?P<code>[A-Z0-9]{3,})")
 # Rotulos de link ('Resgate aqui:', 'Lista de produtos:') — nao sao comentario.
 _RE_LINK_LABEL = re.compile(r"resgate|lista de produtos", re.IGNORECASE)
+# Texto ANTES do 'R$' que faz dele REGRA do cupom (teto, compra minima ou o
+# proprio desconto), nunca preco de produto: '30% OFF max R$15', 'Limite de
+# R$ 15', 'compras acima de R$45', 'R$150 OFF em R$999'.
+_RE_ANTES_REGRA_CUPOM = re.compile(
+    r"(?:m[áa]x(?:imo)?|limite|limitad[oa](?:\s+a)?|m[íi]n(?:imo|ima)?"
+    r"|acima\s+de|compras?|off\s+(?:em|no|na|nos|nas|acima\s+de))"
+    r"[\s:.\-–—]*(?:de\s*)?$", re.IGNORECASE)
+# Texto DEPOIS do valor: 'R$150 OFF' (desconto) e 'R$150/999' (desconto/minimo).
+_RE_DEPOIS_REGRA_CUPOM = re.compile(r"^\s*(?:off\b|/\s*\d)", re.IGNORECASE)
+# Linha que e SO um codigo de cupom, com a regra opcional colada
+# ('🎟️ CPAMD19', '🎟️ SITE150TODO - R$150/999'). O codigo precisa de digito:
+# sem isso, grito em caixa-alta ('CORRE', 'PROMO') viraria cupom.
+_RE_LINHA_CODIGO = re.compile(r"^(?P<code>[A-Z][A-Z0-9]{3,19})\b(?P<resto>.*)$")
+# Cabecalho FRACO de anuncio de cupom ('sao 3 cupons pra resgatar'): o anuncio
+# veio como IMAGEM e a legenda so chama. Por ser fraco, so vale quando nao ha
+# NENHUM valor em reais na mensagem (ver _eh_anuncio_cupom).
+_RE_HEADER_CUPOM_FRACO = re.compile(r"\d+\s*cupo[mn]", re.IGNORECASE)
 # Lojas conhecidas -> nome CANONICO. A ordem importa (mais especifico 1o).
 _LOJAS = (
     ("MERCADO LIVRE", r"mercado\s*livre|mercadolivre|\bmeli\b|meli\.la"),
@@ -262,6 +280,7 @@ def _analisar_precos(linhas):
       - 'Por: R$ Y' -> preco_por (+ texto seguinte = descricao_pagamento)
       - Sem 'Por', usa o 1o 'R$' que nao seja o 'de' como preco_por
         (msgs que so tem o preco final, geralmente 'R$ Y via Pix / à vista').
+      - Se so houver o 'De', preco_por = preco_de (o 'De' e mantido).
     """
     preco_de = preco_por = desc_pag = ""
     idx_de = idx_por = -1
@@ -282,11 +301,23 @@ def _analisar_precos(linhas):
         for i, ln in enumerate(linhas):
             if i == idx_de or _eh_hype(ln):   # nao reusar 'de' nem linha de hype
                 continue
-            m = _RE_PRECO_GEN.search(ln)
-            if m:
+            for m in _RE_VALOR_RS.finditer(ln):
+                # Teto/compra minima de cupom ('30% OFF max R$15') nao e preco.
+                # Sem outro valor na mensagem a oferta fica SEM preco, e o robo
+                # das paginas publica o preco do site (core/precos.py, regra 1).
+                if _regra_cupom_no_valor(ln, m.start(), m.end()):
+                    continue
                 preco_por, idx_por = _limpar_preco(m.group(1)), i
-                desc_pag = _limpar_desc_pagamento(m.group(2))
+                desc_pag = _limpar_desc_pagamento(ln[m.end():])
                 break
+            if preco_por:
+                break
+
+    # So veio o 'De' (sem 'Por' nem outro 'R$'): o preco final e o proprio 'De'
+    # (pedido do usuario, 28/09/2026). O 'De' e sempre mantido; o idx_ancora
+    # continua apontando a linha do 'De' (idx_por fica -1).
+    if preco_de and not preco_por:
+        preco_por = preco_de
 
     idx_ancora = idx_por if idx_por >= 0 else idx_de
     return preco_de, preco_por, desc_pag, idx_ancora
@@ -345,14 +376,52 @@ def _loja_do_campo(text: str, url: str) -> str:
     return _detectar_loja(text, url) or _dominio_da_url(url)
 
 
+def _regra_cupom_no_valor(linha: str, inicio: int, fim: int) -> bool:
+    """
+    True se o 'R$ x' que ocupa [inicio, fim) na linha e REGRA de cupom (teto,
+    compra minima ou o desconto do proprio cupom), nao preco de produto:
+    '30% OFF max R$15', 'Limite de R$ 15', 'Compra min. R$ 999', 'R$150/999'.
+    """
+    antes = linha[:inicio][-30:]
+    depois = linha[fim:][:12]
+    return bool(_RE_ANTES_REGRA_CUPOM.search(antes)
+                or _RE_DEPOIS_REGRA_CUPOM.match(depois))
+
+
+def _eh_linha_regra_cupom(linha: str) -> bool:
+    """True se a linha enuncia a regra de um cupom ('30% OFF max R$15')."""
+    return any(_regra_cupom_no_valor(linha, m.start(), m.end())
+               for m in _RE_VALOR_RS.finditer(linha))
+
+
+def _codigo_solto(linha: str):
+    """
+    (codigo, resto) quando a linha e SO um codigo de cupom, com ou sem a regra
+    colada ('CPAMD19', 'SITE150TODO - R$150/999'); ('', '') quando nao e.
+    Codigo sem digito e descartado: 'CORRE' e grito, nao cupom.
+    """
+    s = _strip_emoji_inicial(linha).strip(" *")
+    m = _RE_LINHA_CODIGO.match(s)
+    if not m:
+        return "", ""
+    codigo = m.group("code")
+    if codigo in _CUPOM_STOP or not any(c.isdigit() for c in codigo):
+        return "", ""
+    resto = m.group("resto").strip(" -:|.\u2013\u2014")
+    if resto and not _eh_linha_regra_cupom(resto):
+        return "", ""
+    return codigo, resto
+
+
 def _tem_header_cupom(linha: str) -> bool:
     """
-    True se a 1a linha e um cabecalho de anuncio de CUPOM: contem CUPOM/CUPONS
-    E (NOVO/NOVOS/SAIU/+N ou nome de loja). Assim 'NOVO CUPOM SHOPEE' e cupom,
-    mas 'BAIXOU 84% COM ESSE CUPOM' (produto) nao.
+    True se a 1a linha e um cabecalho de anuncio de CUPOM: contem o radical
+    CUPOM/CUPONS/CUPONZAO E (NOVO/NOVOS/SAIU/+N ou nome de loja). Assim
+    'NOVO CUPOM SHOPEE' e 'CORRE!!! CUPONZAOOO MERCADO LIVRE' sao cupom, mas
+    'BAIXOU 84% COM ESSE CUPOM' (produto) nao.
     """
     baixo = linha.lower()
-    if not re.search(r"cupo(m|ns)", baixo):
+    if not re.search(r"cupo[mn]", baixo):
         return False
     if re.search(r"\bnovo\b|\bnovos\b|\bsaiu\b|\+\s*\d", baixo):
         return True
@@ -365,10 +434,21 @@ def _eh_anuncio_cupom(linhas) -> bool:
         return False
     if _tem_header_cupom(linhas[0]):
         return True
-    # Sem header claro: 2+ entradas 'Cupom:/Código:' e nenhum preco De/Por.
+    # Preco De/Por e assinatura de PRODUTO: nenhuma regra abaixo reclassifica.
+    if any(_RE_PRECO_DE.search(ln) or _RE_PRECO_POR.search(ln) for ln in linhas):
+        return False
     entradas = sum(1 for ln in linhas if _RE_CUPOM_ENTRY.search(ln))
-    tem_preco = any(_RE_PRECO_DE.search(ln) or _RE_PRECO_POR.search(ln) for ln in linhas)
-    return entradas >= 2 and not tem_preco
+    if entradas >= 2:                      # 2+ entradas 'Cupom:/Código:'
+        return True
+    # Codigo solto + a regra dele ('CPAMD19' / '30% OFF max R$15'): anuncio de
+    # cupom que nao escreve a palavra 'Cupom:' em lugar nenhum.
+    codigos = entradas + sum(1 for ln in linhas if _codigo_solto(ln)[0])
+    if codigos >= 1 and any(_eh_linha_regra_cupom(ln) for ln in linhas):
+        return True
+    # Cupons so na IMAGEM: a legenda chama ('sao 3 cupons pra resgatar') e a
+    # mensagem inteira nao tem um valor em reais sequer.
+    return bool(_RE_HEADER_CUPOM_FRACO.search(linhas[0])
+                and not any(_RE_VALOR_RS.search(ln) for ln in linhas))
 
 
 def _comentario_cupom(linhas, i: int, abaixo: bool) -> str:
@@ -398,12 +478,19 @@ def _extrair_cupons(linhas):
     codigos, comentarios = [], []
     for i, ln in enumerate(linhas):
         m = _RE_CUPOM_ENTRY.search(ln)
-        if not m:
-            continue
-        codigo = m.group("code").strip(" .,!¡")
-        abaixo = "digo" in m.group("kw").lower()   # 'código' -> comentario abaixo
+        if m:
+            codigo = m.group("code").strip(" .,!¡")
+            abaixo = "digo" in m.group("kw").lower()   # 'código' -> comentario abaixo
+            comentario = _comentario_cupom(linhas, i, abaixo)
+        else:
+            # Codigo solto: a regra colada nele ('SITE150TODO - R$150/999') ja e
+            # o comentario; sem ela, a regra vem na linha de baixo.
+            codigo, resto = _codigo_solto(ln)
+            if not codigo:
+                continue
+            comentario = resto or _comentario_cupom(linhas, i, True)
         codigos.append(codigo)
-        comentarios.append(_comentario_cupom(linhas, i, abaixo))
+        comentarios.append(comentario)
     return codigos, comentarios
 
 
@@ -468,6 +555,15 @@ def _achar_nome(linhas, aviso):
     return max(candidatas, key=len) if candidatas else ""
 
 
+_RE_LINK_WHATSAPP = re.compile(
+    r"^https?://(?:[\w-]+\.)*(?:whatsapp\.com|wa\.me)(?:[/?#]|$)", re.IGNORECASE)
+
+
+def eh_link_whatsapp(url: str) -> bool:
+    """True para link do proprio WhatsApp (convite de grupo, canal, wa.me)."""
+    return bool(_RE_LINK_WHATSAPP.match((url or "").strip()))
+
+
 def _campos_vazios() -> dict:
     """Dicionario base com todos os campos vazios (garante colunas consistentes)."""
     return {
@@ -490,8 +586,10 @@ def parse_campos(bruto: dict) -> dict:
     """Classifica a mensagem (PRODUTO/CUPOM) e extrai os campos."""
     text = bruto.get("text", "") or ""
     linhas = _limpar_linhas(text)
-    links = bruto.get("links") or []
-    url = links[0] if links else ""          # 1o link (decisao do usuario)
+    # 1o link (decisao do usuario), pulando os do proprio WhatsApp: convite de
+    # grupo/canal nunca e a oferta (44 de 44 no historico eram divulgacao de grupo).
+    links = [ln for ln in (bruto.get("links") or []) if not eh_link_whatsapp(ln)]
+    url = links[0] if links else ""
 
     campos = _campos_vazios()
     campos["url"] = url

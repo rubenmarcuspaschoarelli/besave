@@ -1,0 +1,57 @@
+-- =============================================================================
+-- STP_OFERTA_FILA_CAPTURA_ERRO
+-- Marca uma linha de OFERTA_FILA_CAPTURA cuja captura NAO deu certo, para que
+-- ela nao volte na fila (que le apenas ST_CAPTURA = '0') nem seja confundida com
+-- uma oferta ainda pendente.
+--
+-- ST_CAPTURA e FORCADO para '9' (constante). Convencao do campo:
+--   '0' pendente | '1' capturado com sucesso | '9' erro/problema
+-- DS_CAPTURA guarda o MOTIVO, exatamente o status_captura do programa Python:
+--   'erro: TimeoutError', 'bloqueado_ou_login', 'pagina_sem_produto',
+--   'loja_nao_implementada', 'loja_desconhecida', 'url_vazia'
+--
+-- DS_URL_FINAL tambem e gravada (quando houver): em caso de bloqueio/captcha ou
+-- link de cupom, saber ONDE a navegacao parou e o que mais ajuda a diagnosticar.
+-- As demais colunas de captura ficam intocadas.
+--
+-- Para reprocessar uma classe de problema depois de corrigida, basta devolver as
+-- linhas para a fila, ex.:
+--   UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA='0'
+--    WHERE ST_CAPTURA='9' AND DS_CAPTURA='bloqueado_ou_login';
+--
+-- Retorno igual ao da SP de update: 'TRUE'/'FALSE' + PV_ERRO (VARCHAR2 em vez de
+-- BOOLEAN porque o 11g nao permite bind de BOOLEAN por clientes OCI).
+-- =============================================================================
+CREATE OR REPLACE PROCEDURE STP_OFERTA_FILA_CAPTURA_ERRO (
+  P_ID_OFERTA    IN  NUMBER,
+  P_DS_CAPTURA   IN  VARCHAR2,
+  P_DS_URL_FINAL IN  VARCHAR2,
+  P_ST_ATIVO     IN  VARCHAR2 DEFAULT NULL,
+  PV_RETORNO     OUT VARCHAR2,
+  PV_ERRO        OUT VARCHAR2
+) AS
+BEGIN
+  UPDATE OFERTA_FILA_CAPTURA SET
+    DS_CAPTURA   = SUBSTR(NVL(P_DS_CAPTURA, 'erro nao informado'), 1, 400),
+    -- NVL(..., DS_URL_FINAL): se a navegacao nem chegou a acontecer, preserva o
+    -- que ja estava la em vez de apagar.
+    DS_URL_FINAL = NVL(SUBSTR(P_DS_URL_FINAL, 1, 350), DS_URL_FINAL),
+    -- Mesmo em erro a loja costuma ser conhecida: gravar ST_ATIVO ajuda a
+    -- priorizar o reprocessamento (idem NVL: nao informado -> nao mexe).
+    ST_ATIVO     = NVL(P_ST_ATIVO, ST_ATIVO),
+    ST_CAPTURA   = '9'
+  WHERE ID_OFERTA = P_ID_OFERTA;
+
+  IF SQL%ROWCOUNT = 0 THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := 'ID_OFERTA ' || TO_CHAR(P_ID_OFERTA) || ' nao encontrado.';
+  ELSE
+    PV_RETORNO := 'TRUE';
+    PV_ERRO    := NULL;
+  END IF;
+EXCEPTION
+  WHEN OTHERS THEN
+    PV_RETORNO := 'FALSE';
+    PV_ERRO    := SUBSTR(SQLERRM, 1, 500);
+END STP_OFERTA_FILA_CAPTURA_ERRO;
+/

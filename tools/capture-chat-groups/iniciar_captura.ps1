@@ -59,7 +59,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # --- 4. nome do log (nao reaproveita arquivo de run anterior) -----------------
-$base = Join-Path $Raiz ("run_captura_" + (Get-Date -Format 'dd_MM'))
+$LogDir = Join-Path $Raiz 'log'
+New-Item -ItemType Directory -Force $LogDir | Out-Null
+$base = Join-Path $LogDir ("run_captura_" + (Get-Date -Format 'dd_MM'))
 $log = "$base.log"
 foreach ($sufixo in 'b','c','d','e','f','g','h') {
     if (-not (Test-Path $log)) { break }

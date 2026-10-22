@@ -1,8 +1,78 @@
-# Resumo do projeto — Agente de Captura WhatsApp
+# Resumo do projeto capture-chat-groups (antigo — Agente de Captura WhatsApp )
 
-_Última atualização: 22/09/2026_
+_Última atualização: 14/10/2026_
 
-## ONDE PARAMOS (22/09/2026, ~10h) — 7 semanas de operação sem sessão; **captura NO AR**
+## ONDE PARAMOS (08/10/2026, noite) — captura PARADA; trava de "conversa errada" pronta (vale após relançar)
+
+**NADA RODANDO.** Último run: hoje 17:15 → 17:32 (`run_captura_08_10.log`, 55 ofertas), encerrado
+sem `finally`. Contador estava atrasado (config 32899 x CSV/Oracle 32902) → **corrigido para
+32902** (backup `conf/config.json.bak_08_10_contador`); `diag\checa_contador.py` = OK.
+Para subir: `.\iniciar_captura.ps1` (quem lança é o usuário).
+
+### 🆕 08/10 — 67 mensagens PESSOAIS viraram oferta em 31/08: causa e correção
+- **Blocos:** IDs **20867-20902** (36, gravados como `@achadinhoscomcarol`, conversa de família,
+  datas 25-31/08) e **21084-21114** (31, gravados como `Promos da Ly`, grupo de trabalho), +1
+  avulsa (20550). Todas entraram pelo **rodízio ao vivo**, não pelo catch-up.
+- **Causa:** `browser.abrir_grupo` digitava o nome na busca, esperava 1,2s e clicava no
+  `list-item-1` **sem conferir o nome**. Se a busca ainda não tinha filtrado, o 1º item era a
+  conversa mais recente da lista normal; e o rodízio trata como "nova" toda mensagem não vista
+  da conversa aberta → a viewport inteira virou linha. Sinal que havia no log: `AVISO: ignorei
+  retrocesso do marcador` (datas de dias antes) logo após o `Abrindo grupo`.
+- **Correção (`wa/browser.py`):** `normalizar_nome` (sem acento/emoji, só `[a-z0-9]`) +
+  2 conferências: (1) só clica quando o 1º resultado contém o nome do grupo (espera até ~6s);
+  (2) depois de abrir, o cabeçalho `#main header` tem que conter o nome. Divergência levanta
+  `ConversaErrada` → falha comum do rodízio, tenta de novo na volta seguinte. Se o texto não der
+  para LER (seletor mudou), só avisa no log e segue — não trava a captura. Testado com página
+  simulada (5 casos, incl. o de 31/08). **Falta ver no DOM real**: no 1º run, conferir que não
+  aparece `AVISO: nao consegui ler...` nem `ConversaErrada` em loop.
+- **Estado dos dados:** as 68 linhas **já tinham saído do Oracle** na limpeza de 07/10
+  (estão em `conf/backup_conversa_fiada_apagada_07_10_*.csv`; nunca foram para `OFERTA`).
+  Continuam no CSV `captura/31_08_2026_08_41.csv`, em 6 imagens de `captura/img/` (20867,
+  20901, 21085, 21090, 21097, 21098 — com telefone de terceiros no nome) e nas **6 pastas
+  correspondentes em `server/s3/ofertas/img/`** → **APAGADAS em 08/10 a pedido do usuário**
+  (6 pastas S3 + 12 arquivos `.jpeg`/`_small.webp`). As linhas do CSV de 31/08 ficaram.
+
+### ✅ 08/10 — filtro de conversa fiada VALIDADO em produção
+Runs com o filtro: `07_10_2026_09_31` (269), `07_10_2026_18_02` (149), `08_10_2026_17_15` (55).
+0 linha sem preço/cupom/url, 0 url do WhatsApp. As 14 linhas PRODUTO sem preço são ofertas reais
+que passaram pelo link (Shopee/ML/Amazon com nome e foto). Volume de 07/10 (418) dentro da faixa
+dos dias anteriores (194-513). Antes do filtro, já desde 28/09 só ~1 lixo por run passava
+(ex.: `Mensagem apagada`, `Aguardando mensagem`). O descarte não é logado por mensagem, então
+"perda zero" é inferida (no replay de 06/10 as 600 que cairiam eram todas lixo), não medida.
+
+### 06-07/10 — filtro de conversa fiada + `OFERTA.DS_CUPOM` 250 + limpeza
+- `monitor._tem_conteudo` exige **preço, cupom ou url** (nome sozinho não basta); `parser`
+  usa como url o 1º link que **não** é do WhatsApp (`eh_link_whatsapp`).
+- `OFERTA.DS_CUPOM` 30 → **250 CHAR** e `STP_OFERTA_PUBLICAR` (do CaptureAmazon) sem o
+  `SUBSTR(...,1,30)` — aplicado 07/10 ~00:15 com autorização (`conf/ds_cupom_250_oferta.py`,
+  backup da SP em `conf/sp_oferta_publicar_antes_ds_cupom_250.sql`).
+- `diag/limpa_conversa_e_cupom.py --aplicar`: 38 cupons da OFERTA restaurados da FILA e
+  **599 linhas de conversa apagadas** da FILA (todas `ST_CAPTURA='9'`, nenhuma em OFERTA;
+  regra: só apagar se ≠ '1'). CSVs e imagens não foram tocados.
+- ⚠️ Armadilha: `executemany` com `:1/:2` liga POR POSIÇÃO de aparição — usar binds nomeados.
+
+### 28/09 — imagem do S3 480×480, `preco_por`, marca d'água, `DS_CUPOM` da fila 250
+- `<id>.webp` do S3: maior lado >480 → reduz e completa com **fundo branco até 480×480**; ≤480
+  fica no original. Teto 200 KB. Backfill `diag\publicar_s3.py --reconverter` rodado pelo
+  usuário e conferido (28.999 pastas, 0 >480, 0 >200 KB).
+- `parser._analisar_precos`: só "De" → `preco_por = preco_de` (sem backfill das 541 antigas).
+- Marca d'água: bug de composição (máscara aplicava o alpha 2x e puxava p/ preto) corrigido;
+  config final cinza `#505050`, opacidade 0.25, limiar 120. Só vale para fotos novas.
+- `DS_CUPOM` da FILA 30 BYTE → 250 CHAR (coluna + SP + `oracle_db._cupom`), 57 cupons antigos
+  corrigidos. ⚠️ Lição: comentário PL/SQL sempre DEPOIS da vírgula; conferir `user_errors`.
+
+### 23/09 — publicação no bucket local do site
+`storage.publicar_s3`: cada oferta vai para `server\s3\ofertas\img\<id>\` como `<id>.webp` +
+`<id>-small.webp`. Backfill `diag\publicar_s3.py` concluído (100% das ofertas com imagem).
+Rodar backfill pesado só com a captura parada (concorrência com o Chrome derrubou lotes).
+
+### Pendências
+1. (feito 08/10: fotos/pastas das conversas pessoais apagadas; CSV de 31/08 mantido)
+2. No próximo run, conferir a trava nova no DOM real (ver acima).
+3. Antigas, sem urgência: fechar modais com botão ("Câmera não encontrada", "Recarregar");
+   162 imagens ausentes do CSV de 15/07; duplicatas do resgate de 03/08 (decisão: deixar).
+
+## HISTÓRICO (22/09/2026, ~10h) — 7 semanas de operação sem sessão; **captura NO AR**
 
 **TEM RUN VIVO.** Lançado hoje 09:38 (`run_captura_22_09.log`, CSV `captura/22_09_2026_09_38.csv`),
 `.err` vazio, **0 erro em todo o log**. Retomou em `ultimo_id_processado=29725`, catch-up
@@ -1152,7 +1222,7 @@ run_captura.py     # LANÇADOR (usar sempre): lê os nomes do conf/config.json
 main.py            # entrada crua: python -u main.py "Grupo A" [...] [--max N] [--seg-grupo S]
 requirements.txt   # playwright>=1.61
 wa/
-  browser.py       # contexto persistente, login, abrir/trocar grupo
+  browser.py       # contexto persistente, login, abrir/trocar grupo (confere o nome)
   monitor.py       # captura_msg_whatsapp(): sweep + catch-up + rodízio multi-grupo + dedupe
   parser.py        # reconstrói texto (emoji->alt) + classifica (PRODUTO/CUPOM) + extrai
   storage.py       # salva imagem + escreve CSV
@@ -1160,13 +1230,37 @@ wa/
   oracle_db.py     # gravação no Oracle via stored procedure (best-effort)
 diag/
   diag_ordem.py    # confere a ORDEM da subida — rodar ao mexer na caminhada (30/07)
+  checa_contador.py  # contador x CSV x Oracle — rodar antes de relançar após parada anormal
+  gerar_thumbs.py    # backfill das miniaturas _small
+  publicar_s3.py     # backfill/reconversão das imagens do bucket local do site
+  normaliza_loja_cupom.py   # normalização histórica de DS_CUPOM_LOJA (22/09)
+  limpa_conversa_e_cupom.py # limpeza de conversa fiada + cupons da OFERTA (07/10)
+iniciar_captura.ps1 / encerrar_captura.ps1  # subir/parar em produção
 conf/config.json   # marcadores por grupo, ultimo_id_processado, bloco db e imagem
 sql/               # a stored procedure de insert
 user_data/         # sessão salva (NÃO commitar) — QR só na 1ª vez
-captura/           # saída: CSV (NÃO commitar)
-captura/img/       # imagens dos anúncios (NÃO commitar)
+captura/csv/       # saída: um CSV por run, DD_MM_AAAA_HH_MM.csv (NÃO commitar) — storage.CSV_DIR
+captura/img/       # imagens dos anúncios (NÃO commitar) — storage.IMG_DIR
 captura/historico/ # CSVs antigos fora de uso (não entram nas conferências)
+log/               # logs dos runs run_captura_DD_MM[_b..].log + .err, e cupom_excedido.log
+                   # (NÃO commitar) — storage.LOG_DIR / iniciar_captura.ps1
 ```
+**Regra de pastas (14/10/2026):** nada de saída na raiz do projeto. CSV novo vai para
+`captura/csv/`, log/erro para `log/`. Caminhos centralizados em `wa/storage.py`
+(`CAPTURA_DIR`, `CSV_DIR`, `IMG_DIR`, `LOG_DIR`, `CONF_DIR`) — código novo importa daí em vez
+de montar caminho à mão. `DS_IMAGEM_OFERTA` no Oracle continua RELATIVO a `captura/`
+(`img/NN_x.jpeg`), então `captura/img/` não pode mudar de lugar sem migrar o banco.
+`diag/checa_contador.py` lê `captura/csv/` e, por segurança, a raiz de `captura/` (CSV de
+run lançado antes da mudança).
+
+**Git (14/10/2026):** `.gitignore` deixa FORA `user_data/` (sessão do WhatsApp = credencial),
+`captura/`, `log/`, `*.log`/`*.err`, `.venv/`, `conf/config.json` (+ `.bak*`) e
+`conf/backup_*.csv`. O `config.json` tem usuário/senha do Oracle e é estado vivo (contador +
+marcadores) — **nunca versionar**. Versionado no lugar: `conf/config.example.json` (mesma
+estrutura, credenciais vazias, marcadores vazios, contador 0). Máquina nova: copiar para
+`config.json`, preencher `db.usuario`/`db.senha` e acertar `controle.ultimo_id_processado` com
+`MAX(ID_OFERTA)` do Oracle (o `checa_contador.py` do `iniciar_captura.ps1` barra se ficar 0).
+Ao criar chave nova no config, replicar no example.
 
 ## Como rodar
 ```bash
