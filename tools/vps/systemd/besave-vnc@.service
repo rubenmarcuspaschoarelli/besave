@@ -1,0 +1,21 @@
+# Tela remota :N (Xfce sobre TigerVNC, porta 590N so em localhost) - unidade-modelo de USUARIO.
+# besave-vnc@1 = lojas (:1, porta 5901); besave-vnc@2 = WhatsApp (:2, porta 5902).
+# Instalar em ~/.config/systemd/user/ (ver tools/vps/README.md).
+# Cada robo depende da SUA tela (Requires= + After=): janelas e area de transferencia
+# separadas, senao a interacao numa roubava o foco da outra.
+# Sem a credencial do VNC o iniciar_vnc.sh sai com 78 e a unidade NAO reinicia (ver o README).
+[Unit]
+Description=Besave - tela remota VNC :%i
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStartPre=-/usr/bin/vncserver -kill :%i
+ExecStart=/srv/besave/repo/tools/vps/iniciar_vnc.sh %i
+ExecStop=/usr/bin/vncserver -kill :%i
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=78
+
+[Install]
+WantedBy=default.target

@@ -217,6 +217,20 @@ fn diff_de_120_chaves_vira_3_lotes_mistos() {
     assert_eq!(lotes_kvs(&[], &(1..=50).collect::<Vec<_>>()).len(), 1);
 }
 
+/// EXP-12 (BSV-47): 14,5 mil exclusões saem em 290 chamadas de no máximo 50 (quota da API).
+#[test]
+fn quatorze_mil_e_quinhentas_exclusoes_viram_290_lotes_de_ate_50() {
+    use worker::redirects::{LOTE_KVS, lotes_kvs};
+    let del: Vec<i64> = (1..=14_500).collect();
+    let lotes = lotes_kvs(&[], &del);
+    assert_eq!(lotes.len(), 290);
+    assert!(
+        lotes
+            .iter()
+            .all(|l| l.puts.is_empty() && l.dels.len() == LOTE_KVS)
+    );
+}
+
 /// BSV-12c (spec, regras): `RedirectsMemoria` expõe `ItemCount` (todas as chaves) e um `ETag`
 /// que muda a cada escrita, inclusive a escrita "por fora" (`inserir_bruto`).
 #[test]

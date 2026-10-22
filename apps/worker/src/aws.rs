@@ -4,11 +4,15 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
+use std::time::Duration;
 
-use aws_config::SdkConfig;
+use aws_config::timeout::TimeoutConfig;
+use aws_config::{BehaviorVersion, SdkConfig};
 use aws_sdk_cloudfrontkeyvaluestore::types::{DeleteKeyRequestListItem, PutKeyRequestListItem};
+use aws_sdk_s3::config::{Credentials, ProvideCredentials};
 use aws_sdk_s3::error::DisplayErrorContext;
 use aws_sdk_s3::primitives::ByteStream;
+use aws_sdk_s3::types::{Delete, ObjectIdentifier};
 use tokio::runtime::Runtime;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
@@ -23,6 +27,10 @@ pub enum ErroAws {
     ConfigAusente(&'static str),
     #[error("região AWS ausente: defina AWS_REGION ou a região do perfil")]
     RegiaoAusente,
+    #[error(
+        "credenciais AWS ausentes: defina AWS_ACCESS_KEY_ID e AWS_SECRET_ACCESS_KEY (ou um perfil válido) no .env"
+    )]
+    CredenciaisAusentes,
     #[error("criando runtime tokio: {0}")]
     Runtime(std::io::Error),
 }
@@ -54,6 +62,45 @@ impl ConfigAws {
     }
 }
 
+/// Limites de tempo das chamadas AWS (BSV-47): sem eles uma conexão HTTPS sem resposta prende o
+/// ciclo até o `TimeoutStartSec`. Estouro vira erro do SDK, com a operação e a chave no texto.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LimitesTempo {
+    /// Abrir a conexão.
+    pub conexao: Duration,
+    /// Esperar bytes de uma conexão já aberta.
+    pub leitura: Duration,
+    /// Uma tentativa (o SDK repete até 3 vezes).
+    pub tentativa: Duration,
+    /// A operação inteira, retentativas incluídas.
+    pub operacao: Duration,
+}
+
+impl Default for LimitesTempo {
+    fn default() -> Self {
+        Self {
+            conexao: Duration::from_secs(10),
+            leitura: Duration::from_secs(30),
+            tentativa: Duration::from_secs(60),
+            operacao: Duration::from_secs(180),
+        }
+    }
+}
+
+impl LimitesTempo {
+    pub fn timeout_config(&self) -> TimeoutConfig {
+        TimeoutConfig::builder()
+            .connect_timeout(self.conexao)
+            .read_timeout(self.leitura)
+            .operation_attempt_timeout(self.tentativa)
+            .operation_timeout(self.operacao)
+            .build()
+    }
+}
+
+/// Quanto esperar a cadeia de credenciais antes de dar por ausentes.
+const ESPERA_CREDENCIAIS: Duration = Duration::from_secs(15);
+
 /// Runtime + `SdkConfig` compartilhados pelos dois adaptadores.
 #[derive(Clone)]
 pub struct ContextoAws {
@@ -62,16 +109,37 @@ pub struct ContextoAws {
 }
 
 impl ContextoAws {
-    /// Cadeia padrão do SDK (env `AWS_*`, perfil, SSO…).
+    /// Cadeia padrão do SDK (env `AWS_*`, perfil, SSO…) com os limites de tempo.
     pub fn carregar() -> Result<Self, ErroAws> {
-        let rt = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .map_err(ErroAws::Runtime)?;
-        let sdk = rt.block_on(aws_config::load_from_env());
+        let rt = runtime()?;
+        let sdk = rt.block_on(config_padrao().load());
+        Self::com_sdk_em(rt, sdk)
+    }
+
+    /// Valida (região e credenciais) e monta o contexto sobre um `SdkConfig` pronto.
+    pub fn com_sdk(sdk: SdkConfig) -> Result<Self, ErroAws> {
+        Self::com_sdk_em(runtime()?, sdk)
+    }
+
+    /// Endpoint fixo e credenciais estáticas, para ensaio com um servidor local (sem rede real).
+    pub fn com_endpoint(endpoint: &str, limites: &LimitesTempo) -> Result<Self, ErroAws> {
+        let rt = runtime()?;
+        let sdk = rt.block_on(
+            aws_config::defaults(BehaviorVersion::latest())
+                .region(aws_config::Region::new("us-east-1"))
+                .endpoint_url(endpoint)
+                .credentials_provider(Credentials::new("ensaio", "ensaio", None, None, "ensaio"))
+                .timeout_config(limites.timeout_config())
+                .load(),
+        );
+        Self::com_sdk_em(rt, sdk)
+    }
+
+    fn com_sdk_em(rt: Runtime, sdk: SdkConfig) -> Result<Self, ErroAws> {
         if sdk.region().is_none() {
             return Err(ErroAws::RegiaoAusente);
         }
+        rt.block_on(exigir_credenciais(&sdk, ESPERA_CREDENCIAIS))?;
         Ok(Self {
             rt: Arc::new(rt),
             sdk,
@@ -79,8 +147,71 @@ impl ContextoAws {
     }
 }
 
+/// Cadeia padrão do SDK com os `LimitesTempo` padrão (o que `carregar` usa).
+pub fn config_padrao() -> aws_config::ConfigLoader {
+    aws_config::defaults(BehaviorVersion::latest())
+        .timeout_config(LimitesTempo::default().timeout_config())
+}
+
+fn runtime() -> Result<Runtime, ErroAws> {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(ErroAws::Runtime)
+}
+
+/// Resolve as credenciais já na carga: sem elas o erro é claro aqui, em vez de uma pergunta ao
+/// serviço de metadados de instância no meio do ciclo (que não existe na VPS e demora a falhar).
+pub async fn exigir_credenciais(sdk: &SdkConfig, espera: Duration) -> Result<(), ErroAws> {
+    let Some(provedor) = sdk.credentials_provider() else {
+        return Err(ErroAws::CredenciaisAusentes);
+    };
+    match tokio::time::timeout(espera, provedor.provide_credentials()).await {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(_)) | Err(_) => Err(ErroAws::CredenciaisAusentes),
+    }
+}
+
 fn texto_erro(e: impl std::error::Error) -> String {
     DisplayErrorContext(e).to_string()
+}
+
+/// Quantas chaves com erro vão por extenso no log e no erro de um `DeleteObjects` parcial.
+const CHAVES_NO_LOG: usize = 20;
+
+/// `DeleteObjects` responde 200 mesmo quando parte das chaves falha (`Errors`). Devolve o erro do
+/// lote com a contagem e as chaves afetadas (até `CHAVES_NO_LOG`, com código e mensagem), e loga
+/// cada uma em WARN. `None` se `Errors` está vazio.
+fn erro_de_lote(erros: &[aws_sdk_s3::types::Error], primeira: &str) -> Option<ErroPublicador> {
+    let primeiro = erros.first()?;
+    let detalhe: Vec<String> = erros
+        .iter()
+        .take(CHAVES_NO_LOG)
+        .map(|e| {
+            let chave = e.key().unwrap_or("?");
+            let motivo = e.message().or(e.code()).unwrap_or("sem detalhe");
+            warn!(
+                chave,
+                motivo, "DeleteObjects: chave não apagada; segue na fila do expurgo"
+            );
+            format!("{chave} ({motivo})")
+        })
+        .collect();
+    let resto = erros.len().saturating_sub(CHAVES_NO_LOG);
+    let mais = if resto > 0 {
+        format!(" e mais {resto}")
+    } else {
+        String::new()
+    };
+    Some(ErroPublicador::Aws {
+        operacao: "DeleteObjects",
+        chave: primeiro.key().unwrap_or(primeira).to_owned(),
+        fonte: format!(
+            "{} erro(s) no lote: {}{mais}",
+            erros.len(),
+            detalhe.join(", ")
+        ),
+    })
 }
 
 pub struct PublicadorS3 {
@@ -179,6 +310,38 @@ impl Publicador for PublicadorS3 {
             )
             .map(|_| ())
             .map_err(|e| erro_s3("DeleteObject", chave, e))
+    }
+
+    /// `DeleteObjects` (modo quieto), uma chamada por até `LOTE_REMOCAO` chaves. O S3 responde 200
+    /// mesmo com falha parcial: qualquer item em `Errors` é erro, com a primeira chave afetada.
+    fn remover_lote(&mut self, chaves: &[String]) -> publicador::Result<()> {
+        for grupo in chaves.chunks(publicador::LOTE_REMOCAO) {
+            let primeira = grupo.first().map_or("", String::as_str);
+            let objetos = grupo
+                .iter()
+                .map(|k| ObjectIdentifier::builder().key(k).build())
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| erro_s3("DeleteObjects", primeira, e))?;
+            let delete = Delete::builder()
+                .set_objects(Some(objetos))
+                .quiet(true)
+                .build()
+                .map_err(|e| erro_s3("DeleteObjects", primeira, e))?;
+            let saida = self
+                .rt
+                .block_on(
+                    self.cliente
+                        .delete_objects()
+                        .bucket(&self.bucket)
+                        .delete(delete)
+                        .send(),
+                )
+                .map_err(|e| erro_s3("DeleteObjects", primeira, e))?;
+            if let Some(erro) = erro_de_lote(saida.errors(), primeira) {
+                return Err(erro);
+            }
+        }
+        Ok(())
     }
 
     /// `ListObjectsV2` paginado.

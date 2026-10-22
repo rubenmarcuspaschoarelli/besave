@@ -24,10 +24,20 @@ def ler_canal(caminho=CONFIG_PATH):
     return valor.strip() if isinstance(valor, str) else CANAL_PADRAO
 
 
+def ler_user_agent(caminho=CONFIG_PATH):
+    """Identificacao do navegador: "navegador.user_agent" no config.json.
+
+    Ausente, vazia ou invalida = padrao do navegador (None). Na VPS (Linux aarch64)
+    o Mercado Livre manda o link curto para a loja de apps; ver tools/vps/README.md.
+    """
+    valor = (_ler_config(caminho).get('navegador') or {}).get('user_agent')
+    return (valor.strip() or None) if isinstance(valor, str) else None
+
+
 # Flags no MINIMO e SEM script de stealth: o captcha da Shopee dava "Erro de
 # Carregamento" com stealth (fingerprint inconsistente) e com --disable-gpu
 # (usa WebGL/canvas). Chrome real + poucos flags = captcha carrega.
-def montar_kwargs(canal, headless=False):
+def montar_kwargs(canal, headless=False, user_agent=None):
     args = ['--disable-blink-features=AutomationControlled']
     kwargs = {
         'headless': headless,
@@ -35,6 +45,8 @@ def montar_kwargs(canal, headless=False):
         'args': args,
         'ignore_default_args': ['--disable-gpu', '--enable-unsafe-swiftshader'],
     }
+    if user_agent:
+        kwargs['user_agent'] = user_agent
     if canal:
         if CHROME_PROFILE:
             args.append(f'--profile-directory={CHROME_PROFILE}')
@@ -44,4 +56,5 @@ def montar_kwargs(canal, headless=False):
 
 def launch_persistent(p, headless=False):
     return p.chromium.launch_persistent_context(
-        PERFIL_DIR, **montar_kwargs(ler_canal(), headless=headless))
+        PERFIL_DIR, **montar_kwargs(ler_canal(), headless=headless,
+                                    user_agent=ler_user_agent()))

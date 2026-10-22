@@ -132,7 +132,7 @@ def test_sh04_tudo_ok_lanca_no_tmux_com_display(amb):
     tmux = amb.log("tmux.log")
     assert "-L besave-whatsapp new-session -d -s besave-whatsapp" in tmux
     assert " -c " in tmux and "capture-chat-groups" in tmux
-    assert "DISPLAY=:1" in tmux
+    assert "DISPLAY=:2" in tmux  # tela propria do WhatsApp (BSV-48)
     assert "run_captura.py" in tmux
     assert "-u" in tmux
 

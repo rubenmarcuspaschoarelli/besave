@@ -24,6 +24,7 @@ API:
   db.desconectar()
 """
 
+import functools
 import json
 import os
 import re
@@ -40,6 +41,38 @@ _client_iniciado = False
 
 NOME_SP = "STP_OFERTA_FILA_CAPTURA_UPDATE"
 NOME_SP_ERRO = "STP_OFERTA_FILA_CAPTURA_ERRO"
+
+# Erros de CONEXAO (sessao morta, rede, banco fora): vale reconectar e repetir.
+# Erro de dados (ORA-01400, PLS-...) nao entra: repetir nao resolve.
+_ERROS_CONEXAO = re.compile(
+    r"DPY-1001|DPY-4011|DPI-1010|DPI-1080|"
+    r"ORA-0(?:3113|3114|3135|3136|1012|2396|0028)|"
+    r"ORA-01033|ORA-01034|ORA-12(?:170|514|537|541|543|571)"
+)
+
+
+class ErroSemConexao(RuntimeError):
+    """Nao ha conexao Oracle utilizavel (nem depois de reconectar)."""
+
+
+def _erro_conexao(exc) -> bool:
+    return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
+
+
+def _reconecta(metodo):
+    """Em erro de conexao, reconecta e repete o metodo UMA vez."""
+    @functools.wraps(metodo)
+    def interno(self, *args, **kwargs):
+        try:
+            return metodo(self, *args, **kwargs)
+        except Exception as e:  # noqa: BLE001
+            if not _erro_conexao(e):
+                raise
+            print(f"[oracle] Conexao perdida ({e}). Reconectando...")
+        if not self._reconectar():
+            raise ErroSemConexao("sem conexao Oracle")
+        return metodo(self, *args, **kwargs)
+    return interno
 
 # Convencao de ST_CAPTURA na tabela (VARCHAR2):
 #   '0' pendente (a fila le so estas) | '1' sucesso | '9' erro/problema
@@ -302,6 +335,11 @@ class OracleDB:
         # So esta "habilitado" se pedido no config E a lib estiver disponivel.
         self.habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
         self._conn = None
+        # True se a ULTIMA gravacao (_chamar_sp) falhou por falta de conexao.
+        self.sem_conexao = False
+        # Menor ID cuja gravacao falhou por falta de conexao nesta execucao: o
+        # ponteiro de retomada (main.py) nunca passa dele.
+        self.trava_ponteiro = None
 
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
@@ -354,6 +392,16 @@ class OracleDB:
             self._conn = None
             return False
 
+    def _reconectar(self) -> bool:
+        """Fecha e reabre a conexao apos uma queda. Diferente de conectar() no
+        arranque, uma falha aqui NAO desliga o banco: a proxima chamada tenta de novo."""
+        self.desconectar()
+        habilitado = bool(self._cfg.get("habilitado")) and oracledb is not None
+        self.habilitado = habilitado
+        ok = self.conectar()
+        self.habilitado = habilitado
+        return ok
+
     def desconectar(self):
         """Fecha a conexao (idempotente, best-effort)."""
         if self._conn is not None:
@@ -372,6 +420,7 @@ class OracleDB:
         return False
 
     # -- leitura da fila ------------------------------------------------------
+    @_reconecta
     def ler_fila(self, ultimo_id=0, limite=0):
         """
         Linhas pendentes: ST_CAPTURA = '0' AND ID_OFERTA > ultimo_id, em ordem de
@@ -379,7 +428,7 @@ class OracleDB:
         com as chaves de COLUNAS_FILA.
         """
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cols = ", ".join(COLUNAS_FILA)
         sql = (f"SELECT {cols} FROM OFERTA_FILA_CAPTURA "
                f"WHERE ST_CAPTURA = '{ST_PENDENTE}' AND ID_OFERTA > :ultimo_id "
@@ -410,11 +459,12 @@ class OracleDB:
         'LS_DETALHES_PRODUTO', 'LS_DETALHES_TECNICOS', 'LS_INFO_ADICIONAIS', 'LS_COMPLEMENTO_PRODUTO',
     ]
 
+    @_reconecta
     def buscar_para_produto(self, id_oferta):
         """Le de volta 1 linha ja gravada (por ID_OFERTA), so as colunas que o
         cadastro de produtos consome. None se o ID nao existir."""
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cols = ", ".join(self.COLUNAS_PARA_PRODUTO)
         cur = self._conn.cursor()
         try:
@@ -442,11 +492,12 @@ class OracleDB:
         'VR_ESPERE_ECONOMIZE', 'ST_ESPERE_ECONOMIZE',
     ]
 
+    @_reconecta
     def buscar_para_oferta(self, id_oferta):
         """Le de volta 1 linha ja gravada (por ID_OFERTA), so as colunas que a
         publicacao em OFERTA consome. None se o ID nao existir."""
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cols = ", ".join(self.COLUNAS_PARA_OFERTA)
         cur = self._conn.cursor()
         try:
@@ -466,11 +517,12 @@ class OracleDB:
     # captura, nao vem do scraping) -- ver cabecalho de sql/CREATE_TABLE_CUPOM.sql.
     COLUNAS_PARA_CUPOM = ['ID_OFERTA', 'DS_CUPOM', 'DS_CUPOM_COMENTARIO', 'DS_CUPOM_LOJA']
 
+    @_reconecta
     def buscar_para_cupom(self, id_oferta):
         """Le de volta 1 linha ja gravada (por ID_OFERTA), so as colunas que o
         cadastro de cupons consome. None se o ID nao existir."""
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cols = ", ".join(self.COLUNAS_PARA_CUPOM)
         cur = self._conn.cursor()
         try:
@@ -485,6 +537,7 @@ class OracleDB:
             cur.close()
 
     # -- gravacao -------------------------------------------------------------
+    @_reconecta
     def executar_stored_procedure(self, nome, params, out_vars, clob_params=None):
         """
         Executa a SP `nome` com binds nomeados: `params` (IN, dict nome->valor) e
@@ -494,7 +547,7 @@ class OracleDB:
         o Oracle recusaria como VARCHAR2 com ORA-01461).
         """
         if self._conn is None:
-            raise RuntimeError("sem conexao Oracle")
+            raise ErroSemConexao("sem conexao Oracle")
         cur = self._conn.cursor()
         try:
             binds = dict(params)
@@ -517,7 +570,8 @@ class OracleDB:
         """Executa a SP e traduz PV_RETORNO/PV_ERRO em (ok, erro). Best-effort:
         nunca propaga excecao -- o CSV e a rede de seguranca e o lote nao pode
         parar por causa do banco."""
-        if not self.habilitado or self._conn is None:
+        self.sem_conexao = False
+        if not self.habilitado:
             return False, 'sem conexao Oracle'
         try:
             out = self.executar_stored_procedure(
@@ -529,6 +583,7 @@ class OracleDB:
             ok = (out.get("PV_RETORNO") or "").upper() == "TRUE"
             return ok, (None if ok else out.get("PV_ERRO"))
         except Exception as e:  # noqa: BLE001
+            self.sem_conexao = _erro_conexao(e)
             try:
                 self._conn.rollback()
             except Exception:  # noqa: BLE001

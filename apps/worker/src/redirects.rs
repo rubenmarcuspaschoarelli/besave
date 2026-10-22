@@ -1,7 +1,7 @@
 //! KeyValueStore de redirects `id → DS_URL_AFILIADO` da Function `/ir/{id}` (MANIFEST §5, §6).
 
 use std::cell::Cell;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -218,6 +218,7 @@ fn validar(ativos: &[(i64, String)]) -> Result<BTreeMap<i64, &str>> {
 fn aplicar_diff(
     alvo: &BTreeMap<i64, &str>,
     base: &BTreeMap<i64, String>,
+    retidos: &BTreeSet<i64>,
     etag: &str,
     kvs: &mut dyn Redirects,
 ) -> Result<(RelatorioRedirects, Option<EstadoKvs>)> {
@@ -228,7 +229,7 @@ fn aplicar_diff(
         .collect();
     let del: Vec<i64> = base
         .keys()
-        .filter(|id| !alvo.contains_key(id))
+        .filter(|id| !alvo.contains_key(id) && !retidos.contains(id))
         .copied()
         .collect();
     let estado = if !put.is_empty() || !del.is_empty() {
@@ -263,28 +264,37 @@ pub fn sincronizar_redirects(
     let alvo = validar(ativos)?;
     let etag = kvs.descrever()?.etag;
     let base = hashes(kvs.listar()?);
-    Ok(aplicar_diff(&alvo, &base, &etag, kvs)?.0)
+    Ok(aplicar_diff(&alvo, &base, &BTreeSet::new(), &etag, kvs)?.0)
 }
 
 /// Como `sincronizar_redirects`, mas contra `base` (de `carregar_base`), sem listar; depois grava
 /// o índice com o `ETag`/`ItemCount` pós-escrita, se ele mudou. Falha ao gravar o índice é erro:
 /// o ciclo aborta antes do manifest e o próximo reconstrói.
+///
+/// `retidos` (BSV-47): ids que saíram do conjunto publicado mas esperam na fila do expurgo. A
+/// chave deles fica na KVS e no índice até `remover_chaves` (a janela noturna), em vez de ir
+/// toda no mesmo ciclo.
 pub fn sincronizar_com_indice(
     ativos: &[(i64, String)],
     base: BaseRedirects,
+    retidos: &BTreeSet<i64>,
     kvs: &mut dyn Redirects,
     pub_: &mut dyn Publicador,
 ) -> Result<RelatorioRedirects> {
     let alvo = validar(ativos)?;
-    let (mut rel, estado) = aplicar_diff(&alvo, &base.urls, &base.estado.etag, kvs)?;
+    let (mut rel, estado) = aplicar_diff(&alvo, &base.urls, retidos, &base.estado.etag, kvs)?;
     let estado = estado.unwrap_or(base.estado);
+    let mut urls: BTreeMap<i64, String> = base
+        .urls
+        .iter()
+        .filter(|(id, _)| retidos.contains(id) && !alvo.contains_key(id))
+        .map(|(id, h)| (*id, h.clone()))
+        .collect();
+    urls.extend(alvo.iter().map(|(id, url)| (*id, hash16(url.as_bytes()))));
     let indice = IndiceRedirects {
         kvs_item_count: estado.item_count,
         kvs_etag: estado.etag,
-        urls: alvo
-            .iter()
-            .map(|(id, url)| (*id, hash16(url.as_bytes())))
-            .collect(),
+        urls,
     };
     let json = serde_json::to_vec(&indice).map_err(ErroRedirects::IndiceSerializacao)?;
     if base.lido.as_deref() != Some(json.as_slice()) {
@@ -294,6 +304,38 @@ pub fn sincronizar_com_indice(
     rel.modo = base.modo;
     rel.motivo = base.motivo;
     Ok(rel)
+}
+
+/// Apaga da KVS as chaves de `ids` que ela tem e regrava o índice com o `ETag`/`ItemCount` novos
+/// (expurgo, BSV-47). Id sem chave na KVS é ignorado. Devolve quantas chaves apagou.
+pub fn remover_chaves(
+    ids: &[i64],
+    kvs: &mut dyn Redirects,
+    pub_: &mut dyn Publicador,
+) -> Result<u64> {
+    let base = carregar_base(kvs, pub_)?;
+    let del: Vec<i64> = ids
+        .iter()
+        .filter(|id| base.urls.contains_key(id))
+        .copied()
+        .collect();
+    if del.is_empty() {
+        return Ok(0);
+    }
+    let estado = kvs.aplicar(&base.estado.etag, &[], &del)?;
+    let mut urls = base.urls;
+    for id in &del {
+        urls.remove(id);
+    }
+    let indice = IndiceRedirects {
+        kvs_item_count: estado.item_count,
+        kvs_etag: estado.etag,
+        urls,
+    };
+    let json = serde_json::to_vec(&indice).map_err(ErroRedirects::IndiceSerializacao)?;
+    pub_.gravar(CHAVE_INDICE, &json, &META_ESTADO)
+        .map_err(ErroRedirects::Indice)?;
+    Ok(del.len() as u64)
 }
 
 /// Quota do `UpdateKeys`: 50 chaves (ou 3 MB; com valor ≤ 1 KB, 50 chaves ficam em ~50 KB).

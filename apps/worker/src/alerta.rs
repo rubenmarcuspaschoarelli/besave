@@ -340,6 +340,29 @@ impl<'a> Alertas<'a> {
         self.salvar(&e);
     }
 
+    /// Aviso que não é falha do ciclo (ex.: expurgo, BSV-47): mesma mensagem e mesma regra de uma
+    /// por variante a cada 2 h, mas sem contar falha nem abrir o estado de "recuperado".
+    pub fn aviso(&self, variante: &str, fase: &str, agora: i64) {
+        let mut e = self.carregar();
+        let na_janela = e
+            .envios
+            .get(variante)
+            .is_some_and(|&t| agora - t < JANELA_SEGUNDOS);
+        if na_janela {
+            info!(variante, "aviso já enviado nas últimas 2 h; não reenviado");
+            return;
+        }
+        let texto = mensagem_falha_de(self.titulo, variante, fase, agora, &self.host);
+        match self.telegram.enviar(&texto) {
+            Ok(()) => {
+                e.envios.insert(variante.to_owned(), agora);
+                info!(variante, "aviso enviado ao Telegram");
+                self.salvar(&e);
+            }
+            Err(err) => warn!(erro = %err, "falha ao enviar aviso ao Telegram"),
+        }
+    }
+
     /// Ciclo ok: depois de falhas, envia "recuperado" e zera o estado (só se entregou).
     pub fn sucesso(&self, agora: i64) {
         let e = self.carregar();

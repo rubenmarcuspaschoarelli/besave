@@ -344,9 +344,9 @@ fn publicar_ciclo(op: &Opcoes, agora: i64) -> Result<Relatorio, Falha> {
         }
         Destino::Aws(aws) => {
             let ctx = ContextoAws::carregar().map_err(|e| match e {
-                ErroAws::RegiaoAusente | ErroAws::ConfigAusente(_) => {
-                    Falha::config("contexto_aws", &e)
-                }
+                ErroAws::RegiaoAusente
+                | ErroAws::ConfigAusente(_)
+                | ErroAws::CredenciaisAusentes => Falha::config("contexto_aws", &e),
                 ErroAws::Runtime(_) => Falha::execucao("contexto_aws", &e),
             })?;
             let mut pub_ = PublicadorS3::new(&ctx, &aws.bucket);

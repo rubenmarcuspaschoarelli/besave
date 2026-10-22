@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 
 use comum::{AGORA, DIA, dir_imagens_vazio, linha, linhas_fixture, mapeamento};
 use worker::conversao::LinhaOferta;
+use worker::expurgo::ConfigExpurgo;
 use worker::fonte::FakeFonte;
 use worker::geracao::{ErroGeracao, Relatorio, gerar};
 use worker::mapeamento::Mapeamento;
@@ -13,6 +14,15 @@ use worker::modelo::Manifest;
 use worker::publicador::{Publicador, PublicadorMemoria};
 use worker::redirects::{Redirects, RedirectsMemoria};
 use worker::site::ConfigSite;
+
+/// Expurgo sem janela: estes testes verificam o que o ciclo apaga, não quando (a janela é de
+/// `tests/expurgo.rs`).
+fn site_base() -> ConfigSite {
+    ConfigSite {
+        expurgo: ConfigExpurgo::sempre(),
+        ..ConfigSite::default()
+    }
+}
 
 fn rodar(
     linhas: &[LinhaOferta],
@@ -36,7 +46,7 @@ fn rodar_com(
         p,
         kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         agora,
     )
 }
@@ -271,7 +281,9 @@ fn expurgo_apaga_a_chave_na_kvs() {
     assert_eq!((r.redirects.puts, r.redirects.dels), (0, 0));
 
     let r = rodar_com(&linhas, &mut p, &mut kvs, &m, AGORA + 2 * DIA).unwrap();
-    assert_eq!((r.redirects.puts, r.redirects.dels), (0, 1));
+    // BSV-47: a chave sai na fila do expurgo, não no diff da sincronização.
+    assert_eq!((r.redirects.puts, r.redirects.dels), (0, 0));
+    assert_eq!(r.expurgo.removidos, 1);
     assert_eq!(
         kvs.listar().unwrap().into_keys().collect::<Vec<_>>(),
         [1001, 5412, 5413, 7001]
@@ -306,6 +318,8 @@ fn primeira_execucao_publica_paginas_sitemap_robots_e_indice() {
     assert_eq!(
         do_site(p.gravacoes()),
         [
+            // BSV-47: fila do expurgo (vazia, reconciliada), gravada antes de qualquer upload.
+            "_estado/expurgo.json",
             "oferta/5412/index.html",
             "oferta/5413/index.html",
             "oferta/5420/index.html",
@@ -385,7 +399,7 @@ fn oferta_expurgada_sai_da_pagina_do_indice_e_do_sitemap() {
         .filter(|l| l.id != 5412)
         .collect();
     let r2 = rodar(&linhas, &mut p, &m, AGORA + 600).unwrap();
-    assert_eq!(r2.site.paginas.removidas, 1);
+    assert_eq!(r2.expurgo.removidos, 1);
     assert!(p.remocoes().contains(&"oferta/5412/index.html".to_owned()));
     assert!(!p.existe("oferta/5412/index.html").unwrap());
     let estado: serde_json::Value =
@@ -473,8 +487,16 @@ fn indice_corrompido_reconstroi_do_bucket_e_remove_orfa() {
     let marca = p.gravacoes().len();
 
     let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
-    assert_eq!(r.site.paginas.removidas, 1);
-    assert_eq!(p.remocoes(), ["oferta/9999/index.html"]);
+    assert_eq!(r.expurgo.removidos, 1);
+    // BSV-47: a fila apaga a página e as duas imagens do id.
+    assert_eq!(
+        p.remocoes(),
+        [
+            "oferta/9999/index.html",
+            "img/ofertas/9999-small.webp",
+            "img/ofertas/9999.webp"
+        ]
+    );
     assert!(!p.existe("oferta/9999/index.html").unwrap());
     assert_eq!(r.site.paginas.publicadas, 3);
     assert!(r.site.indice_gravado);
@@ -501,7 +523,7 @@ fn indice_valido_nao_lista_nem_remove_pagina_fora_dele() {
     )
     .unwrap();
     let r = rodar(&linhas_fixture(), &mut p, &m, AGORA + 600).unwrap();
-    assert_eq!(r.site.paginas.removidas, 0);
+    assert_eq!(r.expurgo.removidos, 0);
     assert!(p.remocoes().is_empty());
     assert!(p.existe("oferta/9999/index.html").unwrap());
 }
@@ -529,12 +551,13 @@ fn rodar_site(
 #[test]
 fn virada_para_indexavel_regrava_robots_e_sitemaps() {
     let mut p = PublicadorMemoria::new();
-    rodar_site(&linhas_fixture(), &mut p, &ConfigSite::default(), AGORA);
+    rodar_site(&linhas_fixture(), &mut p, &site_base(), AGORA);
     assert_eq!(texto(&p, "robots.txt"), "User-agent: *\nDisallow: /\n");
     let marca = p.gravacoes().len();
     let novo = ConfigSite {
         base: "https://www.besave.com.br".into(),
         indexavel: true,
+        expurgo: ConfigExpurgo::sempre(),
     };
     let r = rodar_site(&linhas_fixture(), &mut p, &novo, AGORA + 600);
     assert_eq!(
