@@ -20,11 +20,12 @@ use worker::plano::publicar;
 use worker::publicador::PublicadorLocal;
 use worker::redirects::RedirectsMemoria;
 use worker::site::ConfigSite;
+use worker::unidade;
 
 /// Worker Besave. Fonte por `BESAVE_FONTE` (`oracle` | `fake`).
 #[derive(Parser)]
 #[command(version)]
-#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar", "publicar", "ciclo"])))]
+#[command(group(ArgGroup::new("modo").required(true).args(["dry_run", "gerar", "publicar", "ciclo", "alerta_encerrado"])))]
 struct Args {
     /// Lê a fonte, converte e imprime contagens; não gera nem publica nada.
     #[arg(long)]
@@ -53,6 +54,11 @@ struct Args {
     /// Telegram. Sai com 0 (ok ou ciclo anterior em andamento), 1 (falha) ou 2 (configuração).
     #[arg(long)]
     ciclo: bool,
+    /// Avisa no Telegram que a unidade systemd (`besave-ciclo.service` ou `besave-envio.service`)
+    /// foi encerrada pelo sistema (BSV-47). Chamado pelo `OnFailure=` das unidades; as credenciais
+    /// vêm do ambiente da unidade, nunca da linha de comando.
+    #[arg(long, value_name = "UNIDADE")]
+    alerta_encerrado: Option<String>,
     /// `.env` fora do repo, lido antes de tudo; variável já definida no ambiente vence.
     #[arg(long)]
     env_file: Option<PathBuf>,
@@ -79,6 +85,9 @@ fn main() -> ExitCode {
         .with_writer(std::io::stderr)
         .with_ansi(std::io::stderr().is_terminal())
         .init();
+    if let Some(unidade) = &args.alerta_encerrado {
+        return ExitCode::from(unidade::executar(unidade, agora().unwrap_or_default()));
+    }
     let r = match previa {
         Some(Err(e)) => Err(e.into()),
         _ => executar(args),
@@ -241,7 +250,6 @@ fn imprimir_relatorio(rel: &Relatorio) {
     println!("paginas_renderizadas: {}", pag.renderizadas);
     println!("paginas_publicadas: {}", pag.publicadas);
     println!("paginas_inalteradas: {}", pag.inalteradas);
-    println!("paginas_removidas: {}", pag.removidas);
     println!("paginas_falhas: {}", pag.falhas.len());
     for id in &pag.falhas {
         println!("  {id}");
@@ -251,6 +259,11 @@ fn imprimir_relatorio(rel: &Relatorio) {
     println!("sitemaps_publicados: {}", site.sitemaps_publicados);
     println!("sitemaps_removidos: {}", site.sitemaps_removidos);
     println!("robots_publicado: {}", site.robots_publicado);
+    let exp = &rel.expurgo;
+    println!("expurgo_enfileirados: {}", exp.enfileirados);
+    println!("expurgo_removidos: {}", exp.removidos);
+    println!("expurgo_pendente: {}", exp.pendente);
+    println!("expurgo_falhou: {}", u8::from(exp.falhou));
     let t = &rel.tempos;
     for (nome, v) in [
         ("t_leitura_fonte", t.leitura_fonte),
@@ -262,6 +275,7 @@ fn imprimir_relatorio(rel: &Relatorio) {
         ("t_redirects_listagem", t.redirects_listagem),
         ("t_manifest", t.manifest),
         ("t_orfaos", t.orfaos),
+        ("t_expurgo", t.expurgo),
     ] {
         println!("{nome}: {v} ms");
     }

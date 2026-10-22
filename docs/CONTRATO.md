@@ -194,8 +194,16 @@ Regras:
 - **Expurgo do site** (política do dono): o registro **fica no Oracle**; o worker deixa de
   publicar quando `ST_ATIVO = 0 AND DT_DESATIVACAO < SYSDATE - 7`. Query de publicação:
   `WHERE ST_ATIVO = 1 OR DT_DESATIVACAO >= SYSDATE - 7`. Ids que estavam no último manifest
-  e saíram do resultado → worker apaga `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
-  Depois disso a URL responde 404 (410 via função de borda fica para depois).
+  e saíram do resultado deixam o site **no mesmo ciclo** (chunks, sitemap, contagem por área) e
+  entram numa fila persistida (`_estado/expurgo.json`, MANIFEST §1). O worker só apaga
+  `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS **na janela noturna** (`BESAVE_EXPURGO_JANELA`,
+  padrão 02:00–05:00, hora de Brasília), até `BESAVE_EXPURGO_MAX` ids por ciclo (padrão 3000), em
+  lotes de até 1000 chaves por chamada; o que passar do máximo continua nas noites seguintes.
+  Fora da janela nada é apagado: uma desativação em massa não segura a publicação de ofertas
+  novas. Até a janela, a URL da oferta expurgada ainda responde (a página some da lista e do
+  sitemap); depois dela responde 404 (410 via função de borda fica para depois). Oferta que
+  volta ao conjunto publicado antes de ser apagada sai da fila. Falha do expurgo não derruba o ciclo: vira
+  aviso e os ids seguem na fila.
 
 ### 7.1 Página de oferta expirada
 - Renderizada **pelo worker** com `status: ENCERRADA` (não por JavaScript: o worker sabe o status

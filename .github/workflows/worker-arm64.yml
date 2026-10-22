@@ -117,7 +117,7 @@ jobs:
           /srv/besave/bin/besave-worker --help > /dev/null
 
       - name: systemd-analyze verify
-        run: systemd-analyze verify infra/vps/besave-ciclo.service infra/vps/besave-ciclo.timer infra/vps/besave-envio.service infra/vps/besave-envio.timer
+        run: systemd-analyze verify infra/vps/besave-ciclo.service infra/vps/besave-ciclo.timer infra/vps/besave-envio.service infra/vps/besave-envio.timer infra/vps/besave-alerta@.service
 
       - name: Ciclo pelo systemd (pastas do worker.env.example, fonte fake, destino local)
         run: |

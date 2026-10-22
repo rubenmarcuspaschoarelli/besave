@@ -6,6 +6,7 @@ use std::collections::BTreeMap;
 
 use comum::{AGORA, dir_imagens_vazio, mapeamento};
 use worker::conversao::LinhaOferta;
+use worker::expurgo::ConfigExpurgo;
 use worker::fonte::FakeFonte;
 use worker::geracao::gerar;
 use worker::plano::{Operacao, Plano, Publicacao, publicar};
@@ -73,6 +74,14 @@ impl Redirects for KvsEspiao {
     }
 }
 
+/// Expurgo sem janela: o plano mostra o que o ciclo apagaria; a janela é de `tests/expurgo.rs`.
+fn site_base() -> ConfigSite {
+    ConfigSite {
+        expurgo: ConfigExpurgo::sempre(),
+        ..ConfigSite::default()
+    }
+}
+
 fn url(id: i64) -> String {
     format!("https://loja.example/{id}")
 }
@@ -97,7 +106,7 @@ fn destino() -> (PubEspiao, KvsEspiao, String) {
         &mut p,
         &mut kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA,
     )
     .unwrap();
@@ -113,7 +122,7 @@ fn destino() -> (PubEspiao, KvsEspiao, String) {
         &mut p,
         &mut kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA + 600,
     )
     .unwrap();
@@ -143,7 +152,7 @@ fn terceiro(p: &mut PubEspiao, kvs: &mut KvsEspiao, sim: bool) -> Publicacao {
         p,
         kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA + 1200,
         sim,
     )
@@ -194,22 +203,34 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         Operacao::Gravar { chave, cache_control, .. }
             if chave.starts_with("data/chunks/5-")
                 && *cache_control == "public, max-age=31536000, immutable")));
-    let ultimas: Vec<(&str, &str)> = gravadas[gravadas.len() - 2..]
+    let manifests: Vec<(usize, &str, &str)> = ops
         .iter()
-        .map(|o| match o {
+        .enumerate()
+        .filter_map(|(i, o)| match o {
             Operacao::Gravar {
                 chave,
                 cache_control,
                 ..
-            } => (chave.as_str(), *cache_control),
-            _ => unreachable!(),
+            } if chave.starts_with("manifest") => Some((i, chave.as_str(), *cache_control)),
+            _ => None,
         })
         .collect();
     let curto = "public, max-age=300, stale-while-revalidate=60";
     assert_eq!(
-        ultimas,
+        manifests
+            .iter()
+            .map(|(_, c, cc)| (*c, *cc))
+            .collect::<Vec<_>>(),
         [("manifest.prev.json", curto), ("manifest.json", curto)]
     );
+    // BSV-47: o manifest vem antes de qualquer remoção (o expurgo nunca o segura).
+    let idx_manifest = manifests[1].0;
+    assert_eq!(manifests[0].0 + 1, idx_manifest);
+    for (i, o) in ops.iter().enumerate() {
+        if matches!(o, Operacao::Remover { .. }) {
+            assert!(i > idx_manifest, "remoção antes do manifest: {ops:?}");
+        }
+    }
     // GER-03: 5413 sai do conjunto no 3º ciclo, então as duas chaves de imagem dela também
     // entram no plano de remoção, junto com o chunk órfão.
     assert!(
@@ -218,7 +239,7 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         }),
         "{ops:?}"
     );
-    // BSV-21 regra 5: a página de 5413 também sai.
+    // BSV-21 regra 5 / BSV-47: a página de 5413 sai com as imagens, pela fila do expurgo.
     for chave in [
         "oferta/5413/index.html",
         "img/ofertas/5413-small.webp",
@@ -250,7 +271,9 @@ fn plano_lista_gravacoes_remocoes_e_chaves() {
         ]
     );
     assert_eq!(pb.relatorio.redirects.puts, 1);
-    assert_eq!(pb.relatorio.redirects.dels, 1);
+    // BSV-47: o delete de 5413 sai pela fila do expurgo, não no diff da sincronização.
+    assert_eq!(pb.relatorio.redirects.dels, 0);
+    assert_eq!(pb.relatorio.expurgo.removidos, 1);
 
     let texto: Vec<String> = pb.plano.redirects.iter().map(ToString::to_string).collect();
     assert_eq!(
@@ -289,19 +312,19 @@ fn sim_escreve_no_destino_e_plano_vem_vazio() {
     assert!(pb.plano.objetos.is_empty());
     assert!(pb.plano.redirects.is_empty());
     assert!(p.gravar >= 4, "chunks 2 e 5 + manifests: {}", p.gravar);
-    // GER-03 + BSV-21: a página de 5413 sai antes do manifest (com as páginas), depois o chunk
-    // órfão e as duas chaves de imagem de 5413 (saiu do conjunto).
+    // GER-03 + BSV-47: o chunk órfão e, pela fila do expurgo, a página e as duas imagens de 5413.
     assert_eq!(p.remover, 4);
     assert_eq!(
         p.dentro.remocoes(),
         &[
-            "oferta/5413/index.html".to_owned(),
             orfao.clone(),
+            "oferta/5413/index.html".to_owned(),
             "img/ofertas/5413-small.webp".to_owned(),
             "img/ofertas/5413.webp".to_owned(),
         ][..]
     );
-    assert_eq!(kvs.aplicar, 1);
+    // Puts na sincronização e o delete de 5413 na fila do expurgo.
+    assert_eq!(kvs.aplicar, 2);
     assert!(!p.dentro.existe(&orfao).unwrap());
     assert_eq!(
         kvs.dentro.listar().unwrap().into_keys().collect::<Vec<_>>(),
@@ -334,7 +357,7 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
         &mut p,
         &mut kvs,
         &dir_imagens_vazio(),
-        &ConfigSite::default(),
+        &site_base(),
         AGORA + 1200,
         false,
     )
@@ -356,19 +379,35 @@ fn plano_contra_memoria_registra_zero_escritas_e_lista_previsto() {
     let tem = |prefixo: &str| objetos.iter().any(|l| l.starts_with(prefixo));
     assert!(tem("gravar data/chunks/2-"), "{linhas:?}");
     assert!(tem("gravar data/chunks/5-"), "{linhas:?}");
-    let n = objetos.len();
-    // GER-03: remover chunk órfão + as duas chaves de imagem de 5413, nessa ordem, no final.
-    assert!(
-        objetos[n - 5].starts_with("gravar manifest.prev.json ("),
+    // GER-03 + BSV-47: manifests; depois remover o chunk órfão e a página e as imagens de 5413,
+    // nessa ordem (o resto são os índices `_estado/` regravados pela fila).
+    let pos = |l: &str| objetos.iter().position(|o| o.starts_with(l)).unwrap();
+    let manifest = pos("gravar manifest.json (");
+    assert_eq!(
+        pos("gravar manifest.prev.json ("),
+        manifest - 1,
         "{linhas:?}"
     );
+    let removidas: Vec<&str> = objetos[manifest..]
+        .iter()
+        .filter(|l| l.starts_with("remover ") || l.starts_with("páginas a remover"))
+        .copied()
+        .collect();
+    assert_eq!(
+        removidas,
+        [
+            format!("remover {orfao}").as_str(),
+            "páginas a remover: 1 (ex.: oferta/5413/index.html)",
+            "remover img/ofertas/5413-small.webp",
+            "remover img/ofertas/5413.webp",
+        ]
+    );
     assert!(
-        objetos[n - 4].starts_with("gravar manifest.json ("),
+        objetos[..manifest]
+            .iter()
+            .all(|l| !l.starts_with("remover ")),
         "{linhas:?}"
     );
-    assert_eq!(objetos[n - 3], format!("remover {orfao}"));
-    assert_eq!(objetos[n - 2], "remover img/ofertas/5413-small.webp");
-    assert_eq!(objetos[n - 1], "remover img/ofertas/5413.webp");
     assert_eq!(
         chaves,
         [

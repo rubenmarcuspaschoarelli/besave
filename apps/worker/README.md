@@ -48,8 +48,9 @@ Política de orçamento:
   — BSV-20 já referencia esses caminhos. Estão embutidos no binário (`assets/placeholder/*.webp`,
   gerados por `cargo run --example gerar_placeholders`) e são publicados uma vez, reaproveitados
   depois pelo mesmo critério de `existe`.
-- **Expurgo**: id que sai do conjunto publicado (CONTRATO §7) tem as duas chaves de imagem
-  removidas, junto com a página e a chave na KVS.
+- **Expurgo**: id que sai do conjunto publicado (CONTRATO §7) sai da lista na hora e entra na fila
+  do expurgo; as duas chaves de imagem, a página e a chave na KVS são apagadas na janela noturna
+  (ver "Expurgo em lotes").
 
 ```sh
 cd apps/worker
@@ -101,8 +102,8 @@ regravado quando muda: execução sem mudança sobe só `manifest.prev.json` e `
 - Produtos vêm do Oracle em lote (`FonteOfertas::produtos`, `IN` com até 1 000 ids por query),
   nunca uma query por oferta; `--dry-run` usa o mesmo caminho.
 - Páginas sobem via `gravar_lote` em blocos de 64 (paralelo no S3, BSV-13).
-- **Expurgo:** id do índice anterior que saiu do conjunto → `oferta/{id}/index.html` é removida e
-  sai do índice e do sitemap. `sitemap-{n}.xml` que deixou de ser gerado é removido.
+- **Expurgo:** id do índice anterior que saiu do conjunto → sai do índice e do sitemap e entra na fila
+  do expurgo, que remove `oferta/{id}/index.html` na janela noturna (BSV-47). `sitemap-{n}.xml` que deixou de ser gerado é removido.
 - Oferta que vira ENCERRADA: a página muda (hash novo, `noindex`) e é reenviada; sai do sitemap
   no mesmo ciclo.
 - Orçamento: página acima de 30 720 bytes → erro `PaginaAcimaDoOrcamento { id, bytes }`, o índice,
@@ -196,6 +197,39 @@ tempo: 0.01s
 
 As datas da fake de demonstração acompanham o relógio, então cada execução com ela regrava o
 chunk 5. Com a fonte parada (testes, Oracle sem mudança) a segunda execução grava 0 chunks.
+
+## Expurgo em lotes (BSV-47)
+
+Em 13/10, 14.577 ofertas foram desativadas de uma vez e, 7 dias depois, saíram do conjunto publicado. Apagar
+uma chave por chamada (~140 ms) levava ~1h45 e o limite do `systemd` matava o ciclo no meio, com o site parado.
+Agora o apagamento nunca segura a publicação:
+
+- **Mesmo ciclo:** o id que saiu do conjunto some dos chunks, do sitemap e da contagem por área.
+- **Fila:** a página, as duas imagens e a chave da KVS vão para `_estado/expurgo.json` (`{"reconciliado": bool,
+  "fila": {"<id>": "<entrada ISO UTC>"}}`), gravado **antes** de qualquer upload do ciclo e do manifest. Oferta que volta ao
+  conjunto publicado antes de ser apagada sai da fila.
+- **Janela:** só entre `BESAVE_EXPURGO_JANELA` (padrão `02:00-05:00`, Brasília; `HH:MM-HH:MM`, atravessa a
+  meia-noite se início > fim), até `BESAVE_EXPURGO_MAX` ids por ciclo (padrão 3000), com `DeleteObjects` de até 1000 chaves por
+  chamada. O estado é gravado depois de cada chamada: ciclo interrompido retoma dali, sem repetir os lotes prontos (um id
+  cortado ao meio pela fronteira do lote pode reenviar até 2 chaves). Fora da janela, nenhuma chamada de remoção.
+- **Reconciliação única:** na primeira execução (fila ausente ou ilegível), imagens de `img/ofertas/` e páginas de
+  `oferta/` de ids fora do conjunto publicado entram na fila; `reconciliado` evita repetir.
+- **KVS em lote:** as chaves dos ids apagados saem da KVS com `UpdateKeys` de até 50 chaves por chamada (o limite da
+  API: "50 keys or 3 MB payload, whichever is reached first", CloudFront Developer Guide, *Quotas on key value stores*),
+  encadeando o `ETag`. Por lote de 1000 chaves do S3 (333 ids) são 7 `UpdateKeys`; 14,5 mil ids = ~44 `DeleteObjects` e
+  290 `UpdateKeys`. O tempo real por lote aparece em `t_expurgo` na primeira noite na VPS.
+- **Falha do expurgo não falha o ciclo:** erro (inclusive `DeleteObjects` parcial: o S3 responde 200 com `Errors`, e
+  as chaves com erro vão ao log em WARN) vira `expurgo_falhou=1` e um aviso no Telegram com a variante `Expurgo`
+  (1 por 2 h, sem contar como falha do ciclo). Os ids ficam na fila; `DT_PUBLICACAO_SITE`, avisos e relatório seguem.
+- **Relatório:** `expurgo_enfileirados`, `expurgo_removidos`, `expurgo_pendente` (ainda na fila), `expurgo_falhou` e `t_expurgo`.
+  Fila acima do máximo continua nas noites seguintes e aparece em `expurgo_pendente`.
+
+## Limites de tempo (BSV-47)
+
+AWS: conexão 10 s, leitura 30 s, tentativa 60 s e operação 180 s (retentativas incluídas), configurados no cliente
+(`LimitesTempo`). Oracle: `BESAVE_ORACLE_TIMEOUT_S` (padrão 120) por chamada. Estouro vira erro com a operação e a chave
+no log e o alerta normal. A abertura da conexão Oracle não passa por esse limite: na VPS, ponha em
+`/srv/besave/oracle/wallet/sqlnet.ora` a linha `SQLNET.OUTBOUND_CONNECT_TIMEOUT=15`.
 
 ## Publicar no S3 e na KVS (`--publicar`)
 
@@ -699,11 +733,14 @@ o mesmo comportamento do Agendador do Windows. **Nada se compila na VPS** (BSV-4
 - `gh` (`sudo apt install -y gh`) autenticado como `besave` (`sudo -iu besave gh auth login`). O
   artefato exige login mesmo com o repositório público; um token *fine-grained* só com
   **Actions: read** neste repositório basta.
-- Credenciais AWS do perfil do worker em `~besave/.aws/` (o `AWS_PROFILE` do `.env`).
+- Credenciais AWS do worker no próprio `worker.env`: `AWS_ACCESS_KEY_ID` e `AWS_SECRET_ACCESS_KEY`
+  (sem `AWS_PROFILE`). Sem elas o ciclo para com "credenciais AWS ausentes" em vez de perguntar ao
+  serviço de metadados de instância.
 - `.env`: copie `infra/vps/worker.env.example` para `/srv/besave/worker.env` (`chmod 600`, dono
   `besave`) e preencha os `...` com os valores do `.env` do PC, **inclusive `AWS_REGION`** (a do PC,
   hoje `us-east-1`; região errada faz o S3 e a KVS falharem). É lido pelo `systemd` (`EnvironmentFile`):
-  `CHAVE=valor`, sem aspas. Sem `BESAVE_ORACLE_CLIENT_DIR` (a biblioteca vem do `ldconfig`). Sem
+  `CHAVE=valor`; valor com `$`, `#` ou espaço vai entre **aspas simples** (sem elas o `systemd` expande
+  `$` e a senha chega truncada). Sem `BESAVE_ORACLE_CLIENT_DIR` (a biblioteca vem do `ldconfig`). Sem
   `LOCALAPPDATA`, `alerta.json`, `alerta-envio.json` e `envio-estado.json` ficam em `/srv/besave/estado/`,
   ao lado das travas.
 
@@ -730,7 +767,7 @@ sudo -iu besave /srv/besave/bin/besave-worker --dry-run --env-file /srv/besave/w
 ### Unidades
 
 ```bash
-sudo cp /srv/besave/repo/infra/vps/besave-{ciclo,envio}.{service,timer} /etc/systemd/system/
+sudo cp /srv/besave/repo/infra/vps/besave-{ciclo,envio}.{service,timer}         '/srv/besave/repo/infra/vps/besave-alerta@.service' /etc/systemd/system/
 sudo systemctl daemon-reload
 ```
 
@@ -738,7 +775,8 @@ sudo systemctl daemon-reload
 |---|---|
 | `besave-ciclo.timer` | a cada 5 min no relógio (`:00`, `:05`, …) |
 | `besave-envio.timer` | a cada 5 min, 2 min depois (`:02`, `:07`, …) |
-| `besave-*.service` | `oneshot` como `besave`, `EnvironmentFile=/srv/besave/worker.env`, encerrado após 20 min |
+| `besave-{ciclo,envio}.service` | `oneshot` como `besave`, `EnvironmentFile=/srv/besave/worker.env`, encerrado após 15 min (`TimeoutStartSec`) |
+| `besave-alerta@.service` | disparada por `OnFailure=besave-alerta@%n.service` das duas acima; roda `besave-worker --alerta-encerrado <unidade>` e avisa no Telegram (mesmo bot, no máximo 1 aviso por 2 h) quando o sistema encerra a unidade (só quando `systemctl show -p Result` da unidade é `timeout`, `signal`, `core-dump` ou `watchdog`; `exit-code` o próprio worker já avisou). Lê só o `worker.env`, nenhum segredo na unidade |
 
 `Persistent=false`: execução perdida com a máquina desligada não é recuperada no boot. Enquanto um
 ciclo roda, o timer não abre outro (e a trava continua valendo, como no PC).

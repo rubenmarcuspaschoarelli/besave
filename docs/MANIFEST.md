@@ -32,6 +32,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /_estado/paginas.json               ← índice id → hash do HTML (worker, BSV-21)
 /_estado/redirects.json             ← índice id → hash da URL + ItemCount/ETag da KVS (BSV-12c)
 /_estado/avisos.json                ← índice id → hash da página e chave/hash da imagem (BSV-41)
+/_estado/expurgo.json               ← fila do expurgo: id → data de entrada (ISO UTC) e `reconciliado` (worker, BSV-47)
 /_estado/vigia.json                 ← estado de aviso do vigia (Lambda, BSV-15)
 ```
 
@@ -157,7 +158,14 @@ depois; o dado já existe).
 5. **Por último**, `manifest.json` e `manifest.prev.json` (regravados em todo ciclo: são o batimento
    que o vigia monitora — AD-028, AD-052).
 6. Órfãos: chunks fora dos dois últimos manifests.
-7. Expurgo: ids que saíram do conjunto publicado → apagar `oferta/{id}/`, `img/ofertas/{id}*` e a chave na KVS.
+7. Expurgo, **só na janela** `BESAVE_EXPURGO_JANELA` (padrão `02:00-05:00`, Brasília) e até
+   `BESAVE_EXPURGO_MAX` ids por ciclo (padrão 3000): `oferta/{id}/`, `img/ofertas/{id}*` e a chave na
+   KVS dos ids da fila `_estado/expurgo.json`, com `DeleteObjects` de até 1000 chaves por chamada; a
+   fila é regravada depois de cada chamada (ciclo interrompido retoma dali). O id que saiu do conjunto
+   publicado entra na fila nos passos 1–3, **antes** do manifest (a fila é gravada antes de qualquer
+   upload do ciclo), e some de chunks, sitemap e contagem no mesmo ciclo; o manifest nunca espera o
+   expurgo. Falha do expurgo não falha o ciclo: vira aviso (variante `Expurgo`) e os ids seguem na fila. Na primeira execução, uma reconciliação única põe na fila as páginas e imagens de ids fora
+   do conjunto publicado (sobras de execuções interrompidas).
 
 Se falhar antes do passo 5, o manifest antigo continua válido e aponta para arquivos que
 ainda existem. Idempotente: rodar duas vezes sem mudança no Oracle não altera nenhum

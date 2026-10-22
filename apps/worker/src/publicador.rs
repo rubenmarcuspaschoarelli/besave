@@ -156,6 +156,16 @@ pub trait Publicador {
         chaves.iter().map(|c| self.existe(c)).collect()
     }
 
+    /// Remove várias chaves numa chamada (até `LOTE_REMOCAO`; o chamador não passa mais que isso).
+    /// Default sequencial via `remover`; `PublicadorS3` usa `DeleteObjects` (BSV-47). Chave
+    /// ausente não é erro.
+    fn remover_lote(&mut self, chaves: &[String]) -> Result<()> {
+        for c in chaves {
+            self.remover(c)?;
+        }
+        Ok(())
+    }
+
     /// Grava várias chaves de uma vez. Default sequencial via `gravar` (mesma observação de
     /// `existem`); `PublicadorS3` sobrescreve com o mesmo pool paralelo.
     fn gravar_lote(&mut self, itens: &[(String, Vec<u8>, Meta)]) -> Result<()> {
@@ -165,6 +175,9 @@ pub trait Publicador {
         Ok(())
     }
 }
+
+/// Chaves por chamada de `remover_lote` (limite do `DeleteObjects` do S3).
+pub const LOTE_REMOCAO: usize = 1000;
 
 /// Sufixo do arquivo de headers gravado ao lado de cada objeto pelo `PublicadorLocal`.
 pub const SUFIXO_META: &str = ".meta.json";
@@ -274,6 +287,8 @@ pub struct PublicadorMemoria {
     listar_chamadas: Cell<u64>,
     existe_chamadas: Cell<u64>,
     existem_chamadas: Cell<u64>,
+    remover_lote_chamadas: u64,
+    falhar_remover_lote_na: Option<u64>,
 }
 
 impl PublicadorMemoria {
@@ -309,6 +324,24 @@ impl PublicadorMemoria {
     pub fn existem_chamadas(&self) -> u64 {
         self.existem_chamadas.get()
     }
+
+    /// Chamadas a `remover_lote` desde a criação (as que falharam contam).
+    pub fn remover_lote_chamadas(&self) -> u64 {
+        self.remover_lote_chamadas
+    }
+
+    /// A `n`-ésima chamada a `remover_lote` (1 = a primeira, contando desde a criação) falha sem
+    /// remover nada; as demais seguem normais.
+    #[must_use]
+    pub fn falhando_em_remover_lote_na(mut self, n: u64) -> Self {
+        self.falhar_remover_lote_na = Some(n);
+        self
+    }
+
+    /// Chaves presentes, em ordem.
+    pub fn chaves(&self) -> Vec<String> {
+        self.objetos.keys().cloned().collect()
+    }
 }
 
 fn incrementar(c: &Cell<u64>) {
@@ -343,6 +376,21 @@ impl Publicador for PublicadorMemoria {
     fn remover(&mut self, chave: &str) -> Result<()> {
         self.objetos.remove(chave);
         self.remocoes.push(chave.to_owned());
+        Ok(())
+    }
+
+    fn remover_lote(&mut self, chaves: &[String]) -> Result<()> {
+        self.remover_lote_chamadas += 1;
+        if self.falhar_remover_lote_na == Some(self.remover_lote_chamadas) {
+            return Err(ErroPublicador::Aws {
+                operacao: "DeleteObjects",
+                chave: chaves.first().cloned().unwrap_or_default(),
+                fonte: "falha injetada".into(),
+            });
+        }
+        for c in chaves {
+            self.remover(c)?;
+        }
         Ok(())
     }
 

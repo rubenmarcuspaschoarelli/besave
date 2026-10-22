@@ -30,6 +30,15 @@ const OPCIONAIS: &[(&str, &str)] = &[
         "ensaio e testes: grava numa pasta em vez do S3",
     ),
     ("BESAVE_AGORA", "relógio fixo, só com BESAVE_DESTINO_LOCAL"),
+    (
+        "BESAVE_EXPURGO_JANELA",
+        "padrão 02:00-05:00, hora de Brasília (BSV-47)",
+    ),
+    ("BESAVE_EXPURGO_MAX", "padrão 3000 ids por ciclo (BSV-47)"),
+    (
+        "BESAVE_ORACLE_TIMEOUT_S",
+        "padrão 120 s por chamada ao Oracle (BSV-47)",
+    ),
     ("BESAVE_ALERTA_SEM_NOVAS_HORAS", "padrão 24 h"),
     ("BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS", "padrão 24 h"),
     ("BESAVE_CANAL_URL", "padrão https://t.me/besaveofertas"),
@@ -43,7 +52,8 @@ const OPCIONAIS: &[(&str, &str)] = &[
 const EXTERNAS: &[(&str, &str)] = &[
     ("TNS_ADMIN", "Oracle Instant Client: pasta da wallet"),
     ("AWS_REGION", "aws-config"),
-    ("AWS_PROFILE", "aws-config"),
+    ("AWS_ACCESS_KEY_ID", "aws-config"),
+    ("AWS_SECRET_ACCESS_KEY", "aws-config"),
 ];
 
 fn raiz() -> PathBuf {
