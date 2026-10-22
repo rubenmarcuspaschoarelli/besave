@@ -78,43 +78,40 @@ Canal (broadcast), nunca automação de grupos.
 7. **Nenhuma URL de loja no site.** Só `/ir/{id}`. Troca de rede de afiliado sem regerar 30 mil
    páginas, e o Google não vê link de afiliado.
 
-## 4. Onde estamos (19/10/2026)
+## 4. Onde estamos (22/10/2026)
 
-**O site está no ar em `besave.com.br`, indexável.** A cada 5 minutos o Agendador do Windows executa
-`C:\besave\bin\besave-ciclo.exe`, que lê o Oracle e publica na AWS só o que mudou: chunks, imagens,
-páginas de oferta, sitemap e redirects. Ciclo em regime: ~40 s desde que o banco foi para a nuvem
-(~10 s de leitura pela internet; antes ~20 s). Hoje são ~26 mil ofertas válidas (25.963 no manifest
-de 19/10).
+**O site está no ar em `besave.com.br`, indexável, e toda a operação roda na VPS da Oracle Cloud desde
+20/10 (AD-105).** A cada 5 minutos o `besave-ciclo` (timer `systemd`) lê o Oracle e publica na AWS só o que
+mudou; leitura do banco em ~1 s. Os robôs capturam 24×7 na mesma máquina, com rodadas a cada 2 h das 22h
+às 8h. O PC do dono saiu da operação. ~13,4 mil ofertas no site depois do expurgo de 22/10 (AD-106).
 
 Feito e no ar:
 - **Banco na Oracle Cloud** (15/10): Autonomous Database Always Free (26ai, 20 GB), acesso por wallet,
-  fuso `-03:00`; cópia conferida tabela a tabela contra o XE antes da virada (AD-100). Robôs e worker
-  continuam no PC do dono.
+  fuso `-03:00`; cópia conferida tabela a tabela contra o XE antes da virada (AD-100).
 - `besave.com.br` na distribuição nova (`www` → 301 para o domínio sem www), sitemap e Google Search
   Console verificado; home, áreas e 404 definitivas (BSV-30, BSV-30b).
 - Links curtos `besave.io/{id}` e `besave.me/{id}` → `/oferta/{id}/` (BSV-16).
 - Uma página HTML por oferta (`/oferta/{id}/`), com imagem, preço, cupom, "Copiar cupom e ir para a
   loja" e campo de busca (BSV-34, BSV-38).
 - Redirect de afiliado na borda, com autocorreção quando alguém mexe na tabela por fora.
-- Alertas no Telegram: ciclo que falha, site parado (vigia na AWS) e nenhuma oferta nova em 24 h.
+- Alertas no Telegram: ciclo que falha ou é encerrado pelo sistema, site parado (vigia na AWS) e nenhuma
+  oferta nova em 8 h (AD-106, AD-108).
 - Canal `@besaveofertas`: até 180 ofertas por dia em lotes de 2 (8–22 h), "Oferta encerrada" na
   expiração e avisos programados com página `/avisos/{id}/` (BSV-40, BSV-41).
 - Home com filtros, aviso de novas ofertas, favoritos no aparelho e busca `/busca/` (BSV-31 a 37);
   carregamento inicial com 10 KiB de folga no gate de 150 KiB (BSV-39).
 - Código dos dois robôs no repositório (`tools/`, PR #75).
-- Contrato 1.5.0, 104 decisões registradas.
+- **VPS** (20–22/10): worker ARM64 por timers, robôs com uma tela VNC cada, janela noturna, reconexão ao
+  Oracle, expurgo em lotes de madrugada (BSV-42, 43, 47, 48).
+- Contrato 1.5.0, 108 decisões registradas.
 
 Próximos, nesta ordem:
-- **Cupom com vários códigos** (AD-102): o worker separa `DS_CUPOM` por `|`; hoje ~150 ofertas saem sem
-  cupom porque o campo inteiro não cabe no padrão.
-- **Imagem reenviada por hash** (BSV-45): o worker decide o envio de imagem por existência de chave, então
-  foto trocada no mesmo id nunca sobe — todo backfill de imagem exige apagar a chave no S3 à mão (foi o
-  que aconteceu em 19/10). Troca por `_estado/imagens.json`, no molde do `paginas.json`, e de quebra tira
-  60 `ListObjectsV2` de cada ciclo.
-- **VPS para worker e robôs** (AD-104): specs escritas e implementadas — BSV-42 (robôs no Linux ARM,
-  PR #81) e BSV-43 (binário ARM64 do worker e timers, PR #80), as duas com CI verde e Verifier. Falta a
-  execução real na instância 1, que bloqueia o merge das duas.
-- Página da oferta: trocar a faixa "Oferta expirada" por "Encerrada" (mesma palavra dos cards).
+- **Backup diário do banco** (BSV-49, em implementação): o Autonomous Always Free não restaura; export às
+  03:30 para a OCI e a AWS, teste de restauração mensal.
+- **Cupom com vários códigos e faixa "Encerrada"** (BSV-50, AD-102): ~150 ofertas saem sem cupom hoje.
+- **Imagem reenviada por hash** (BSV-45), depois da BSV-50 (mesmo código do worker).
+- **Reconexão nos outros pontos do robô das lojas** (validade, duplicidade, produto) e fechar sozinho o aviso
+  de ligações do WhatsApp Web que bloqueia o clique (ticket pequeno).
 - **Infra:** state do Terraform em backend S3 versionado com trava (hoje só no PC do dono; até lá, backup manual
   do `terraform.tfstate` fora do PC); desligar o protótipo (roteiro manual do dono); desligar o XE local
   depois de alguns dias estáveis (fica como volta até lá).
