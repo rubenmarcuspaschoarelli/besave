@@ -33,10 +33,10 @@ fn linha() -> LinhaCanal {
     }
 }
 
-/// CON-01 (BSV-40), CON-03 (BSV-36): contrato 1.5.0.
+/// CON-01 (BSV-40), CON-03 (BSV-36): contrato 1.6.0.
 #[test]
-fn contrato_na_versao_1_5_0() {
-    assert_eq!(versao_contrato().unwrap(), "1.5.0");
+fn contrato_na_versao_1_6_0() {
+    assert_eq!(versao_contrato().unwrap(), "1.6.0");
 }
 
 #[test]
@@ -50,7 +50,7 @@ fn projecao_do_canal_tem_os_campos_do_contrato() {
     assert_eq!(o.preco_de, Some(29990));
     assert_eq!(o.preco_por, 19990);
     assert_eq!(o.desconto_pct, Some(33));
-    assert_eq!(o.cupom.as_deref(), Some("BESAVE10"));
+    assert_eq!(o.cupons, ["BESAVE10"]);
     assert!(o.recorrencia);
     assert_eq!(o.dt_oferta, "2026-09-21T14:13:20Z");
 }
@@ -112,4 +112,15 @@ fn rejeita_como_o_worker() {
         mexe(&mut l);
         assert_eq!(para_canal(&l, &m()), Err(esperado));
     }
+}
+
+// CAN-01 (BSV-50): mesma separação do card.
+#[test]
+fn varios_cupons_viram_lista() {
+    let mut l = linha();
+    l.oferta.cupom = Some(" a1 | b2 | a1 | ruim cupom | C3 ".into());
+    let o = para_canal(&l, &m()).unwrap();
+    assert_eq!(o.cupons, ["A1", "B2", "C3"]);
+    l.oferta.cupom = Some("ruim cupom".into());
+    assert!(para_canal(&l, &m()).unwrap().cupons.is_empty());
 }

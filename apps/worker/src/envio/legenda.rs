@@ -69,9 +69,10 @@ fn linha(html: String, texto: String) -> Linha {
     Linha { html, texto }
 }
 
-/// Linhas depois do título, na ordem da regra 6. Opcionais vazias não entram.
-/// Devolve as linhas e, à parte, a linha do link (a legenda encerrada não a usa).
-fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros) -> (Vec<Linha>, String) {
+/// Linhas depois do título, na ordem da regra 6. Opcionais vazias não entram. `n_cupons` = quantos
+/// códigos entram (BSV-50: o que não cabe em 1024 sai do fim). Devolve as linhas e, à parte, a
+/// linha do link (a legenda encerrada não a usa).
+fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros, n_cupons: usize) -> (Vec<Linha>, String) {
     let mut v = Vec::new();
     if let Some(d) = &o.destaque {
         v.push(linha(escapar(d), d.clone()));
@@ -99,10 +100,20 @@ fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros) -> (Vec<Linha>, String) {
             "📉 Caiu mais o preço!!!".to_owned(),
         ));
     }
-    if let Some(c) = &o.cupom {
+    let codigos = &o.cupons[..n_cupons.min(o.cupons.len())];
+    if !codigos.is_empty() {
+        let rotulo = if codigos.len() == 1 {
+            "Cupom"
+        } else {
+            "Cupons"
+        };
+        let html: Vec<String> = codigos
+            .iter()
+            .map(|c| format!("<code>{}</code>", escapar(c)))
+            .collect();
         v.push(linha(
-            format!("🎟️ Cupom: <code>{}</code>", escapar(c)),
-            format!("🎟️ Cupom: {c}"),
+            format!("🎟️ {rotulo}: {}", html.join(" · ")),
+            format!("🎟️ {rotulo}: {}", codigos.join(" · ")),
         ));
     }
     let loja = nome_loja(o.loja);
@@ -134,13 +145,26 @@ pub(crate) fn caber(titulo: &str, montar: impl Fn(&str) -> String) -> String {
     montar(&truncar(titulo, cabe))
 }
 
+/// Monta a legenda com todos os cupons; se passar de 1024, tira códigos do fim (fica 1) antes de
+/// cortar o título.
+fn ajustar(o: &OfertaCanal, montar: impl Fn(usize, &str) -> String) -> String {
+    for n in (1..=o.cupons.len()).rev() {
+        let inteira = montar(n, &o.titulo);
+        if tamanho(&inteira) <= MAX_LEGENDA {
+            return inteira;
+        }
+    }
+    let n = o.cupons.len().min(1);
+    caber(&o.titulo, |t| montar(n, t))
+}
+
 /// Legenda do post.
 pub fn legenda(o: &OfertaCanal, caiu: bool, p: &Parametros) -> String {
-    let (linhas, link) = corpo(o, caiu, p);
-    caber(&o.titulo, |t| {
-        std::iter::once(format!("<b>{}</b>", escapar(t)))
+    ajustar(o, |n, titulo| {
+        let (linhas, link) = corpo(o, caiu, p, n);
+        std::iter::once(format!("<b>{}</b>", escapar(titulo)))
             .chain(linhas.iter().map(|l| l.html.clone()))
-            .chain(std::iter::once(link.clone()))
+            .chain(std::iter::once(link))
             .collect::<Vec<_>>()
             .join("\n")
     })
@@ -148,9 +172,9 @@ pub fn legenda(o: &OfertaCanal, caiu: bool, p: &Parametros) -> String {
 
 /// Legenda de oferta expirada: aviso no topo e o texto original riscado, sem link nem "Caiu mais".
 pub fn legenda_encerrada(o: &OfertaCanal, p: &Parametros) -> String {
-    let (linhas, _) = corpo(o, false, p);
-    caber(&o.titulo, |t| {
-        let texto = std::iter::once(t.to_owned())
+    ajustar(o, |n, titulo| {
+        let (linhas, _) = corpo(o, false, p, n);
+        let texto = std::iter::once(titulo.to_owned())
             .chain(linhas.iter().map(|l| l.texto.clone()))
             .collect::<Vec<_>>()
             .join("\n");

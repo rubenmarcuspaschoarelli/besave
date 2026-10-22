@@ -119,6 +119,9 @@ pub struct OfertaPagina {
     pub preco_por: i64,
     pub desconto_pct: Option<i64>,
     pub cupom: Option<String>,
+    /// Todos os códigos válidos (0 a 5); `cupom` é o primeiro.
+    #[serde(default)]
+    pub cupons: Vec<String>,
     pub nota: Option<f64>,
     pub qt_avaliacoes: Option<i64>,
     pub dt_oferta: String,

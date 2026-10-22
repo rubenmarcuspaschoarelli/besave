@@ -173,3 +173,41 @@ fn nota_uma_casa_e_fora_de_0_a_5_vira_null() {
     assert_eq!(nota(5.5), None);
     assert_eq!(nota(-1.0), None);
 }
+
+// PAG-01 (BSV-50): `cupons` completo, `cupom` = primeiro.
+#[test]
+fn cupons_completos_e_cupom_e_o_primeiro() {
+    let m = m();
+    let l = LinhaOferta {
+        cupom: Some("MELI26TODOSITE | SITEMELI26 | ruim cupom | meli26sitetodo".into()),
+        ..linha()
+    };
+    let p = para_pagina(&l, None, &m).unwrap();
+    assert_eq!(p.cupons, ["MELI26TODOSITE", "SITEMELI26", "MELI26SITETODO"]);
+    assert_eq!(p.cupom.as_deref(), Some("MELI26TODOSITE"));
+    let json = serde_json::to_value(&p).unwrap();
+    assert_eq!(json["cupons"].as_array().unwrap().len(), 3);
+
+    let sem = para_pagina(
+        &LinhaOferta {
+            cupom: Some("ruim cupom".into()),
+            ..linha()
+        },
+        None,
+        &m,
+    )
+    .unwrap();
+    assert!(sem.cupons.is_empty());
+    assert_eq!(sem.cupom, None);
+    assert_eq!(
+        serde_json::to_value(&sem).unwrap()["cupons"],
+        serde_json::json!([])
+    );
+}
+
+#[test]
+fn um_cupom_vira_lista_de_um() {
+    let p = para_pagina(&linha(), None, &m()).unwrap();
+    assert_eq!(p.cupons, ["BESAVE10"]);
+    assert_eq!(p.cupom.as_deref(), Some("BESAVE10"));
+}
