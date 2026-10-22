@@ -1,0 +1,17 @@
+# Teste mensal de restauração do backup (BSV-49). Falha → besave-backup-alerta@teste.service.
+[Unit]
+Description=Besave: Teste mensal de restauração do backup
+Wants=network-online.target
+After=network-online.target
+OnFailure=besave-backup-alerta@teste.service
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/backup/backup.env
+ExecStart=/srv/besave/backup/teste-restauracao.sh
+TimeoutStartSec=3h
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full

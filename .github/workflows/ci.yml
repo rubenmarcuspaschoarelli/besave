@@ -129,6 +129,9 @@ jobs:
       - run: terraform init -backend=false
       - run: terraform validate
       - run: terraform test
+      # Backup do banco (BSV-49): shellcheck já vem no ubuntu-latest; os testes usam comandos falsos.
+      - run: shellcheck -x backup/*.sh
+      - run: bash backup/teste_backup.sh
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       - run: python -m unittest discover -s lambdas/vigia -v

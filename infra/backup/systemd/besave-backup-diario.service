@@ -1,0 +1,17 @@
+# Backup diário do banco (export, cópia na AWS, retenção) (BSV-49). Falha → besave-backup-alerta@diario.service.
+[Unit]
+Description=Besave: Backup diário do banco (export, cópia na AWS, retenção)
+Wants=network-online.target
+After=network-online.target
+OnFailure=besave-backup-alerta@diario.service
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/backup/backup.env
+ExecStart=/srv/besave/backup/backup-diario.sh
+TimeoutStartSec=2h
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full

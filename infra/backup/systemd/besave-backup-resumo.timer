@@ -1,0 +1,10 @@
+[Unit]
+Description=Besave: resumo semanal do backup (segunda, 08:00)
+
+[Timer]
+OnCalendar=Mon *-*-* 08:00:00
+Persistent=false
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target
