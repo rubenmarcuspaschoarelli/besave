@@ -1,7 +1,8 @@
 # BSV-45 · Worker: imagem de oferta reenviada por hash, não por existência de chave
 
 **Papel:** Backend Rust · **Pasta:** `apps/worker/` + `docs/MANIFEST.md`
-(regra 10: chave nova no S3 entra com a adaptação do worker) · **Depende de:** BSV-13b, BSV-21 (mergeados).
+(regra 10: chave nova no S3 entra com a adaptação do worker) · **Depende de:** BSV-13b, BSV-21 (mergeados)
+e **BSV-47 mergeada** (mesmo trecho de `geracao.rs` e MANIFEST §1/§6; a fila de expurgo muda a regra 3).
 MANIFEST.md §1, §4, §6; CONTRATO.md §6; AD-028, AD-041, AD-042, AD-044
 
 ## Contexto
@@ -65,8 +66,10 @@ de `img/ofertas/` sai do caminho quente do ciclo.
    precisa estar escrito no MANIFEST §6, não só no código.
 2. Id sem origem em disco (`sem_origem`) ou com falha de envio **não entra** no índice: o ciclo seguinte
    tenta de novo. Mesmo critério das páginas, em que o render que falha mantém o hash anterior.
-3. Expurgo (MANIFEST §6 passo 7) continua removendo por chave (`chave_small`/`chave_grande`, não depende
-   de listagem) e passa a **tirar o id do índice** no mesmo passo.
+3. Expurgo: desde a BSV-47 as imagens saem pela **fila de expurgo** (`_estado/expurgo.json`, na janela da
+   madrugada, `DeleteObjects` em lote). O id sai do `imagens.json` **quando a fila apaga as imagens dele**
+   (no mesmo lote, com o índice regravado junto da fila), não quando ele sai do conjunto publicado; id
+   reativado antes da janela continua no índice e não é reenviado.
 4. Idempotência (AD-028): segundo ciclo sem mudança no espelho → 0 uploads de imagem, 0 listagem de
    `img/ofertas/`, índice não regravado.
 5. Primeiro ciclo depois do deploy: índice ausente → uma listagem, índice construído, **0 uploads**
@@ -97,8 +100,9 @@ Testes com fakes de `Publicador` e espelho local temporário; nenhum deles espel
   não acontece antes da janela. Chave apagada no fake + índice intacto → não volta antes da janela, volta
   depois (o teste prova as duas metades, senão não discrimina).
 - **`sem_origem` e falha de envio** não gravam hash: o ciclo seguinte tenta o mesmo id de novo.
-- **Expurgo:** id que sai do conjunto → 2 chaves removidas **e** id fora do índice; reentrada do mesmo id
-  depois sobe de novo.
+- **Expurgo (fila da BSV-47):** id que sai do conjunto continua no índice até a fila apagá-lo; na janela,
+  2 chaves removidas **e** id fora do índice; reentrada do mesmo id depois sobe de novo; id reativado antes
+  da janela não é reenviado.
 - **Placeholders:** ausente → publicado; presente → não republicado (comportamento de hoje, preservado).
 - **Orçamento:** índice de 30.000 ids ≤ 1 MB (fixture sintética).
 - **Relatório:** linha do ciclo agendado traz `t_imagens_listagem` e `imagens_reenviadas`.
