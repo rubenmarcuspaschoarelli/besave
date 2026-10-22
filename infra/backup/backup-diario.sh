@@ -100,6 +100,15 @@ etapa_copiar() {
     echo "baixados $baixados de $esperados objetos (esperado: dump + log)" >&2
     return 1
   fi
+  # Só vale export com dump de verdade (> 0 byte) e log do Data Pump terminando com sucesso.
+  if [ -z "$(find "$TMP/dl" -type f -name "$PREFIXO-[0-9]*.dmp*" -size +0c -print -quit)" ]; then
+    echo "nenhum besave-$DIA-NNN.dmp com tamanho maior que zero no export" >&2
+    return 1
+  fi
+  if ! grep -q 'successfully completed' "$TMP/dl/$MARCADOR" || grep -q 'completed with' "$TMP/dl/$MARCADOR"; then
+    echo "o log do Data Pump não termina com sucesso" >&2
+    return 1
+  fi
   (cd "$TMP/dl" && sha256sum -- besave-* > "$TMP/SHA256SUMS") || return 1
   mv "$TMP/SHA256SUMS" "$TMP/dl/SHA256SUMS"
   BYTES=$(find "$TMP/dl" -type f -exec stat -c %s {} + | awk '{s+=$1} END {print s+0}')

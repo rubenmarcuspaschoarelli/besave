@@ -299,6 +299,31 @@ contem "manteve o limite" "$(ls "$FAKE_OCI")" "besave-20261015.log"
 contem "manteve fora do padrão" "$(ls "$FAKE_OCI")" "besave-semdata.txt"
 rm -rf "$T"
 
+# ---------- BKP-04b: export no bucket sem dump válido ou sem sucesso no log não vai para o S3 ----------
+while IFS='|' read -r nome tamanho log; do
+  caso="BKP-04b export inválido: $nome"
+  preparar
+  printf '%s' "$tamanho" > "$FAKE_OCI/besave-$DIA-100.dmp"
+  echo "$log" > "$FAKE_OCI/besave-$DIA.log"
+  rodar backup-diario.sh
+  igual "código 1" 1 "$codigo"
+  igual "um alerta" 1 "$(alertas)"
+  contem "etapa no alerta" "$(texto_alerta)" "falhou na etapa 'cópia para o S3'"
+  igual "nada foi para o S3" "" "$(cd "$FAKE_S3" && find . -type f)"
+  rm -rf "$T"
+done <<'CASOS'
+dump vazio|| Job "BESAVE_BACKUP"."SYS_EXPORT_SCHEMA_01" successfully completed
+log sem sucesso|x|ORA-39095: Dump file space has been exhausted
+concluído com erros|x|Job "BESAVE_BACKUP"."SYS_EXPORT_SCHEMA_01" completed with 2 error(s)
+CASOS
+caso="BKP-04b só o log, sem dump"
+preparar
+echo 'Job "X" successfully completed' > "$FAKE_OCI/besave-$DIA.log"
+rodar backup-diario.sh
+igual "código 1" 1 "$codigo"
+igual "nada foi para o S3" "" "$(cd "$FAKE_S3" && find . -type f)"
+rm -rf "$T"
+
 # ---------- BKP-05: falha em cada etapa → alerta e código ≠ 0 ----------
 while IFS='|' read -r falha etapa; do
   caso="BKP-05 falha $falha"

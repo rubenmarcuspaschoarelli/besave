@@ -38,9 +38,18 @@ Só ferramentas oficiais; nada compilado:
 ## 2. OCI: bucket e permissão (console, uma vez)
 
 1. Bucket `besave-backup` (Standard, privado, sem versionamento), na região do banco (Vinhedo).
-2. Grupo dinâmico com a inst2: regra `instance.id = '<OCID da inst2>'`, e a política
-   `Allow dynamic-group <grupo> to manage objects in compartment <compartimento> where target.bucket.name = 'besave-backup'`.
-   O CLI usa `--auth instance_principal`; nenhum segredo da OCI vai para o `.env`.
+2. **Grupo dinâmico** (Identidade → Domínios → Grupos dinâmicos; só a inst2): nome `besave-inst2-backup`, regra
+   ```
+   ANY {instance.id = '<OCID da instância bsv-agent-2026>'}
+   ```
+   e a **política** (Identidade → Políticas, no compartimento do bucket, ou na raiz do tenancy):
+   ```
+   Allow dynamic-group besave-inst2-backup to manage objects in compartment <compartimento> where target.bucket.name = 'besave-backup'
+   ```
+   `manage objects` cobre listar, ler, gravar e apagar objetos **só desse bucket**; não dá acesso a outros buckets,
+   nem a `manage buckets`. Se usar domínio que não seja o padrão, escreva `dynamic-group <domínio>/besave-inst2-backup`.
+   O CLI usa `--auth instance_principal`; nenhum segredo da OCI vai para o `.env`. Teste na inst2:
+   `oci os object list --bucket-name besave-backup --auth instance_principal` (deve responder, mesmo vazio).
 3. **Auth token** do usuário OCI que o banco usará para gravar no bucket (Perfil → Tokens de autenticação). Ele fica
    só dentro do banco (passo 4), nunca em arquivo.
 
