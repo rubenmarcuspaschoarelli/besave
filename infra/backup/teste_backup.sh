@@ -94,7 +94,9 @@ falha expdp
 [ -z "${FAKE_SEM_DUMP:-}" ] || exit 0
 uri=$(sed -n 's/^dumpfile=//p' "$par")
 base=$(basename "$uri" | sed 's/%L/100/')
-for n in "$base" "${base}_aaaaaa"; do
+pecas=("$base")
+[ "${FAKE_PECAS:-2}" -lt 2 ] || pecas+=("${base}_aaaaaa")
+for n in "${pecas[@]}"; do
   if [ -e "$FAKE_OCI/$n" ]; then echo "ORA-27038: arquivo $n já existe" >&2; exit 5; fi
   echo "conteúdo $n" > "$FAKE_OCI/$n"
 done
@@ -174,7 +176,7 @@ ambiente() {
   ENV=(
     "PATH=$T/fake:$PATH" "HOME=$T"
     "FAKE_REG=$FAKE_REG" "FAKE_OCI=$FAKE_OCI" "FAKE_S3=$FAKE_S3" "FAKE_CONTAGEM=$FAKE_CONTAGEM"
-    "FAKE_FALHA=${FAKE_FALHA:-}" "FAKE_SEM_DUMP=${FAKE_SEM_DUMP:-}" "FAKE_FLOCK=${FAKE_FLOCK:-}"
+    "FAKE_FALHA=${FAKE_FALHA:-}" "FAKE_SEM_DUMP=${FAKE_SEM_DUMP:-}" "FAKE_PECAS=${FAKE_PECAS:-2}" "FAKE_FLOCK=${FAKE_FLOCK:-}"
     "BESAVE_BACKUP_DIR=$T/srv" "BESAVE_BACKUP_ENV=$T/nao-existe.env" "BACKUP_TMP=$T/tmp"
     "BACKUP_DB_USER=BESAVE_BACKUP" "BACKUP_DB_PASS=s3nh4-secreta" "BACKUP_DB_DSN=bsvdb_high"
     "BACKUP_OCI_URI=https://ns.example/o" "BACKUP_OCI_BUCKET=bkp-oci" "BACKUP_OCI_CREDENCIAL=BACKUP_OCI_CRED"
@@ -240,6 +242,16 @@ bytes=$(cut -d' ' -f3 "$T/srv/estado/historico.log")
 [ "${bytes:-0}" -gt 0 ] || falhou "histórico sem tamanho: $bytes"
 igual "nenhum alerta no dia bom" 0 "$(alertas)"
 igual "pasta temporária apagada" "" "$(ls -d "$T"/tmp.* 2> /dev/null)"
+rm -rf "$T"
+
+caso="BKP-01b dump de peça única e marca de alerta velha"
+preparar
+: > "$T/srv/estado/alertado-diario"
+FAKE_PECAS=1
+rodar backup-diario.sh
+igual "código 0 com 1 peça + log" 0 "$codigo"
+[ ! -e "$T/srv/estado/alertado-diario" ] || falhou "execução nova não limpou a marca de alerta anterior"
+unset FAKE_PECAS
 rm -rf "$T"
 
 # ---------- BKP-02: idempotência ----------
@@ -535,6 +547,8 @@ done <<'DIVERGE'
 restore com poucas linhas|LINHAS|OFERTA|1000|900\nINVALIDOS|0|0
 restore com linhas demais|LINHAS|OFERTA|1000|1100\nINVALIDOS|0|0
 tabela ausente no restore|LINHAS|OFERTA|1000|-1\nINVALIDOS|0|0
+tabela pequena ausente no restore|LINHAS|FILA|5|-1
+INVALIDOS|0|0
 tabela pequena fora do mínimo|LINHAS|FILA|100|50\nINVALIDOS|0|0
 mais inválidos que a origem|LINHAS|OFERTA|1000|1000\nINVALIDOS|1|2
 sem tabelas|INVALIDOS|0|0
