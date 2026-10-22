@@ -43,7 +43,7 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade)
+                  validade, janela as janela_mod)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -198,6 +198,17 @@ def _gate_login_shopee_arranque(page):
             return
 
 
+# Pedacos de URL de tela de login: se a pagina do programa de afiliados caiu
+# numa delas, a sessao nao esta ativa.
+MARCAS_LOGIN = ('login', 'signin', 'sign-in', 'authenticate')
+
+
+def _pode_perguntar():
+    """Confirma os logins de afiliado pelo teclado? So com terminal e se o
+    config.json nao desligar (afiliados.confirmar_no_arranque=false)."""
+    return sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
+
+
 def _gate_login_afiliado(page, titulo, url, instrucao):
     """Gate generico de login num PROGRAMA DE AFILIADOS: abre a pagina da loja
     na janela da automacao e espera o usuario confirmar que esta logado.
@@ -211,6 +222,15 @@ def _gate_login_afiliado(page, titulo, url, instrucao):
         page.goto(url, wait_until='domcontentloaded', timeout=60000)
     except Exception:  # noqa: BLE001
         pass
+    if not _pode_perguntar():
+        # Sem ninguem para responder (reboot/queda na VPS): segue e so avisa.
+        atual = (page.url or '').lower()
+        if any(m in atual for m in MARCAS_LOGIN):
+            print(f'[login] AVISO: {titulo} sem login ativo ({page.url[:70]}); '
+                  f'as ofertas desta loja ficarao sem DS_URL_AFILIADO.')
+            return False
+        print(f'[login] {titulo}: sem confirmacao interativa; seguindo.')
+        return True
     print('\n' + '=' * 64)
     print(f'{titulo}')
     print(instrucao)
@@ -387,6 +407,19 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
     gravadas = 0
     com_erro = 0
     tempos = {}  # loja -> [_Cronometro] (media do lote no fim, _resumo_tempos)
+    # Menor ID cuja GRAVACAO falhou por erro de conexao: o ponteiro de retomada
+    # nunca passa dele, senao a linha so seria relida com --desde. Linha deixada
+    # em '0' de proposito (loja nao implementada) NAO segura o ponteiro.
+    # Guardada no db para valer tambem nos lotes seguintes do monitor.
+    trava = getattr(db, 'trava_ponteiro', None)
+
+    def _adiar(id_oferta, perdida_por_conexao=False):
+        nonlocal trava
+        if perdida_por_conexao:
+            trava = id_oferta if trava is None else min(trava, id_oferta)
+            db.trava_ponteiro = trava
+        if adiados is not None:
+            adiados.add(id_oferta)
 
     for row in rows:
         cron = _Cronometro()
@@ -522,9 +555,11 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 if ok:
                     gravadas += 1
                     status_db = ' | oracle=ok'
-                    # Ponteiro so avanca no sucesso: se o processo cair, a
-                    # proxima execucao recomeca da primeira linha nao gravada.
-                    estado.gravar_ultimo_id(id_oferta)
+                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
+                    # gravada: se o processo cair, a proxima execucao recomeca
+                    # da primeira linha nao gravada.
+                    if trava is None or id_oferta < trava:
+                        estado.gravar_ultimo_id(id_oferta)
                     # Cadastro consolidado de produtos (BESAVE.PRODUTO): le de
                     # volta a linha JA GRAVADA (numeros/LS_* ja convertidos,
                     # ver core/oracle_db.buscar_para_produto) e acha-ou-cria o
@@ -626,15 +661,13 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
-                    if adiados is not None:
-                        adiados.add(id_oferta)
+                    _adiar(id_oferta, db.sem_conexao)
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha
                 # quando a loja passar a ser suportada.
                 status_db = ' | oracle=pendente(0)'
-                if adiados is not None:
-                    adiados.add(id_oferta)
+                _adiar(id_oferta)
             else:
                 ok, erro = db.marcar_erro(
                     id_oferta, out['status_captura'], out['url_final'], ativo=ativo)
@@ -644,8 +677,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 else:
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
-                    if adiados is not None:
-                        adiados.add(id_oferta)
+                    _adiar(id_oferta, db.sem_conexao)
 
         # Marca so quando a loja TEM fluxo de link de afiliado: '-' ali quer
         # dizer "tentou e nao veio" (sessao deslogada / layout mudou), nao
@@ -708,7 +740,7 @@ def _varrer_validade(db):
         print(f'[validade] falhou: {e}')
 
 
-def _monitorar(context, page, db, args, header, img_root, intervalo_min):
+def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None):
     """Varre a fila ate o usuario interromper (Ctrl+C).
 
     Cada varredura que encontra pendentes vira um lote normal, com seu proprio
@@ -724,10 +756,17 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
     ciclos = 0
     total_grav = 0
     total_erro = 0
-    espera_s = intervalo_min * 60
+    normal_s = intervalo_min * 60
+
+    def espera_s():
+        # Na janela noturna a pausa e a da janela (cortada no fim dela).
+        return janela_mod.espera_s(janela, datetime.now(), normal_s)
 
     print(f'\n[monitor] ligado: varredura a cada {intervalo_min:g} min '
           f'(conf/config.json -> monitor.intervalo_minutos). Ctrl+C para sair.\n')
+    if janela:
+        print(f'[monitor] janela noturna {janela[0]:%H:%M}-{janela[1]:%H:%M}: '
+              f'varredura a cada {janela[2] / 60:g} min dentro dela.')
     ult_validade = 0.0
     try:
         while True:
@@ -736,13 +775,13 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
                 ult_validade = time.monotonic()
             rows = _ler_pendentes_resiliente(db, ultimo_id, args.limite, adiados)
             if rows is None:  # banco fora do ar: tenta na proxima varredura
-                print(f'[monitor] nova tentativa em {intervalo_min:g} min.')
-                _esperar(espera_s)
+                print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
                 continue
             if not rows:
                 print(f'[{datetime.now():%H:%M:%S}] fila vazia; proxima leitura '
-                      f'em {intervalo_min:g} min.')
-                _esperar(espera_s)
+                      f'em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
                 continue
 
             ciclos += 1
@@ -762,6 +801,9 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min):
             if adiados:
                 print(f'[monitor] {len(adiados)} linha(s) adiada(s) nesta execucao '
                       f'(seguem ST_CAPTURA=0): {sorted(adiados)}')
+            if janela_mod.dentro(janela, datetime.now()):  # na janela nao rele a fila na hora
+                print(f'[monitor] janela noturna: proxima rodada em {espera_s() / 60:g} min.')
+                _esperar(espera_s())
     except KeyboardInterrupt:
         print('\n[monitor] interrompido (Ctrl+C).')
     finally:
@@ -891,7 +933,8 @@ def main():
             # 3) Logins dos programas de afiliado (so p/ o DS_URL_AFILIADO).
             if capturar_link:
                 _gates_login_afiliados(page)
-            _monitorar(context, page, db, args, header, img_root, intervalo_min)
+            _monitorar(context, page, db, args, header, img_root, intervalo_min,
+                       janela_mod.ler_janela(estado._ler_config()))
         else:
             # 2) Login manual da Shopee (so quando o lote tem produtos da Shopee).
             if tem_shopee:

@@ -82,6 +82,17 @@ def ler_link_afiliado(caminho=CONFIG_PATH, padrao=True):
     return padrao if valor is None else bool(valor)
 
 
+def ler_confirmar_no_arranque(caminho=CONFIG_PATH, padrao=True):
+    """Pedir confirmacao (input) dos logins de afiliado no arranque?
+
+    Vem de "afiliados.confirmar_no_arranque" no config.json; ausente/invalido =
+    True (o PC pergunta como sempre). Na VPS, false: depois de um reboot ninguem
+    responde o input() e o robo ficaria parado.
+    """
+    valor = (_ler_config(caminho).get('afiliados') or {}).get('confirmar_no_arranque')
+    return padrao if valor is None else bool(valor)
+
+
 def ler_validade_ofertas(caminho=CONFIG_PATH, padrao=45):
     """Dias de vida de uma oferta (DT_OFERTA) antes de ser desativada sozinha
     (core/validade.py). Vem de "ofertas.validade_dias" no config.json;

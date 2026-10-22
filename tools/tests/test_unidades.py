@@ -8,6 +8,8 @@ import pytest
 VPS = Path(__file__).resolve().parent.parent / "vps"
 UNIDADES = sorted((VPS / "systemd").glob("*.service"))
 ROBOS = [u for u in UNIDADES if u.name.startswith("besave-captura-")]
+# cada robo na sua tela VNC (BSV-48)
+TELA = {"besave-captura-lojas.service": 1, "besave-captura-whatsapp.service": 2}
 
 
 def _ler(caminho):
@@ -19,7 +21,7 @@ def _ler(caminho):
 
 def test_existem_as_duas_unidades():
     assert [u.name for u in UNIDADES] == [
-        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-vnc.service",
+        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-vnc@.service",
     ]
 
 
@@ -28,7 +30,7 @@ def test_reinicia_em_falha_e_roda_no_tmux_com_display(unidade):
     cfg = _ler(unidade)
     servico = cfg["Service"]
     assert servico["Restart"] == "on-failure"
-    assert servico["Environment"] == "BESAVE_DISPLAY=:1"
+    assert servico["Environment"] == f"BESAVE_DISPLAY=:{TELA[unidade.name]}"
     exec_start = servico["ExecStart"]
     assert re.search(r"/tools/vps/(rodar_em_tmux|iniciar_captura)\.sh\b", exec_start)
     assert cfg["Install"]["WantedBy"] == "default.target"
@@ -58,8 +60,9 @@ def test_lojas_roda_o_main_em_modo_monitor():
 @pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
 def test_robo_depende_da_tela_vnc(unidade):
     unit = _ler(unidade)["Unit"]
-    assert unit["After"] == "besave-vnc.service"
-    assert unit["Requires"] == "besave-vnc.service"
+    tela = f"besave-vnc@{TELA[unidade.name]}.service"
+    assert unit["After"] == tela
+    assert unit["Requires"] == tela
 
 
 @pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
@@ -68,18 +71,17 @@ def test_robo_nao_fica_failed_por_falha_de_partida(unidade):
     assert cfg["Unit"]["StartLimitIntervalSec"] == "0"  # sem limite: nunca 'start-limit-hit'
     assert int(cfg["Service"]["RestartSec"]) >= 30
     pre = cfg["Service"]["ExecStartPre"]
-    assert "/tmp/.X11-unix/X1" in pre  # espera a tela existir de fato
+    assert f"/tmp/.X11-unix/X{TELA[unidade.name]} ]" in pre  # espera a SUA tela existir de fato
     assert "$$(" in pre  # systemd consome '$' simples
 
 
-def test_vnc_e_a_tela_1_em_primeiro_plano_e_sobe_sozinha():
-    cfg = _ler(VPS / "systemd" / "besave-vnc.service")
+def test_vnc_e_unidade_modelo_da_tela_n_so_em_localhost():
+    cfg = _ler(VPS / "systemd" / "besave-vnc@.service")
     servico = cfg["Service"]
     assert servico["Restart"] == "on-failure"
-    partes = servico["ExecStart"].split()
-    assert partes[1:3] == [":1", "-fg"]
-    assert "-localhost yes" in servico["ExecStart"]  # tela so por tunel SSH
-    assert servico["ExecStop"].endswith("vncserver -kill :1")
+    assert servico["ExecStart"].endswith("/tools/vps/iniciar_vnc.sh %i")  # tela :%i, porta 590%i
+    assert servico["ExecStop"].endswith("vncserver -kill :%i")
+    assert servico["RestartPreventExitStatus"] == "78"  # sem senha: nao reinicia em laco
     assert cfg["Unit"]["StartLimitIntervalSec"] == "0"
     assert cfg["Install"]["WantedBy"] == "default.target"
 
@@ -106,7 +108,6 @@ def test_robo_falha_se_a_tela_nao_aparece(unidade):
 
 
 def test_vnc_detalhes_da_tela():
-    servico = _ler(VPS / "systemd" / "besave-vnc.service")["Service"]
+    servico = _ler(VPS / "systemd" / "besave-vnc@.service")["Service"]
     assert servico["ExecStartPre"].startswith("-")  # limpa tela velha, mas nao falha se nao ha
-    assert "-geometry 1600x900" in servico["ExecStart"]
-    assert "-xstartup /usr/bin/startxfce4" in servico["ExecStart"]
+    assert servico["ExecStartPre"].endswith("vncserver -kill :%i")

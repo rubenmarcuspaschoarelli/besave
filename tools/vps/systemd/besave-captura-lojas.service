@@ -4,8 +4,8 @@
 # pedido de login do Mercado Livre/Shopee aparece la, no input().
 [Unit]
 Description=Besave - captura de paginas de loja
-After=besave-vnc.service
-Requires=besave-vnc.service
+After=besave-vnc@1.service
+Requires=besave-vnc@1.service
 # Falha de partida (contador atrasado, tela ainda subindo) nao deixa a unidade em
 # 'failed': tenta de novo a cada RestartSec, sem limite.
 StartLimitIntervalSec=0
