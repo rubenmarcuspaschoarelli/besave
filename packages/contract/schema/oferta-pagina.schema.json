@@ -15,6 +15,7 @@
     "preco_por": { "type": "integer", "minimum": 1 },
     "desconto_pct": { "oneOf": [ { "type": "integer", "minimum": 0, "maximum": 99 }, { "type": "null" } ] },
     "cupom": { "oneOf": [ { "type": "string", "minLength": 1, "maxLength": 30 }, { "type": "null" } ] },
+    "cupons": { "type": "array", "maxItems": 5, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 30, "pattern": "^[A-Z0-9_-]+$" } },
     "nota": { "oneOf": [ { "type": "number", "minimum": 0, "maximum": 5 }, { "type": "null" } ] },
     "qt_avaliacoes": { "oneOf": [ { "type": "integer", "minimum": 0 }, { "type": "null" } ] },
     "dt_oferta": { "$ref": "enums.schema.json#/$defs/DataHora" },

@@ -17,6 +17,11 @@ const casos = [
   ["fixtures/chunk-ok.json",         "https://besave.com.br/contract/chunk.schema.json",         true],
   ["fixtures/chunk-invalido.json",   "https://besave.com.br/contract/chunk.schema.json",         false],
   ["fixtures/oferta-pagina-ok.json", "https://besave.com.br/contract/oferta-pagina.schema.json", true],
+  ["fixtures/oferta-pagina-cupons.json", "https://besave.com.br/contract/oferta-pagina.schema.json", true],
+  ["fixtures/oferta-pagina-cupons-invalido.json", "https://besave.com.br/contract/oferta-pagina.schema.json", false],
+  ["fixtures/oferta-pagina-cupons-invalido-duplicado.json", "https://besave.com.br/contract/oferta-pagina.schema.json", false],
+  ["fixtures/oferta-pagina-cupons-invalido-minuscula.json", "https://besave.com.br/contract/oferta-pagina.schema.json", false],
+  ["fixtures/oferta-pagina-cupons-invalido-longo.json", "https://besave.com.br/contract/oferta-pagina.schema.json", false],
   ["fixtures/manifest-ok.json",      "https://besave.com.br/contract/manifest.schema.json",      true],
 ];
 

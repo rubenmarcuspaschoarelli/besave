@@ -29,7 +29,7 @@ Só com cupom e oferta ativa, um `<script>` embutido no fim do `<body>` (sem arq
 da oferta: lê o código do DOM). Ícone: `navigator.clipboard.writeText` + aviso; falhou → seleciona o
 código. Botão principal: no HTML diz "Ir para a loja"; com `navigator.clipboard.writeText` o script troca para
 "Copiar cupom e ir para a loja" e tenta copiar no clique sem `preventDefault` (falhou → nada, a aba nova
-abre do mesmo jeito). Sem JS o ícone fica oculto e o botão é um link comum para `/ir/{id}`.
+abre do mesmo jeito). Com vários códigos (BSV-50), cada botão `copiar` copia o `.codigo` do seu próprio `.cupom`; o botão principal copia sempre o primeiro. Sem JS o ícone fica oculto e o botão é um link comum para `/ir/{id}`.
 
 ## Variáveis do template
 
@@ -58,17 +58,18 @@ usar classe sem regra no CSS. Renomear classe é mudança de contrato.
 
 | classe | elemento | papel |
 |---|---|---|
-| `encerrada` | `<body>` | oferta expirada: imagem em cinza, preço apagado |
+| `encerrada` | `<body>` | oferta encerrada: imagem em cinza, preço apagado |
 | `topo`, `logo`, `menu` | cabeçalho | logo "Besave" e links das 10 áreas |
 | `busca`, `campo`, `buscar`, `oculto` | `<form>`, `<input>`, `<button>`, `<label>` | busca no topo (BSV-34): `GET /busca/?q=`, sem JS; `buscar` é a lupa de envio; `oculto` esconde o rótulo só visualmente. No celular as áreas descem para a linha de baixo |
 | `oferta` | `<main>` | contêiner da página |
 | `titulo` | `<h1>` | título integral |
-| `expirada` | `<p>` | faixa "Oferta expirada" (só encerrada) |
+| `expirada` | `<p>` | faixa "Encerrada" (só encerrada; a classe segue `expirada`) |
 | `compra` | `<div>` | grade imagem + painel (lado a lado a partir de 1024 px) |
 | `foto` | `<div>` | caixa quadrada da imagem (`object-fit: contain`) |
 | `painel` | `<div>` | preço, cupom, CTA, avaliação |
 | `preco`, `loja`, `de`, `por`, `desconto`, `data` | bloco de preço | loja, preço de (riscado), preço por, selo `-N%`, data de publicação |
-| `cupom`, `codigo` | `<p>`, `<code>` | caixa do cupom |
+| `cupons` | `<div>` | lista dos códigos (BSV-50), um `cupom` por código, na ordem de `o.cupons`; só existe com cupom |
+| `cupom`, `codigo` | `<p>`, `<code>` | caixa de um código, com o botão `copiar` ao lado |
 | `cta` | `<a>` | "Acesse a oferta" (com cupom: "Ir para a loja", que o script troca por "Copiar cupom e ir para a loja" quando há clipboard), aba nova; `[aria-disabled="true"]` sem `href` quando encerrada |
 | `copiar` | `<button hidden>` | ícone de copiar ao lado do código (só ativa com cupom); o script tira o `hidden` (BSV-38) |
 | `copiado` | `.copiar` | estado por ~2 s depois da cópia (posto pelo script) |

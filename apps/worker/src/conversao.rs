@@ -77,6 +77,7 @@ pub enum Rejeicao {
 
 const MAX_TITULO_CARD: usize = 200;
 const MAX_CUPOM: usize = 30;
+const MAX_CUPONS: usize = 5;
 const MAX_TITULO_PAGINA: usize = 400;
 const MAX_DESCRICAO: usize = 600;
 
@@ -128,6 +129,14 @@ pub fn para_card(l: &LinhaOferta, m: &Mapeamento, agora: i64) -> Result<OfertaCa
 
 /// Regras do §9 e projeção do card, sem `dp` (página e canal não usam a data).
 pub(crate) fn validar_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard, Rejeicao> {
+    validar_card_e_cupons(l, m).map(|(card, _)| card)
+}
+
+/// Como [`validar_card`], devolvendo também todos os códigos de cupom (página e canal).
+pub(crate) fn validar_card_e_cupons(
+    l: &LinhaOferta,
+    m: &Mapeamento,
+) -> Result<(OfertaCard, Vec<String>), Rejeicao> {
     let pp = l
         .preco_por
         .map(centavos)
@@ -148,20 +157,22 @@ pub(crate) fn validar_card(l: &LinhaOferta, m: &Mapeamento) -> Result<OfertaCard
     let dt = l.dt_oferta.ok_or(Rejeicao::DataNula)?;
     // O CTA `/ir/{id}` depende da URL de afiliado: sem ela, nem card nem página.
     url_afiliado(l)?;
+    let cupons = separar_cupons(l.id, l.cupom.as_deref());
 
-    Ok(OfertaCard {
+    let card = OfertaCard {
         id: l.id,
         loja,
         titulo: truncar(titulo, MAX_TITULO_CARD),
         preco_de: l.preco_de.map(centavos).filter(|&pd| pd > pp),
         preco_por: pp,
-        cupom: cupom(l),
+        cupom: cupons.first().cloned(),
         dt_oferta: iso_utc(dt),
         dt_publicacao: String::new(),
         area,
         publico,
         x: (!l.ativo).then_some(1),
-    })
+    };
+    Ok((card, cupons))
 }
 
 /// URL de afiliado trimada; vazia = oferta não existe (CONTRATO §10.1).
@@ -177,7 +188,7 @@ pub fn para_pagina(
     p: Option<&LinhaProduto>,
     m: &Mapeamento,
 ) -> Result<OfertaPagina, Rejeicao> {
-    let card = validar_card(l, m)?;
+    let (card, cupons) = validar_card_e_cupons(l, m)?;
     let id_produto = l
         .id_produto
         .filter(|&id| id >= 1)
@@ -199,6 +210,7 @@ pub fn para_pagina(
         preco_por: card.preco_por,
         desconto_pct: card.preco_de.map(|pd| desconto_pct(pd, card.preco_por)),
         cupom: card.cupom,
+        cupons,
         nota: l
             .nota
             .filter(|n| (0.0..=5.0).contains(n))
@@ -249,19 +261,37 @@ fn produto(p: &LinhaProduto) -> Option<Produto> {
     })
 }
 
-fn cupom(l: &LinhaOferta) -> Option<String> {
-    let c = l.cupom.as_deref()?.trim().to_uppercase();
-    if c.is_empty() {
-        return None;
+/// Códigos de `DS_CUPOM` (CONTRATO §3, §4): separados por `|`, trim e maiúsculas, só `^[A-Z0-9_-]{1,30}$`,
+/// sem repetição, no máximo [`MAX_CUPONS`]. Parte inválida e excesso saem com WARN.
+pub fn separar_cupons(id: i64, bruto: Option<&str>) -> Vec<String> {
+    let mut codigos: Vec<String> = Vec::new();
+    let mut excesso = false;
+    for parte in bruto.unwrap_or_default().split('|') {
+        let parte = parte.trim().to_uppercase();
+        if parte.is_empty() {
+            continue;
+        }
+        let valido = parte.chars().count() <= MAX_CUPOM
+            && parte
+                .chars()
+                .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-');
+        if !valido {
+            warn!(id, parte = %parte, "cupom fora do padrão; omitido");
+        } else if codigos.contains(&parte) {
+            continue;
+        } else if codigos.len() == MAX_CUPONS {
+            excesso = true;
+        } else {
+            codigos.push(parte);
+        }
     }
-    let valido = c.chars().count() <= MAX_CUPOM
-        && c.chars()
-            .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_' || ch == '-');
-    if !valido {
-        warn!(id = l.id, cupom = %c, "cupom fora do padrão; omitido");
-        return None;
+    if excesso {
+        warn!(
+            id,
+            "cupom com mais de {MAX_CUPONS} códigos; excedentes omitidos"
+        );
     }
-    Some(c)
+    codigos
 }
 
 /// Reais → centavos, arredondando meia para cima sobre o decimal que o `f64` representa

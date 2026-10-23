@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.5.0** (SemVer; mudança incompatível = major).
-Histórico: 1.5.0 — `OfertaCard.dp` (data de publicação no site), orçamento do card média ≤ 230 B (AD-074), §10.6 respondida (BSV-36). 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.6.0** (SemVer; mudança incompatível = major).
+Histórico: 1.6.0 — `DS_CUPOM` com vários códigos separados por `|`: `c` do card = primeiro válido, `OfertaPagina.cupons` e `OfertaCanal.cupons` (BSV-50, AD-102). 1.5.0 — `OfertaCard.dp` (data de publicação no site), orçamento do card média ≤ 230 B (AD-074), §10.6 respondida (BSV-36). 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -79,7 +79,7 @@ comprimido ≤ 60 KB (MANIFEST §7, AD-064, AD-074). Chaves curtas por isso. O t
 | `t` | string 1..200 | `DS_TITULO` | trim; se > 200, corta em 197 + `…` na última fronteira de palavra |
 | `pd` | integer ≥ 0 \| null | `VL_PRECO_DE` | centavos; `null` se ausente ou ≤ `pp` |
 | `pp` | integer ≥ 1 | `VL_PRECO_POR` | centavos; obrigatório |
-| `c` | string 1..30 \| ausente | `DS_CUPOM` | só presente se houver cupom; trim, maiúsculas |
+| `c` | string 1..30 \| ausente | `DS_CUPOM` | só presente se houver cupom; primeiro código válido de `DS_CUPOM` (separador `\|`, §4.3); trim, maiúsculas |
 | `dt` | string date-time | `DT_OFERTA` | ISO 8601 UTC |
 | `dp` | string date-time | `DT_PUBLICACAO_SITE` | ISO 8601 UTC; nula → instante do ciclo truncado ao minuto, gravado no Oracle depois do manifest (§11); fora de `[2026-10-06T00:00:00Z, instante]` → instante do ciclo + WARN, sem rejeitar |
 | `a` | `Area` | `DS_COMUNIDADE` | enum |
@@ -114,7 +114,8 @@ Consumida só pelo template do worker. Chaves legíveis (não há orçamento de 
 | `preco_de` | integer \| null | `VL_PRECO_DE` | centavos |
 | `preco_por` | integer | `VL_PRECO_POR` | centavos |
 | `desconto_pct` | integer 0..99 \| null | derivado | `round((1 - por/de)*100)`; pré-calculado aqui porque vai no HTML e no `schema.org` |
-| `cupom` | string \| null | `DS_CUPOM` | exibido abaixo do preço quando presente |
+| `cupom` | string \| null | `DS_CUPOM` | primeiro código de `cupons`; compatível com a 1.5 |
+| `cupons` | string[] (0..5) | `DS_CUPOM` | todos os códigos válidos (§4.3), cada um listado abaixo do preço com botão de copiar; `[]` sem cupom |
 | `nota` | number 0..5 \| null | `NR_NOTA_AVALIACAO` | 1 casa decimal |
 | `qt_avaliacoes` | integer ≥ 0 \| null | `QT_AVALIACAO` | |
 | `dt_oferta` | date-time | `DT_OFERTA` | |
@@ -143,6 +144,11 @@ Campos opcionais só aparecem no HTML quando não nulos/vazios.
 
 Indicador de faixa de preço (barra de calor min → atual → max) só renderiza quando
 `preco_min`, `preco_max` são não nulos e `preco_min < preco_max`.
+
+### 4.3 Separação de `DS_CUPOM` (card, página e canal)
+`DS_CUPOM` é dividido por `|`; cada parte com trim e maiúsculas; válida se casar `^[A-Z0-9_-]{1,30}$`;
+duplicadas saem mantendo a ordem; no máximo 5 (o resto sai com WARN). Parte inválida sai com WARN (id e
+parte). Nenhuma válida → sem cupom. Uma função só serve card, página e canal.
 
 ---
 
@@ -267,7 +273,7 @@ que tem página no ar).
 | `preco_de` | integer \| null | `VL_PRECO_DE` | centavos; `null` se ausente ou ≤ `preco_por` |
 | `preco_por` | integer ≥ 1 | `VL_PRECO_POR` | centavos |
 | `desconto_pct` | integer 0..99 \| null | derivado | mesma conta de `OfertaPagina.desconto_pct` |
-| `cupom` | string 1..30 \| null | `DS_CUPOM` | mesma regra do card |
+| `cupons` | string[] (0..5) | `DS_CUPOM` | mesma separação da página (§4.3); a legenda mostra todos (`Cupons: A · B · C`) e, se passar de 1024 caracteres, corta códigos do fim (fica 1) antes de cortar o título |
 | `recorrencia` | boolean | `ST_RECORRENCIA = 1` | preço do Programe e Poupe |
 | `dt_oferta` | date-time | `DT_OFERTA` | ISO 8601 UTC |
 

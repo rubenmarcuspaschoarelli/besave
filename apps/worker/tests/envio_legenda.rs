@@ -14,7 +14,7 @@ fn oferta() -> OfertaCanal {
         preco_de: Some(29990),
         preco_por: 16490,
         desconto_pct: Some(45),
-        cupom: None,
+        cupons: vec![],
         recorrencia: false,
         dt_oferta: "2026-09-24T12:40:00Z".into(),
     }
@@ -42,7 +42,7 @@ fn legenda_completa() {
     let o = OfertaCanal {
         destaque: Some("Menor preço em 30 dias".into()),
         recorrencia: true,
-        cupom: Some("BESAVE10".into()),
+        cupons: vec!["BESAVE10".into()],
         loja: Loja::MercadoLivre,
         ..oferta()
     };
@@ -118,7 +118,7 @@ fn titulo_longo_cortado() {
     let o = OfertaCanal {
         titulo: "Palavra & longa ".repeat(120).trim().to_owned(),
         destaque: Some("d".repeat(200)),
-        cupom: Some("BESAVE10".into()),
+        cupons: vec!["BESAVE10".into()],
         recorrencia: true,
         ..oferta()
     };
@@ -163,7 +163,7 @@ fn reais_com_milhar() {
 #[test]
 fn legenda_encerrada_riscada_sem_link() {
     let o = OfertaCanal {
-        cupom: Some("BESAVE10".into()),
+        cupons: vec!["BESAVE10".into()],
         titulo: "Fone <XYZ>".into(),
         ..oferta()
     };
@@ -175,4 +175,98 @@ fn legenda_encerrada_riscada_sem_link() {
     );
     assert!(!l.contains("href"));
     assert!(tamanho(&l) <= MAX_LEGENDA);
+}
+
+// CAN-01 (BSV-50)
+#[test]
+fn varios_cupons_na_mesma_linha() {
+    let o = OfertaCanal {
+        cupons: vec![
+            "MELI26TODOSITE".into(),
+            "SITEMELI26".into(),
+            "MELI26SITETODO".into(),
+        ],
+        ..oferta()
+    };
+    let l = legenda(&o, false, &p());
+    assert!(
+        l.contains(
+            "🎟️ Cupons: <code>MELI26TODOSITE</code> · <code>SITEMELI26</code> · <code>MELI26SITETODO</code>"
+        ),
+        "{l}"
+    );
+    assert!(!l.contains("Cupom:"), "{l}");
+    let e = legenda_encerrada(&o, &p());
+    assert!(
+        e.contains("🎟️ Cupons: MELI26TODOSITE · SITEMELI26 · MELI26SITETODO</s>"),
+        "{e}"
+    );
+}
+
+// CAN-02 (BSV-50)
+#[test]
+fn cupons_do_fim_saem_antes_do_titulo() {
+    // Título que enche a legenda: com 5 códigos de 30 caracteres passa de 1024; o título só é
+    // cortado depois que sobra 1 código.
+    let codigos: Vec<String> = ["A", "B", "C", "D", "E"]
+        .iter()
+        .map(|c| c.repeat(30))
+        .collect();
+    let base = OfertaCanal {
+        titulo: "Palavra longa ".repeat(60).trim().to_owned(),
+        ..oferta()
+    };
+    let sem = legenda(&base, false, &p());
+    assert!(tamanho(&sem) <= MAX_LEGENDA);
+
+    // Título que deixa folga para exatamente 2 códigos de 30 (a legenda com 2 chega a 1024).
+    let com = |k: usize, titulo: &str| OfertaCanal {
+        titulo: titulo.to_owned(),
+        cupons: codigos[..k].to_vec(),
+        ..oferta()
+    };
+    let vazia = |k: usize| tamanho(&legenda(&com(k, ""), false, &p()));
+    assert!(vazia(3) > vazia(2));
+    let titulo_folga = "x".repeat(MAX_LEGENDA - vazia(2));
+    let l = legenda(&com(5, &titulo_folga), false, &p());
+    assert_eq!(tamanho(&l), MAX_LEGENDA);
+    assert!(
+        l.contains(&format!("<b>{titulo_folga}</b>")),
+        "título intacto"
+    );
+    assert!(
+        l.contains(&format!(
+            "🎟️ Cupons: <code>{}</code> · <code>{}</code>\n",
+            codigos[0], codigos[1]
+        )),
+        "{l}"
+    );
+    assert!(!l.contains(&codigos[2]), "o terceiro já saiu");
+
+    // Mesma regra na legenda encerrada (texto riscado).
+    let vazia_e = |k: usize| tamanho(&legenda_encerrada(&com(k, ""), &p()));
+    assert!(vazia_e(3) > vazia_e(2));
+    let titulo_e = "x".repeat(MAX_LEGENDA - vazia_e(2));
+    let e = legenda_encerrada(&com(5, &titulo_e), &p());
+    assert_eq!(tamanho(&e), MAX_LEGENDA);
+    assert!(e.contains(&titulo_e), "título intacto");
+    assert!(
+        e.contains(&format!("🎟️ Cupons: {} · {}</s>", codigos[0], codigos[1])),
+        "{e}"
+    );
+    assert!(!e.contains(&codigos[2]));
+
+    // Nem 1 código cabe com o título inteiro: o título é cortado e o primeiro código fica.
+    let enorme = OfertaCanal {
+        titulo: "Palavra longa ".repeat(120).trim().to_owned(),
+        cupons: codigos.clone(),
+        ..oferta()
+    };
+    let l = legenda(&enorme, false, &p());
+    assert!(tamanho(&l) <= MAX_LEGENDA);
+    assert!(
+        l.contains(&format!("🎟️ Cupom: <code>{}</code>", codigos[0])),
+        "{l}"
+    );
+    assert!(l.lines().next().unwrap().ends_with("…</b>"));
 }
