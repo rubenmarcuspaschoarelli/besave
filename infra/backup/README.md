@@ -17,7 +17,7 @@ Cada dia gera `besave-AAAAMMDD-NNN.dmp` (+ pedaços `…dmp_aaaaaa`, o Data Pump
 `besave-AAAAMMDD.log` (saída do `expdp`; **é o marcador de "export completo"**, sobe por último) e, no S3,
 `SHA256SUMS`. No S3 tudo fica em `db/AAAAMMDD/`.
 
-Testes: `bash infra/backup/teste_backup.sh` (comandos falsos, sem rede) e `shellcheck -x infra/backup/*.sh`.
+Testes: `bash infra/backup/teste_backup.sh` (comandos falsos, sem rede) e `shellcheck -x -P SCRIPTDIR infra/backup/*.sh`.
 Ambos rodam no CI (job `infra`).
 
 ---
