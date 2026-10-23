@@ -31,7 +31,8 @@ trap 'rm -rf "$TMP"' EXIT
 # Quantos objetos do bucket começam com o prefixo (falha se a OCI falhar).
 oci_contar() {
   local n
-  # Bucket sem objetos: a OCI CLI não devolve `data`; o `|| []` evita o erro do JMESPath.
+  # Bucket sem objetos: a OCI CLI não devolve `data`; o `|| []` evita o erro do JMESPath (crases = literal JMESPath).
+  # shellcheck disable=SC2016
   n=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix "$1" --all \
     --query 'length(data || `[]`)' --raw-output) || return 1
   if [[ $n =~ ^[0-9]+$ ]]; then echo "$n"; else echo 0; fi
