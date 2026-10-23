@@ -45,3 +45,9 @@ variable "ativar_curto" {
   type        = bool
   default     = false
 }
+
+variable "bucket_backup" {
+  description = "Bucket privado das cópias diárias do banco (BSV-49)."
+  type        = string
+  default     = "besave-backup"
+}

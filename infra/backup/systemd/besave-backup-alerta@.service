@@ -1,0 +1,10 @@
+# Rede de segurança do OnFailure= dos três serviços de backup (BSV-49). %i = diario | teste | resumo.
+[Unit]
+Description=Besave: alerta de falha do backup (%i)
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/backup/backup.env
+ExecStart=/srv/besave/backup/alerta.sh %i

@@ -14,6 +14,7 @@ Terraform que cria, ao lado do protótipo (AD-016), a infra do site novo:
 | A/AAAA de `besave.com.br` e `www` na distribuição nova (com `ativar_dominios`, BSV-16) | — | `dominios.tf` |
 | zonas `besave.io`/`besave.me`; com `ativar_curto`: certificado, Function `link-curto`, distribuição e A/AAAA (BSV-16) | `besave-curto` | `curto.tf`, `functions/link-curto.js` |
 | provedor OIDC do GitHub e papel do deploy do site, restrito aos prefixos do site (BSV-17) | `besave-site-deploy` | `site_deploy.tf`, `deploy-site/` |
+| bucket das cópias diárias do banco (privado, versionado, 30 dias) e usuário IAM que só grava/lê `db/` e não apaga (BSV-49) | `besave-backup` | `backup.tf`, `backup/` |
 
 Não gerencia o bucket `besave.com.br` nem a distribuição atual do protótipo: o `plan` não mostra nenhum dos dois.
 

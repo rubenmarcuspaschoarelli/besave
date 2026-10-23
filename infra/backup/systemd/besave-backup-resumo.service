@@ -1,0 +1,17 @@
+# Resumo semanal do backup no Telegram (BSV-49). Falha → besave-backup-alerta@resumo.service.
+[Unit]
+Description=Besave: Resumo semanal do backup no Telegram
+Wants=network-online.target
+After=network-online.target
+OnFailure=besave-backup-alerta@resumo.service
+
+[Service]
+Type=oneshot
+User=besave
+Group=besave
+EnvironmentFile=/srv/besave/backup/backup.env
+ExecStart=/srv/besave/backup/resumo-semanal.sh
+TimeoutStartSec=5min
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
