@@ -433,3 +433,25 @@ mod dp {
         );
     }
 }
+
+// CARD-01 (BSV-50): `c` é o primeiro código válido.
+#[test]
+fn cupom_do_card_e_o_primeiro_codigo_valido() {
+    let l = LinhaOferta {
+        cupom: Some("ruim cupom | isdin15d | SMARTWATCHES10".into()),
+        ..linhas_fixture().remove(0)
+    };
+    let c = para_card(&l, &m(), AGORA_CARD).unwrap();
+    assert_eq!(c.cupom.as_deref(), Some("ISDIN15D"));
+    let json = serde_json::to_value(&c).unwrap();
+    assert_eq!(json["c"], "ISDIN15D");
+    assert!(json.get("cupons").is_none(), "o card não ganha campo");
+
+    let sem = LinhaOferta {
+        cupom: Some("só inválido!".into()),
+        ..l
+    };
+    let c = para_card(&sem, &m(), AGORA_CARD).unwrap();
+    assert_eq!(c.cupom, None);
+    assert!(serde_json::to_value(&c).unwrap().get("c").is_none());
+}

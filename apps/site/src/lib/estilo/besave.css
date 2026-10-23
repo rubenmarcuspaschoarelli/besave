@@ -246,6 +246,12 @@ figure {
 	padding: 0.625rem 1rem;
 	color: var(--cor-suave);
 }
+/* Vários códigos (BSV-50): um .cupom por código, empilhados. */
+.cupons {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0.5rem;
+}
 .codigo {
 	font:
 		700 1.125rem/1.2 ui-monospace,

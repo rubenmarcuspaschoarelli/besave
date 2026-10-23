@@ -45,7 +45,7 @@ prefixos `img/ofertas/` e `img/produtos/`. Um bucket só: menos política, menos
 
 ```json
 {
-  "contrato": "1.5.0",
+  "contrato": "1.6.0",
   "versao": 20260924130500,
   "gerado_em": "2026-09-24T13:05:00Z",
   "total_ofertas": 30412,

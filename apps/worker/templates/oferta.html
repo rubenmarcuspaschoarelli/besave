@@ -40,7 +40,7 @@
 <main class="oferta">
 <h1 class="titulo">{{ o.titulo }}</h1>
 {% if encerrada %}
-<p class="expirada">Oferta expirada</p>
+<p class="expirada">Encerrada</p>
 {% endif %}
 <div class="compra">
 <div class="foto">
@@ -55,9 +55,13 @@
 <p class="por"><strong>{{ o.preco_por|reais }}</strong>{% if o.desconto_pct is not none %} <span class="desconto">-{{ o.desconto_pct }}%</span>{% endif %}</p>
 <p class="data">publicada em <time datetime="{{ o.dt_oferta }}">{{ o.dt_oferta|data_br }}</time></p>
 </section>
-{% set copia = o.cupom is not none and not encerrada %}
-{% if o.cupom is not none %}
-<p class="cupom">Cupom <code class="codigo">{{ o.cupom }}</code>{% if copia %} <button class="copiar" type="button" aria-label="Copiar cupom" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>{% endif %}</p>
+{% set copia = o.cupons|length > 0 and not encerrada %}
+{% if o.cupons|length > 0 %}
+<div class="cupons">
+{% for c in o.cupons %}
+<p class="cupom">Cupom <code class="codigo">{{ c }}</code>{% if copia %} <button class="copiar" type="button" aria-label="Copiar cupom{% if o.cupons|length > 1 %} {{ c }}{% endif %}" hidden><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>{% endif %}</p>
+{% endfor %}
+</div>
 {% endif %}
 {% if encerrada %}
 <a class="cta" aria-disabled="true">Acesse a oferta</a>
@@ -106,13 +110,13 @@
 {% if copia %}
 <script>
 (function () {
-  var codigo = document.querySelector(".cupom .codigo");
-  var botao = document.querySelector(".copiar");
+  var botoes = document.querySelectorAll(".copiar");
   var aviso = document.querySelector(".confirmacao");
   var cta = document.querySelector(".cta");
   var timer;
-  function avisar() {
+  function avisar(botao) {
     aviso.textContent = "Cupom copiado!";
+    botoes.forEach(function (b) { b.classList.remove("copiado"); });
     botao.classList.add("copiado");
     clearTimeout(timer);
     timer = setTimeout(function () {
@@ -120,25 +124,32 @@
       botao.classList.remove("copiado");
     }, 2000);
   }
-  function selecionar() {
+  function selecionar(codigo) {
     var r = document.createRange();
     r.selectNodeContents(codigo);
     var s = window.getSelection();
     s.removeAllRanges();
     s.addRange(r);
   }
-  function copiar(falhou) {
+  function copiar(codigo, botao, falhou) {
     try {
-      navigator.clipboard.writeText(codigo.textContent).then(avisar, falhou);
+      navigator.clipboard.writeText(codigo.textContent).then(function () { avisar(botao); }, falhou);
     } catch (e) {
       falhou();
     }
   }
-  botao.hidden = false;
-  botao.addEventListener("click", function () { copiar(selecionar); });
+  botoes.forEach(function (botao) {
+    var codigo = botao.parentNode.querySelector(".codigo");
+    botao.hidden = false;
+    botao.addEventListener("click", function () {
+      copiar(codigo, botao, function () { selecionar(codigo); });
+    });
+  });
   if (navigator.clipboard && navigator.clipboard.writeText) {
     cta.textContent = "Copiar cupom e ir para a loja";
-    cta.addEventListener("click", function () { copiar(function () {}); });
+    cta.addEventListener("click", function () {
+      copiar(botoes[0].parentNode.querySelector(".codigo"), botoes[0], function () {});
+    });
   }
 })();
 </script>

@@ -71,7 +71,8 @@ describe('besave.css', () => {
 
 	// CUP-11 (BSV-38): ícone de copiar, estado copiado e aviso; toque ≥ 44 px; sem JS fica oculto.
 	it('estiliza a cópia do cupom', () => {
-		for (const c of ['copiar', 'copiado', 'confirmacao']) expect(temRegra(c), `.${c}`).toBe(true);
+		for (const c of ['copiar', 'copiado', 'confirmacao', 'cupons'])
+			expect(temRegra(c), `.${c}`).toBe(true);
 		/** Corpo da regra cujo seletor é exatamente `seletor`. */
 		const regra = (seletor: string) =>
 			[...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^}]*)\}/g)].find(

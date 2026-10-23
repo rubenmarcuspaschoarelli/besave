@@ -58,7 +58,7 @@ pub fn selecionar(
     todas.sort_by_key(|(o, _)| {
         (
             Reverse(o.desconto_pct.unwrap_or(0)),
-            o.cupom.is_none(),
+            o.cupons.is_empty(),
             Reverse(o.dt_oferta.clone()),
             Reverse(o.id),
         )

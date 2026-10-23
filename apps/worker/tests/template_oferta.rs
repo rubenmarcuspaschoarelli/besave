@@ -153,6 +153,14 @@ fn golden_oferta_encerrada_byte_a_byte() {
     assert_eq!(render(&o), golden("oferta-pagina-encerrada.html"));
 }
 
+// TPL-01 (BSV-50): fixture do contrato com 3 códigos, byte a byte.
+#[test]
+fn golden_oferta_com_tres_cupons_byte_a_byte() {
+    let o: OfertaPagina = serde_json::from_str(&fixture("oferta-pagina-cupons.json")).unwrap();
+    assert_eq!(o.cupons.len(), 3);
+    assert_eq!(render(&o), golden("oferta-pagina-cupons.html"));
+}
+
 // PAG-03
 #[test]
 fn head_com_title_description_canonical_og_css_e_viewport() {
@@ -262,7 +270,7 @@ fn encerrada_noindex_classe_faixa_e_cta_desabilitado() {
     assert!(
         html[h1_fim..]
             .trim_start()
-            .starts_with(r#"<p class="expirada">Oferta expirada</p>"#),
+            .starts_with(r#"<p class="expirada">Encerrada</p>"#),
         "faixa logo após o h1"
     );
     let cta = tag(&html, r#"<a class="cta""#);
@@ -300,6 +308,7 @@ fn imagem_com_dimensoes_alt_e_fallback_como_unico_js() {
     let mut o = oferta_ok();
     o.area = Area::EsporteVida;
     o.cupom = None;
+    o.cupons = vec![];
     let html = render(&o);
     let img = tag(&html, "<img");
     for atributo in [
@@ -369,6 +378,7 @@ fn cupom_so_quando_presente() {
     assert!(html.contains(r#"<code class="codigo">BESAVE10</code>"#));
     let mut o = oferta_ok();
     o.cupom = None;
+    o.cupons = vec![];
     let html = render(&o);
     assert!(!html.contains(r#"class="cupom""#));
     assert!(!html.contains("<code"));
@@ -569,6 +579,7 @@ fn hora_com_offset_fixo_menos_tres() {
 fn sem_cupom() -> OfertaPagina {
     OfertaPagina {
         cupom: None,
+        cupons: vec![],
         ..oferta_ok()
     }
 }
@@ -638,6 +649,7 @@ fn cupom_ativo_tem_status_e_script_sem_dado_da_oferta() {
     // O script é o mesmo para qualquer cupom: o código vem do DOM (AD-034).
     let mut o = oferta_ok();
     o.cupom = Some(r#"<X&"Y'>"#.into());
+    o.cupons = vec![r#"<X&"Y'>"#.into()];
     o.id = 77;
     let outro = render(&o);
     assert!(outro.contains(r#"<code class="codigo">&lt;X&amp;&quot;Y&#x27;&gt;</code>"#));
@@ -672,6 +684,7 @@ fn encerrada_com_ou_sem_cupom_sem_copia() {
         oferta_encerrada(),
         OfertaPagina {
             cupom: None,
+            cupons: vec![],
             ..oferta_encerrada()
         },
     ] {
@@ -762,4 +775,122 @@ fn com_formulario_html_no_orcamento_e_deterministico() {
         assert!(html.len() <= 30 * 1024, "HTML {} B", html.len());
         assert_eq!(html, render(&o), "mesmo input, mesmos bytes");
     }
+}
+
+// BSV-50 (docs/specs/BSV-50.md, .specs/features/BSV-50/spec.md)
+
+fn tres_cupons() -> OfertaPagina {
+    OfertaPagina {
+        cupom: Some("MELI26TODOSITE".into()),
+        cupons: vec![
+            "MELI26TODOSITE".into(),
+            "SITEMELI26".into(),
+            "MELI26SITETODO".into(),
+        ],
+        ..oferta_ok()
+    }
+}
+
+// TPL-01
+#[test]
+fn varios_cupons_lista_com_botao_de_copiar_por_codigo() {
+    let html = render(&tres_cupons());
+    let lista = trecho(&html, r#"<div class="cupons">"#, "</div>");
+    let codigos: Vec<&str> = lista
+        .match_indices(r#"<code class="codigo">"#)
+        .map(|(i, _)| trecho(&lista[i..], r#"<code class="codigo">"#, "</code>"))
+        .map(|t| &t[r#"<code class="codigo">"#.len()..])
+        .collect();
+    assert_eq!(codigos, ["MELI26TODOSITE", "SITEMELI26", "MELI26SITETODO"]);
+    assert_eq!(ocorrencias(lista, r#"<p class="cupom">"#), 3);
+    assert_eq!(ocorrencias(lista, r#"<button class="copiar""#), 3);
+    // Cada botão fica no mesmo <p> do seu código e diz qual copia.
+    for c in codigos {
+        let i = lista
+            .find(&format!(r#"<code class="codigo">{c}</code>"#))
+            .unwrap();
+        let p = trecho(&lista[i..], "<code", "</p>");
+        assert!(
+            p.contains(&format!(r#"aria-label="Copiar cupom {c}""#)),
+            "{p}"
+        );
+    }
+    // Abaixo do preço e antes do CTA.
+    let (preco, lista_i, cta) = (
+        html.find(r#"<section class="preco""#).unwrap(),
+        html.find(r#"<div class="cupons">"#).unwrap(),
+        html.find(r#"<a class="cta""#).unwrap(),
+    );
+    assert!(preco < lista_i && lista_i < cta);
+}
+
+// TPL-02
+#[test]
+fn varios_cupons_botao_principal_continua_link_com_o_primeiro() {
+    let html = render(&tres_cupons());
+    assert_eq!(
+        trecho(&html, r#"<a class="cta""#, "</a>"),
+        r#"<a class="cta" href="/ir/5412" target="_blank" rel="nofollow sponsored noopener">Ir para a loja"#
+    );
+    assert_eq!(ocorrencias(&html, "Copiar cupom e ir para a loja"), 1);
+    let js = scripts_js(&html);
+    assert_eq!(js.len(), 1);
+    for proibido in ["MELI26", "5412", "/ir/", "http"] {
+        assert!(!js[0].contains(proibido), "{proibido} no script");
+    }
+    // O script é o mesmo para qualquer lista: o código vem do DOM.
+    assert_eq!(scripts_js(&render(&oferta_ok())), js);
+    // O botão principal copia o primeiro; cada ícone copia o código do seu próprio <p>.
+    assert!(js[0].contains("botoes[0]"));
+    assert!(js[0].contains(r#"botao.parentNode.querySelector(".codigo")"#));
+}
+
+#[test]
+fn um_cupom_continua_com_aria_label_simples() {
+    let html = render(&oferta_ok());
+    assert_eq!(ocorrencias(&html, r#"aria-label="Copiar cupom""#), 1);
+}
+
+#[test]
+fn varios_cupons_encerrada_mostra_codigos_sem_copia() {
+    let o = OfertaPagina {
+        status: Status::Encerrada,
+        ..tres_cupons()
+    };
+    let html = render(&o);
+    assert_eq!(ocorrencias(&html, r#"<code class="codigo">"#), 3);
+    for ausente in ["<script>", "/ir/", "confirmacao"] {
+        assert!(!html.contains(ausente), "{ausente}");
+    }
+    assert_eq!(ocorrencias(&html, r#"<button class="copiar""#), 0);
+    assert!(scripts_js(&html).is_empty());
+}
+
+#[test]
+fn varios_cupons_escapados() {
+    let o = OfertaPagina {
+        cupons: vec!["<B>".into(), "A&B".into()],
+        cupom: Some("<B>".into()),
+        ..oferta_ok()
+    };
+    let html = render(&o);
+    assert!(html.contains(r#"<code class="codigo">&lt;B&gt;</code>"#));
+    assert!(html.contains(r#"<code class="codigo">A&amp;B</code>"#));
+}
+
+// TPL-03
+#[test]
+fn faixa_encerrada_sem_oferta_expirada() {
+    let html = render(&oferta_encerrada());
+    assert!(html.contains(r#"<p class="expirada">Encerrada</p>"#));
+    assert!(!html.contains("Oferta expirada"));
+}
+
+// TPL-04
+#[test]
+fn varios_cupons_orcamento_e_determinismo() {
+    let o = tres_cupons();
+    let html = render(&o);
+    assert!(html.len() <= 30 * 1024, "{}", html.len());
+    assert_eq!(html, render(&o));
 }

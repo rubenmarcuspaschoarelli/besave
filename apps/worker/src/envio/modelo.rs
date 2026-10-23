@@ -1,7 +1,7 @@
 //! `OfertaCanal` (CONTRATO §11), a linha do Oracle que a alimenta e os parâmetros por canal
 //! (`PARAMETROS_ENVIO`, `sql/bsv-40.sql`).
 
-use crate::conversao::{LinhaOferta, Rejeicao, desconto_pct, truncar, validar_card};
+use crate::conversao::{LinhaOferta, Rejeicao, desconto_pct, truncar, validar_card_e_cupons};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::Loja;
 
@@ -31,7 +31,8 @@ pub struct OfertaCanal {
     pub preco_de: Option<i64>,
     pub preco_por: i64,
     pub desconto_pct: Option<i64>,
-    pub cupom: Option<String>,
+    /// Códigos válidos, 0 a 5 (mesma separação do card).
+    pub cupons: Vec<String>,
     pub recorrencia: bool,
     /// ISO 8601 UTC.
     pub dt_oferta: String,
@@ -39,7 +40,7 @@ pub struct OfertaCanal {
 
 /// Regras do §9 + URL de afiliado + `id_produto` (só vai ao canal o que tem página).
 pub fn para_canal(l: &LinhaCanal, m: &Mapeamento) -> Result<OfertaCanal, Rejeicao> {
-    let card = validar_card(&l.oferta, m)?;
+    let (card, cupons) = validar_card_e_cupons(&l.oferta, m)?;
     let id_produto = l
         .oferta
         .id_produto
@@ -67,7 +68,7 @@ pub fn para_canal(l: &LinhaCanal, m: &Mapeamento) -> Result<OfertaCanal, Rejeica
         preco_de: card.preco_de,
         preco_por: card.preco_por,
         desconto_pct: card.preco_de.map(|pd| desconto_pct(pd, card.preco_por)),
-        cupom: card.cupom,
+        cupons,
         recorrencia: l.recorrencia,
         dt_oferta: card.dt_oferta,
     })
