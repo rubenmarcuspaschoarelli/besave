@@ -89,7 +89,7 @@ etapa_importar() {
     "dumpfile=$BACKUP_OCI_URI/besave-$DIA-%L.dmp" \
     "parallel=1" \
     "transform=segment_attributes:n" \
-    "exclude=cluster,db_link" \
+    "exclude=cluster,db_link"     "exclude=user" \
     "directory=data_pump_dir" \
     "logfile=restore-$DIA.log" || return 1
   impdp parfile="$TMP/imp.par" > "$TMP/imp.out" 2>&1

@@ -129,7 +129,16 @@ echo "impdp $*" >> "$FAKE_REG/impdp.log"
 echo impdp >> "$FAKE_REG/ordem.log"
 cp "${1#parfile=}" "$FAKE_REG/impdp.par"
 falha impdp
+# Como o impdp real: o schema de destino já existe (BACKUP_PREPARA_RESTORE); sem `exclude=user` o USER é
+# recriado e o job termina com erro (ORA-31684/ORA-39111, "completed with 2 error(s)", código 5).
+if ! grep -q '^exclude=user$' "${1#parfile=}" || [ -n "${FAKE_IMPDP_ERROS:-}" ]; then
+  echo 'ORA-31684: Object type USER:"BESAVE_RESTORE" already exists'
+  echo 'ORA-39111: Dependent object type PASSWORD_HISTORY skipped, base object type USER:"BESAVE_RESTORE" already exists'
+  echo 'Job "BESAVE_BACKUP"."SYS_IMPORT_SCHEMA_01" completed with 2 error(s)'
+  exit 5
+fi
 echo "Import simulado"
+echo 'Job "BESAVE_BACKUP"."SYS_IMPORT_SCHEMA_01" successfully completed'
 IMPDP
 
   cat > "$T/fake/sqlplus" <<'SQLPLUS'
@@ -201,7 +210,7 @@ FLOCK
 
   : > "$T/contagem.txt"
   export FAKE_REG="$T/reg" FAKE_OCI="$T/oci" FAKE_S3="$T/s3" FAKE_CONTAGEM="$T/contagem.txt"
-  unset FAKE_FALHA FAKE_SEM_DUMP FAKE_FLOCK FAKE_CAT_CORTA FAKE_AWS_CONTAGEM
+  unset FAKE_FALHA FAKE_SEM_DUMP FAKE_FLOCK FAKE_CAT_CORTA FAKE_AWS_CONTAGEM FAKE_IMPDP_ERROS
 }
 
 # Ambiente do backup: tudo explícito, nada herdado do backup.env real.
@@ -209,7 +218,7 @@ ambiente() {
   ENV=(
     "PATH=$T/fake:$PATH" "HOME=$T"
     "FAKE_REG=$FAKE_REG" "FAKE_OCI=$FAKE_OCI" "FAKE_S3=$FAKE_S3" "FAKE_CONTAGEM=$FAKE_CONTAGEM"
-    "FAKE_FALHA=${FAKE_FALHA:-}" "FAKE_SEM_DUMP=${FAKE_SEM_DUMP:-}" "FAKE_PECAS=${FAKE_PECAS:-2}" "FAKE_FLOCK=${FAKE_FLOCK:-}" "FAKE_CAT_CORTA=${FAKE_CAT_CORTA:-}" "FAKE_AWS_CONTAGEM=${FAKE_AWS_CONTAGEM:-}"
+    "FAKE_FALHA=${FAKE_FALHA:-}" "FAKE_SEM_DUMP=${FAKE_SEM_DUMP:-}" "FAKE_PECAS=${FAKE_PECAS:-2}" "FAKE_FLOCK=${FAKE_FLOCK:-}" "FAKE_CAT_CORTA=${FAKE_CAT_CORTA:-}" "FAKE_IMPDP_ERROS=${FAKE_IMPDP_ERROS:-}" "FAKE_AWS_CONTAGEM=${FAKE_AWS_CONTAGEM:-}"
     "BESAVE_BACKUP_DIR=$T/srv" "BESAVE_BACKUP_ENV=$T/nao-existe.env" "BACKUP_TMP=$T/tmp"
     "BACKUP_DB_USER=BESAVE_BACKUP" "BACKUP_DB_PASS=s3nh4-secreta" "BACKUP_DB_DSN=bsvdb_high"
     "BACKUP_OCI_URI=https://ns.example/o" "BACKUP_OCI_BUCKET=bkp-oci" "BACKUP_OCI_CREDENCIAL=BACKUP_OCI_CRED"
@@ -697,6 +706,7 @@ dumpfile=https://ns.example/o/besave-20261015-%L.dmp
 parallel=1
 transform=segment_attributes:n
 exclude=cluster,db_link
+exclude=user
 directory=data_pump_dir
 logfile=restore-20261015.log" "$(reg impdp.par)"
 igual "impdp (comando inteiro)" "impdp parfile=<TMP>/imp.par" "$(reg impdp.log | norm)"
@@ -782,6 +792,21 @@ contagem|comparar contagens|prepara\nimpdp\ncontagem\nlimpa
 limpa:1|apagar BESAVE_RESTORE|prepara\nimpdp\ncontagem\nlimpa\nlimpa
 oci_list|escolher o último dump|
 CASOS
+
+caso="RST-07 import termina com erro (ORA-31684/39111): alerta e BESAVE_RESTORE é apagado mesmo assim"
+preparar
+dumps 20261015
+contagem_boa
+FAKE_IMPDP_ERROS=1
+rodar teste-restauracao.sh
+igual "código 1" 1 "$codigo"
+contem "etapa" "$(texto_alerta)" "falhou na etapa 'importar (Data Pump)'"
+igual "ordem: limpa depois do import que falhou" "prepara
+impdp
+limpa" "$(reg ordem.log)"
+contem "log do import visível" "$(cat "$T/out")" "completed with 2 error(s)"
+unset FAKE_IMPDP_ERROS
+rm -rf "$T"
 
 caso="RST-06 sem dump completo"
 preparar

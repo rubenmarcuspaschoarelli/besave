@@ -179,6 +179,7 @@ faltam: `INSERT INTO BESAVE.OFERTA SELECT * FROM BESAVE_RESTORE.OFERTA r WHERE N
    dumpfile=<BACKUP_OCI_URI>/besave-AAAAMMDD-%L.dmp
    transform=segment_attributes:n
    exclude=cluster,db_link
+   exclude=user
    directory=data_pump_dir
    logfile=restore-total.log
    ```
