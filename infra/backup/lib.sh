@@ -12,6 +12,17 @@ carregar_env() {
   [ -r "$arq" ] || return 0
   while IFS='=' read -r k v || [ -n "$k" ]; do
     case $k in '' | '#'*) continue ;; esac
+    [[ $k =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || {
+      echo "backup.env: nome de variável inválido '$k' (sem espaço antes do '=')" >&2
+      exit 2
+    }
+    # CR (arquivo salvo no Windows) ou espaço no fim virariam parte do valor (e quebrariam a conexão sem dizer por quê).
+    case $v in
+      *[[:space:]])
+        echo "backup.env: o valor de $k termina com espaço ou CR (arquivo com fim de linha do Windows? use dos2unix)" >&2
+        exit 2
+        ;;
+    esac
     [ -n "${!k+x}" ] || export "$k=$v"
   done < "$arq"
 }
@@ -23,6 +34,18 @@ exigir() {
     echo "variáveis ausentes no backup.env: ${faltam[*]}" >&2
     exit 2
   fi
+}
+
+# A senha vai para o parfile do Data Pump (`userid=usuario/senha@dsn`): `#` abre comentário (o resto some e a
+# conexão falha com ORA-12162), espaço e aspas quebram a linha, `@` e `/` são separadores. Recusa antes de tentar.
+exigir_senha_do_parfile() {
+  case ${BACKUP_DB_PASS:-} in
+    *[\#\"\'@/[:space:]]*)
+      echo "BACKUP_DB_PASS tem um caractere que o parfile do Data Pump não aceita (# espaço aspas @ /)." >&2
+      echo "Troque a senha do usuário de backup por uma só com letras, números, _ e -, e atualize o backup.env." >&2
+      exit 2
+      ;;
+  esac
 }
 
 # Telegram. O token vai por stdin do curl (-K -): não aparece em `ps`.

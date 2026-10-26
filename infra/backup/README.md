@@ -13,9 +13,19 @@ backup manual). Este diretório é a rede de segurança, e roda na **instância 
 Retenção: **7 dias na OCI** (script), **30 dias na AWS** (regra de ciclo de vida do bucket, `infra/backup.tf`).
 Nenhum script escreve em `BESAVE`; o teste de restauração escreve só em `BESAVE_RESTORE`.
 
-Cada dia gera `besave-AAAAMMDD-NNN.dmp` (+ pedaços `…dmp_aaaaaa`, o Data Pump divide em arquivos de até 5 GB),
+Cada dia gera `besave-AAAAMMDD-NNN.dmp` (o Data Pump divide em arquivos de até 5 GB),
 `besave-AAAAMMDD.log` (saída do `expdp`; **é o marcador de "export completo"**, sobe por último) e, no S3,
 `SHA256SUMS`. No S3 tudo fica em `db/AAAAMMDD/`.
+
+**Como o dump fica na OCI e no S3.** O `expdp` para o Object Storage deixa cada `besave-AAAAMMDD-NNN.dmp` com
+**0 byte**; o conteúdo está nos segmentos (`besave-AAAAMMDD-NNN.dmp_segments/aaaaaa…`, ou `…dmp_aaaaaa` nos exemplos
+da Oracle). A Oracle diz que baixar o `.dmp` de 0 byte pela CLI não traz o dump
+([docs](https://docs.oracle.com/en-us/iaas/autonomous-database-serverless/doc/export-data-download-run-pump.html)),
+Para o S3, `backup-diario.sh` baixa
+tudo, **remonta o `.dmp` concatenando os segmentos em ordem alfabética**, confere que o tamanho é a soma dos segmentos
+e sobe só o `.dmp` inteiro (com o `SHA256SUMS` dele); `BYTES` no histórico é o tamanho real. A Oracle não documenta a
+ordem dos segmentos (assumi a alfabética, a dos objetos grandes da API Swift); por isso **a primeira remontagem
+real precisa ser provada com um `impdp` do arquivo remontado** (seção 6, "Dump só na AWS").
 
 Testes: `bash infra/backup/teste_backup.sh` (comandos falsos, sem rede) e `shellcheck -x -P SCRIPTDIR infra/backup/*.sh`.
 Ambos rodam no CI (job `infra`).
@@ -99,6 +109,11 @@ sudo systemctl enable --now besave-backup-diario.timer besave-backup-teste.timer
 (`teste_backup.sh` não precisa ir para a máquina.) O `.env` guarda a senha do `BESAVE_BACKUP`, o token do bot e o
 perfil AWS; `chmod 600`, dono `besave`, nunca no git.
 
+Formato do `backup.env`: `CHAVE=valor`, sem aspas, **LF** (não salve do Windows: o CR no fim vira parte do valor) e
+sem espaço no fim da linha; o script recusa o arquivo e diz qual chave. `BACKUP_DB_PASS` não pode ter `#`, espaço,
+aspas, `@` nem `/` (o `userid=` do parfile quebra: `#` vira comentário e o `expdp` falha com `ORA-12162`); o script
+recusa antes de chamar qualquer coisa. Use só letras, números, `_` e `-`.
+
 Execução manual (a primeira, em horário calmo):
 
 ```sh
@@ -122,8 +137,10 @@ errado por um dia, rode, confirme o alerta no Telegram e o código ≠ 0, e volt
    `besave-AAAAMMDD.log`.
 3. Restaure (a, b ou c abaixo), **confira** e só então religue timers e robôs (na ordem: ciclo, envio, robôs).
 
-Dump só na AWS: baixe `db/AAAAMMDD/` com `aws s3 cp --recursive`, confira com `sha256sum -c SHA256SUMS` e suba os
-arquivos para o bucket da OCI com `oci os object put` (mesmos nomes), porque o `impdp` lê de lá.
+Dump só na AWS: baixe `db/AAAAMMDD/` com `aws s3 cp --recursive` e confira com `sha256sum -c SHA256SUMS`. Os `.dmp`
+do S3 já estão inteiros (não há segmentos). Suba cada `.dmp` e o `.log` para o bucket da OCI com `oci os object put`
+(mesmos nomes), porque o `impdp` lê de lá; objeto inteiro é leitura
+normal para o `impdp`.
 
 Os exemplos usam um *parfile* com a senha (`chmod 600`, apague depois); `AAAAMMDD` é o dia do dump.
 
@@ -162,6 +179,7 @@ faltam: `INSERT INTO BESAVE.OFERTA SELECT * FROM BESAVE_RESTORE.OFERTA r WHERE N
    dumpfile=<BACKUP_OCI_URI>/besave-AAAAMMDD-%L.dmp
    transform=segment_attributes:n
    exclude=cluster,db_link
+   exclude=user
    directory=data_pump_dir
    logfile=restore-total.log
    ```

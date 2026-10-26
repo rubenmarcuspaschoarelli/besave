@@ -11,6 +11,7 @@ MODO=diario
 carregar_env
 exigir BACKUP_DB_USER BACKUP_DB_PASS BACKUP_DB_DSN BACKUP_OCI_URI BACKUP_OCI_BUCKET \
   BACKUP_OCI_CREDENCIAL BACKUP_S3_BUCKET TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
+exigir_senha_do_parfile
 
 DIA=${BACKUP_DIA:-$(date +%Y%m%d)}
 [[ $DIA =~ ^[0-9]{8}$ ]] || { echo "BACKUP_DIA inválido: $DIA" >&2; exit 2; }
@@ -48,6 +49,8 @@ oci_nomes() {
 oci_apagar_prefixo() {
   local nome nomes
   nomes=$(oci_nomes "$1") || return 1
+  # Ordem reversa: segmentos (`<dmp>_...`) antes do `.dmp` de 0 byte que os referencia.
+  nomes=$(LC_ALL=C sort -r <<< "$nomes")
   while IFS= read -r nome; do
     [ -n "$nome" ] || continue
     "${OCI[@]}" os object delete --bucket-name "$BACKUP_OCI_BUCKET" --object-name "$nome" --force || return 1
@@ -84,11 +87,56 @@ etapa_export() {
     --name "$MARCADOR" --force
 }
 
+# Quantos objetos do S3 começam com o prefixo. A CLI v2 devolve "None" (não 0) em `KeyCount` quando não há
+# objeto; `length(Contents || [])` dá 0. Resposta que não é número é erro, nunca "já existe".
+s3_contar() {
+  local n
+  # shellcheck disable=SC2016
+  n=$(aws s3api list-objects-v2 --bucket "$BACKUP_S3_BUCKET" --prefix "$1" \
+    --query 'length(Contents || `[]`)' --output text) || return 1
+  [[ $n =~ ^[0-9]+$ ]] || { echo "resposta inesperada do S3 ao contar '$1': '$n'" >&2; return 1; }
+  echo "$n"
+}
+
+# O Data Pump grava no Object Storage o `.dmp` com 0 byte e o conteúdo em segmentos (`<dmp>_aaaaaa`,
+# `<dmp>_segments/aaaaaa…`); baixar o `.dmp` pela CLI não traz o dump (docs da Oracle). Remonta cada `.dmp`
+# concatenando seus segmentos em ordem alfabética (a Oracle não documenta a ordem; ver README), confere
+# tamanho = soma dos segmentos e apaga os segmentos, para subir ao S3 só o `.dmp` inteiro.
+remontar_dumps() { # pasta
+  local pasta=$1 dmp seg soma tam todos
+  todos=$(cd "$pasta" && find . -type f | sed 's#^\./##' | LC_ALL=C sort) || return 1
+  while IFS= read -r dmp; do
+    [[ $dmp =~ ^$PREFIXO-[0-9]+\.dmp$ ]] || continue
+    local segs=()
+    while IFS= read -r seg; do
+      case $seg in "$dmp"_*) segs+=("$seg") ;; esac
+    done <<< "$todos"
+    tam=$(stat -c %s "$pasta/$dmp")
+    if [ "${#segs[@]}" -eq 0 ]; then
+      [ "$tam" -gt 0 ] || { echo "$dmp tem 0 byte e nenhum segmento no bucket" >&2; return 1; }
+      continue
+    fi
+    [ "$tam" -eq 0 ] || { echo "$dmp tem $tam bytes e também segmentos; layout inesperado" >&2; return 1; }
+    soma=0
+    for seg in "${segs[@]}"; do soma=$((soma + $(stat -c %s "$pasta/$seg"))); done
+    [ "$soma" -gt 0 ] || { echo "os segmentos de $dmp somam 0 byte" >&2; return 1; }
+    : > "$pasta/$dmp.novo"
+    for seg in "${segs[@]}"; do
+      cat "$pasta/$seg" >> "$pasta/$dmp.novo" || return 1
+      rm -f "$pasta/$seg"
+    done
+    tam=$(stat -c %s "$pasta/$dmp.novo")
+    [ "$tam" -eq "$soma" ] || { echo "$dmp remontado tem $tam bytes; os segmentos somavam $soma" >&2; return 1; }
+    mv "$pasta/$dmp.novo" "$pasta/$dmp" || return 1
+    log "$dmp remontado: ${#segs[@]} segmento(s), $soma bytes"
+  done <<< "$todos"
+  find "$pasta" -mindepth 1 -type d -empty -delete
+}
+
 etapa_copiar() {
   local ja
-  ja=$(aws s3api list-objects-v2 --bucket "$BACKUP_S3_BUCKET" --prefix "db/$DIA/$MARCADOR" \
-    --query 'KeyCount' --output text) || return 1
-  if [ "$ja" != 0 ]; then
+  ja=$(s3_contar "db/$DIA/$MARCADOR") || return 1
+  if [ "$ja" -gt 0 ]; then
     log "cópia de $DIA já existe no S3; pulando"
     return 0
   fi
@@ -102,8 +150,9 @@ etapa_copiar() {
     echo "baixados $baixados de $esperados objetos (esperado: dump + log)" >&2
     return 1
   fi
+  remontar_dumps "$TMP/dl" || return 1
   # Só vale export com dump de verdade (> 0 byte) e log do Data Pump terminando com sucesso.
-  if [ -z "$(find "$TMP/dl" -type f -name "$PREFIXO-[0-9]*.dmp*" -size +0c -print -quit)" ]; then
+  if [ -z "$(find "$TMP/dl" -maxdepth 1 -type f -name "$PREFIXO-[0-9]*.dmp" -size +0c -print -quit)" ]; then
     echo "nenhum besave-$DIA-NNN.dmp com tamanho maior que zero no export" >&2
     return 1
   fi
@@ -111,6 +160,7 @@ etapa_copiar() {
     echo "o log do Data Pump não termina com sucesso" >&2
     return 1
   fi
+  # Soma do .dmp inteiro (já remontado); a restauração a partir do S3 confere com ela.
   (cd "$TMP/dl" && sha256sum -- besave-* > "$TMP/SHA256SUMS") || return 1
   mv "$TMP/SHA256SUMS" "$TMP/dl/SHA256SUMS"
   BYTES=$(find "$TMP/dl" -type f -exec stat -c %s {} + | awk '{s+=$1} END {print s+0}')
@@ -123,6 +173,7 @@ etapa_retencao() {
   local corte nome d nomes
   corte=$(date -d "$DIA -$((RETENCAO_DIAS - 1)) days" +%Y%m%d) || return 1
   nomes=$(oci_nomes "besave-") || return 1
+  nomes=$(LC_ALL=C sort -r <<< "$nomes")
   while IFS= read -r nome; do
     [[ $nome =~ ^besave-([0-9]{8})[-.] ]] || continue
     d=${BASH_REMATCH[1]}

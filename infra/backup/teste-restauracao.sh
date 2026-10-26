@@ -11,6 +11,7 @@ MODO=teste
 carregar_env
 exigir BACKUP_DB_USER BACKUP_DB_PASS BACKUP_DB_DSN BACKUP_OCI_URI BACKUP_OCI_BUCKET \
   BACKUP_OCI_CREDENCIAL TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
+exigir_senha_do_parfile
 
 TOLERANCIA_PCT=${BACKUP_TOLERANCIA_PCT:-5}
 TOLERANCIA_MIN=${BACKUP_TOLERANCIA_MIN:-20}
@@ -88,7 +89,7 @@ etapa_importar() {
     "dumpfile=$BACKUP_OCI_URI/besave-$DIA-%L.dmp" \
     "parallel=1" \
     "transform=segment_attributes:n" \
-    "exclude=cluster,db_link" \
+    "exclude=cluster,db_link"     "exclude=user" \
     "directory=data_pump_dir" \
     "logfile=restore-$DIA.log" || return 1
   impdp parfile="$TMP/imp.par" > "$TMP/imp.out" 2>&1
