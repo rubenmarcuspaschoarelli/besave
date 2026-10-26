@@ -31,14 +31,16 @@ trap 'rm -rf "$TMP"' EXIT
 # Quantos objetos do bucket começam com o prefixo (falha se a OCI falhar).
 oci_contar() {
   local n
+  # Bucket sem objetos: a OCI CLI não devolve `data`; o `|| []` evita o erro do JMESPath (crases = literal JMESPath).
+  # shellcheck disable=SC2016
   n=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix "$1" --all \
-    --query 'length(data)' --raw-output) || return 1
+    --query 'length(data || `[]`)' --raw-output) || return 1
   if [[ $n =~ ^[0-9]+$ ]]; then echo "$n"; else echo 0; fi
 }
 
 oci_nomes() {
   local json
-  json=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix "$1" --all     --query 'data[].name' --output json) || return 1
+  json=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix "$1" --all --query 'data[].name' --output json) || return 1
   # Sem objetos não é erro: grep sai com 1 e o resultado é vazio.
   grep -o '"besave-[^"]*"' <<< "$json" | tr -d '"' || true
 }

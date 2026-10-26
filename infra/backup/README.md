@@ -58,9 +58,13 @@ Só ferramentas oficiais; nada compilado:
 ```sh
 cd infra && terraform apply        # cria besave-backup (privado, versionado, criptografado, 30 dias) e o usuário besave-backup
 ```
-No console IAM: **gere a chave de acesso** do usuário `besave-backup` (o Terraform não cria chave) e, na inst2,
+O **usuário IAM `besave-backup` é criado pelo Terraform** (não crie à mão). Só **depois do `apply`**, no console IAM,
+**gere a chave de acesso** desse usuário (o Terraform não cria chave) e, na inst2,
 `sudo -iu besave aws configure --profile besave-backup`. A policy só deixa gravar/ler/listar em `db/` e **nega apagar**
 (inclusive versão e bucket); a expiração de 30 dias é do próprio S3.
+
+Teste de acesso: `aws s3 ls s3://besave-backup/db/ --profile besave-backup`. Listar a **raiz**
+(`aws s3 ls s3://besave-backup/`) é **negado de propósito** (o usuário só enxerga `db/`); `AccessDenied` ali é o esperado.
 
 ## 4. Banco: usuário de backup (feito pelo dono, como ADMIN)
 

@@ -68,7 +68,13 @@ casa() { find "$FAKE_OCI" -maxdepth 1 -type f -name "$prefixo*" -printf '%f\n' |
 case $op in
   list)
     falha oci_list
-    if [ "$query" = "length(data)" ]; then casa | grep -c . || true
+    # Como a OCI CLI real: sem objetos não há `data`; length(data) puro dá erro, com `|| []` dá 0 e a lista sai vazia.
+    vazio=; [ -n "$(casa)" ] || vazio=1
+    if [ "$query" = "length(data)" ]; then
+      [ -z "$vazio" ] || { echo "JMESPathTypeError: In function length(), invalid type for value: None" >&2; exit 1; }
+      casa | grep -c . || true
+    elif [[ $query == 'length(data || '* ]]; then casa | grep -c . || true
+    elif [ -n "$vazio" ]; then :
     else
       echo '['
       casa | sed 's/.*/  "&",/'
@@ -227,12 +233,12 @@ directory=data_pump_dir
 logfile=besave-$DIA.log" "$(reg expdp.par)"
 # NTFS (Git Bash no Windows) não guarda modo unix; no Linux, que é onde roda, vale.
 case $(uname -s) in MINGW* | MSYS*) ;; *) igual "parfile só do dono" 600 "$(reg expdp.par.modo)" ;; esac
-igual "chamadas à OCI (inteiras)" "--auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA.log --all --query length(data) --raw-output
+igual "chamadas à OCI (inteiras)" "--auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA.log --all --query length(data || \`[]\`) --raw-output
 --auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA- --all --query data[].name --output json
---auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA- --all --query length(data) --raw-output
+--auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA- --all --query length(data || \`[]\`) --raw-output
 --auth instance_principal os object put --bucket-name bkp-oci --file <TMP>/besave-$DIA.log --name besave-$DIA.log --force
 --auth instance_principal os object bulk-download --bucket-name bkp-oci --prefix besave-$DIA --download-dir <TMP>/dl --overwrite
---auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA --all --query length(data) --raw-output
+--auth instance_principal os object list --bucket-name bkp-oci --prefix besave-$DIA --all --query length(data || \`[]\`) --raw-output
 --auth instance_principal os object list --bucket-name bkp-oci --prefix besave- --all --query data[].name --output json" "$(reg oci.log | norm)"
 igual "chamadas à AWS (inteiras)" "s3api list-objects-v2 --bucket bkp-s3 --prefix db/$DIA/besave-$DIA.log --query KeyCount --output text
 s3 cp <TMP>/dl s3://bkp-s3/db/$DIA/ --recursive --exclude besave-$DIA.log --only-show-errors
