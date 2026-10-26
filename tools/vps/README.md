@@ -151,6 +151,31 @@ ao ritmo normal. Lojas: a fila acumula e é processada na rodada. WhatsApp: ao a
 pelo marcador (catch-up), então nada se perde; o contador é salvo no `finally` como sempre. Mudou o bloco:
 reinicie o robô (a janela é lida no arranque). No log: `Janela noturna ... uma rodada a cada 120 min`.
 
+## Aviso cobrindo a tela do WhatsApp (BSV-51)
+
+Um aviso do WhatsApp Web (ex.: "Confira suas ligações recentes…", em `#wa-popovers-bucket`) ou um diálogo
+pode ficar por cima da lista e interceptar o clique no grupo. O robô do WhatsApp resolve sozinho, nesta ordem:
+
+1. **Escape**, e clica de novo. Cada clique tem 5 s de limite (não o padrão do Playwright).
+2. Se ainda estiver coberto, clica num botão de **lista fechada** dentro de `#wa-popovers-bucket` ou
+   `[role="dialog"]`: `Fechar`, `OK`, `Agora não`, `Close`, `Not now`. Nada que mude conta, grupo ou mensagem.
+3. Se nada resolver, a volta falha como erro tratado (o rodízio segue). Depois de `destravar.recarregar_voltas`
+   voltas seguidas sem abrir nenhum grupo (padrão 8, ~10 min; repete a cada 8) o robô **recarrega o WhatsApp
+   Web** e roda o resgate (catch-up pelo marcador de cada grupo): nada se perde, contador e marcadores não andam.
+
+**No log** (`log/run_captura_DD_MM.log`): `[destravar] Clique interceptado…`, `Escape destravou o clique` ou
+`Fechei 'agora nao' do aviso: '<texto resumido>'`, `Recarregando o WhatsApp Web…`, e `Rodizio destravado apos N
+volta(s) cega(s)`.
+
+**No Telegram** (bloco `alerta` do `config.json`, fora do git; sem `telegram_token`/`telegram_chat_id` só vai
+para o log): se, **fora da janela noturna**, nenhum grupo abrir por `alerta.sem_abrir_minutos` (padrão 45), chega
+"Robô do WhatsApp parado…", com lembrete a cada 2 h, e uma mensagem "voltou" quando destravar. Dentro da janela
+noturna o relógio do aviso fica zerado.
+
+**Ainda é preciso entrar na tela** (VNC `:2`) quando chegar o aviso de "parado": é um diálogo que o robô não
+conhece (não está na lista), um pedido de login/QR ou o navegador travado. Feche à mão e confira no log que a
+linha `Rodizio destravado` apareceu. Chaves novas (ver `conf/config.example.json`): `alerta`, `destravar`.
+
 ## Voltar para o PC
 
 1. Parar na VPS (acima).
