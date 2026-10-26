@@ -863,19 +863,22 @@ rm -rf "$T"
 # ---------- CWD: o `find -delete` do .dmp remontado falhava quando o diretório de onde o sudo foi chamado
 # (ex.: /home/ubuntu) não era legível pelo usuário besave. Os scripts começam com `cd /`.
 # chmod 000 não vale no Windows (Git Bash) nem como root: lá o caso é pulado.
-semleitura() { # script [preparo]
-  mkdir -p "$T/semleitura"
-  chmod 000 "$T/semleitura"
+# O diretório atual fica DENTRO de uma pasta sem permissão nenhuma (nem o pai dá acesso), o pior caso.
+semleitura() { # script
+  mkdir -p "$T/semleitura/dentro"
+  chmod 000 "$T/semleitura/dentro" "$T/semleitura"
   if [ -r "$T/semleitura" ]; then
-    chmod 755 "$T/semleitura"
+    chmod 755 "$T/semleitura" "$T/semleitura/dentro"
     echo "(pulado: $caso — este sistema não impede a leitura de um diretório com chmod 000)"
     return 1
   fi
   local origem=$PWD
-  cd "$T/semleitura" || { chmod 755 "$T/semleitura"; return 1; }
+  chmod 755 "$T/semleitura"
+  cd "$T/semleitura/dentro" || { chmod 755 "$T/semleitura/dentro"; return 1; }
+  chmod 000 "$T/semleitura" "$T/semleitura/dentro"
   rodar "$1"
   cd "$origem" || exit 1
-  chmod 755 "$T/semleitura"
+  chmod 755 "$T/semleitura" "$T/semleitura/dentro"
 }
 
 caso="CWD-01 backup-diario.sh chamado de diretório sem leitura"
