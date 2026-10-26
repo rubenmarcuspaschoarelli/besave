@@ -5,6 +5,9 @@
 set -uo pipefail
 
 AQUI=$(cd "$(dirname "$0")" && pwd)
+# O sudo herda o diretório de onde foi chamado (ex.: /home/ubuntu), que o usuário besave pode não ler; `find -delete`
+# e outros comandos falham ao voltar a ele ("Failed to restore initial working directory"). Os caminhos são absolutos.
+cd / || exit 2
 # shellcheck source=lib.sh
 . "$AQUI/lib.sh"
 MODO=teste
@@ -13,6 +16,10 @@ exigir BACKUP_DB_USER BACKUP_DB_PASS BACKUP_DB_DSN BACKUP_OCI_URI BACKUP_OCI_BUC
   BACKUP_OCI_CREDENCIAL TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID
 exigir_senha_do_parfile
 
+# Prefixo dos dumps na OCI (padrão besave). Com outro valor (ex.: besave-aws) importa um dump de outro nome, para
+# provar a cópia que veio da AWS (README, seção 6); nesse caso não grava o registro do teste mensal.
+PREFIXO_DUMP=${BACKUP_DUMP_PREFIXO:-besave}
+[[ $PREFIXO_DUMP =~ ^[A-Za-z0-9_-]+$ ]] || { echo "BACKUP_DUMP_PREFIXO inválido (só letras, números, _ e -): $PREFIXO_DUMP" >&2; exit 2; }
 TOLERANCIA_PCT=${BACKUP_TOLERANCIA_PCT:-5}
 TOLERANCIA_MIN=${BACKUP_TOLERANCIA_MIN:-20}
 OCI=(oci --auth instance_principal)
@@ -68,9 +75,9 @@ SQL
 
 etapa_escolher() {
   local nomes
-  nomes=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix besave- --all \
-    --query 'data[].name' --output json | grep -o '"besave-[0-9]\{8\}\.log"') || return 1
-  DIA=$(printf '%s\n' "$nomes" | tr -d '"' | sed 's/^besave-//; s/\.log$//' | sort | tail -n 1)
+  nomes=$("${OCI[@]}" os object list --bucket-name "$BACKUP_OCI_BUCKET" --prefix "$PREFIXO_DUMP-" --all \
+    --query 'data[].name' --output json | grep -o "\"$PREFIXO_DUMP-[0-9]\{8\}\.log\"") || return 1
+  DIA=$(printf '%s\n' "$nomes" | tr -d '"' | sed "s/^$PREFIXO_DUMP-//; s/\.log\$//" | sort | tail -n 1)
   [[ ${DIA:-} =~ ^[0-9]{8}$ ]] || { echo "nenhum export completo no bucket da OCI" >&2; return 1; }
   log "restaurando o dump de $DIA"
 }
@@ -86,7 +93,7 @@ etapa_importar() {
     "schemas=BESAVE" \
     "remap_schema=BESAVE:BESAVE_RESTORE" \
     "credential=$BACKUP_OCI_CREDENCIAL" \
-    "dumpfile=$BACKUP_OCI_URI/besave-$DIA-%L.dmp" \
+    "dumpfile=$BACKUP_OCI_URI/$PREFIXO_DUMP-$DIA-%L.dmp" \
     "parallel=1" \
     "transform=segment_attributes:n" \
     "exclude=cluster,db_link"     "exclude=user" \
@@ -130,6 +137,10 @@ etapa_importar || falhar "$MODO" "importar (Data Pump)"
 etapa_comparar || falhar "$MODO" "comparar contagens"
 etapa_apagar || falhar "$MODO" "apagar BESAVE_RESTORE"
 
-printf '%s ok %s\n' "$(date +%Y%m%d)" "$DIA" > "$ESTADO/ultimo-teste.txt"
+if [ "$PREFIXO_DUMP" = besave ]; then
+  printf '%s ok %s\n' "$(date +%Y%m%d)" "$DIA" > "$ESTADO/ultimo-teste.txt"
+else
+  DIA="$PREFIXO_DUMP-$DIA" # prova manual: o aviso diz qual dump foi importado
+fi
 alertar "Teste de restauração ok: dump de $DIA, $TABELAS tabelas conferidas em $((SECONDS - INICIO)) s." || true
 log "teste de restauração ok ($DIA, $TABELAS tabelas)"

@@ -5,6 +5,9 @@
 set -uo pipefail
 
 AQUI=$(cd "$(dirname "$0")" && pwd)
+# O sudo herda o diretório de onde foi chamado (ex.: /home/ubuntu), que o usuário besave pode não ler; `find -delete`
+# e outros comandos falham ao voltar a ele ("Failed to restore initial working directory"). Os caminhos são absolutos.
+cd / || exit 2
 # shellcheck source=lib.sh
 . "$AQUI/lib.sh"
 MODO=diario
