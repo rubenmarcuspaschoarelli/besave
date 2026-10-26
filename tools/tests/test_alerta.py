@@ -86,3 +86,27 @@ def test_limite_padrao_45_e_configuravel():
     v, env = vigia({"alerta": {"sem_abrir_minutos": 10, "telegram_token": "t", "telegram_chat_id": "c"}})
     andar(v, T0, 12)
     assert len(env) == 1
+
+
+def test_limite_exato_dispara_e_um_minuto_antes_nao():  # fronteira ALE-01
+    v, env = vigia()
+    v.registrar_volta(False, T0 + timedelta(minutes=44, seconds=59))
+    assert env == []
+    v.registrar_volta(False, T0 + timedelta(minutes=45))
+    assert len(env) == 1
+
+
+def test_lembrete_exato_em_2h_e_um_segundo_antes_nao():  # fronteira ALE-01
+    v, env = vigia()
+    v.registrar_volta(False, T0 + timedelta(minutes=45))
+    v.registrar_volta(False, T0 + timedelta(minutes=45, hours=2, seconds=-1))
+    assert len(env) == 1
+    v.registrar_volta(False, T0 + timedelta(minutes=45, hours=2))
+    assert len(env) == 2
+
+
+def test_voltou_informa_quanto_tempo_ficou_parado():  # ALE-03
+    v, env = vigia()
+    v.registrar_volta(False, T0 + timedelta(minutes=50))
+    v.registrar_volta(True, T0 + timedelta(minutes=90))
+    assert "~90 min" in env[1][2]

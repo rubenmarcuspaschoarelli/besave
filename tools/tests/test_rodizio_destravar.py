@@ -24,7 +24,7 @@ def zap(monkeypatch):
             sys.modules.pop(nome, None)
 
 
-def _rodar(zap, monkeypatch, abre, estado=None, voltas_max=12):
+def _rodar(zap, monkeypatch, abre, estado=None, voltas_max=12, janela=None, resgates=None):
     """`abre(volta)` -> True se o grupo abre naquela volta. Devolve (eventos, estado, telegram)."""
     eventos, enviados = [], []
     estado = estado if estado is not None else {"grupos": {"g1": {"ultima_data_hora": "22/10/2026 12:00",
@@ -63,6 +63,8 @@ def _rodar(zap, monkeypatch, abre, estado=None, voltas_max=12):
 
     def recuperar(page, nomes, csv, numero, est, vistos, db, parado_s):
         eventos.append("resgate")
+        if resgates is not None:
+            resgates.append(parado_s)
         return numero, False
 
     class Rel(datetime):
@@ -98,7 +100,7 @@ def _rodar(zap, monkeypatch, abre, estado=None, voltas_max=12):
     monkeypatch.setattr(zap, "_ids_baloes", lambda page: [])
     monkeypatch.setattr(zap, "_ler_novas_do_grupo", lambda page, nome, vistos, numero, *a, **k: (numero, 0))
     monkeypatch.setattr(zap, "_recuperar_lacuna", recuperar)
-    monkeypatch.setattr(zap.janela_mod, "carregar", lambda caminho: None)
+    monkeypatch.setattr(zap.janela_mod, "carregar", lambda caminho: janela)
     zap.captura_msg_whatsapp(["g1"], seg_grupo=0)
     return eventos, estado, enviados
 
@@ -155,3 +157,20 @@ def test_config_example_documenta_as_chaves_novas():  # spec saida 5
     sem_obs = {k: {c: v for c, v in blo.items() if c != "_obs"} for k, blo in cfg.items() if k in ("alerta", "destravar")}
     assert sem_obs["alerta"] == {"sem_abrir_minutos": 45, "telegram_token": "", "telegram_chat_id": ""}
     assert sem_obs["destravar"] == {"recarregar_voltas": 8}
+
+
+def test_janela_noturna_chega_ao_vigia_do_monitor(zap, monkeypatch):  # ALE-02 no rodizio
+    from wa import janela as jm
+    est = {"grupos": {}, "controle": {"ultimo_id_processado": 0}, "alerta": CFG_ALERTA}
+    janela = jm.ler_janela({"janela_noturna": {"inicio": "12:00", "fim": "23:00", "intervalo_minutos": 1}})
+    monkeypatch.setattr(jm, "espera_s", lambda *a: 0)            # sem pausa longa no teste
+    _, _, enviados = _rodar(zap, monkeypatch, lambda v: v == 1, estado=est, voltas_max=18, janela=janela)
+    assert enviados == []                                         # 13:00-14:30 esta dentro da janela
+
+
+def test_reload_com_n_menor_que_5_marca_resgate_com_tempo_de_bloqueio(zap, monkeypatch):  # REC-01
+    est = {"grupos": {}, "controle": {"ultimo_id_processado": 0}, "destravar": {"recarregar_voltas": 3}}
+    resgates = []
+    eventos, _, _ = _rodar(zap, monkeypatch, lambda v: v == 1, estado=est, voltas_max=4, resgates=resgates)
+    assert eventos.count("reload") == 1 and eventos.count("resgate") >= 1
+    assert resgates and resgates[0] > 0

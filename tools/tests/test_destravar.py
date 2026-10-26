@@ -202,9 +202,48 @@ def test_abrir_grupo_apos_escape_com_busca_limpa_nao_clica_conversa_errada(monke
 
     def esc(t):
         antigo(t)
-        p.texto_item = "Familia 12:00"      # Escape limpou a busca
+        if t == "Escape":
+            p.texto_item = "Familia 12:00"      # so o Escape limpa a busca
 
     p.keyboard.press = esc
     with pytest.raises(browser.ConversaErrada):
         browser.abrir_grupo(p, "Promos da Ly ✨")
     assert "clicou-item" not in p.eventos
+
+
+def test_recarregar_voltas_config_invalida_cai_no_padrao():
+    for cfg in (None, {}, {"destravar": 3}, {"destravar": {"recarregar_voltas": 0}},
+                {"destravar": {"recarregar_voltas": -2}}, {"destravar": {"recarregar_voltas": "x"}}):
+        assert destravar.recarregar_voltas(cfg) == destravar.RECARREGAR_VOLTAS_PADRAO == 8
+    assert destravar.recarregar_voltas({"destravar": {"recarregar_voltas": 3}}) == 3
+
+
+def test_erro_nao_interceptado_no_segundo_clique_nao_vira_bloqueio():
+    p = Pagina(botao={"botao": "ok", "aviso": ""})
+    n = {"c": 0}
+
+    class Alvo2:
+        def click(self, timeout=None):
+            n["c"] += 1
+            raise RuntimeError(BLOQUEIO if n["c"] == 1 else "Element is not attached to the DOM")
+
+    with pytest.raises(RuntimeError, match="not attached"):
+        destravar.clicar(p, Alvo2())
+    assert n["c"] == 2 and p.args == []
+
+
+def test_abrir_grupo_clique_da_busca_bloqueado_tambem_destrava(monkeypatch):  # DES-01 (busca)
+    monkeypatch.setattr(browser, "_texto", lambda page, sel: page.texto_item if "list" in sel else page.cabecalho)
+    p = PaginaGrupo(bloqueios=False)
+
+    class Busca(Alvo):
+        def click(self, timeout=None):
+            self.tempos.append(timeout)
+            if "tecla:Escape" not in self.pagina.eventos:
+                raise RuntimeError(BLOQUEIO)
+
+    b = Busca(p, None)
+    p.query_selector = lambda sel: b
+    browser.abrir_grupo(p, "Promos da Ly ✨")
+    assert p.eventos.index("tecla:Escape") < p.eventos.index("digitou")
+    assert b.tempos == [destravar.CLIQUE_TIMEOUT_MS] * 2
