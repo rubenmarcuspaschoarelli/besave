@@ -247,3 +247,7 @@ def test_abrir_grupo_clique_da_busca_bloqueado_tambem_destrava(monkeypatch):  # 
     browser.abrir_grupo(p, "Promos da Ly ✨")
     assert p.eventos.index("tecla:Escape") < p.eventos.index("digitou")
     assert b.tempos == [destravar.CLIQUE_TIMEOUT_MS] * 2
+
+
+def test_recarregar_voltas_1_vale_1():
+    assert destravar.recarregar_voltas({"destravar": {"recarregar_voltas": 1}}) == 1

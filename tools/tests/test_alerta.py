@@ -110,3 +110,9 @@ def test_voltou_informa_quanto_tempo_ficou_parado():  # ALE-03
     v.registrar_volta(False, T0 + timedelta(minutes=50))
     v.registrar_volta(True, T0 + timedelta(minutes=90))
     assert "~90 min" in env[1][2]
+
+
+def test_limite_zero_ou_negativo_cai_no_padrao():
+    for m in (0, -5, "x"):
+        v, _ = vigia({"alerta": {"sem_abrir_minutos": m}})
+        assert v.limite == timedelta(minutes=45)
