@@ -808,6 +808,49 @@ contem "log do import visível" "$(cat "$T/out")" "completed with 2 error(s)"
 unset FAKE_IMPDP_ERROS
 rm -rf "$T"
 
+# Prova da cópia vinda da AWS: o dump sobe para a OCI com outro prefixo e o teste importa esse.
+caso="RST-08 BACKUP_DUMP_PREFIXO importa o dump de outro nome"
+preparar
+dumps 20261001
+echo x > "$FAKE_OCI/besave-aws-20261015-100.dmp"
+echo x > "$FAKE_OCI/besave-aws-20261015.log"
+echo x > "$FAKE_OCI/besave-aws-20261020-100.dmp" # sem log: não vale
+contagem_boa
+EXTRA=("BACKUP_DUMP_PREFIXO=besave-aws")
+rodar teste-restauracao.sh
+igual "código 0" 0 "$codigo"
+igual "lista só o prefixo pedido" "--auth instance_principal os object list --bucket-name bkp-oci --prefix besave-aws- --all --query data[].name --output json" "$(reg oci.log)"
+contem "dumpfile do outro nome" "$(reg impdp.par)" "dumpfile=https://ns.example/o/besave-aws-20261015-%L.dmp"
+contem "logfile" "$(reg impdp.par)" "logfile=restore-20261015.log"
+contem "aviso diz o prefixo" "$(texto_alerta)" "dump de besave-aws-20261015"
+[ ! -e "$T/srv/estado/ultimo-teste.txt" ] || falhou "prova manual gravou o registro do teste mensal"
+EXTRA=()
+rm -rf "$T"
+
+caso="RST-08b sem BACKUP_DUMP_PREFIXO ignora os dumps de outro nome"
+preparar
+dumps 20261015
+echo x > "$FAKE_OCI/besave-aws-20261020-100.dmp"
+echo x > "$FAKE_OCI/besave-aws-20261020.log"
+contagem_boa
+rodar teste-restauracao.sh
+igual "código 0" 0 "$codigo"
+contem "dump do dia, não o aws" "$(reg impdp.par)" "dumpfile=https://ns.example/o/besave-20261015-%L.dmp"
+rm -rf "$T"
+
+for ruim in 'a b' 'x/y' 'a#b' ''; do
+  [ -n "$ruim" ] || continue
+  caso="RST-08c prefixo inválido '$ruim'"
+  preparar
+  EXTRA=("BACKUP_DUMP_PREFIXO=$ruim")
+  rodar teste-restauracao.sh
+  igual "código 2" 2 "$codigo"
+  contem "diz qual" "$(cat "$T/err")" "BACKUP_DUMP_PREFIXO"
+  igual "nada chamado" "" "$(reg oci.log)"
+  EXTRA=()
+  rm -rf "$T"
+done
+
 caso="RST-06 sem dump completo"
 preparar
 echo x > "$FAKE_OCI/besave-20261015-100.dmp"
@@ -815,6 +858,57 @@ rodar teste-restauracao.sh
 igual "código 1" 1 "$codigo"
 contem "etapa" "$(texto_alerta)" "escolher o último dump"
 igual "nada do banco foi tocado" "" "$(reg ordem.log)"
+rm -rf "$T"
+
+# ---------- CWD: o `find -delete` do .dmp remontado falhava quando o diretório de onde o sudo foi chamado
+# (ex.: /home/ubuntu) não era legível pelo usuário besave. Os scripts começam com `cd /`.
+# chmod 000 não vale no Windows (Git Bash) nem como root: lá o caso é pulado.
+# O diretório atual fica DENTRO de uma pasta sem permissão nenhuma (nem o pai dá acesso), o pior caso.
+semleitura() { # script
+  mkdir -p "$T/semleitura/dentro"
+  chmod 000 "$T/semleitura/dentro" "$T/semleitura"
+  if [ -r "$T/semleitura" ]; then
+    chmod 755 "$T/semleitura" "$T/semleitura/dentro"
+    echo "(pulado: $caso — este sistema não impede a leitura de um diretório com chmod 000)"
+    return 1
+  fi
+  local origem=$PWD
+  chmod 755 "$T/semleitura"
+  cd "$T/semleitura/dentro" || { chmod 755 "$T/semleitura/dentro"; return 1; }
+  chmod 000 "$T/semleitura" "$T/semleitura/dentro"
+  rodar "$1"
+  cd "$origem" || exit 1
+  chmod 755 "$T/semleitura" "$T/semleitura/dentro"
+}
+
+caso="CWD-01 backup-diario.sh chamado de diretório sem leitura"
+preparar
+if semleitura backup-diario.sh; then
+  igual "código 0" 0 "$codigo"
+  igual "S3 com o .dmp remontado" "db/$DIA/SHA256SUMS
+db/$DIA/besave-$DIA-100.dmp
+db/$DIA/besave-$DIA.log" "$(cd "$FAKE_S3" && find . -type f | sed 's#^\./##' | LC_ALL=C sort)"
+fi
+rm -rf "$T"
+
+caso="CWD-02 teste-restauracao.sh chamado de diretório sem leitura"
+preparar
+dumps 20261015
+contagem_boa
+if semleitura teste-restauracao.sh; then
+  igual "código 0" 0 "$codigo"
+  nao_contem "sem erro de diretório" "$(cat "$T/out" "$T/err")" "working directory"
+fi
+rm -rf "$T"
+
+caso="CWD-03 resumo-semanal.sh chamado de diretório sem leitura"
+preparar
+printf '%s ok 1048576 10
+' "$DIA" > "$T/srv/estado/historico.log"
+if semleitura resumo-semanal.sh; then
+  igual "código 0" 0 "$codigo"
+  contem "resumo enviado" "$(texto_alerta)" "1/7 ok"
+fi
 rm -rf "$T"
 
 echo "$((total - falhas)) de $total verificações ok"

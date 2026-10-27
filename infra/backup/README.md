@@ -137,12 +137,30 @@ errado por um dia, rode, confirme o alerta no Telegram e o código ≠ 0, e volt
    `besave-AAAAMMDD.log`.
 3. Restaure (a, b ou c abaixo), **confira** e só então religue timers e robôs (na ordem: ciclo, envio, robôs).
 
-Dump só na AWS: baixe `db/AAAAMMDD/` com `aws s3 cp --recursive` e confira com `sha256sum -c SHA256SUMS`. Os `.dmp`
-do S3 já estão inteiros (não há segmentos). Suba cada `.dmp` e o `.log` para o bucket da OCI com `oci os object put`
-(mesmos nomes), porque o `impdp` lê de lá; objeto inteiro é leitura
-normal para o `impdp`.
+Dump só na AWS (OCI perdida ou vencida): ver "Restaurar a partir da AWS" abaixo.
 
 Os exemplos usam um *parfile* com a senha (`chmod 600`, apague depois); `AAAAMMDD` é o dia do dump.
+
+### Restaurar a partir da AWS (e provar a cópia do S3)
+
+Os `.dmp` do S3 já estão inteiros (sem segmentos). O `impdp` lê da OCI, então o dump volta para lá com **outro
+prefixo**, para não colidir com o `besave-AAAAMMDD-*` da OCI nem com a retenção do `backup-diario.sh`:
+
+```sh
+cd /srv/besave/backup/tmp && mkdir aws && cd aws             # pasta com espaço livre (o dump pode ter GBs)
+aws s3 cp s3://besave-backup/db/AAAAMMDD/ . --recursive --profile besave-backup
+sha256sum -c SHA256SUMS                                      # todos "OK"
+for f in besave-AAAAMMDD-*.dmp; do                           # primeiro os .dmp...
+  oci os object put --bucket-name besave-backup --file "$f" --name "besave-aws-${f#besave-}" --force --auth instance_principal
+done                                                         # ...o .log por último: é o marcador de "completo"
+oci os object put --bucket-name besave-backup --file besave-AAAAMMDD.log --name besave-aws-AAAAMMDD.log --force --auth instance_principal
+sudo -u besave BACKUP_DUMP_PREFIXO=besave-aws /srv/besave/backup/teste-restauracao.sh
+```
+O teste importa o dump `besave-aws-AAAAMMDD` em `BESAVE_RESTORE`, compara as contagens e apaga o schema, como no teste
+mensal; nesse modo **não** grava `estado/ultimo-teste.txt` (o aviso no Telegram diz `besave-aws-AAAAMMDD`). Sucesso
+prova que o `.dmp` remontado de `backup-diario.sh` (ordem dos segmentos) é um dump válido. Depois apague
+`besave-aws-*` do bucket (`oci os object delete --force`); a retenção não toca neles. Para restaurar de verdade a partir
+daí, use (a), (b) ou (c) com `besave-aws-AAAAMMDD-%L.dmp` no `dumpfile`.
 
 ### a) Uma tabela (ex.: `OFERTA`, apagada ou corrompida)
 
