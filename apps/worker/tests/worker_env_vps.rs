@@ -36,6 +36,14 @@ const OPCIONAIS: &[(&str, &str)] = &[
     ),
     ("BESAVE_EXPURGO_MAX", "padrão 3000 ids por ciclo (BSV-47)"),
     (
+        "BESAVE_IMAGENS_RELISTAR",
+        "padrão 0; 1 lista img/ofertas/ neste ciclo (BSV-45)",
+    ),
+    (
+        "BESAVE_IMAGENS_RELISTAR_HORAS",
+        "padrão 24 h entre listagens de reconciliação (BSV-45)",
+    ),
+    (
         "BESAVE_ORACLE_TIMEOUT_S",
         "padrão 120 s por chamada ao Oracle (BSV-47)",
     ),

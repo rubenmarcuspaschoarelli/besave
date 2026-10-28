@@ -27,6 +27,14 @@ chunk:
 | `{dir}/{id}/{id}-small.webp` | `img/ofertas/{id}-small.webp` | ≤ 25 600 B, lado maior ≤ 320 px |
 | `{dir}/{id}/{id}.webp` | `img/ofertas/{id}.webp` | aviso (`WARN`) acima de 300 000 B; publica assim mesmo |
 
+**Decisão por hash (BSV-45).** O envio é decidido por `_estado/imagens.json` (`id → hash16`, SHA-256 de
+`{id}.webp` ++ `{id}-small.webp` do espelho), não por existência de chave: imagem trocada no espelho
+sobe sozinha (`imagens_reenviadas`). `img/ofertas/` só é listada para reconstruir o índice (ausente,
+ilegível, `BESAVE_IMAGENS_RELISTAR=1`, reconciliação do expurgo por fazer) e a cada
+`BESAVE_IMAGENS_RELISTAR_HORAS` (padrão 24; `0` = todo ciclo); `t_imagens_listagem` mede isso. O
+primeiro ciclo depois do deploy lista uma vez, monta o índice e não sobe nada. O id sai do índice quando a
+fila do expurgo apaga as imagens dele. Overwrite de chave `immutable` não invalida o CloudFront.
+
 Política de orçamento:
 
 - **Dentro do orçamento**: copia os bytes como vieram (nunca reprocessa sem necessidade).
@@ -62,6 +70,7 @@ Relatório no stdout (além das contagens de `--gerar`/`--publicar`):
 ```
 imagens_publicadas: 3
 imagens_reaproveitadas: 0
+imagens_reenviadas: 0
 imagens_sem_origem: 1
 imagens_reprocessadas: 0
 imagens_falhas: 0
@@ -249,6 +258,8 @@ cargo run --release -- --publicar --sim    # executa
 | `BESAVE_BUCKET` | sim | bucket de destino |
 | `BESAVE_KVS_ARN` | sim | ARN da KeyValueStore da Function `/ir/{id}` |
 | `BESAVE_IMAGENS_DIR` | sim | raiz `{id}/{id}[-small].webp` do robô (BSV-13, ver seção Imagens) |
+| `BESAVE_IMAGENS_RELISTAR` | não | `1` lista `img/ofertas/` neste ciclo (padrão `0`, BSV-45) |
+| `BESAVE_IMAGENS_RELISTAR_HORAS` | não | horas entre listagens de reconciliação (padrão `24`; `0` = todo ciclo, BSV-45) |
 | `AWS_REGION` | sim (ou região no perfil) | região do bucket |
 | credenciais | sim | só pela cadeia padrão do SDK: `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, `AWS_PROFILE`, SSO |
 

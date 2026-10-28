@@ -31,6 +31,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /robots.txt                         ← Disallow: / até a virada de DNS (BESAVE_INDEXAVEL)
 /_estado/paginas.json               ← índice id → hash do HTML (worker, BSV-21)
 /_estado/redirects.json             ← índice id → hash da URL + ItemCount/ETag da KVS (BSV-12c)
+/_estado/imagens.json               ← índice id → hash16 da origem das duas imagens + `_relistado_em` (worker, BSV-45)
 /_estado/avisos.json                ← índice id → hash da página e chave/hash da imagem (BSV-41)
 /_estado/expurgo.json               ← fila do expurgo: id → data de entrada (ISO UTC) e `reconciliado` (worker, BSV-47)
 /_estado/vigia.json                 ← estado de aviso do vigia (Lambda, BSV-15)
@@ -150,7 +151,19 @@ depois; o dado já existe).
 
 ## 6. Worker — ordem de publicação (evita janela inconsistente)
 
-1. Imagens novas (existência decidida por **uma listagem** de `img/ofertas/`, nunca HEAD por chave — AD-042).
+1. Imagens: o worker sobe o par `{id}.webp` + `{id}-small.webp` quando o **hash da origem** (SHA-256 dos
+   dois arquivos do espelho, `{id}.webp` ++ `{id}-small.webp`, 16 hex) difere do de `_estado/imagens.json`
+   ou o id não está nele; o índice é regravado depois dos uploads, só quando muda (igual ao
+   `paginas.json`, AD-041). Imagem trocada no espelho com o mesmo id sobe sozinha; sem origem ou com
+   falha de envio, o id não entra no índice e o ciclo seguinte tenta de novo (BSV-45). A listagem de
+   `img/ofertas/` virou caminho de **reconstrução** (nunca HEAD por chave — AD-042): acontece com o
+   índice ausente, ilegível ou fora do formato, com `BESAVE_IMAGENS_RELISTAR=1`, quando a reconciliação
+   do expurgo (passo 7) ainda não rodou e a cada `BESAVE_IMAGENS_RELISTAR_HORAS` (padrão 24; `0` = todo
+   ciclo; a marca é `_relistado_em` no próprio índice). Na listagem, id fora do índice com o par inteiro
+   no bucket entra no índice **sem upload**; id com o par incompleto sobe. `img/placeholder/` continua
+   listado todo ciclo (10 chaves). **Preço da economia:** chave apagada à mão com o índice intacto só
+   volta na próxima listagem (até `BESAVE_IMAGENS_RELISTAR_HORAS`). Sobrescrever uma chave `immutable`
+   já em cache exige invalidação do CloudFront, fora do worker.
 2. Chunks novos (nomes novos, nunca sobrescreve).
 3. Páginas HTML, sitemaps, robots e `_estado/paginas.json` (só o que mudou de hash — AD-041).
 4. KVS de redirects pelo diff contra `_estado/redirects.json`; KVS só é listada quando o índice
@@ -161,7 +174,9 @@ depois; o dado já existe).
 7. Expurgo, **só na janela** `BESAVE_EXPURGO_JANELA` (padrão `02:00-05:00`, Brasília) e até
    `BESAVE_EXPURGO_MAX` ids por ciclo (padrão 3000): `oferta/{id}/`, `img/ofertas/{id}*` e a chave na
    KVS dos ids da fila `_estado/expurgo.json`, com `DeleteObjects` de até 1000 chaves por chamada; a
-   fila é regravada depois de cada chamada (ciclo interrompido retoma dali). O id que saiu do conjunto
+   fila é regravada depois de cada chamada (ciclo interrompido retoma dali); o id sai de
+   `_estado/imagens.json` quando a fila apaga as imagens dele, com o índice gravado antes da fila (BSV-45).
+   O id que saiu do conjunto
    publicado entra na fila nos passos 1–3, **antes** do manifest (a fila é gravada antes de qualquer
    upload do ciclo), e some de chunks, sitemap e contagem no mesmo ciclo; o manifest nunca espera o
    expurgo. Falha do expurgo não falha o ciclo: vira aviso (variante `Expurgo`) e os ids seguem na fila. Na primeira execução, uma reconciliação única põe na fila as páginas e imagens de ids fora

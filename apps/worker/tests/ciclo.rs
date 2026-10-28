@@ -320,6 +320,8 @@ fn primeira_execucao_publica_paginas_sitemap_robots_e_indice() {
         [
             // BSV-47: fila do expurgo (vazia, reconciliada), gravada antes de qualquer upload.
             "_estado/expurgo.json",
+            // BSV-45: índice de imagens, gravado depois dos uploads de imagem.
+            "_estado/imagens.json",
             "oferta/5412/index.html",
             "oferta/5413/index.html",
             "oferta/5420/index.html",
@@ -558,6 +560,7 @@ fn virada_para_indexavel_regrava_robots_e_sitemaps() {
         base: "https://www.besave.com.br".into(),
         indexavel: true,
         expurgo: ConfigExpurgo::sempre(),
+        ..ConfigSite::default()
     };
     let r = rodar_site(&linhas_fixture(), &mut p, &novo, AGORA + 600);
     assert_eq!(
