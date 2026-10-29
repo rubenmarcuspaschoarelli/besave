@@ -6,6 +6,8 @@ mod comum;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use comum::{AGORA, linha, mapeamento};
 use worker::conversao::LinhaOferta;
@@ -140,18 +142,56 @@ fn webp(marca: u8, tamanho: usize) -> Vec<u8> {
     b
 }
 
+static RELOGIO: AtomicU64 = AtomicU64::new(0);
+
+/// mtime novo a cada chamada (segundos distintos + nanos fixos): o sistema de arquivos não decide.
+fn mtime_novo() -> SystemTime {
+    let n = RELOGIO.fetch_add(1, Ordering::SeqCst);
+    UNIX_EPOCH + Duration::new(1_700_000_000 + n * 7, 123_456_789)
+}
+
+fn definir_mtime(arq: &Path, t: SystemTime) {
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(arq)
+        .unwrap()
+        .set_modified(t)
+        .unwrap();
+}
+
+/// Grava o arquivo com mtime novo.
+fn gravar_arquivo(arq: &Path, bytes: &[u8]) {
+    std::fs::write(arq, bytes).unwrap();
+    definir_mtime(arq, mtime_novo());
+}
+
 fn escrever(dir: &Path, id: i64, marca: u8) {
     let pasta = dir.join(id.to_string());
     std::fs::create_dir_all(&pasta).unwrap();
-    std::fs::write(pasta.join(format!("{id}-small.webp")), webp(marca, 200)).unwrap();
-    std::fs::write(pasta.join(format!("{id}.webp")), webp(marca, 400)).unwrap();
+    gravar_arquivo(&pasta.join(format!("{id}-small.webp")), &webp(marca, 200));
+    gravar_arquivo(&pasta.join(format!("{id}.webp")), &webp(marca, 400));
 }
 
+fn mtime_de(arq: &Path) -> SystemTime {
+    std::fs::metadata(arq).unwrap().modified().unwrap()
+}
+
+/// Impressão digital da emenda do dono: `hash16("len_g:mtime_ns_g:len_s:mtime_ns_s")`.
 fn hash_da_origem(dir: &Path, id: i64) -> String {
     let pasta = dir.join(id.to_string());
-    let mut bytes = std::fs::read(pasta.join(format!("{id}.webp"))).unwrap();
-    bytes.extend(std::fs::read(pasta.join(format!("{id}-small.webp"))).unwrap());
-    hash16(&bytes)
+    let parte = |nome: String| {
+        let m = std::fs::metadata(pasta.join(nome)).unwrap();
+        let ns = m
+            .modified()
+            .unwrap()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        format!("{}:{ns}", m.len())
+    };
+    let g = parte(format!("{id}.webp"));
+    let sm = parte(format!("{id}-small.webp"));
+    hash16(format!("{g}:{sm}").as_bytes())
 }
 
 fn ciclo(
@@ -207,10 +247,94 @@ fn trocar_so_o_small_tambem_sobe() {
     escrever(&dir, 7, b'A');
     let mut p = Espiao::new();
     ciclo(&[7], &dir, &mut p, &padrao(), AGORA);
-    std::fs::write(dir.join("7").join("7-small.webp"), webp(b'Z', 200)).unwrap();
+    gravar_arquivo(&dir.join("7").join("7-small.webp"), &webp(b'Z', 200));
     let rel = ciclo(&[7], &dir, &mut p, &padrao(), AGORA + 300);
     assert_eq!(rel.reenviadas, 1);
     assert_eq!(p.ler(&chave_small(7)).unwrap(), Some(webp(b'Z', 200)));
+}
+
+/// Emenda (impressão digital): arquivo trocado com outro tamanho (e mtime novo) → sobe.
+#[test]
+fn outro_tamanho_sobe() {
+    let dir = dir_temp("fp-tamanho");
+    escrever(&dir, 3, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[3], &dir, &mut p, &padrao(), AGORA);
+    gravar_arquivo(&dir.join("3").join("3.webp"), &webp(b'A', 450));
+    let rel = ciclo(&[3], &dir, &mut p, &padrao(), AGORA + 300);
+    assert_eq!((rel.publicadas, rel.reenviadas), (1, 1));
+    assert_eq!(p.ler(&chave_grande(3)).unwrap(), Some(webp(b'A', 450)));
+}
+
+/// Emenda: mesmo tamanho e mesmo conteúdo, só o mtime diferente (regravar a mesma foto) → sobe
+/// uma vez; no ciclo seguinte não sobe mais. É o custo aceito.
+#[test]
+fn mesmo_tamanho_e_mtime_diferente_sobe_uma_vez() {
+    let dir = dir_temp("fp-mtime");
+    escrever(&dir, 4, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[4], &dir, &mut p, &padrao(), AGORA);
+    gravar_arquivo(&dir.join("4").join("4-small.webp"), &webp(b'A', 200));
+    let rel = ciclo(&[4], &dir, &mut p, &padrao(), AGORA + 300);
+    assert_eq!((rel.publicadas, rel.reenviadas), (1, 1));
+    let rel = ciclo(&[4], &dir, &mut p, &padrao(), AGORA + 600);
+    assert_eq!((rel.publicadas, rel.reaproveitadas), (0, 1));
+}
+
+/// Emenda: o mtime entra em nanossegundos; diferença só na parte sub-segundo também sobe.
+#[test]
+fn mtime_so_em_nanossegundos_diferente_sobe() {
+    let dir = dir_temp("fp-nanos");
+    escrever(&dir, 8, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[8], &dir, &mut p, &padrao(), AGORA);
+    let arq = dir.join("8").join("8.webp");
+    definir_mtime(&arq, mtime_de(&arq) + Duration::from_millis(500));
+    let rel = ciclo(&[8], &dir, &mut p, &padrao(), AGORA + 300);
+    assert_eq!((rel.publicadas, rel.reenviadas), (1, 1));
+}
+
+/// Emenda: mtime preservado (cópia com `-p`) e tamanho diferente → sobe.
+#[test]
+fn mtime_preservado_e_tamanho_diferente_sobe() {
+    let dir = dir_temp("fp-cp-p");
+    escrever(&dir, 5, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[5], &dir, &mut p, &padrao(), AGORA);
+    let arq = dir.join("5").join("5.webp");
+    let t = mtime_de(&arq);
+    std::fs::write(&arq, webp(b'B', 410)).unwrap();
+    definir_mtime(&arq, t);
+    assert_eq!(mtime_de(&arq), t);
+    let rel = ciclo(&[5], &dir, &mut p, &padrao(), AGORA + 300);
+    assert_eq!((rel.publicadas, rel.reenviadas), (1, 1));
+    assert_eq!(p.ler(&chave_grande(5)).unwrap(), Some(webp(b'B', 410)));
+}
+
+/// Emenda — LIMITE ACEITO: com tamanho e mtime restaurados, o conteúdo trocado não é percebido
+/// (a impressão digital não lê o arquivo). Nada sobe e o índice não muda.
+#[test]
+fn metadados_iguais_nao_sobem_mesmo_com_conteudo_trocado() {
+    let dir = dir_temp("fp-limite");
+    escrever(&dir, 6, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[6], &dir, &mut p, &padrao(), AGORA);
+    let indice = p.indice();
+    let antes = p.imagens_gravadas().len();
+    for nome in ["6.webp", "6-small.webp"] {
+        let arq = dir.join("6").join(nome);
+        let (t, tam) = (
+            mtime_de(&arq),
+            std::fs::metadata(&arq).unwrap().len() as usize,
+        );
+        std::fs::write(&arq, webp(b'Z', tam)).unwrap();
+        definir_mtime(&arq, t);
+    }
+    let rel = ciclo(&[6], &dir, &mut p, &padrao(), AGORA + 300);
+    assert_eq!((rel.publicadas, rel.reaproveitadas), (0, 1));
+    assert_eq!(p.imagens_gravadas().len(), antes);
+    assert_eq!(p.indice(), indice);
+    assert_eq!(p.ler(&chave_grande(6)).unwrap(), Some(webp(b'A', 400)));
 }
 
 /// IMG-02: id novo sobe, é "publicada" e não "reenviada", e entra no índice.
@@ -368,6 +492,20 @@ fn reconstrucao_envia_o_id_cujo_par_nao_esta_inteiro_no_bucket() {
     let rel = ciclo(&[1], &dir, &mut p, &padrao(), AGORA);
     assert_eq!(rel.publicadas, 1);
     assert_eq!(p.ler(&chave_grande(1)).unwrap(), Some(webp(b'A', 400)));
+}
+
+/// FAL-01 na reconstrução: sem origem no espelho, o id com o par no bucket não é adotado.
+#[test]
+fn reconstrucao_nao_adota_id_sem_origem() {
+    let dir = dir_temp("rec-sem-origem");
+    let mut p = Espiao::new();
+    for c in chaves_do_id(1) {
+        p.gravar(&c, b"qualquer", &META_IMAGEM).unwrap();
+    }
+    let rel = ciclo(&[1], &dir, &mut p, &padrao(), AGORA);
+    assert_eq!(rel.sem_origem, 1);
+    assert_eq!(rel.reaproveitadas, 0);
+    assert!(!p.indice().contains_key("1"));
 }
 
 /// REC-02: índice inválido de três jeitos → reconstrói sem erro e o seguinte já não lista.
@@ -564,10 +702,10 @@ fn origem_invalida_fica_fora_do_indice_e_mantem_o_hash_anterior() {
     ciclo(&[1], &dir, &mut p, &padrao(), AGORA);
     let hash_antigo = p.indice()["1"].clone();
 
-    std::fs::write(dir.join("1").join("1.webp"), b"isto nao e webp").unwrap();
+    gravar_arquivo(&dir.join("1").join("1.webp"), b"isto nao e webp");
     std::fs::create_dir_all(dir.join("2")).unwrap();
-    std::fs::write(dir.join("2").join("2.webp"), b"jpeg").unwrap();
-    std::fs::write(dir.join("2").join("2-small.webp"), b"jpeg").unwrap();
+    gravar_arquivo(&dir.join("2").join("2.webp"), b"jpeg");
+    gravar_arquivo(&dir.join("2").join("2-small.webp"), b"jpeg");
 
     let rel = ciclo(&[1, 2], &dir, &mut p, &padrao(), AGORA + 300);
     assert_eq!(rel.falhas.len(), 2);

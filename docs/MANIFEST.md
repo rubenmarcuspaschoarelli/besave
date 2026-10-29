@@ -31,7 +31,7 @@ muda, o manifest aponta para o novo arquivo e o cliente rebaixa só aquele chunk
 /robots.txt                         ← Disallow: / até a virada de DNS (BESAVE_INDEXAVEL)
 /_estado/paginas.json               ← índice id → hash do HTML (worker, BSV-21)
 /_estado/redirects.json             ← índice id → hash da URL + ItemCount/ETag da KVS (BSV-12c)
-/_estado/imagens.json               ← índice id → hash16 da origem das duas imagens + `_relistado_em` (worker, BSV-45)
+/_estado/imagens.json               ← índice id → hash16 da impressão digital (tamanho + mtime) da origem das duas imagens + `_relistado_em` (worker, BSV-45)
 /_estado/avisos.json                ← índice id → hash da página e chave/hash da imagem (BSV-41)
 /_estado/expurgo.json               ← fila do expurgo: id → data de entrada (ISO UTC) e `reconciliado` (worker, BSV-47)
 /_estado/vigia.json                 ← estado de aviso do vigia (Lambda, BSV-15)
@@ -151,10 +151,10 @@ depois; o dado já existe).
 
 ## 6. Worker — ordem de publicação (evita janela inconsistente)
 
-1. Imagens: o worker sobe o par `{id}.webp` + `{id}-small.webp` quando o **hash da origem** (SHA-256 dos
-   dois arquivos do espelho, `{id}.webp` ++ `{id}-small.webp`, 16 hex) difere do de `_estado/imagens.json`
+1. Imagens: o worker sobe o par `{id}.webp` + `{id}-small.webp` quando a **impressão digital da origem** (`hash16` de
+   `len_g:mtime_ns_g:len_s:mtime_ns_s` dos dois arquivos do espelho, só `metadata`, sem ler o conteúdo) difere da de `_estado/imagens.json`
    ou o id não está nele; o índice é regravado depois dos uploads, só quando muda (igual ao
-   `paginas.json`, AD-041). Imagem trocada no espelho com o mesmo id sobe sozinha; sem origem ou com
+   `paginas.json`, AD-041). Imagem trocada no espelho com o mesmo id sobe sozinha (regravar a mesma foto reenvia uma vez; conteúdo trocado com tamanho e mtime restaurados não é percebido); sem origem ou com
    falha de envio, o id não entra no índice e o ciclo seguinte tenta de novo (BSV-45). A listagem de
    `img/ofertas/` virou caminho de **reconstrução** (nunca HEAD por chave — AD-042): acontece com o
    índice ausente, ilegível ou fora do formato, com `BESAVE_IMAGENS_RELISTAR=1`, quando a reconciliação

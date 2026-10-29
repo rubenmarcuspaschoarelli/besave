@@ -40,11 +40,17 @@ de `img/ofertas/` sai do caminho quente do ciclo.
    ```json
    {"5412":"9f2a1c3b4d5e6f70","5413":"77b0e4d5c6b7a890","_placeholders":"1"}
    ```
-   `hash16` = 16 primeiros hex do SHA-256 da **concatenação dos dois arquivos de origem** lidos do
-   espelho local (`{id}.webp` ++ `{id}-small.webp`), reusando `paginas::hash16`. Hash da origem, não do
-   que sobe: o `ajustar_small` é função determinística da origem, então a origem identifica o par
-   publicado e não é preciso hashear duas vezes.
-2. **Decisão por hash em `publicar_imagens`:** lê o índice uma vez por ciclo, hasheia a origem de cada
+   `hash16` = `paginas::hash16` (16 primeiros hex do SHA-256) da **impressão digital de metadados** dos
+   dois arquivos de origem do espelho local, a string `len_g:mtime_ns_g:len_s:mtime_ns_s`
+   (`{id}.webp` = g, `{id}-small.webp` = s; tamanho em bytes e mtime em nanossegundos desde a época
+   Unix, vindos de `std::fs::metadata`). **O conteúdo não é lido** no ciclo sem mudança: o arquivo só
+   é aberto quando o id vai subir. Motivo (emenda do dono): ler e hashear todas as imagens a cada
+   ciclo custa disco e memória na inst1. Origem, não o que sobe: o `ajustar_small` é função
+   determinística da origem, então a origem identifica o par publicado.
+   **Custo aceito:** regravar a mesma foto (mtime novo, mesmo conteúdo) reenvia o par uma vez.
+   **Limite aceito:** conteúdo trocado com tamanho **e** mtime restaurados (ex.: edição seguida de
+   `touch -d`) não é percebido; troca por cópia com `-p` e tamanho diferente é percebida.
+2. **Decisão por hash em `publicar_imagens`:** lê o índice uma vez por ciclo, calcula a impressão digital da origem de cada
    id publicável e sobe só quando o hash difere do índice (ou o id não está nele). Índice regravado
    **depois** dos uploads do ciclo, e só quando mudou — mesma ordem do `paginas.json` (AD-041).
 3. **Listagem só na reconstrução** (padrão do `redirects.json`, AD-044): o worker lista `img/ofertas/`

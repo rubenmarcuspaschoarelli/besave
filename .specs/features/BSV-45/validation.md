@@ -158,3 +158,34 @@ Mutantes (`CARGO_BUILD_JOBS=1`, lote de 5, `git checkout src` após cada um; ár
 | M5 | `warn!` também com índice ausente | morto (`indice_invalido_loga_warn_...`) |
 
 Gates após a rodada: `cargo fmt --check` OK, `cargo clippy --all-targets -- -D warnings` OK, `cargo test --no-fail-fast` 564 passados, 0 falhas.
+
+## 6. Emenda do dono: hash16 passa a ser impressão digital de metadados (rodada 3)
+
+`hash16("len_g:mtime_ns_g:len_s:mtime_ns_s")` por `std::fs::metadata`; o conteúdo só é lido quando o id vai subir. Spec (`docs/specs/BSV-45.md` Saída 1, `.specs/features/BSV-45/spec.md` IMG-03 e IMG-05..08), MANIFEST §1 e §6 passo 1 e README atualizados. O resto não mudou.
+
+Testes (`tests/imagens_hash.rs`; o mtime é fixado por `set_modified`, sem depender da granularidade do sistema de arquivos):
+
+| AC | teste | resultado esperado |
+|---|---|---|
+| IMG-06 | `outro_tamanho_sobe` | tamanho diferente → sobe, `reenviadas = 1` |
+| IMG-07 | `mesmo_tamanho_e_mtime_diferente_sobe_uma_vez` | sobe uma vez; ciclo seguinte reaproveita |
+| IMG-07 | `mtime_so_em_nanossegundos_diferente_sobe` | diferença de 500 ms → sobe |
+| IMG-06 | `mtime_preservado_e_tamanho_diferente_sobe` | cópia com `-p` e tamanho diferente → sobe |
+| IMG-08 | `metadados_iguais_nao_sobem_mesmo_com_conteudo_trocado` | **limite aceito**: conteúdo trocado com len e mtime restaurados não sobe; bucket e índice intactos |
+| FAL-01 | `reconstrucao_nao_adota_id_sem_origem` | par no bucket, sem origem → `sem_origem`, fora do índice |
+
+Limite do IMG-05: não há asserção que prove "nenhum arquivo é lido" no ciclo sem mudança (leitura sem efeito observável); ficou coberto pelo mutante M5 (hash por conteúdo, morto pelos testes de formato do índice) e pelo teste do limite aceito.
+
+Mutantes do trecho novo (`CARGO_BUILD_JOBS=1`, lote de 7, `src/imagens.rs` restaurado ao fim de cada lote):
+
+| # | mutante | resultado |
+|---|---|---|
+| M1 | impressão sem `len` | morto |
+| M2 | mtime em segundos (`as_secs`) | morto |
+| M3 | ignora o `-small` | morto |
+| M4 | ignora o `{id}.webp` | morto |
+| M5 | hash volta a ser do conteúdo | morto |
+| M6 | `metadata` ausente vira impressão vazia | **sobreviveu** na 1ª passada; morto após `reconstrucao_nao_adota_id_sem_origem` |
+| M7 | impressão só com o grande | morto |
+
+Gates: `cargo fmt --check` OK, `cargo clippy --all-targets -- -D warnings` OK, `cargo test --no-fail-fast` sem falhas (570 passados, 0 falhas).

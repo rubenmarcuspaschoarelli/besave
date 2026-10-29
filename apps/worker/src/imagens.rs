@@ -238,7 +238,7 @@ fn publicar_placeholders(
     Ok(())
 }
 
-/// Índice do que já está no bucket (MANIFEST §1): id → hash16 da origem. Também guarda quando
+/// Índice do que já está no bucket (MANIFEST §1): id → hash16 da impressão digital da origem (tamanho + mtime). Também guarda quando
 /// `img/ofertas/` foi listada pela última vez (`_relistado_em`), para a reconciliação periódica.
 pub const CHAVE_INDICE: &str = "_estado/imagens.json";
 /// Chave reservada do índice: segundos Unix UTC da última listagem de `img/ofertas/`.
@@ -477,7 +477,7 @@ fn chave_de_oferta_valida(chave: &str) -> bool {
 /// contra o custo de refazer o lote inteiro se uma tarefa falhar. Revisão do dono (BSV-13).
 const TAMANHO_BLOCO: usize = 64;
 
-/// Copia as imagens de `ids` de `dir` para o destino quando o hash da origem difere do índice
+/// Copia as imagens de `ids` de `dir` para o destino quando a impressão digital da origem difere do índice
 /// (BSV-45) e garante os 10 placeholders de área. Lê o índice, lista `img/ofertas/` só se
 /// `IndiceImagens::deve_listar` (fila já reconciliada) e regrava o índice no fim.
 pub fn publicar_imagens(
@@ -523,8 +523,27 @@ pub fn publicar_imagens_com(
     Ok(rel)
 }
 
+/// Impressão digital da origem (BSV-45): `hash16("len_g:mtime_ns_g:len_s:mtime_ns_s")` dos dois
+/// arquivos, só por `metadata` (não lê o conteúdo). `None` se algum não existe ou não tem mtime.
+/// Limite aceito: conteúdo trocado com tamanho e mtime restaurados não é percebido.
+fn impressao(origem_g: &Path, origem_s: &Path) -> Option<String> {
+    let parte = |p: &Path| -> Option<String> {
+        let m = std::fs::metadata(p).ok()?;
+        let ns = m
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_nanos();
+        Some(format!("{}:{ns}", m.len()))
+    };
+    Some(hash16(
+        format!("{}:{}", parte(origem_g)?, parte(origem_s)?).as_bytes(),
+    ))
+}
+
 /// Um bloco: no máximo 1 `gravar_lote` com tudo que precisa subir. `dir`/CPU (leitura de disco,
-/// hash, assinatura, `ajustar_small`) continuam por id, síncronos — só a rede é agrupada.
+/// assinatura, `ajustar_small`) continuam por id, síncronos — só a rede é agrupada.
 fn processar_bloco(
     ids: &[i64],
     existentes: &ImagensExistentes,
@@ -538,12 +557,10 @@ fn processar_bloco(
     for &id in ids {
         let (chave_s, chave_g) = (chave_small(id), chave_grande(id));
         let (origem_s, origem_g) = origem(dir, id);
-        let (Ok(bytes_s), Ok(bytes_g)) = (std::fs::read(&origem_s), std::fs::read(&origem_g))
-        else {
+        let Some(hash) = impressao(&origem_g, &origem_s) else {
             rel.sem_origem += 1;
             continue;
         };
-        let hash = hash16(&[bytes_g.as_slice(), bytes_s.as_slice()].concat());
         let anterior = indice.hash(id);
         // `Some` só quando listou: o par inteiro está no bucket?
         let no_bucket = existentes
@@ -561,6 +578,12 @@ fn processar_bloco(
             continue;
         }
         let troca = anterior.is_some_and(|h| h != hash);
+        // Só aqui o disco é lido: ciclo sem mudança olha metadados, nunca o conteúdo.
+        let (Ok(bytes_s), Ok(bytes_g)) = (std::fs::read(&origem_s), std::fs::read(&origem_g))
+        else {
+            rel.sem_origem += 1;
+            continue;
+        };
         if !e_webp(&bytes_s) || !e_webp(&bytes_g) {
             rel.falhas.push((id, MotivoFalhaImagem::NaoWebp));
             continue;

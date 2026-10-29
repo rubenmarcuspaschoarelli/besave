@@ -30,7 +30,7 @@ isso por hash (`_estado/paginas.json`); a imagem passa a usar o mesmo molde.
 
 | Assumption / decision | Chosen default | Rationale | Confirmed? |
 | --------------------- | -------------- | --------- | ---------- |
-| Hash | `hash16` do SHA-256 de `{id}.webp` ++ `{id}-small.webp` lidos do espelho | Spec §Saídas 1; `ajustar_small` é determinística, a origem identifica o par | y |
+| Hash | `hash16` de `len_g:mtime_ns_g:len_s:mtime_ns_s` dos dois arquivos do espelho (`metadata`, sem ler o conteúdo) | Emenda do dono: ler e hashear todas as imagens a cada ciclo custa disco e memória na inst1. Custo aceito: regravar a mesma foto reenvia uma vez; limite: conteúdo trocado com tamanho e mtime restaurados não é percebido | y |
 | Marca da última listagem | Chave reservada `_relistado_em` no próprio `imagens.json` (segundos Unix UTC, texto); chaves `_*` desconhecidas são ignoradas | A reconciliação periódica precisa de relógio persistido; um arquivo só, sem chave nova no S3 | n |
 | Índice sem `_relistado_em` | Conta como "nunca reconciliado": lista uma vez e grava a marca | Índice escrito por versão sem a marca não pode ficar eternamente sem reconciliar | n |
 | Formato inválido | Não é objeto JSON de strings; chave de id (só dígitos) com valor que não seja 16 hex minúsculos; `_relistado_em` não numérico | Spec: "valor fora do formato" reconstrói | n |
@@ -57,8 +57,12 @@ isso por hash (`_estado/paginas.json`); a imagem passa a usar o mesmo molde.
 
 1. IMG-01: WHEN o arquivo de um id já publicado muda no espelho com o mesmo nome THEN `publicar_imagens` SHALL gravar as duas chaves do id, reportar `reenviadas = 1` e SHALL NOT remover chave nenhuma.
 2. IMG-02: WHEN o id não está no índice e o bucket não tem as chaves THEN `publicar_imagens` SHALL gravar as duas chaves, contar em `publicadas` (e não em `reenviadas`) e pôr o id no índice com o hash da origem.
-3. IMG-03: The índice `_estado/imagens.json` SHALL ser um objeto plano `id → hash16` (SHA-256 de `{id}.webp` ++ `{id}-small.webp`, 16 hex), gravado com `Content-Type: application/json` e `Cache-Control: no-store`, sem nenhuma URL.
+3. IMG-03: The índice `_estado/imagens.json` SHALL ser um objeto plano `id → hash16` (`hash16` de `len_g:mtime_ns_g:len_s:mtime_ns_s`, 16 hex), gravado com `Content-Type: application/json` e `Cache-Control: no-store`, sem nenhuma URL.
 4. IMG-04: WHEN o índice muda THEN o worker SHALL gravá-lo depois dos uploads de imagem do ciclo; WHEN não muda THEN SHALL NOT gravá-lo.
+5. IMG-05: The hash do índice SHALL ser calculado só por `metadata` dos dois arquivos de origem (tamanho e mtime em ns); o conteúdo SHALL ser lido apenas quando o id vai subir.
+6. IMG-06: WHEN o tamanho de um dos arquivos muda (com ou sem o mtime preservado) THEN o id SHALL subir.
+7. IMG-07: WHEN só o mtime muda (inclusive só os nanossegundos) com o mesmo conteúdo THEN o id SHALL subir uma vez e SHALL NOT subir no ciclo seguinte (custo aceito).
+8. IMG-08: WHEN tamanho e mtime são iguais e o conteúdo foi trocado THEN o id SHALL NOT subir (limite aceito).
 
 ### P1: Ciclo sem mudança não lista
 
@@ -121,6 +125,10 @@ Dimensions: estado persistido (IMG-03/04, REC); falha de dependência externa (F
 | IMG-02 | P1: Imagem trocada | Execute | Done |
 | IMG-03 | P1: Imagem trocada | Execute | Done |
 | IMG-04 | P1: Imagem trocada | Execute | Done |
+| IMG-05 | P1: Imagem trocada | Execute | Done |
+| IMG-06 | P1: Imagem trocada | Execute | Done |
+| IMG-07 | P1: Imagem trocada | Execute | Done |
+| IMG-08 | P1: Imagem trocada | Execute | Done |
 | IDE-01 | P1: Sem mudança | Execute | Done |
 | IDE-02 | P1: Sem mudança | Execute | Done |
 | REC-01 | P1: Reconstrução | Execute | Done |
@@ -139,7 +147,7 @@ Dimensions: estado persistido (IMG-03/04, REC); falha de dependência externa (F
 | ORC-01 | P1: Orçamento | Execute | Done |
 | REL-01 | P1: Orçamento | Execute | Done |
 
-**Coverage:** 21 total, 21 mapped to steps, 0 unmapped.
+**Coverage:** 25 total, 25 mapped to steps, 0 unmapped.
 
 ---
 

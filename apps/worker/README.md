@@ -27,8 +27,8 @@ chunk:
 | `{dir}/{id}/{id}-small.webp` | `img/ofertas/{id}-small.webp` | ≤ 25 600 B, lado maior ≤ 320 px |
 | `{dir}/{id}/{id}.webp` | `img/ofertas/{id}.webp` | aviso (`WARN`) acima de 300 000 B; publica assim mesmo |
 
-**Decisão por hash (BSV-45).** O envio é decidido por `_estado/imagens.json` (`id → hash16`, SHA-256 de
-`{id}.webp` ++ `{id}-small.webp` do espelho), não por existência de chave: imagem trocada no espelho
+**Decisão por hash (BSV-45).** O envio é decidido por `_estado/imagens.json` (`id → hash16` da impressão digital
+`len:mtime_ns` dos dois arquivos do espelho, sem ler o conteúdo; regravar a mesma foto reenvia uma vez), não por existência de chave: imagem trocada no espelho
 sobe sozinha (`imagens_reenviadas`). `img/ofertas/` só é listada para reconstruir o índice (ausente,
 ilegível, `BESAVE_IMAGENS_RELISTAR=1`, reconciliação do expurgo por fazer) e a cada
 `BESAVE_IMAGENS_RELISTAR_HORAS` (padrão 24; `0` = todo ciclo); `t_imagens_listagem` mede isso. O
