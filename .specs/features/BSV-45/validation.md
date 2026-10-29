@@ -134,3 +134,27 @@ Também sem cobertura automatizada e dependente do dono: o tempo real da listage
 - `unwrap`/`expect` fora de teste: nenhum introduzido. Erros com `thiserror` (`ErroIndice`, `ErroConfigImagens`).
 - Índice sem URL de afiliado (IH:246).
 - Evidência: este arquivo não contém caminhos de usuário, tokens nem hostnames.
+
+## 5. Fechamento das lacunas 1, 3 e 4 (rodada 2)
+
+Testes novos, derivados da spec (autor da correção ≠ Verifier; mutantes rodados pelo autor da correção):
+
+| lacuna | teste | evidência |
+|---|---|---|
+| 1 `fila_reconciliada` | `fila_nao_reconciliada_forca_listagem_e_a_orfa_entra_na_fila` (`tests/imagens_hash.rs`) | índice válido e recente + fila sem `reconciliado` + órfã 99 no bucket → 1 listagem, `enfileirados == 1`, fila com `"99"` e `reconciliado:true`, ciclo seguinte sem listagem |
+| 3 WARN do índice | `indice_invalido_loga_warn_e_ausente_nao` (`tests/imagens_indice_log.rs`, binário próprio) | JSON inválido e valor fora do formato → 1 WARN citando `imagens.json`; índice ausente → 0 WARN |
+| 4 chave `_*` | `chave_desconhecida_com_underscore_nao_invalida_o_indice` (`tests/imagens_hash.rs`) | índice com `_desconhecida` → 0 listagem, `reaproveitadas == 1`, 0 upload |
+
+Lacuna 2 (`t_imagens_listagem` preenchido por `gerar`, linha do `--publicar`) continua aberta: o campo é tempo real medido, sem asserção determinística.
+
+Mutantes (`CARGO_BUILD_JOBS=1`, lote de 5, `git checkout src` após cada um; árvore limpa no fim):
+
+| # | mutante | resultado |
+|---|---|---|
+| M1 | remover `!fila_reconciliada` de `deve_listar` (`imagens.rs`) | morto (`fila_nao_reconciliada_...`) |
+| M2 | `geracao.rs` passa `true` no lugar de `fila.reconciliado()` | morto (`fila_nao_reconciliada_...`) |
+| M3 | remover o `warn!` do índice inválido | morto (`indice_invalido_loga_warn_...`) |
+| M4 | chave `_*` desconhecida invalida o índice | morto (`chave_desconhecida_...`) |
+| M5 | `warn!` também com índice ausente | morto (`indice_invalido_loga_warn_...`) |
+
+Gates após a rodada: `cargo fmt --check` OK, `cargo clippy --all-targets -- -D warnings` OK, `cargo test --no-fail-fast` 564 passados, 0 falhas.

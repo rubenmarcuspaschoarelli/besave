@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use comum::{AGORA, linha, mapeamento};
 use worker::conversao::LinhaOferta;
 use worker::execucao::linha_relatorio;
-use worker::expurgo::ConfigExpurgo;
+use worker::expurgo::{CHAVE_EXPURGO, ConfigExpurgo};
 use worker::fonte::FakeFonte;
 use worker::geracao::{Relatorio, gerar};
 use worker::imagens::{
@@ -684,6 +684,67 @@ fn id_reativado_antes_da_janela_nao_e_reenviado() {
     // E a fila esvaziou: a janela seguinte não apaga o id reativado.
     rodar(&[1, 2], &dir, &mut p, &mut kvs, NA_JANELA);
     assert_eq!(tem(&p, 2), [true, true]);
+}
+
+/// REC (BSV-47): índice válido e recente, mas a fila ainda sem `reconciliado` → o ciclo lista
+/// `img/ofertas/` e a imagem órfã do bucket entra na fila.
+#[test]
+fn fila_nao_reconciliada_forca_listagem_e_a_orfa_entra_na_fila() {
+    let dir = dir_temp("fila-nao-reconciliada");
+    for id in [1, 2] {
+        escrever(&dir, id, b'A');
+    }
+    let mut p = Espiao::new();
+    let mut kvs = RedirectsMemoria::new();
+    rodar(&[1, 2], &dir, &mut p, &mut kvs, AGORA);
+    // Estado de hoje na produção: índice válido e recente, fila nunca reconciliada, órfã no bucket.
+    p.dentro.remover(CHAVE_EXPURGO).unwrap();
+    for c in chaves_do_id(99) {
+        p.gravar(&c, b"orfa", &META_IMAGEM).unwrap();
+    }
+    p.zerar_listagens();
+
+    let r = rodar(&[1, 2], &dir, &mut p, &mut kvs, AGORA + 300);
+
+    assert_eq!(p.listagens_de_ofertas(), 1, "lista para reconciliar");
+    assert_eq!(r.expurgo.enfileirados, 1, "a órfã 99 entra na fila");
+    let fila = String::from_utf8(p.ler(CHAVE_EXPURGO).unwrap().unwrap()).unwrap();
+    assert!(fila.contains("\"99\""), "{fila}");
+    assert!(fila.contains("\"reconciliado\":true"), "{fila}");
+
+    p.zerar_listagens();
+    rodar(&[1, 2], &dir, &mut p, &mut kvs, AGORA + 600);
+    assert_eq!(
+        p.listagens_de_ofertas(),
+        0,
+        "reconciliada: o ciclo seguinte não lista"
+    );
+}
+
+/// REC: chave `_desconhecida` no índice é ignorada; o índice continua válido e não força listagem.
+#[test]
+fn chave_desconhecida_com_underscore_nao_invalida_o_indice() {
+    let dir = dir_temp("chave-desconhecida");
+    escrever(&dir, 1, b'A');
+    let mut p = Espiao::new();
+    ciclo(&[1], &dir, &mut p, &padrao(), AGORA);
+    let mut mapa = p.indice();
+    mapa.insert("_desconhecida".into(), "qualquer coisa".into());
+    p.gravar(
+        CHAVE_INDICE,
+        &serde_json::to_vec(&mapa).unwrap(),
+        &META_ESTADO,
+    )
+    .unwrap();
+    p.zerar_listagens();
+    let antes = p.imagens_gravadas().len();
+
+    let rel = ciclo(&[1], &dir, &mut p, &padrao(), AGORA + 300);
+
+    assert_eq!(p.listagens_de_ofertas(), 0, "índice lido como válido");
+    assert_eq!(rel.reaproveitadas, 1);
+    assert_eq!(rel.publicadas, 0);
+    assert_eq!(p.imagens_gravadas().len(), antes);
 }
 
 /// GER: ciclo completo sem mudança lista `img/ofertas/` no máximo na 1ª vez.
