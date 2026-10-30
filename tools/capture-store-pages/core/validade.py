@@ -31,15 +31,9 @@ def desativar_vencidas(db, dias=None):
     dias = estado.ler_validade_ofertas() if dias is None else dias
     if not dias:
         return 0
-    cur = db._conn.cursor()
-    try:
+    def varrer(cur):
         cur.execute("UPDATE OFERTA SET ST_ATIVO = 0, DT_DESATIVACAO = SYSDATE "
                     " WHERE ST_ATIVO = 1 AND DT_OFERTA < SYSDATE - :dias", dias=int(dias))
-        n = cur.rowcount
-        db._conn.commit()
-        return n
-    except Exception:
-        db._conn.rollback()
-        raise
-    finally:
-        cur.close()
+        return cur.rowcount
+
+    return db.transacao(varrer)

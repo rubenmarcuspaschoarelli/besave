@@ -12,7 +12,12 @@ reaproveita o mesmo ID de OFERTA_FILA_CAPTURA).
 import oracledb
 
 from core import duplicidade, validade
+from core.oracle_db import erro_conexao
 from core.precos import resolver_preco_por
+
+# Duplicidade nao checada por falta de conexao (mesmo depois de reconectar): a
+# oferta NAO e publicada e o chamador trava o ponteiro nela (BSV-52).
+SEM_CONEXAO = 'sem conexao Oracle (duplicidade)'
 
 
 def publicar_oferta(db, id_oferta, id_produto, loja_nome, linha, classificacao=None):
@@ -48,6 +53,9 @@ def publicar_oferta(db, id_oferta, id_produto, loja_nome, linha, classificacao=N
             duplicidade.marcar_duplicada(db, id_oferta, id_mantida)
             return False, f'{duplicidade.PREFIXO}{id_mantida}'
     except Exception as e:  # noqa: BLE001
+        if erro_conexao(e):
+            print(f'[ofertas] duplicidade sem conexao ({id_oferta}): {e} -- nao publicada.')
+            return False, SEM_CONEXAO
         print(f'[ofertas] checagem de duplicidade falhou ({id_oferta}): {e} -- publicando.')
     params = {
         'P_ID_OFERTA': int(id_oferta),
@@ -108,13 +116,8 @@ def publicar_oferta(db, id_oferta, id_produto, loja_nome, linha, classificacao=N
 
 
 def _desativar(db, id_oferta):
-    cur = db._conn.cursor()
-    try:
+    def desativar(cur):
         cur.execute("UPDATE OFERTA SET ST_ATIVO = 0, DT_DESATIVACAO = NVL(DT_DESATIVACAO, SYSDATE) "
                     "WHERE ID_OFERTA = :id AND NVL(ST_ATIVO, 1) <> 0", id=int(id_oferta))
-        db._conn.commit()
-    except Exception:
-        db._conn.rollback()
-        raise
-    finally:
-        cur.close()
+
+    db.transacao(desativar)

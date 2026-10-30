@@ -555,11 +555,8 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 if ok:
                     gravadas += 1
                     status_db = ' | oracle=ok'
-                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
-                    # gravada: se o processo cair, a proxima execucao recomeca
-                    # da primeira linha nao gravada.
-                    if trava is None or id_oferta < trava:
-                        estado.gravar_ultimo_id(id_oferta)
+                    # (O ponteiro avanca no fim deste bloco, depois da publicacao:
+                    # linha nao publicada por falta de conexao o trava, BSV-52.)
                     # Cadastro consolidado de produtos (BESAVE.PRODUTO): le de
                     # volta a linha JA GRAVADA (numeros/LS_* ja convertidos,
                     # ver core/oracle_db.buscar_para_produto) e acha-ou-cria o
@@ -635,7 +632,14 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     # afiliado ATIVO em LOJA_AFILIADA -- conceito DIFERENTE
                     # do "ativo" de ST_ATIVO (esse vem de conf/config.json).
                     # Best-effort, mesmo padrao do cadastro de produto acima.
-                    if id_produto is not None and afiliados.loja_ativa(loja):
+                    # Cache de afiliados fora do ar (LOJA_AFILIADA nao lida): a
+                    # linha nao e publicada e trava o ponteiro (BSV-52).
+                    cache_afiliados = id_produto is None or afiliados.garantir_carregado(db)
+                    if not cache_afiliados:
+                        status_db += ' | oferta=FALHOU'
+                        print(f'[captura {captura}] oferta: afiliados nao carregado')
+                        _adiar(id_oferta, True)
+                    elif id_produto is not None and afiliados.loja_ativa(loja):
                         try:
                             linha_oferta = db.buscar_para_oferta(id_oferta)
                             ok_oferta, erro_oferta = (
@@ -657,6 +661,13 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         else:
                             status_db += ' | oferta=FALHOU'
                             print(f'[captura {captura}] oferta: {erro_oferta}')
+                            if erro_oferta == ofertas.SEM_CONEXAO:
+                                _adiar(id_oferta, True)
+                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
+                    # gravada nem publicada: se o processo cair, a proxima execucao
+                    # recomeca da primeira linha nao gravada.
+                    if trava is None or id_oferta < trava:
+                        estado.gravar_ultimo_id(id_oferta)
                 else:
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
