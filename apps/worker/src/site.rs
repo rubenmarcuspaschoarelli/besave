@@ -7,6 +7,7 @@ use std::fmt::Write;
 use tracing::{debug, warn};
 
 use crate::expurgo::{ConfigExpurgo, ErroConfigExpurgo, ErroExpurgo, FilaExpurgo};
+use crate::imagens::{ConfigImagens, ErroConfigImagens};
 use crate::modelo::{Area, OfertaPagina, Publico, Status};
 use crate::pagina_html::{ErroTemplate, TemplateOferta, data_brasilia};
 use crate::paginas::{ErroPaginas, IndicePaginas, RelatorioPaginas, hash16, publicar_paginas};
@@ -203,13 +204,21 @@ impl From<ErroConfigExpurgo> for ErroConfigSite {
     }
 }
 
+impl From<ErroConfigImagens> for ErroConfigSite {
+    fn from(e: ErroConfigImagens) -> Self {
+        Self::Invalida(e.var, e.motivo)
+    }
+}
+
 /// `BESAVE_BASE_URL` (sem `/` final) e `BESAVE_INDEXAVEL`; leva junto a política do expurgo
-/// (`BESAVE_EXPURGO_*`, BSV-47), que `gerar` recebe por aqui.
+/// (`BESAVE_EXPURGO_*`, BSV-47) e a das imagens (`BESAVE_IMAGENS_*`, BSV-45), que `gerar` recebe
+/// por aqui.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConfigSite {
     pub base: String,
     pub indexavel: bool,
     pub expurgo: ConfigExpurgo,
+    pub imagens: ConfigImagens,
 }
 
 impl Default for ConfigSite {
@@ -218,6 +227,7 @@ impl Default for ConfigSite {
             base: BASE_PADRAO.to_owned(),
             indexavel: false,
             expurgo: ConfigExpurgo::default(),
+            imagens: ConfigImagens::default(),
         }
     }
 }
@@ -252,6 +262,7 @@ impl ConfigSite {
             base: base.trim_end_matches('/').to_owned(),
             indexavel,
             expurgo: ConfigExpurgo::de(&env)?,
+            imagens: ConfigImagens::de(&env)?,
         })
     }
 }

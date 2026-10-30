@@ -236,6 +236,7 @@ fn imprimir_relatorio(rel: &Relatorio) {
     let img = &rel.imagens;
     println!("imagens_publicadas: {}", img.publicadas);
     println!("imagens_reaproveitadas: {}", img.reaproveitadas);
+    println!("imagens_reenviadas: {}", img.reenviadas);
     println!("imagens_sem_origem: {}", img.sem_origem);
     println!("imagens_reprocessadas: {}", img.reprocessadas);
     println!("imagens_falhas: {}", img.falhas.len());

@@ -334,6 +334,7 @@ fn relatorio_com_contagens() {
             imagens: RelatorioImagens {
                 publicadas: 0,
                 reaproveitadas: 0,
+                reenviadas: 0,
                 sem_origem: 5,
                 reprocessadas: 0,
                 falhas: vec![],
@@ -513,6 +514,7 @@ fn falha_na_kvs_nao_grava_manifest() {
             || c.starts_with("sitemap")
             || c == "robots.txt"
             || c == "_estado/paginas.json"
+            || c == "_estado/imagens.json"
             || c == "_estado/expurgo.json"),
         "{:?}",
         p.gravacoes()

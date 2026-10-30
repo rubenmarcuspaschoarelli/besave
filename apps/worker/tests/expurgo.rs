@@ -15,7 +15,7 @@ use worker::expurgo::{
 };
 use worker::fonte::FakeFonte;
 use worker::geracao::{Relatorio, gerar};
-use worker::imagens::{chave_grande, chave_small};
+use worker::imagens::{IndiceImagens, chave_grande, chave_small};
 use worker::paginas::chave_pagina;
 use worker::publicador::{
     self, META_ESTADO, META_IMAGEM, META_PAGINA, Meta, Publicador, PublicadorMemoria,
@@ -168,7 +168,13 @@ fn fora_da_janela_nada_e_apagado() {
     let (mut p, mut kvs) = bucket_com(ids.clone());
     let mut fila = fila_com(ids);
     let r = fila
-        .executar(&ConfigExpurgo::default(), AGORA, &mut p, &mut kvs)
+        .executar(
+            &ConfigExpurgo::default(),
+            AGORA,
+            &mut p,
+            &mut kvs,
+            &mut IndiceImagens::default(),
+        )
         .unwrap();
     assert_eq!(p.remover_lote_chamadas(), 0);
     assert!(p.remocoes().is_empty());
@@ -194,7 +200,13 @@ fn na_janela_apaga_em_lotes_de_mil_chaves_ate_o_maximo() {
     let mut pendentes = Vec::new();
     for noite in 0..5 {
         let r = fila
-            .executar(&cfg, NA_JANELA + noite * 86_400, &mut p, &mut kvs)
+            .executar(
+                &cfg,
+                NA_JANELA + noite * 86_400,
+                &mut p,
+                &mut kvs,
+                &mut IndiceImagens::default(),
+            )
             .unwrap();
         let chamadas = p.remover_lote_chamadas() - chamadas_antes;
         chamadas_antes = p.remover_lote_chamadas();
@@ -220,8 +232,14 @@ fn lote_exato_usa_ceil_de_chaves_sobre_mil() {
     for (n, esperado) in [(1000, 3), (1001, 4), (1, 1)] {
         let (mut p, mut kvs) = bucket_com(1..=n);
         let mut fila = fila_com(1..=n);
-        fila.executar(&ConfigExpurgo::sempre(), AGORA, &mut p, &mut kvs)
-            .unwrap();
+        fila.executar(
+            &ConfigExpurgo::sempre(),
+            AGORA,
+            &mut p,
+            &mut kvs,
+            &mut IndiceImagens::default(),
+        )
+        .unwrap();
         assert_eq!(p.remover_lote_chamadas(), esperado, "{n} ids");
     }
 }
@@ -236,7 +254,8 @@ fn interrompido_no_meio_retoma_sem_repetir_e_sem_perder() {
     let mut fila = fila_com(ids.clone());
     fila.salvar(&mut p).unwrap();
     let cfg = ConfigExpurgo::sempre();
-    fila.executar(&cfg, AGORA, &mut p, &mut kvs).unwrap_err();
+    fila.executar(&cfg, AGORA, &mut p, &mut kvs, &mut IndiceImagens::default())
+        .unwrap_err();
     let apagadas_1 = p.remocoes().to_vec();
     assert_eq!(
         apagadas_1.len(),
@@ -248,7 +267,15 @@ fn interrompido_no_meio_retoma_sem_repetir_e_sem_perder() {
     let mut fila = FilaExpurgo::carregar(&p).unwrap();
     assert_eq!(fila.len(), 1000, "mil ids ficaram feitos e gravados");
     assert_eq!(fila.ids().next(), Some(1001));
-    let r = fila.executar(&cfg, AGORA + 300, &mut p, &mut kvs).unwrap();
+    let r = fila
+        .executar(
+            &cfg,
+            AGORA + 300,
+            &mut p,
+            &mut kvs,
+            &mut IndiceImagens::default(),
+        )
+        .unwrap();
     assert_eq!((r.removidos, r.pendente), (1000, 0));
 
     let todas = p.remocoes();
@@ -267,13 +294,21 @@ fn interrupcao_no_meio_de_um_id_nao_perde_chave() {
     p = p.falhando_em_remover_lote_na(3);
     let mut fila = fila_com(ids.clone());
     let cfg = ConfigExpurgo::sempre();
-    fila.executar(&cfg, AGORA, &mut p, &mut kvs).unwrap_err();
+    fila.executar(&cfg, AGORA, &mut p, &mut kvs, &mut IndiceImagens::default())
+        .unwrap_err();
     let mut fila = FilaExpurgo::carregar(&p).unwrap();
     assert!(
         !fila.is_empty(),
         "a fila gravada depois da 1ª chamada ficou no bucket"
     );
-    fila.executar(&cfg, AGORA + 300, &mut p, &mut kvs).unwrap();
+    fila.executar(
+        &cfg,
+        AGORA + 300,
+        &mut p,
+        &mut kvs,
+        &mut IndiceImagens::default(),
+    )
+    .unwrap();
     let todas = p.remocoes();
     let esperadas: BTreeSet<String> = ids.flat_map(chaves_do_id).collect();
     assert_eq!(todas.iter().cloned().collect::<BTreeSet<_>>(), esperadas);
@@ -521,8 +556,14 @@ fn id_sem_chave_na_kvs_nao_chama_a_kvs() {
     p.gravar(&chave_pagina(777), b"x", &META_PAGINA).unwrap();
     let mut kvs = RedirectsMemoria::new();
     let mut fila = fila_com([777]);
-    fila.executar(&ConfigExpurgo::sempre(), AGORA, &mut p, &mut kvs)
-        .unwrap();
+    fila.executar(
+        &ConfigExpurgo::sempre(),
+        AGORA,
+        &mut p,
+        &mut kvs,
+        &mut IndiceImagens::default(),
+    )
+    .unwrap();
     assert_eq!(kvs.aplicados().len(), 0);
     assert!(fila.is_empty());
 }
@@ -538,7 +579,13 @@ fn expurgo_de_um_ciclo_cabe_no_tempo_na_mediana() {
         let mut fila = fila_com(ids.clone());
         let inicio = std::time::Instant::now();
         let r = fila
-            .executar(&ConfigExpurgo::default(), NA_JANELA, &mut p, &mut kvs)
+            .executar(
+                &ConfigExpurgo::default(),
+                NA_JANELA,
+                &mut p,
+                &mut kvs,
+                &mut IndiceImagens::default(),
+            )
             .unwrap();
         assert_eq!(r.removidos, 3000);
         inicio.elapsed()

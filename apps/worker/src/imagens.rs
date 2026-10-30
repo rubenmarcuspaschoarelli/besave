@@ -1,7 +1,7 @@
 //! Imagens WebP do robô → S3 (BSV-13). O robô já entrega `{dir}/{id}/{id}[-small].webp`;
 //! o worker copia com verificação de orçamento (MANIFEST §1, §6, §7).
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use image::{
@@ -10,7 +10,8 @@ use image::{
 use tracing::warn;
 
 use crate::modelo::Area;
-use crate::publicador::{ErroPublicador, META_IMAGEM, Meta, Publicador};
+use crate::paginas::hash16;
+use crate::publicador::{ErroPublicador, META_ESTADO, META_IMAGEM, Meta, Publicador};
 
 /// Orçamento da imagem pequena (MANIFEST §7): acima disso, `ajustar_small` recodifica.
 pub const ORCAMENTO_SMALL: usize = 25_600;
@@ -40,6 +41,17 @@ pub enum ErroImagens {
     },
     #[error(transparent)]
     Publicador(#[from] ErroPublicador),
+    #[error(transparent)]
+    Indice(#[from] ErroIndice),
+}
+
+/// Erro ao ler ou gravar `_estado/imagens.json`.
+#[derive(Debug, thiserror::Error)]
+pub enum ErroIndice {
+    #[error(transparent)]
+    Publicador(#[from] ErroPublicador),
+    #[error("serializando {CHAVE_INDICE}: {0}")]
+    Serializacao(serde_json::Error),
 }
 
 /// Prefixo das imagens de oferta (CONTRATO §6).
@@ -61,6 +73,8 @@ pub enum MotivoFalhaImagem {
 pub struct RelatorioImagens {
     pub publicadas: u64,
     pub reaproveitadas: u64,
+    /// Subconjunto de `publicadas`: o id já estava no índice com outro hash (imagem trocada).
+    pub reenviadas: u64,
     pub sem_origem: u64,
     pub reprocessadas: u64,
     pub falhas: Vec<(i64, MotivoFalhaImagem)>,
@@ -224,46 +238,221 @@ fn publicar_placeholders(
     Ok(())
 }
 
-/// Chaves de imagem que já estão no destino, obtidas por listagem (BSV-13b): ~22 `ListObjectsV2`
-/// para 21 mil objetos no S3, em vez de um `HeadObject` por chave. Só memória; nada é persistido.
+/// Índice do que já está no bucket (MANIFEST §1): id → hash16 da impressão digital da origem (tamanho + mtime). Também guarda quando
+/// `img/ofertas/` foi listada pela última vez (`_relistado_em`), para a reconciliação periódica.
+pub const CHAVE_INDICE: &str = "_estado/imagens.json";
+/// Chave reservada do índice: segundos Unix UTC da última listagem de `img/ofertas/`.
+const CHAVE_RELISTADO: &str = "_relistado_em";
+/// Padrão de `BESAVE_IMAGENS_RELISTAR_HORAS`.
+pub const RELISTAR_HORAS_PADRAO: u64 = 24;
+
+#[derive(Debug, thiserror::Error)]
+#[error("{var} inválida: {motivo}")]
+pub struct ErroConfigImagens {
+    pub var: &'static str,
+    pub motivo: String,
+}
+
+/// `BESAVE_IMAGENS_RELISTAR` e `BESAVE_IMAGENS_RELISTAR_HORAS` (BSV-45).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ConfigImagens {
+    /// Lista `img/ofertas/` neste ciclo, com o índice em ordem.
+    pub relistar: bool,
+    /// Intervalo entre listagens de reconciliação; `0` lista todo ciclo.
+    pub relistar_horas: u64,
+}
+
+impl Default for ConfigImagens {
+    fn default() -> Self {
+        Self {
+            relistar: false,
+            relistar_horas: RELISTAR_HORAS_PADRAO,
+        }
+    }
+}
+
+impl ConfigImagens {
+    pub fn de(env: impl Fn(&str) -> Option<String>) -> Result<Self, ErroConfigImagens> {
+        let ler = |k: &str| {
+            env(k)
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty())
+        };
+        let relistar = match ler("BESAVE_IMAGENS_RELISTAR").as_deref() {
+            None | Some("0" | "false") => false,
+            Some("1" | "true") => true,
+            Some(outro) => {
+                return Err(ErroConfigImagens {
+                    var: "BESAVE_IMAGENS_RELISTAR",
+                    motivo: format!("{outro:?}, esperado 0 ou 1"),
+                });
+            }
+        };
+        let relistar_horas = match ler("BESAVE_IMAGENS_RELISTAR_HORAS") {
+            None => RELISTAR_HORAS_PADRAO,
+            Some(v) => v.parse::<u64>().map_err(|_| ErroConfigImagens {
+                var: "BESAVE_IMAGENS_RELISTAR_HORAS",
+                motivo: format!("{v:?}, esperado inteiro ≥ 0"),
+            })?,
+        };
+        Ok(Self {
+            relistar,
+            relistar_horas,
+        })
+    }
+}
+
+/// `_estado/imagens.json`: objeto plano `id → hash16`, mais `_relistado_em`. Lido uma vez por
+/// ciclo e regravado só quando muda (AD-041).
+#[derive(Debug, Clone, Default)]
+pub struct IndiceImagens {
+    hashes: BTreeMap<i64, String>,
+    relistado_em: Option<i64>,
+    /// Ausente, ilegível ou fora do formato: o ciclo reconstrói listando `img/ofertas/`.
+    confiavel: bool,
+    /// Bytes lidos do bucket; o índice só é regravado se diferir.
+    lido: Option<Vec<u8>>,
+}
+
+fn hash_valido(h: &str) -> bool {
+    h.len() == 16 && h.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+impl IndiceImagens {
+    /// Índice ausente, JSON inválido ou valor fora do formato = índice vazio e não confiável
+    /// (WARN no caso inválido). Erro de leitura do bucket propaga.
+    pub fn carregar(pub_: &dyn Publicador) -> Result<Self, ErroIndice> {
+        let lido = pub_.ler(CHAVE_INDICE)?;
+        let Some(bytes) = lido.as_deref() else {
+            return Ok(Self::default());
+        };
+        let Some(mut indice) = Self::de_json(bytes) else {
+            warn!("{CHAVE_INDICE} ilegível ou fora do formato; reconstruindo pela listagem");
+            return Ok(Self::default());
+        };
+        indice.lido = lido;
+        Ok(indice)
+    }
+
+    fn de_json(bytes: &[u8]) -> Option<Self> {
+        let mapa: BTreeMap<String, String> = serde_json::from_slice(bytes).ok()?;
+        let mut indice = Self {
+            confiavel: true,
+            ..Self::default()
+        };
+        for (k, v) in mapa {
+            if k == CHAVE_RELISTADO {
+                indice.relistado_em = Some(v.parse().ok()?);
+            } else if k.starts_with('_') {
+                continue;
+            } else if hash_valido(&v) {
+                indice.hashes.insert(k.parse().ok()?, v);
+            } else {
+                return None;
+            }
+        }
+        Some(indice)
+    }
+
+    pub fn len(&self) -> usize {
+        self.hashes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.hashes.is_empty()
+    }
+
+    pub fn contem(&self, id: i64) -> bool {
+        self.hashes.contains_key(&id)
+    }
+
+    fn hash(&self, id: i64) -> Option<&str> {
+        self.hashes.get(&id).map(String::as_str)
+    }
+
+    /// O ciclo precisa listar `img/ofertas/`: índice não confiável, `BESAVE_IMAGENS_RELISTAR`,
+    /// reconciliação do expurgo por fazer (`fila_reconciliada` falso) ou intervalo vencido.
+    pub fn deve_listar(&self, cfg: &ConfigImagens, fila_reconciliada: bool, agora: i64) -> bool {
+        if !self.confiavel || cfg.relistar || !fila_reconciliada {
+            return true;
+        }
+        let limite = i64::try_from(cfg.relistar_horas.saturating_mul(3600)).unwrap_or(i64::MAX);
+        self.relistado_em
+            .is_none_or(|t| agora.saturating_sub(t) >= limite)
+    }
+
+    fn definir(&mut self, id: i64, hash: String) {
+        self.hashes.insert(id, hash);
+    }
+
+    /// Tira do índice os ids cujas imagens o expurgo apagou (BSV-47).
+    pub fn remover(&mut self, ids: &[i64]) {
+        for id in ids {
+            self.hashes.remove(id);
+        }
+    }
+
+    /// Grava o índice se mudou. Devolve se gravou.
+    pub fn salvar(&mut self, pub_: &mut dyn Publicador) -> Result<bool, ErroIndice> {
+        let mut mapa: BTreeMap<String, String> = self
+            .hashes
+            .iter()
+            .map(|(id, h)| (id.to_string(), h.clone()))
+            .collect();
+        if let Some(t) = self.relistado_em {
+            mapa.insert(CHAVE_RELISTADO.to_owned(), t.to_string());
+        }
+        let json = serde_json::to_vec(&mapa).map_err(ErroIndice::Serializacao)?;
+        if self.lido.as_deref() == Some(json.as_slice()) {
+            return Ok(false);
+        }
+        pub_.gravar(CHAVE_INDICE, &json, &META_ESTADO)?;
+        self.lido = Some(json);
+        self.confiavel = true;
+        Ok(true)
+    }
+}
+
+/// Chaves de imagem que já estão no destino. `img/placeholder/` é listado todo ciclo (10 chaves);
+/// `img/ofertas/` só quando o índice não basta (BSV-45, AD-044). Só memória; nada é persistido.
 #[derive(Debug, Clone, Default)]
 pub struct ImagensExistentes {
-    ofertas: HashSet<String>,
+    /// `None` = não listou neste ciclo.
+    ofertas: Option<HashSet<String>>,
     placeholders: HashSet<String>,
     estranhas: u64,
 }
 
 impl ImagensExistentes {
-    /// Lista `img/ofertas/` e `img/placeholder/`, cada um uma vez. Chave de oferta com nome
-    /// inesperado fica fora do conjunto e é só contada.
-    pub fn listar(pub_: &dyn Publicador) -> Result<Self, ErroImagens> {
+    /// Lista `img/placeholder/` e, com `ofertas`, `img/ofertas/` (uma vez cada). Chave de oferta
+    /// com nome inesperado fica fora do conjunto e é só contada.
+    pub fn listar(pub_: &dyn Publicador, ofertas: bool) -> Result<Self, ErroImagens> {
         let listar = |prefixo: &'static str| {
             pub_.listar(prefixo)
                 .map_err(|fonte| ErroImagens::Listagem { prefixo, fonte })
         };
-        let mut ofertas = HashSet::new();
-        let mut estranhas = 0;
-        for chave in listar(PREFIXO_OFERTAS)? {
-            if chave_de_oferta_valida(&chave) {
-                ofertas.insert(chave);
-            } else {
-                estranhas += 1;
+        let mut existentes = Self::default();
+        if ofertas {
+            let mut conjunto = HashSet::new();
+            for chave in listar(PREFIXO_OFERTAS)? {
+                if chave_de_oferta_valida(&chave) {
+                    conjunto.insert(chave);
+                } else {
+                    existentes.estranhas += 1;
+                }
             }
+            existentes.ofertas = Some(conjunto);
         }
-        let placeholders = listar(PREFIXO_PLACEHOLDER)?.into_iter().collect();
-        Ok(Self {
-            ofertas,
-            placeholders,
-            estranhas,
-        })
+        existentes.placeholders = listar(PREFIXO_PLACEHOLDER)?.into_iter().collect();
+        Ok(existentes)
     }
-}
 
-impl ImagensExistentes {
     /// Ids que têm ao menos uma imagem em `img/ofertas/` (reconciliação do expurgo, BSV-47).
+    /// Vazio se `img/ofertas/` não foi listada.
     pub fn ids_de_oferta(&self) -> BTreeSet<i64> {
         self.ofertas
             .iter()
+            .flatten()
             .filter_map(|c| {
                 let nome = c.strip_prefix(PREFIXO_OFERTAS)?.strip_suffix(".webp")?;
                 nome.strip_suffix("-small").unwrap_or(nome).parse().ok()
@@ -288,26 +477,31 @@ fn chave_de_oferta_valida(chave: &str) -> bool {
 /// contra o custo de refazer o lote inteiro se uma tarefa falhar. Revisão do dono (BSV-13).
 const TAMANHO_BLOCO: usize = 64;
 
-/// Copia as imagens de `ids` de `dir` para o destino, em blocos de `TAMANHO_BLOCO` (regras 2, 3,
-/// 4, 5), e garante os 10 placeholders de área (regra 5). Existência vem de uma listagem
-/// (`ImagensExistentes::listar`), nunca de `existe`/`existem` (BSV-13b). Reaproveitamento
-/// (regra 4) e ausência de origem (regra 5) nunca retornam erro; falha de assinatura WebP conta
-/// em `RelatorioImagens.falhas` e não interrompe o processamento (regra 2).
+/// Copia as imagens de `ids` de `dir` para o destino quando a impressão digital da origem difere do índice
+/// (BSV-45) e garante os 10 placeholders de área. Lê o índice, lista `img/ofertas/` só se
+/// `IndiceImagens::deve_listar` (fila já reconciliada) e regrava o índice no fim.
 pub fn publicar_imagens(
     ids: &[i64],
     dir: &Path,
     pub_: &mut dyn Publicador,
+    cfg: &ConfigImagens,
+    agora: i64,
 ) -> Result<RelatorioImagens, ErroImagens> {
-    let existentes = ImagensExistentes::listar(pub_)?;
-    publicar_imagens_com(&existentes, ids, dir, pub_)
+    let mut indice = IndiceImagens::carregar(pub_)?;
+    let existentes = ImagensExistentes::listar(pub_, indice.deve_listar(cfg, true, agora))?;
+    publicar_imagens_com(&existentes, &mut indice, ids, dir, pub_, agora)
 }
 
-/// `publicar_imagens` com o conjunto já listado (o `gerar` mede a listagem à parte).
+/// `publicar_imagens` com índice e listagem já feitos (o `gerar` mede a listagem à parte e usa o
+/// índice de novo no expurgo). O índice é gravado depois dos uploads; um bloco que falha fica
+/// fora dele, os anteriores entram (regra 2).
 pub fn publicar_imagens_com(
     existentes: &ImagensExistentes,
+    indice: &mut IndiceImagens,
     ids: &[i64],
     dir: &Path,
     pub_: &mut dyn Publicador,
+    agora: i64,
 ) -> Result<RelatorioImagens, ErroImagens> {
     publicar_placeholders(existentes, pub_)?;
     let mut rel = RelatorioImagens {
@@ -315,9 +509,37 @@ pub fn publicar_imagens_com(
         ..Default::default()
     };
     for bloco in ids.chunks(TAMANHO_BLOCO) {
-        processar_bloco(bloco, existentes, dir, pub_, &mut rel)?;
+        if let Err(e) = processar_bloco(bloco, existentes, indice, dir, pub_, &mut rel) {
+            if let Err(e2) = indice.salvar(pub_) {
+                warn!(erro = %e2, "não gravou {CHAVE_INDICE} depois da falha de envio");
+            }
+            return Err(e.into());
+        }
     }
+    if existentes.ofertas.is_some() {
+        indice.relistado_em = Some(agora);
+    }
+    indice.salvar(pub_)?;
     Ok(rel)
+}
+
+/// Impressão digital da origem (BSV-45): `hash16("len_g:mtime_ns_g:len_s:mtime_ns_s")` dos dois
+/// arquivos, só por `metadata` (não lê o conteúdo). `None` se algum não existe ou não tem mtime.
+/// Limite aceito: conteúdo trocado com tamanho e mtime restaurados não é percebido.
+fn impressao(origem_g: &Path, origem_s: &Path) -> Option<String> {
+    let parte = |p: &Path| -> Option<String> {
+        let m = std::fs::metadata(p).ok()?;
+        let ns = m
+            .modified()
+            .ok()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_nanos();
+        Some(format!("{}:{ns}", m.len()))
+    };
+    Some(hash16(
+        format!("{}:{}", parte(origem_g)?, parte(origem_s)?).as_bytes(),
+    ))
 }
 
 /// Um bloco: no máximo 1 `gravar_lote` com tudo que precisa subir. `dir`/CPU (leitura de disco,
@@ -325,18 +547,38 @@ pub fn publicar_imagens_com(
 fn processar_bloco(
     ids: &[i64],
     existentes: &ImagensExistentes,
+    indice: &mut IndiceImagens,
     dir: &Path,
     pub_: &mut dyn Publicador,
     rel: &mut RelatorioImagens,
 ) -> Result<(), ErroPublicador> {
     let mut a_gravar: Vec<(String, Vec<u8>, Meta)> = Vec::new();
+    let mut enviados: Vec<(i64, String)> = Vec::new();
     for &id in ids {
         let (chave_s, chave_g) = (chave_small(id), chave_grande(id));
-        if existentes.ofertas.contains(&chave_s) && existentes.ofertas.contains(&chave_g) {
+        let (origem_s, origem_g) = origem(dir, id);
+        let Some(hash) = impressao(&origem_g, &origem_s) else {
+            rel.sem_origem += 1;
+            continue;
+        };
+        let anterior = indice.hash(id);
+        // `Some` só quando listou: o par inteiro está no bucket?
+        let no_bucket = existentes
+            .ofertas
+            .as_ref()
+            .map(|o| o.contains(&chave_s) && o.contains(&chave_g));
+        if anterior == Some(hash.as_str()) && no_bucket != Some(false) {
             rel.reaproveitadas += 1;
             continue;
         }
-        let (origem_s, origem_g) = origem(dir, id);
+        if anterior.is_none() && no_bucket == Some(true) {
+            // Reconstrução com o par no bucket: registra o hash, sem upload (regra 5).
+            indice.definir(id, hash);
+            rel.reaproveitadas += 1;
+            continue;
+        }
+        let troca = anterior.is_some_and(|h| h != hash);
+        // Só aqui o disco é lido: ciclo sem mudança olha metadados, nunca o conteúdo.
         let (Ok(bytes_s), Ok(bytes_g)) = (std::fs::read(&origem_s), std::fs::read(&origem_g))
         else {
             rel.sem_origem += 1;
@@ -375,11 +617,18 @@ fn processar_bloco(
         rel.maior_small = rel.maior_small.max(bytes_s.len() as u64);
         rel.maior_grande = rel.maior_grande.max(bytes_g.len() as u64);
         rel.publicadas += 1;
+        if troca {
+            rel.reenviadas += 1;
+        }
         a_gravar.push((chave_s, bytes_s, META_IMAGEM));
         a_gravar.push((chave_g, bytes_g, META_IMAGEM));
+        enviados.push((id, hash));
     }
     if !a_gravar.is_empty() {
         pub_.gravar_lote(&a_gravar)?;
+    }
+    for (id, hash) in enviados {
+        indice.definir(id, hash);
     }
     Ok(())
 }

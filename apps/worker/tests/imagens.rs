@@ -6,8 +6,9 @@ use std::path::{Path, PathBuf};
 use image::ImageEncoder;
 use worker::imagens::{
     AVISO_GRANDE, LADO_SMALL, MotivoFalhaImagem, ORCAMENTO_SMALL, ajustar_small, chave_grande,
-    chave_placeholder, chave_small, e_webp, origem, publicar_imagens,
+    chave_placeholder, chave_small, e_webp, origem,
 };
+use worker::imagens::{ConfigImagens, publicar_imagens as publicar};
 use worker::modelo::Area;
 use worker::publicador::{META_IMAGEM, Meta, Publicador, PublicadorMemoria};
 
@@ -299,26 +300,24 @@ fn imagem_grande_acima_do_aviso_publica_sem_alteracao() {
     assert_eq!(rel.maior_grande, grande.len() as u64);
 }
 
-/// REU-01: id já publicado (as duas chaves existem) é pulado mesmo com a origem "trocada" —
-/// nunca compara conteúdo.
+/// REU-01 (BSV-45): id já publicado com a origem **igual** é pulado. A origem trocada é o caso
+/// de `imagens_hash.rs` (IMG-01); decidir por existência de chave era o defeito de 19/10/2026.
 #[test]
-fn id_ja_publicado_e_reaproveitado_mesmo_com_origem_trocada() {
+fn id_ja_publicado_com_origem_igual_e_reaproveitado() {
     let dir = dir_temp("reaproveita");
-    let original_pequena = bytes_webp(1_000);
-    let original_grande = bytes_webp(1_000);
-    escrever_origem(&dir, 8000, &original_pequena, &original_grande);
+    escrever_origem(&dir, 8000, &bytes_webp(1_000), &bytes_webp(1_000));
 
     let mut p = PublicadorMemoria::new();
     publicar_imagens(&[8000], &dir, &mut p).unwrap();
     let publicado_antes = p.ler(&chave_small(8000)).unwrap();
+    let gravacoes = p.gravacoes().len();
 
-    // Origem muda depois da 1ª publicação: a 2ª chamada não deve nem ler o disco de novo.
-    escrever_origem(&dir, 8000, &bytes_webp(2_000), &bytes_webp(2_000));
     let rel = publicar_imagens(&[8000], &dir, &mut p).unwrap();
 
     assert_eq!(rel.reaproveitadas, 1);
     assert_eq!(rel.publicadas, 0);
     assert_eq!(p.ler(&chave_small(8000)).unwrap(), publicado_antes);
+    assert_eq!(p.gravacoes().len(), gravacoes, "nada regravado");
 }
 
 /// Fix 2 (validation.md, REU-01 conjunction): só uma das duas chaves já existe no destino
@@ -379,12 +378,18 @@ fn placeholders_publicados_uma_vez_e_reaproveitados_depois() {
     for area in Area::TODAS {
         assert!(p.existe(&chave_placeholder(area)).unwrap(), "{area:?}");
     }
-    let gravacoes_1a_chamada = p.gravacoes().len();
+    let placeholders = |p: &PublicadorMemoria| {
+        p.gravacoes()
+            .iter()
+            .filter(|c| c.starts_with("img/placeholder/"))
+            .count()
+    };
+    let gravacoes_1a_chamada = placeholders(&p);
     assert_eq!(gravacoes_1a_chamada, 10);
 
     publicar_imagens(&[], &dir, &mut p).unwrap();
     assert_eq!(
-        p.gravacoes().len(),
+        placeholders(&p),
         gravacoes_1a_chamada,
         "2ª chamada não deveria regravar nenhum placeholder"
     );
@@ -509,12 +514,15 @@ fn destino_com_tudo(ids: &[i64]) -> PublicadorMemoria {
     p
 }
 
-/// LST-01 (BSV-13b): 5000 ids já publicados → nenhuma checagem por chave, poucas listagens,
-/// nada publicado e tudo reaproveitado.
+/// LST-01 (BSV-13b, BSV-45): 5000 ids já publicados e sem índice → nenhuma checagem por chave,
+/// poucas listagens (a reconstrução), nada publicado e tudo reaproveitado.
 #[test]
 fn cinco_mil_ids_existentes_decididos_so_por_listagem() {
     let dir = dir_temp("lst-cinco-mil");
     let ids: Vec<i64> = (1..=5000).collect();
+    for &id in &ids {
+        escrever_origem(&dir, id, &bytes_webp(100), &bytes_webp(100));
+    }
     let mut p = destino_com_tudo(&ids);
     let gravacoes_antes = p.gravacoes().len();
 
@@ -529,10 +537,11 @@ fn cinco_mil_ids_existentes_decididos_so_por_listagem() {
     );
     assert_eq!(rel.publicadas, 0);
     assert_eq!(rel.reaproveitadas, 5000);
+    let novas: Vec<&String> = p.gravacoes()[gravacoes_antes..].iter().collect();
     assert_eq!(
-        p.gravacoes().len(),
-        gravacoes_antes,
-        "nada deveria ser gravado"
+        novas,
+        ["_estado/imagens.json"],
+        "só o índice reconstruído deveria ser gravado"
     );
 }
 
@@ -582,9 +591,13 @@ fn placeholder_existente_nao_e_reenviado_e_ausente_e_enviado() {
 
     publicar_imagens(&[], &dir, &mut p).unwrap();
 
+    let novas: Vec<&String> = p.gravacoes()[antes..]
+        .iter()
+        .filter(|c| c.starts_with("img/"))
+        .collect();
     assert_eq!(
-        &p.gravacoes()[antes..],
-        [chave_placeholder(ausente)],
+        novas,
+        [&chave_placeholder(ausente)],
         "só o placeholder ausente deveria subir"
     );
     assert_eq!(p.existe_chamadas() + p.existem_chamadas(), 0);
@@ -618,4 +631,13 @@ fn chaves_estranhas_contadas_ignoradas_e_mantidas() {
     for c in estranhas {
         assert!(p.existe(c).unwrap(), "{c} foi removida");
     }
+}
+
+/// Atalho dos testes de BSV-13: config padrão e um instante fixo.
+fn publicar_imagens(
+    ids: &[i64],
+    dir: &Path,
+    p: &mut dyn Publicador,
+) -> Result<worker::imagens::RelatorioImagens, worker::imagens::ErroImagens> {
+    publicar(ids, dir, p, &ConfigImagens::default(), 1_790_000_000)
 }
