@@ -82,3 +82,18 @@ Roteiro do README, passos 1–6, com conta e ARNs trocados por `REDACTED` na PR 
 - teste do lock com `Error acquiring the state lock`.
 
 Também falta conferir o CI da PR (aba Checks, lição 12).
+
+## Adendo — curinga no nome do bucket (Saída 4)
+
+`infra/tests/estado_acesso.tftest.hcl`: em Allow com ação `*` ou `s3*`, nenhum Resource pode ser `*` nem ter
+curinga no nome do bucket (parte antes da primeira `/`); curinga depois da `/` segue permitido.
+Rodado por quem alterou o teste (o Verifier não repetiu estes mutantes); cada mutante revertido com `git checkout`.
+
+| mutante | resultado em `estado_acesso` |
+|---|---|
+| worker: Allow `s3:GetObject` em `arn:aws:s3:::besave-*` | morto (fail) |
+| vigia: `s3:ListBucket` em `arn:aws:s3:::*` | morto (fail) |
+| worker: Resource `arn:aws:s3:::*/x` | morto (fail) |
+| controle: worker em `arn:aws:s3:::besave-site/*` | `estado_acesso` pass (só o `iam.tftest`, que compara a policy exata, falha) |
+
+Suíte limpa depois do ajuste: 20 passed, 0 failed.

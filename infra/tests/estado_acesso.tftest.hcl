@@ -29,7 +29,8 @@ run "ninguem_de_servico_acessa_o_estado" {
     error_message = "nenhuma policy de serviço pode citar o bucket do state (besave-tfstate)"
   }
 
-  # Allow com s3:* (ou *) em Resource "*" alcançaria o bucket do state sem citá-lo.
+  # Statement Allow com ação "*" ou s3:*: Resource não pode ser "*" nem ter curinga no nome do bucket
+  # (arn:aws:s3:::*, arn:aws:s3:::besave-*, arn:aws:s3:::*/x). Curinga depois da "/" do objeto é permitido.
   assert {
     condition = alltrue(flatten([for p in [
       aws_iam_user_policy.worker.policy,
@@ -38,10 +39,12 @@ run "ninguem_de_servico_acessa_o_estado" {
       aws_iam_role_policy.vigia.policy,
       aws_iam_role_policy.vigia_agenda.policy,
       ] : [for s in jsondecode(p).Statement :
-      !(s.Effect == "Allow"
-        && anytrue([for a in flatten([s.Action]) : a == "*" || a == "s3:*"])
-      && anytrue([for r in flatten([s.Resource]) : r == "*"]))
+      s.Effect != "Allow"
+      || !anytrue([for a in flatten([s.Action]) : a == "*" || startswith(a, "s3")])
+      || alltrue([for r in flatten([s.Resource]) :
+        r != "*" && !strcontains(split("/", replace(r, "arn:aws:s3:::", ""))[0], "*")
+      ])
     ]]))
-    error_message = "nenhuma policy de serviço pode liberar s3:* ou * em Resource \"*\""
+    error_message = "Allow com ação * ou s3:* não pode ter Resource \"*\" nem curinga no nome do bucket"
   }
 }
