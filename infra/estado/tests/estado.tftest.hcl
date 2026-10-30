@@ -1,8 +1,7 @@
 mock_provider "aws" {}
 
 variables {
-  regiao        = "us-east-1"
-  bucket_estado = "besave-tfstate"
+  regiao = "us-east-1"
 }
 
 run "bucket_do_estado" {
