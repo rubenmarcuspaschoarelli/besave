@@ -73,8 +73,7 @@ def _concorrentes(db, id_oferta, url_final, dt_oferta, id_produto):
         binds['prod'] = int(id_produto)
     if not filtros:
         return []
-    cur = db._conn.cursor()
-    try:
+    def consultar(cur):
         cur.execute(
             "SELECT ID_OFERTA, VL_PRECO_POR, DT_OFERTA, DS_URL_FINAL, ID_PRODUTO FROM OFERTA "
             " WHERE ST_ATIVO = 1 AND ID_OFERTA <> :id AND VL_PRECO_POR IS NOT NULL "
@@ -89,8 +88,8 @@ def _concorrentes(db, id_oferta, url_final, dt_oferta, id_produto):
             if mesmo:
                 out.append((int(id_outra), preco_outra, dt_outra))
         return out
-    finally:
-        cur.close()
+
+    return db.transacao(consultar, commit=False)
 
 
 def oferta_mantida(db, id_oferta, url_final, preco, dt_oferta, id_produto=None):
@@ -116,15 +115,10 @@ def perdedoras(db, id_oferta, url_final, preco, dt_oferta, id_produto=None):
 def marcar_duplicada(db, id_oferta, id_mantida):
     """Fila: ST_CAPTURA='9' + DS_CAPTURA='duplicada de N'. OFERTA (se a linha
     ja existir, ex. republicacao por backfill): desativada."""
-    cur = db._conn.cursor()
-    try:
+    def marcar(cur):
         cur.execute("UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '9', DS_CAPTURA = :d "
                     "WHERE ID_OFERTA = :id", d=f'{PREFIXO}{id_mantida}', id=int(id_oferta))
         cur.execute("UPDATE OFERTA SET ST_ATIVO = 0, DT_DESATIVACAO = NVL(DT_DESATIVACAO, SYSDATE) "
                     "WHERE ID_OFERTA = :id AND NVL(ST_ATIVO, 1) <> 0", id=int(id_oferta))
-        db._conn.commit()
-    except Exception:
-        db._conn.rollback()
-        raise
-    finally:
-        cur.close()
+
+    db.transacao(marcar)

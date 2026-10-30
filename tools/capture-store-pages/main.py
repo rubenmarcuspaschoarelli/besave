@@ -421,6 +421,16 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
         if adiados is not None:
             adiados.add(id_oferta)
 
+    # Capturadas ('1') mas ainda sem publicar por falta de conexao/afiliados: o
+    # ponteiro nao passa do menor delas; _recuperar_publicacoes as devolve a '0'.
+    pendentes = set(estado.ler_publicacao_pendente())
+
+    def _pendente(id_oferta):
+        pendentes.add(id_oferta)
+        estado.adicionar_publicacao_pendente(id_oferta)
+        if adiados is not None:
+            adiados.add(id_oferta)
+
     for row in rows:
         cron = _Cronometro()
         out = dict(row)
@@ -555,11 +565,8 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 if ok:
                     gravadas += 1
                     status_db = ' | oracle=ok'
-                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
-                    # gravada: se o processo cair, a proxima execucao recomeca
-                    # da primeira linha nao gravada.
-                    if trava is None or id_oferta < trava:
-                        estado.gravar_ultimo_id(id_oferta)
+                    # (O ponteiro avanca no fim deste bloco, depois da publicacao:
+                    # linha nao publicada por falta de conexao o trava, BSV-52.)
                     # Cadastro consolidado de produtos (BESAVE.PRODUTO): le de
                     # volta a linha JA GRAVADA (numeros/LS_* ja convertidos,
                     # ver core/oracle_db.buscar_para_produto) e acha-ou-cria o
@@ -635,7 +642,14 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     # afiliado ATIVO em LOJA_AFILIADA -- conceito DIFERENTE
                     # do "ativo" de ST_ATIVO (esse vem de conf/config.json).
                     # Best-effort, mesmo padrao do cadastro de produto acima.
-                    if id_produto is not None and afiliados.loja_ativa(loja):
+                    # Cache de afiliados fora do ar (LOJA_AFILIADA nao lida): a
+                    # linha nao e publicada e trava o ponteiro (BSV-52).
+                    cache_afiliados = id_produto is None or afiliados.garantir_carregado(db)
+                    if not cache_afiliados:
+                        status_db += ' | oferta=FALHOU'
+                        print(f'[captura {captura}] oferta: afiliados nao carregado')
+                        _pendente(id_oferta)
+                    elif id_produto is not None and afiliados.loja_ativa(loja):
                         try:
                             linha_oferta = db.buscar_para_oferta(id_oferta)
                             ok_oferta, erro_oferta = (
@@ -657,6 +671,14 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         else:
                             status_db += ' | oferta=FALHOU'
                             print(f'[captura {captura}] oferta: {erro_oferta}')
+                            if erro_oferta == ofertas.SEM_CONEXAO:
+                                _pendente(id_oferta)
+                    # Ponteiro so avanca no sucesso e nunca alem de uma linha nao
+                    # gravada nem publicada: se o processo cair, a proxima execucao
+                    # recomeca da primeira linha nao gravada.
+                    if ((trava is None or id_oferta < trava)
+                            and (not pendentes or id_oferta < min(pendentes))):
+                        estado.gravar_ultimo_id(id_oferta)
                 else:
                     status_db = ' | oracle=FALHOU'
                     print(f'[captura {captura}] oracle: {erro}')
@@ -722,6 +744,37 @@ def _resumo_oracle(total, gravadas, com_erro):
               "WHERE ST_CAPTURA='9' AND DS_CAPTURA='<motivo>';")
 
 
+def _devolver_a_fila(cur, id_oferta):
+    cur.execute("UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '0' "
+                "WHERE ID_OFERTA = :id AND ST_CAPTURA = '1'", id=int(id_oferta))
+    return cur.rowcount
+
+
+def _recuperar_publicacoes(db, adiados):
+    """Devolve a '0' as linhas capturadas cuja publicacao ficou pendente (queda
+    de conexao na duplicidade, cache de afiliados fora): sao relidas e seguem o
+    caminho normal. Persistente; se a causa continua, o id fica para a proxima
+    volta (cache: no maximo 1x/min, via afiliados.garantir_carregado)."""
+    pendentes = estado.ler_publicacao_pendente()
+    if not pendentes or not db:
+        return
+    if not afiliados.garantir_carregado(db):
+        print(f'[pendentes] {len(pendentes)} publicacao(oes) aguardando o cache de afiliados.')
+        return
+    restantes = list(pendentes)
+    for id_oferta in pendentes:
+        try:
+            db.transacao(lambda cur, i=id_oferta: _devolver_a_fila(cur, i))
+        except Exception as e:  # noqa: BLE001
+            print(f'[pendentes] {id_oferta} segue pendente: {e}')
+            break                       # banco fora: sem laco apertado, tenta na proxima volta
+        restantes.remove(id_oferta)
+        adiados.discard(id_oferta)
+        print(f'[pendentes] {id_oferta} devolvida para a fila (ST_CAPTURA=0).')
+    if restantes != pendentes:
+        estado.gravar_publicacao_pendente(restantes)
+
+
 # Varredura de validade no --monitorar: no maximo 1 por hora (UPDATE barato,
 # mas nao precisa rodar a cada 3 min).
 VALIDADE_A_CADA_S = 3600
@@ -770,6 +823,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
     ult_validade = 0.0
     try:
         while True:
+            _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
                 _varrer_validade(db)
                 ult_validade = time.monotonic()
@@ -870,6 +924,7 @@ def main():
         # Lido uma vez aqui; o monitor fica horas no ar sem reconectar o
         # suficiente para justificar reler a cada varredura.
         afiliados.carregar(db)
+        _recuperar_publicacoes(db, set())
         origem_fields = list(COLUNAS_FILA)
         base = f'oracle_{datetime.now():%d_%m_%Y_%H_%M}'
         # No modo lote a fila e lida ANTES de abrir o navegador: nao havendo
