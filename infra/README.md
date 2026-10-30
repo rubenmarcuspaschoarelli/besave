@@ -39,8 +39,43 @@ Variáveis (`variables.tf`), todas com padrão: `regiao`, `dominio`, `bucket_sit
 `dominios_curtos` (`["besave.io", "besave.me"]`), `ativar_curto` (`false`).
 Nome de bucket é global: se `besave-site` ou `besave-logs` estiver tomado, passe `-var bucket_site=...`.
 
-**State local.** `terraform.tfstate` fica em `infra/` e está no `.gitignore`. Faça backup fora do
-git: sem ele o Terraform perde o controle dos recursos. Backend S3 é ticket futuro.
+## State remoto (BSV-53)
+
+O state da raiz `infra/` fica no bucket `besave-tfstate` (S3 privado, versionado, SSE-S3, TLS obrigatório),
+chave `infra/terraform.tfstate`, com o lock nativo do S3 (`use_lockfile`, sem DynamoDB; exige Terraform
+≥ 1.11). Só a identidade de administrador do dono (não a conta root) acessa o bucket: worker, backup,
+`site_deploy` e vigia não têm acesso, e o teste `tests/estado_acesso.tftest.hcl` barra quem ganhar.
+O bucket nasce na raiz `infra/estado/` (state local próprio, mudança rara). O CI roda `init -backend=false`,
+`validate` e `test` nas duas raízes, sem credencial AWS.
+
+### Roteiro da migração (dono, uma vez)
+
+1. Copie `infra/terraform.tfstate*` para uma pasta fora do repositório.
+2. Em `infra/estado/`: `terraform init`, `terraform plan -out p` (só o bucket e as configurações dele),
+   `terraform apply p`.
+3. Em `infra/`: `terraform init -migrate-state` e responda `yes`.
+4. `terraform plan` em `infra/` deve dar **"No changes"**. É o gate: qualquer diferença, pare; o state local
+   copiado no passo 1 continua valendo.
+5. Teste do lock: no terminal A, `terraform apply` (sem arquivo de plano), parado na confirmação; no B,
+   `terraform plan` deve falhar com `Error acquiring the state lock`; responda `no` no A.
+6. Mova `infra/terraform.tfstate*` para a pasta do passo 1 (sem apagar) e guarde por 30 dias. Apague os
+   `infra/*.plan` antigos depois de conferir que são planos de 23/10.
+
+Não há `destroy` no roteiro: o `prevent_destroy` do bucket barra de propósito.
+
+### Operação
+
+- **Voltar uma versão do state:** `aws s3api list-object-versions --bucket besave-tfstate --prefix infra/terraform.tfstate`,
+  baixe a `VersionId` desejada com `aws s3api get-object --bucket besave-tfstate --key infra/terraform.tfstate --version-id <id> state.json`,
+  confira o conteúdo e envie com `terraform state push state.json` (ou `aws s3api put-object`).
+  Versões não correntes ficam 90 dias, sempre as 30 mais novas.
+- **Lock preso:** `terraform force-unlock <LOCK_ID>` (o id vem na mensagem de erro). Só com certeza de que
+  ninguém está aplicando. O lock é o objeto `infra/terraform.tfstate.tflock`.
+- **State de `infra/estado/`:** fica local (`infra/estado/terraform.tfstate`, no `.gitignore`); faça backup
+  fora do git. Se perder, `terraform init` na pasta e `terraform import aws_s3_bucket.estado besave-tfstate`
+  (e o mesmo para `aws_s3_bucket_public_access_block`, `_server_side_encryption_configuration`,
+  `_versioning`, `_lifecycle_configuration` e `_policy`, todos com o nome do bucket); o `plan` deve dar
+  "No changes".
 
 ## Depois do apply
 
