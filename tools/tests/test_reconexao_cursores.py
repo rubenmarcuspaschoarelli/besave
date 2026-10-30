@@ -122,7 +122,6 @@ def _marcar_duplicada(db):
 def _afiliados_carregar(db):
     afiliados = _core("afiliados")
     afiliados.carregar(db)
-    assert afiliados._carregado or True
 
 
 def _mapa(db):
