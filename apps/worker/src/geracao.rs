@@ -14,7 +14,7 @@ use crate::conversao::{
 };
 use crate::expurgo::{ErroExpurgo, FilaExpurgo, RelatorioExpurgo};
 use crate::fonte::{ErroFonte, FonteOfertas};
-use crate::imagens::{self, ErroImagens, ImagensExistentes, RelatorioImagens};
+use crate::imagens::{self, ErroImagens, ImagensExistentes, IndiceImagens, RelatorioImagens};
 use crate::mapeamento::Mapeamento;
 use crate::modelo::{ChunkRef, Manifest, OfertaCard};
 use crate::publicador::{ErroPublicador, META_CHUNK, META_MANIFEST, Publicador};
@@ -243,13 +243,17 @@ pub fn gerar(
     // MANIFEST §6 passo 1: imagens antes de qualquer chunk.
     let t = Instant::now();
     let ids_publicaveis: Vec<i64> = cards.iter().map(|c| c.id).collect();
-    let existentes = ImagensExistentes::listar(pub_)?;
+    let mut fila = FilaExpurgo::carregar(pub_)?;
+    // `img/ofertas/` só é listada quando o índice de imagens não basta (BSV-45); a reconciliação
+    // única do expurgo (abaixo) também precisa da listagem.
+    let mut indice_imagens = IndiceImagens::carregar(pub_).map_err(ErroImagens::from)?;
+    let listar_ofertas = indice_imagens.deve_listar(&site.imagens, fila.reconciliado(), agora);
+    let existentes = ImagensExistentes::listar(pub_, listar_ofertas)?;
     let d_imagens_listagem = t.elapsed();
 
     // Fila do expurgo (BSV-47), gravada antes de qualquer upload e do manifest: ciclo que cai
     // depois não perde id que saiu. Quem voltou ao conjunto (reativado) sai da fila.
     let publicados: HashSet<i64> = ids_publicaveis.iter().copied().collect();
-    let mut fila = FilaExpurgo::carregar(pub_)?;
     fila.devolver_publicados(&publicados);
     rel.expurgo.enfileirados += fila.registrar(
         ids_anteriores
@@ -261,7 +265,14 @@ pub fn gerar(
     rel.expurgo.enfileirados +=
         fila.reconciliar(pub_, existentes.ids_de_oferta(), &publicados, agora)?;
     fila.salvar(pub_)?;
-    rel.imagens = imagens::publicar_imagens_com(&existentes, &ids_publicaveis, dir_imagens, pub_)?;
+    rel.imagens = imagens::publicar_imagens_com(
+        &existentes,
+        &mut indice_imagens,
+        &ids_publicaveis,
+        dir_imagens,
+        pub_,
+        agora,
+    )?;
     let d_imagens = t.elapsed();
 
     let t = Instant::now();
@@ -374,7 +385,13 @@ pub fn gerar(
     let t = Instant::now();
     // Falha aqui não derruba o ciclo: o site já foi publicado e os ids seguem na fila. O erro vira
     // WARN e `expurgo_falhou`, e quem chama avisa com a variante `Expurgo`.
-    let expurgo = match fila.executar(&site.expurgo, agora, pub_, &mut redirects) {
+    let expurgo = match fila.executar(
+        &site.expurgo,
+        agora,
+        pub_,
+        &mut redirects,
+        &mut indice_imagens,
+    ) {
         Ok(r) => r,
         Err(e) => {
             warn!(erro = %e, pendente = fila.len(), "expurgo falhou; ids seguem na fila para o próximo ciclo");

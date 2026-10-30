@@ -1,0 +1,11 @@
+# 03:30 (hora do servidor; ver o README sobre o fuso). Fora da janela do expurgo, 02:00-05:00.
+[Unit]
+Description=Besave: backup diário do banco às 03:30
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::conversao::iso_utc;
-use crate::imagens::{chave_grande, chave_small};
+use crate::imagens::{ErroIndice, IndiceImagens, chave_grande, chave_small};
 use crate::logs::FUSO_BRASILIA;
 use crate::paginas::chave_pagina;
 use crate::publicador::{ErroPublicador, LOTE_REMOCAO, META_ESTADO, Publicador};
@@ -33,6 +33,8 @@ pub enum ErroExpurgo {
     Publicador(#[from] ErroPublicador),
     #[error(transparent)]
     Redirects(#[from] ErroRedirects),
+    #[error(transparent)]
+    Indice(#[from] ErroIndice),
     #[error("serializando {CHAVE_EXPURGO}: {0}")]
     Serializacao(serde_json::Error),
 }
@@ -291,12 +293,16 @@ impl FilaExpurgo {
     /// todas apagadas saem da KVS e da fila e o estado é gravado: ciclo interrompido retoma dali.
     /// Um id cortado ao meio pela fronteira do lote fica na fila até o fim da sua última chave
     /// (no máximo duas chaves são reenviadas, e o `DeleteObjects` de chave ausente não falha).
+    /// Os mesmos ids saem de `indice` (hashes das imagens, BSV-45) e o índice é gravado antes da
+    /// fila: queda entre as duas gravações só repete um delete inofensivo, nunca deixa hash velho
+    /// de id apagado (a reentrada dele não subiria).
     pub fn executar(
         &mut self,
         cfg: &ConfigExpurgo,
         agora: i64,
         pub_: &mut dyn Publicador,
         kvs: &mut dyn Redirects,
+        indice: &mut IndiceImagens,
     ) -> Result<RelatorioExpurgo> {
         let mut rel = RelatorioExpurgo {
             pendente: self.len() as u64,
@@ -324,6 +330,8 @@ impl FilaExpurgo {
             if ate > feitos {
                 let prontos = &ids[feitos..ate];
                 redirects::remover_chaves(prontos, kvs, pub_)?;
+                indice.remover(prontos);
+                indice.salvar(pub_)?;
                 for id in prontos {
                     self.c.fila.remove(id);
                 }
