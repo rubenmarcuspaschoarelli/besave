@@ -116,3 +116,25 @@ def test_limite_zero_ou_negativo_cai_no_padrao():
     for m in (0, -5, "x"):
         v, _ = vigia({"alerta": {"sem_abrir_minutos": m}})
         assert v.limite == timedelta(minutes=45)
+
+
+def test_tempo_parado_conta_do_fim_da_janela_e_nao_da_ultima_volta_dentro_dela():  # achado real 30/10
+    cfg = {"alerta": {"sem_abrir_minutos": 2, "telegram_token": "t", "telegram_chat_id": "c"}}
+    ult = datetime(2026, 10, 30, 7, 41)
+    v, env = vigia(cfg, inicio=ult - timedelta(hours=1))
+    v.registrar_volta(True, ult)                                    # ultima volta dentro da janela
+    v.registrar_volta(False, datetime(2026, 10, 30, 8, 1, 24))      # 1a cega, 1 min depois das 08:00
+    assert env == []
+    v.registrar_volta(False, datetime(2026, 10, 30, 8, 2))
+    assert len(env) == 1 and "ha 2 min" in env[0][2]
+    v.registrar_volta(True, datetime(2026, 10, 30, 8, 16))
+    assert len(env) == 2 and "~16 min" in env[1][2]                 # do fim da janela, nao das 07:41
+
+
+def test_fim_da_janela_de_ontem_nao_atrapalha_quem_abriu_de_dia():
+    v, env = vigia()
+    v.registrar_volta(True, T0)                                    # 13:00 abriu
+    v.registrar_volta(False, T0 + timedelta(minutes=44))
+    assert env == []
+    v.registrar_volta(False, T0 + timedelta(minutes=45))
+    assert len(env) == 1 and "ha 45 min" in env[0][2]

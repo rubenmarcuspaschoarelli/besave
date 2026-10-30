@@ -28,6 +28,14 @@ def enviar_telegram(token: str, chat_id: str, texto: str) -> None:
         r.read()
 
 
+def fim_mais_recente(janela, agora):
+    """Instante em que a janela noturna terminou pela ultima vez (<= agora), ou None sem janela."""
+    if janela is None:
+        return None
+    fim = datetime.combine(agora.date(), janela[1])
+    return fim if fim <= agora else fim - timedelta(days=1)
+
+
 class VigiaCaptura:
     def __init__(self, cfg, janela, inicio=None, enviar=None):
         bloco = (cfg or {}).get("alerta")
@@ -66,6 +74,11 @@ class VigiaCaptura:
                 self.alertado_em = self.desde = None
             self.ultimo_aberto = agora
             return
+        # Fora da janela o tempo parado conta do FIM dela: a ultima volta aberta foi
+        # a de dentro (dormiu ate 08:00), e nao pode contar o sono como parada.
+        fim = fim_mais_recente(self.janela, agora)
+        if fim is not None and fim > self.ultimo_aberto:
+            self.ultimo_aberto = fim
         parado = agora - self.ultimo_aberto
         if self.alertado_em is None:
             if parado >= self.limite:
