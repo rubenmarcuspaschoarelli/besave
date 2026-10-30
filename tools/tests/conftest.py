@@ -50,6 +50,12 @@ def lojas(monkeypatch):
     monkeypatch.setattr(mod.estado, "usa_imagem_loja", lambda g: False)
     mod.ponteiro = []
     monkeypatch.setattr(mod.estado, "gravar_ultimo_id", mod.ponteiro.append)
+    mod.pendentes = []
+    monkeypatch.setattr(mod.estado, "ler_publicacao_pendente", lambda: sorted(mod.pendentes))
+    monkeypatch.setattr(mod.estado, "gravar_publicacao_pendente",
+                        lambda ids: mod.pendentes.__setitem__(slice(None), sorted(ids)))
+    monkeypatch.setattr(mod.estado, "adicionar_publicacao_pendente",
+                        lambda i: mod.pendentes.append(i) if i not in mod.pendentes else None)
     yield mod
     for nome in set(sys.modules) - antes:
         if nome != "core.janela":

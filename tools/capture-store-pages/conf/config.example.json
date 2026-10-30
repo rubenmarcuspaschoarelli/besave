@@ -11,7 +11,8 @@
     "_obs": "Vazio = sem janela (ritmo normal). Preencha inicio/fim (HH:MM, relogio do sistema; pode cruzar a meia-noite) e intervalo_minutos, ex.: 22:00, 08:00, 120. Dentro dela o robo faz uma rodada a cada intervalo."
   },
   "controle": {
-    "ultimo_id_processado": 0
+    "ultimo_id_processado": 0,
+    "publicacao_pendente": []
   },
   "monitor": {
     "intervalo_minutos": 3
