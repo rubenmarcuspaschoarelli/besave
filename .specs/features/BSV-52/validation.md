@@ -33,3 +33,47 @@ M1 sem @_reconecta em transacao; M2 sem rollback; M3 funcao executada 2x; M4 che
 - Testes de tempo/carga: rodados sem outra carga; nao ha teste de tempo neste ticket.
 
 ## Veredito: PASS (condicionado ao teste real do dono, lição 5)
+
+---
+
+# Trecho novo: publicacao pendente recuperada sozinha (commit eb38d28)
+
+Verificador: sub-agente independente (autor != verificador). Nenhum codigo de producao nem teste foi alterado; mutantes restaurados com `git checkout -- <arquivo>`.
+
+## Gates
+- `cd tools && python -m pytest -q` -> 187 passed.
+- `cd tools/capture-chat-groups && python -m unittest discover -s tests` -> 15 tests OK.
+- `git status` limpo fora de `.specs` depois dos mutantes.
+
+## Requisitos
+| item | veredito | evidencia |
+|---|---|---|
+| (a) id vai para `controle.publicacao_pendente` (persistida, dedupe, ordenada) | PASS | core/estado.py:176-198 (`ler/gravar/adicionar_publicacao_pendente`, gravacao atomica via `_gravar_controle`, preserva o resto do config); main.py:424-432 (`_pendente`); chamado em main.py:651 (cache) e :675 (SEM_CONEXAO) |
+| (b) inicio de cada volta do monitor e arranque; UPDATE `WHERE ID_OFERTA=:id AND ST_CAPTURA='1'` via `db.transacao`; tira de `adiados` e da lista; causa persistente fica na lista sem laco (cache 1/min) | PASS | main.py:747-776 (`_devolver_a_fila`, `_recuperar_publicacoes`: `garantir_carregado` faz o gate de 1/min, `break` no 1o erro de banco, lista regravada so com o que sobrou); monitor main.py:826; arranque main.py:927; testes test_publicacao_pendente.py:21 (1), :46 (2), :68 (3), :95 (4), :113 (sem laco), :139 (monitor) |
+| (c) ponteiro nao passa do menor pendente (inclui os da lista persistida apos reinicio) | PASS | main.py:679-681 (`id_oferta < min(pendentes)`, `pendentes` lido de `estado` no inicio do lote, :426); teste :122 |
+| Duplicada de verdade continua '9' (nao volta a '0') | PASS | teste :95 (1 devolucao + 1 marca '9') |
+| Monitor ignora o ponteiro (ultimo_id=0), entao a linha devolvida e relida; no modo lote a linha devolvida tem id > ponteiro (ponteiro < menor pendente) | PASS | main.py:807, :933 |
+| SQL CONFERE_BSV_52_KILL_SESSION.sql (Oracle 11g, so leitura) | PASS (leitura) | consulta 1 e 2: colunas `ID_PRODUTO`/`DS_URL_FINAL` existem na fila (usadas em programas_ajuste/backfill_*.py), `BESAVE.LOJA_AFILIADA(DS_LOJA, ST_ATIVO)` igual a core/afiliados.py:46; consulta 3: `ABS(date - date) <= 1` e valido em 11g; sem recurso 12c (sem FETCH FIRST, sem IDENTITY). Nao executado no banco. Binds `:ini` repetido: ok no SQL*Plus/SQL Developer |
+
+## Sensor de discriminacao (um por vez; `pytest -x tests/test_publicacao_pendente.py tests/test_reconexao_cursores.py tests/test_reconexao_lojas.py`)
+MORTOS (17): M1 nao remove da lista apos UPDATE; M2 remove mesmo com UPDATE falho; M3 sem `adiados.discard`; M5 UPDATE para '9'; M6 UPDATE para '1'; M7 sem recuperacao no monitor; M9 ponteiro ignora pendentes; M10 `<` -> `<=`; M11 `_pendente` nao persiste; M12 `_pendente` sem `adiados.add`; M13 gate de afiliados sem `_pendente`; M14 SEM_CONEXAO sem `_pendente`; M15 recuperacao ignora `garantir_carregado`; M18 `_gravar_controle` nao preserva o config; M19 ponteiro ignora a lista persistida; M20 nao grava `restantes`; M21 gate de afiliados volta ao `_adiar` antigo.
+
+SOBREVIVENTES (4):
+- M4 UPDATE sem `AND ST_CAPTURA='1'` (main.py:749): o fake de cursor so confere que o texto contem `ST_CAPTURA = '0'`. Em producao a guarda impede que uma entrada velha reponha a '0' uma linha ja '9' (duplicada) ou ja publicada. Lacuna de teste, nao de codigo.
+- M8 sem `_recuperar_publicacoes` no arranque (main.py:927): o teste de reinicio (:46) chama a funcao direto; nada exercita `main()`. Lacuna de teste.
+- M16 `break` -> `continue` (main.py:769): com 2 pendentes o numero de tentativas ainda cabe em `conexoes <= 3` (teste :113). Lacuna de sensibilidade (teste com 5+ ids e limite exato resolve).
+- M17 `adicionar` sem dedupe: equivalente, `ler_publicacao_pendente` ja deduplica por `set`.
+
+## Achados (nao bloqueantes)
+1. Fechar M4/M8/M16 com testes: asserir que o SQL devolvido contem `AND ST_CAPTURA = '1'`; teste de `main()` (ou extrair o arranque) chamando a recuperacao; teste de `break` com 5 ids.
+2. Janela pequena: se o UPDATE for confirmado e a regravacao do config.json falhar (disco), a entrada fica na lista e na volta seguinte o UPDATE `AND ST_CAPTURA='1'` pode reabrir uma linha ja republicada (volta a '0' e passa pela duplicidade contra si mesma, que a ignora por id; no pior caso republica o mesmo id). Raro; a guarda '1' reduz, nao elimina.
+3. `_recuperar_publicacoes` sai cedo quando o cache de afiliados nao carrega, mesmo para ids pendentes por SEM_CONEXAO; coerente com o requisito (a publicacao precisaria do cache de qualquer forma).
+4. Escrita concorrente do config.json: monitor e recuperacao rodam na mesma thread e sequencialmente; `os.replace` atomico. Sem corrida dentro de um processo; dois processos no mesmo config nao sao protegidos (fora do escopo).
+5. Execucao real (KILL SESSION) segue PENDENTE do dono e bloqueia o merge.
+
+## Veredito do trecho novo: PASS com ressalvas (codigo atende (a)(b)(c) e os 4 testes exigidos; 3 lacunas de sensibilidade de teste acima, nao bloqueantes). Condicionado ao teste real do dono.
+
+### Nota do autor após o Verifier do trecho novo
+Mutantes M4 (UPDATE sem `AND ST_CAPTURA='1'`) e M16 (`break`→`continue`) passaram a ser cobertos por
+`test_devolucao_so_reabre_linha_capturada` e `test_banco_fora_para_na_primeira_falha_...`. M17 é equivalente.
+M8 (chamada no arranque do `main()`) segue sem teste automatizado; fica para o teste real do dono.

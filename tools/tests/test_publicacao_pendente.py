@@ -153,3 +153,22 @@ def test_monitor_recupera_pendentes_no_comeco_de_cada_volta(lojas, monkeypatch):
     args = type("A", (), {"desde": None, "limite": 0})()
     lojas._monitorar(None, None, object(), args, [], "img", 3)
     assert chamadas == ["recuperar", "ler", "recuperar", "ler"]
+
+
+def test_devolucao_so_reabre_linha_capturada(lojas, monkeypatch):
+    c = Conn()
+    db, _ = _db(monkeypatch, c)
+    _sem_afiliados_fora(lojas, monkeypatch)
+    lojas.pendentes[:] = [100]
+    lojas._recuperar_publicacoes(db, set())
+    assert c.escritas == ["UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '0' "
+                          "WHERE ID_OFERTA = :id AND ST_CAPTURA = '1'"]
+
+
+def test_banco_fora_para_na_primeira_falha_mesmo_com_muitos_pendentes(lojas, monkeypatch):
+    db, banco = _db(monkeypatch, Conn(DPY), *[RuntimeError("fora")] * 8)
+    _sem_afiliados_fora(lojas, monkeypatch)
+    lojas.pendentes[:] = [1, 2, 3, 4, 5, 6]
+    lojas._recuperar_publicacoes(db, set())
+    assert lojas.pendentes == [1, 2, 3, 4, 5, 6]
+    assert banco.conexoes == 2          # a conexao inicial + 1 reconexao; nada de 1 por id
