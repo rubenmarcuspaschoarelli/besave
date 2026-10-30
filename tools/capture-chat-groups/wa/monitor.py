@@ -23,7 +23,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from . import browser, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
+from . import alerta, browser, destravar, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
 
 SELETOR_MENSAGENS = '#main [data-testid="conversation-panel-messages"] div[data-id]'
 
@@ -1195,6 +1195,8 @@ def captura_msg_whatsapp(
             voltas_cegas = 0
             inicio_do_cegueira = None
             browser_morto = False
+            recarregar_a_cada = destravar.recarregar_voltas(estado)
+            vigia = alerta.VigiaCaptura(estado, janela)
             while True:
                 if resgate_pendente:
                     numero, feito = _recuperar_lacuna(
@@ -1231,6 +1233,8 @@ def captura_msg_whatsapp(
                     saida = SAIDA_BROWSER_MORTO
                     break
 
+                vigia.registrar_volta(falhas_na_volta < len(nomes_grupos))
+
                 # Volta CEGA = nenhum grupo abriu. Falha isolada (1 grupo) e o
                 # timeout transitorio de sempre e nao conta; o que interessa
                 # aqui e a pagina inteira travada. Ver VOLTAS_CEGAS_RESGATE.
@@ -1244,6 +1248,13 @@ def captura_msg_whatsapp(
                         print(f"[monitor] {voltas_cegas} voltas seguidas sem abrir grupo nenhum "
                               f"({lacuna_s / 60:.1f} min). O rodizio nao volta no historico; "
                               "resgate marcado como PENDENTE.")
+                        resgate_pendente = True
+                    # Ultimo recurso (BSV-51): Escape/fechar ja foram tentados em cada
+                    # clique. Recarrega e deixa o resgate pendente: ele retoma pelo
+                    # marcador de cada grupo (contador e marcadores nao andam aqui).
+                    if voltas_cegas % recarregar_a_cada == 0:
+                        destravar.recarregar(page)
+                        lacuna_s = (datetime.now() - inicio_do_cegueira).total_seconds()
                         resgate_pendente = True
                 elif voltas_cegas:
                     print(f"[monitor] Rodizio destravado apos {voltas_cegas} volta(s) cega(s).")
