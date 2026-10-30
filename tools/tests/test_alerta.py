@@ -138,3 +138,19 @@ def test_fim_da_janela_de_ontem_nao_atrapalha_quem_abriu_de_dia():
     assert env == []
     v.registrar_volta(False, T0 + timedelta(minutes=45))
     assert len(env) == 1 and "ha 45 min" in env[0][2]
+
+
+def test_janela_que_nao_cruza_meia_noite_chamada_antes_do_fim():  # F7/F8 da rodada 3
+    jan = janela_mod.ler_janela({"janela_noturna": {"inicio": "01:00", "fim": "05:00", "intervalo_minutos": 120}})
+    ini = datetime(2026, 10, 30, 0, 30)
+    v, env = vigia(janela=jan, inicio=ini)
+    v.registrar_volta(False, datetime(2026, 10, 30, 0, 40))        # fim mais recente = 05:00 de ontem
+    assert v.ultimo_aberto == ini
+    v.registrar_volta(False, datetime(2026, 10, 30, 6, 0))         # 1 h depois do fim de hoje
+    assert len(env) == 1 and "ha 60 min" in env[0][2]
+
+
+def test_no_instante_exato_do_fim_da_janela_parado_e_zero():  # F5 da rodada 3
+    v, env = vigia(inicio=datetime(2026, 10, 30, 7, 41))
+    v.registrar_volta(False, datetime(2026, 10, 30, 8, 0))
+    assert v.ultimo_aberto == datetime(2026, 10, 30, 8, 0) and env == []
