@@ -5,12 +5,11 @@ import importlib
 import re
 import sys
 from datetime import datetime
-from pathlib import Path
 
 import falsos
 import pytest
+from conftest import LOJAS
 
-from conftest import LOJAS, Loja
 
 def _core(nome):
     # `from core import x` usaria o atributo do pacote, que sobrevive ao pop do sys.modules

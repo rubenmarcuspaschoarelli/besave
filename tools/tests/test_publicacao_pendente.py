@@ -4,10 +4,16 @@
 import json
 from datetime import datetime
 
-import pytest
-
 from test_reconexao_cursores import (  # noqa: F401 - estado_limpo e fixture autouse
-    DPY, Conn, Pagina, _core, _db, _linhas, _preparar_publicacao, estado_limpo)
+    DPY,
+    Conn,
+    Pagina,
+    _core,
+    _db,
+    _linhas,
+    _preparar_publicacao,
+    estado_limpo,
+)
 
 
 def _devolveu(conn):
@@ -161,8 +167,8 @@ def test_devolucao_so_reabre_linha_capturada(lojas, monkeypatch):
     _sem_afiliados_fora(lojas, monkeypatch)
     lojas.pendentes[:] = [100]
     lojas._recuperar_publicacoes(db, set())
-    assert c.escritas == ["UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '0' "
-                          "WHERE ID_OFERTA = :id AND ST_CAPTURA = '1'"]
+    assert c.escritas == [("UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '0' "
+                           "WHERE ID_OFERTA = :id AND ST_CAPTURA = '1'")]
 
 
 def test_banco_fora_para_na_primeira_falha_mesmo_com_muitos_pendentes(lojas, monkeypatch):
