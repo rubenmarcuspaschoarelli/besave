@@ -129,6 +129,14 @@ jobs:
       - run: terraform init -backend=false
       - run: terraform validate
       - run: terraform test
+      # Raiz de bootstrap do bucket do state (BSV-53): sem backend e sem credencial AWS.
+      - name: infra/estado
+        working-directory: infra/estado
+        run: |
+          terraform fmt -check
+          terraform init -backend=false
+          terraform validate
+          terraform test
       # Backup do banco (BSV-49): shellcheck já vem no ubuntu-latest; os testes usam comandos falsos.
       - run: shellcheck -x -P SCRIPTDIR backup/*.sh
       - run: bash backup/teste_backup.sh

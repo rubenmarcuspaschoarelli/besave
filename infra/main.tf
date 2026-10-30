@@ -1,5 +1,14 @@
 terraform {
-  required_version = ">= 1.7"
+  required_version = ">= 1.11" # use_lockfile estável (BSV-53)
+
+  # Nome literal (backend não aceita variável); o mesmo de infra/estado/. Lock nativo do S3, sem DynamoDB.
+  backend "s3" {
+    bucket       = "besave-tfstate"
+    key          = "infra/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
 
   required_providers {
     aws = {
