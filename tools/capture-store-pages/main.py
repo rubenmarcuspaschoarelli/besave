@@ -30,6 +30,7 @@ Uso:
     python main.py --desde 0           # ignora o ponteiro e reprocessa pendentes
     python main.py --sem-oracle        # captura e grava so no CSV (nao atualiza)
     python main.py --sem-link-afiliado # nao captura o link oficial de afiliado
+    python main.py --monitorar --sem-perguntas # systemd: nenhum input()
     python main.py --csv origem/x.csv  # modo antigo: le de um CSV de origem
 """
 
@@ -61,6 +62,10 @@ STATUS_MANTER_PENDENTE = {'loja_nao_implementada'}
 # 'verify/' e a Shopee; 'account-verification' e o Mercado Livre.
 MARCAS_BLOQUEIO = ('verify/', 'account-verification')
 
+# --sem-perguntas (BSV-55): partida pelo systemd, sem ninguem no terminal. Ligada,
+# nenhum input() e chamado: logins valem pela sessao salva no perfil.
+SEM_PERGUNTAS = False
+
 
 def _gate_fechar_navegadores():
     # Antes de abrir o navegador de automacao, garante que NENHUM Chrome esteja
@@ -68,6 +73,11 @@ def _gate_fechar_navegadores():
     # logar na janela errada) e nao ha conflito de perfil.
     if not processos.chrome_aberto():
         return
+    if SEM_PERGUNTAS:
+        # Ninguem para fechar e nada e morto daqui: sai com erro e o systemd tenta de novo.
+        print('[arranque] ERRO: ha navegador aberto e --sem-perguntas nao pergunta nem '
+              'fecha processo. Feche-o pela tela (VNC); a unidade tenta de novo sozinha.')
+        sys.exit(2)
     while True:
         print('\n' + '=' * 64)
         print('Ha Chrome ABERTO. Feche TODAS as janelas do Chrome (inclusive as')
@@ -142,6 +152,9 @@ def _resolver_ponte(page, url, captura):
 def _gate_login_manual(page):
     # Abre a tela de login da Shopee na janela de automacao e espera o usuario
     # logar manualmente, confirmando com "S". A sessao fica salva no perfil.
+    if SEM_PERGUNTAS:
+        print('[login] --sem-perguntas: Shopee segue com a sessao salva no perfil.')
+        return
     try:
         page.goto('https://shopee.com.br/buyer/login',
                   wait_until='domcontentloaded', timeout=60000)
@@ -178,6 +191,9 @@ def _gate_login_shopee_arranque(page):
     # o login e oferecido UMA vez, no arranque, e depois o loop nunca mais para.
     # A sessao dura ~1 dia; expirando, ofertas da Shopee caem em
     # 'bloqueado_ou_login' ate um novo login.
+    if SEM_PERGUNTAS:
+        print('[login] --sem-perguntas: Shopee segue com a sessao salva no perfil.')
+        return
     print('\n' + '=' * 64)
     print('MODO MONITOR: o programa vai ficar ligado vigiando a fila.')
     print('A Shopee exige sessao logada e o login e MANUAL (captcha/OTP).')
@@ -205,8 +221,9 @@ MARCAS_LOGIN = ('login', 'signin', 'sign-in', 'authenticate')
 
 def _pode_perguntar():
     """Confirma os logins de afiliado pelo teclado? So com terminal e se o
-    config.json nao desligar (afiliados.confirmar_no_arranque=false)."""
-    return sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
+    config.json nao desligar (afiliados.confirmar_no_arranque=false) nem houver
+    --sem-perguntas."""
+    return not SEM_PERGUNTAS and sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
 
 
 def _gate_login_afiliado(page, titulo, url, instrucao):
@@ -887,7 +904,12 @@ def main():
                     help='Nao captura o link oficial de afiliado (DS_URL_AFILIADO) '
                          'nem pede os logins dos programas de afiliado. A captura '
                          'dos dados do produto continua igual.')
+    ap.add_argument('--sem-perguntas', action='store_true', dest='sem_perguntas',
+                    help='Partida automatica (systemd): nunca pergunta nada. Logins '
+                         'valem pela sessao do perfil; navegador aberto = sai com erro.')
     args = ap.parse_args()
+    global SEM_PERGUNTAS
+    SEM_PERGUNTAS = args.sem_perguntas
 
     # Captura do link de afiliado: ligada por padrao (conf/config.json ->
     # link_afiliado.habilitado); a linha de comando so consegue DESLIGAR.
