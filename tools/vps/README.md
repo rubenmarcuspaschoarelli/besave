@@ -95,7 +95,7 @@ journalctl --user -u besave-captura-whatsapp -f      # início, falhas e reiníc
 
 ## Atender a um pedido de login
 
-Quando o robô pede login (Mercado Livre, Shopee) ou o QR do WhatsApp: abra a tela do robô (túnel SSH para as duas portas;
+Quando o robô pede login (lojas no PC, sem `--sem-perguntas`) ou o QR do WhatsApp: abra a tela do robô (túnel SSH para as duas portas;
 no PC: `ssh -L 5901:localhost:5901 -L 5902:localhost:5902 besave@<vps>`; cliente VNC em `localhost:5901`
 para as lojas e `localhost:5902` para o WhatsApp), e num terminal:
 
@@ -105,6 +105,38 @@ tmux -L besave-lojas attach          # ou: tmux -L besave-whatsapp attach
 
 Responda ao prompt, faça o login no navegador que abriu e saia **sem parar o robô**: `Ctrl+b` e depois `d`.
 A sessão fica salva no perfil (`.chrome_perfil/`, `user_data/`); não precisa repetir.
+
+O robô das lojas sobe com `--sem-perguntas` (BSV-55) e **não faz pergunta nenhuma**: não há prompt para
+responder no `tmux`. Para ele, veja a seção seguinte.
+
+## Robô das lojas: partida sem perguntas e bloqueios (BSV-55)
+
+**Sozinho**, sem ninguém na tela:
+
+- A unidade roda `main.py --monitorar --sem-perguntas`: nenhum `input()`. Shopee e programas de afiliado
+  valem pela sessão salva no perfil (`.chrome_perfil/`). Navegador aberto no arranque (só no Windows) → sai com
+  código 2, sem fechar nada, e o `Restart=on-failure` tenta de novo. Sem a opção (PC, operador no terminal), as
+  perguntas continuam.
+- Captcha ou tela de login/verificação da loja (`bloqueado_ou_login`) e painel de afiliado da Shopee deslogado
+  (`sessao_afiliado_ausente`) **não tiram a linha da fila**: ela fica em `ST_CAPTURA='0'`, nada é gravado em
+  `OFERTA`, e o ponteiro de retomada não passa dela.
+- **3 bloqueios seguidos da mesma loja** → aquela loja entra em **pausa** por `bloqueio.pausa_minutos`
+  (padrão 60): as linhas dela ficam em `'0'` e são puladas (`loja_pausada` no log), as outras lojas seguem. No
+  fim da pausa o robô tenta **uma** linha: passou, a loja volta; falhou, pausa de novo.
+
+**No Telegram** (bloco `alerta` do `capture-store-pages/conf/config.json`, fora do git: `telegram_token`,
+`telegram_chat_id`; sem eles só vai para o log `main_monitorar.log`, linhas `[alerta]` e `[bloqueio]`):
+
+- "Robo das lojas: Shopee em pausa…" — loja, motivo (`pagina` = captcha/login da loja; `afiliado` = painel de
+  afiliado), linhas retidas, "Entrar no VNC :1 e logar". Uma por entrada em pausa.
+- "…continua em pausa há N h" — lembrete a cada 6 h enquanto durar.
+- "…voltou" — uma vez, quando a sonda passa.
+
+**Logar pela tela sem parar o robô:** túnel e VNC `localhost:5901` (acima). No navegador do robô, numa **aba
+nova**, faça o login que o aviso pediu (loja ou `affiliate.shopee.com.br`, inclusive captcha/OTP) e deixe a aba
+aberta ou feche-a; não feche a janela nem as abas do robô. Não precisa `tmux`, nem reiniciar: no fim da pausa a
+sonda usa a sessão nova e o "voltou" chega no Telegram. Para não esperar a pausa inteira, reinicie a unidade
+(`systemctl --user restart besave-captura-lojas`): sobe sem perguntas e com a contagem zerada.
 
 ## Parar
 

@@ -249,3 +249,13 @@ def test_monitor_com_so_linhas_em_pausa_dorme_em_vez_de_reler(lojas, monkeypatch
             return False
     lojas._monitorar(None, Aba(), None, argparse.Namespace(desde=None, limite=0), [], None, 3, None)
     assert lotes == [] and pausas == [180]
+
+
+def test_doc01_readme_da_vps_explica_sem_perguntas_pausa_e_telegram():
+    from conftest import TOOLS
+    leia = (TOOLS / "vps" / "README.md").read_text(encoding="utf-8")
+    for termo in ("--sem-perguntas", "bloqueio.pausa_minutos", "telegram_token", "telegram_chat_id",
+                  "VNC :1", "voltou", "6 h", "sem parar o robô"):
+        assert termo in leia, termo
+    exemplo = (TOOLS / "capture-store-pages" / "conf" / "config.example.json").read_text(encoding="utf-8")
+    assert '"pausa_minutos": 60' in exemplo and '"telegram_token": ""' in exemplo

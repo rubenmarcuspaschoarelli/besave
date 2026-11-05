@@ -51,7 +51,7 @@ T4 → T5
 **Tests**: `tools/tests/test_pausa_lojas.py`
 **Gate**: `pytest`
 
-### T5: README da VPS
+### T5: README da VPS ✅
 **What**: o que é automático, o que chega no Telegram, como logar pela tela sem parar o robô.
 **Where**: `tools/vps/README.md`
 **Depends on**: T4

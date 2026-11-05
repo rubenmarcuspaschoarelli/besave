@@ -78,7 +78,7 @@ Open questions: none
 | PAU-03 | P1 | Execute | Done |
 | TEL-01 | P1 | Execute | Done |
 | TEL-02 | P1 | Execute | Done |
-| DOC-01 | P1 | Execute | Pending |
+| DOC-01 | P1 | Execute | Done |
 
 ## Success Criteria
 
