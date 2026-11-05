@@ -269,7 +269,13 @@ def test_pau01_tel01_monitor_mantem_a_pausa_entre_varreduras_e_lembra(ambiente, 
     e o lembrete de 6 h sai do proprio monitor."""
     _, bloqueadas, pausa, rel, enviados = ambiente
     bloqueadas.update({1, 2, 3})
-    monkeypatch.setattr(lojas, "_pausa_padrao", lambda: pausa)
+    criadas = []
+
+    def nova_pausa():
+        # como em producao: cada chamada cria uma pausa nova; so o monitor pode repassar a dele
+        criadas.append(lojas.bloqueio.PausaLojas(CFG, agora=rel, avisar=pausa.avisar, nome=pausa.nome))
+        return criadas[-1]
+    monkeypatch.setattr(lojas, "_pausa_padrao", nova_pausa)
     for nome in ("_gravar_csv", "_resumo_oracle", "_varrer_validade", "_recuperar_publicacoes"):
         monkeypatch.setattr(lojas, nome, lambda *a, **k: None)
 
@@ -287,6 +293,7 @@ def test_pau01_tel01_monitor_mantem_a_pausa_entre_varreduras_e_lembra(ambiente, 
     pagina = Pagina()
     lojas._monitorar(None, pagina, Db(), argparse.Namespace(desde=None, limite=0), [], "img", 3, None)
     assert pagina.visitas == [1, 2, 3]          # a 4 (2a varredura) nao navegou: loja seguiu pausada
+    assert len(criadas) == 1
     assert len(enviados) == 2 and "em pausa por" in enviados[0] and "continua em pausa" in enviados[1]
 
 
