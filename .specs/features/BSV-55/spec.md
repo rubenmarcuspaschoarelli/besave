@@ -73,11 +73,11 @@ Open questions: none
 | BLQ-02 | P1 | Execute | Done |
 | AFI-01 | P1 | Execute | Done |
 | AFI-02 | P1 | Execute | Done |
-| PAU-01 | P1 | Execute | Pending |
-| PAU-02 | P1 | Execute | Pending |
-| PAU-03 | P1 | Execute | Pending |
-| TEL-01 | P1 | Execute | Pending |
-| TEL-02 | P1 | Execute | Pending |
+| PAU-01 | P1 | Execute | Done |
+| PAU-02 | P1 | Execute | Done |
+| PAU-03 | P1 | Execute | Done |
+| TEL-01 | P1 | Execute | Done |
+| TEL-02 | P1 | Execute | Done |
 | DOC-01 | P1 | Execute | Pending |
 
 ## Success Criteria

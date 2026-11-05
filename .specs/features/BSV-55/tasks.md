@@ -43,7 +43,7 @@ T4 → T5
 **Tests**: `tools/tests/test_bloqueio_lojas.py`
 **Gate**: `pytest`
 
-### T4: Pausa por loja e Telegram
+### T4: Pausa por loja e Telegram ✅
 **What**: `core/bloqueio.py` (pausa, sonda, avisos com relógio injetado), `core/alerta.py` (envio); ligação no lote e no monitor; config de exemplo.
 **Where**: `tools/capture-store-pages/core/bloqueio.py`, `core/alerta.py`, `main.py`, `conf/config.example.json`
 **Depends on**: T3

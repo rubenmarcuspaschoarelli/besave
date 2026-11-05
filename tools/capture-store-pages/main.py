@@ -45,7 +45,7 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod)
+                  validade, janela as janela_mod, bloqueio)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -428,12 +428,20 @@ def _nova_page(context):
     return page
 
 
-def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
+def _pausa_padrao():
+    return bloqueio.PausaLojas(estado._ler_config(), nome=registry.nome_loja)
+
+
+def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None):
     """Captura cada linha do lote e devolve (out_rows, gravadas, com_erro).
 
     `adiados` (set, usado pelo monitor): recebe os IDs que continuam pendentes
     de proposito — sem isso o monitor releria a mesma linha a cada varredura.
+    `pausa` (core/bloqueio.PausaLojas): lojas em pausa por bloqueios seguidos;
+    o monitor passa a mesma entre os lotes.
     """
+    if pausa is None:
+        pausa = _pausa_padrao()
     out_rows = []
     gravadas = 0
     com_erro = 0
@@ -465,7 +473,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
         if adiados is not None:
             adiados.add(id_oferta)
 
-    for row in rows:
+    for pos, row in enumerate(rows):
         cron = _Cronometro()
         out = dict(row)
         url = (row.get('url') or '').strip()
@@ -502,6 +510,10 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
             store = registry.get_store(loja)
             if store is None:
                 out['status_captura'] = 'loja_nao_implementada'
+            elif pausa.em_pausa(loja):
+                # Fica '0' sem navegar; as outras lojas seguem (BSV-55).
+                out['status_captura'] = 'loja_pausada'
+                pausa.reter(loja, row.get('ID_OFERTA'))
             else:
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
@@ -579,6 +591,16 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 except Exception as e:
                     out['status_captura'] = _status_erro(e)
                     print(f'[captura {captura}] erro: {e}')
+
+        # Contagem de bloqueios seguidos por loja (pagina ou sessao de afiliado).
+        if loja and out['status_captura'] in STATUS_RETER:
+            restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
+                         if registry.resolver_loja((r.get('url') or '').strip()) == loja]
+            motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
+                      else bloqueio.PAGINA)
+            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes)
+        elif loja and out['status_captura'] == 'ok':
+            pausa.registrar_sucesso(loja)
 
         # Loja "ativa" = entra em producao agora (conf/config.json ->
         # "lojas_ativas"). As demais sao capturadas e mapeadas do mesmo jeito,
@@ -728,6 +750,10 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                 # sem entrar em `adiados`; o ponteiro para antes dela.
                 status_db = ' | oracle=retida(0)'
                 _travar(id_oferta)
+            elif out['status_captura'] == 'loja_pausada':
+                # De proposito, como STATUS_MANTER_PENDENTE, mas sem `adiados`:
+                # volta a ser lida quando a pausa vencer.
+                status_db = ' | oracle=pausada(0)'
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha
@@ -837,6 +863,19 @@ def _varrer_validade(db):
         print(f'[validade] falhou: {e}')
 
 
+def _sem_lojas_em_pausa(rows, pausa):
+    """Tira do lote as linhas de loja em pausa (ficam '0'), para o monitor nao
+    reler a fila na hora quando so elas sobram. Devolve (linhas, retidas)."""
+    ficam = []
+    for r in rows:
+        loja = registry.resolver_loja((r.get('url') or '').strip())
+        if loja and pausa.em_pausa(loja):
+            pausa.reter(loja, r.get('ID_OFERTA'))
+        else:
+            ficam.append(r)
+    return ficam, len(rows) - len(ficam)
+
+
 def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None):
     """Varre a fila ate o usuario interromper (Ctrl+C).
 
@@ -865,8 +904,10 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
         print(f'[monitor] janela noturna {janela[0]:%H:%M}-{janela[1]:%H:%M}: '
               f'varredura a cada {janela[2] / 60:g} min dentro dela.')
     ult_validade = 0.0
+    pausa = _pausa_padrao()
     try:
         while True:
+            pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
                 _varrer_validade(db)
@@ -876,9 +917,11 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
                 _esperar(espera_s())
                 continue
+            rows, retidas = _sem_lojas_em_pausa(rows, pausa)
             if not rows:
-                print(f'[{datetime.now():%H:%M:%S}] fila vazia; proxima leitura '
-                      f'em {espera_s() / 60:g} min.')
+                print(f'[{datetime.now():%H:%M:%S}] fila vazia'
+                      + (f' ({retidas} linha(s) de loja em pausa)' if retidas else '')
+                      + f'; proxima leitura em {espera_s() / 60:g} min.')
                 _esperar(espera_s())
                 continue
 
@@ -891,7 +934,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 page = _nova_page(context)
 
             out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, True, img_root, adiados)
+                page, rows, db, True, img_root, adiados, pausa)
             total_grav += gravadas
             total_erro += com_erro
             _gravar_csv(out_rows, header, f'oracle_{datetime.now():%d_%m_%Y_%H_%M_%S}')
