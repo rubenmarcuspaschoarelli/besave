@@ -5,7 +5,7 @@ Windows nada muda: `iniciar_captura.ps1` e `encerrar_captura.ps1` continuam vale
 
 | robô | unidade `systemd --user` | sessão `tmux` | log |
 |---|---|---|---|
-| `capture-chat-groups` (WhatsApp) | `besave-captura-whatsapp` | `besave-whatsapp` | `capture-chat-groups/log/run_captura_DD_MM.log` |
+| `capture-chat-groups` (WhatsApp) | `besave-captura-whatsapp` | `besave-whatsapp` | `capture-chat-groups/log/run_captura_DD_MM_HHMMSS.log` (um por partida) |
 | `capture-store-pages` (lojas) | `besave-captura-lojas` | `besave-lojas` | `capture-store-pages/destino/log/main_monitorar.log` |
 
 Cada robô tem a **própria tela VNC** (Xfce): lojas em `:1` (porta `5901`), WhatsApp em `:2` (porta `5902`),
@@ -87,8 +87,11 @@ falha com a mensagem no `journalctl`; corrija e suba de novo. Também funciona s
 
 ## Ver log
 
+Cada partida do robô do WhatsApp abre um log novo, `run_captura_DD_MM_HHMMSS.log` (se existir, por duas partidas no mesmo
+segundo, `_2`, `_3`… sem limite): o nome do log nunca impede a partida e nenhum log antigo é reaproveitado.
+
 ```bash
-tail -f /srv/besave/repo/tools/capture-chat-groups/log/run_captura_$(date +%d_%m).log
+tail -f "$(ls -t /srv/besave/repo/tools/capture-chat-groups/log/run_captura_*.log | head -n 1)"   # o log mais recente
 tail -f /srv/besave/repo/tools/capture-store-pages/destino/log/main_monitorar.log
 journalctl --user -u besave-captura-whatsapp -f      # início, falhas e reinícios
 ```
@@ -113,7 +116,7 @@ systemctl --user stop besave-captura-lojas
 systemctl --user stop besave-captura-whatsapp     # ou: tools/vps/encerrar_captura.sh
 ```
 
-O `encerrar_captura.sh` para a unidade do WhatsApp, manda `SIGINT` (Ctrl+C) ao `run_captura.py` (o `finally` salva
+O `encerrar_captura.sh` para a unidade do WhatsApp (o `ExecStop=` dela para o scope do robô com `SIGINT`), manda `SIGINT` (Ctrl+C) ao `run_captura.py` (o `finally` salva
 o contador), espera, usa `SIGKILL` no que sobrar, encerra o navegador do perfil e a sessão `tmux`.
 Filtra por `run_captura.py` e `--user-data-dir`: nunca mata todo `python`. Para desligar de vez no boot:
 `systemctl --user disable ...`.
@@ -163,7 +166,7 @@ pode ficar por cima da lista e interceptar o clique no grupo. O robô do WhatsAp
    voltas seguidas sem abrir nenhum grupo (padrão 8, ~10 min; repete a cada 8) o robô **recarrega o WhatsApp
    Web** e roda o resgate (catch-up pelo marcador de cada grupo): nada se perde, contador e marcadores não andam.
 
-**No log** (`log/run_captura_DD_MM.log`): `[destravar] Clique interceptado…`, `Escape destravou o clique` ou
+**No log** (`log/run_captura_DD_MM_HHMMSS.log`): `[destravar] Clique interceptado…`, `Escape destravou o clique` ou
 `Fechei 'agora nao' do aviso: '<texto resumido>'`, `Recarregando o WhatsApp Web…`, e `Rodizio destravado apos N
 volta(s) cega(s)`.
 
@@ -175,6 +178,50 @@ noturna o relógio do aviso fica zerado.
 **Ainda é preciso entrar na tela** (VNC `:2`) quando chegar o aviso de "parado": é um diálogo que o robô não
 conhece (não está na lista), um pedido de login/QR ou o navegador travado. Feche à mão e confira no log que a
 linha `Rodizio destravado` apareceu. Chaves novas (ver `conf/config.example.json`): `alerta`, `destravar`.
+
+## Reinício diário do WhatsApp e teto de memória (BSV-54)
+
+A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_data` chegou a 6,4 GB em
+3 dias e levou a máquina ao swap). Duas defesas:
+
+1. **Reinício às 05:30** (dentro da janela noturna): `besave-reinicio-whatsapp.timer` dispara o
+   `besave-reinicio-whatsapp.service`, que roda `reiniciar_whatsapp.sh`. Ele registra o RSS do maior
+   processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava o
+   contador) e espera até 3 min a unidade ficar `active` **e** o log novo ter `Retomando contador` ou
+   `Grupo aberto`. Confirmou: só log. Não confirmou (contador atrasado, QR pedido, falha de partida): mensagem
+   no Telegram com o motivo (`python -m wa.avisar`, token e chat lidos do `alerta` do `config.json`; sem eles,
+   só log). Unidade parada de propósito (`inactive`): não reinicia. Só `systemctl restart`; nunca mata
+   processo por nome.
+2. **Teto de memória no scope do robô:** o tmux do Ubuntu 24.04 põe cada painel num scope próprio
+   (`app.slice/tmux-spawn-*.scope`), fora da unidade: `MemoryHigh`/`MemoryMax` na unidade não pegavam o
+   Chromium, e o `KillSignal=SIGINT` da unidade chegava só ao servidor tmux (o python morria por SIGHUP, sem o
+   `finally`). Por isso o `iniciar_captura.sh` roda o robô, dentro do painel, por
+   `systemd-run --user --scope --unit=besave-whatsapp-robo -p MemoryHigh=… -p MemoryMax=… -p MemorySwapMax=… -p KillSignal=SIGINT -p TimeoutStopSec=30`.
+   Os valores vêm do `Environment=` da unidade (`BESAVE_MEM_HIGH=3500M`, `BESAVE_MEM_MAX=4500M`, provisórios; `BESAVE_MEM_SWAP_MAX=0`).
+   **Sem `MemorySwapMax` o teto vira thrashing, não reinício:** o `MemoryMax` não conta swap, então o kernel joga
+   o excesso no swap e o robô fica lento dentro do teto, sem ser morto (visto na execução real de 05/11 com
+   `MemoryMax=300M`). Com `MemorySwapMax=0` o kernel mata o scope ao bater o `MemoryMax`.
+   Em `MemoryHigh` o kernel segura; em `MemoryMax` (com swap em 0) o kernel mata o scope (código de saída ≠ 0), a unidade falha
+   e o `Restart=on-failure` sobe de novo. O `ExecStop=` da unidade faz `systemctl --user stop besave-whatsapp-robo.scope`
+   (SIGINT, até 30 s: o `finally` grava o contador) antes de o tmux morrer; scope ausente não falha o stop.
+   Se o scope ainda estiver ativo na partida, o lançador recusa subir (não duplica o robô). O `systemd-run` usa `--collect`:
+   scope que termina em `failed` (OOM-kill, `kill -9`) seria mantido carregado e todo `systemd-run` seguinte com o
+   mesmo `--unit` falharia com "already loaded", em laço. Na partida, com o scope inativo, o lançador ainda roda
+   `systemctl --user reset-failed` e `revert` (resíduo de `set-property --runtime`), ignorando erros; se o robô morrer
+   nos primeiros segundos, o `ABORTADO` traz a última linha do log (a mensagem do `systemd-run`). O robô das lojas não muda.
+
+```bash
+cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
+systemctl --user enable --now besave-reinicio-whatsapp.timer
+systemctl --user list-timers besave-reinicio-whatsapp.timer           # próximo disparo
+systemctl --user start besave-reinicio-whatsapp                        # testar agora, uma vez
+journalctl _SYSTEMD_USER_UNIT=besave-reinicio-whatsapp.service         # resultado (RSS antes, OK ou AVISO)
+systemctl --user disable --now besave-reinicio-whatsapp.timer          # desligar
+```
+
+Ver o teto e a memória do robô: `systemd-cgls --user-unit besave-whatsapp-robo.scope` e
+`systemctl --user show besave-whatsapp-robo.scope -p MemoryHigh -p MemoryMax -p MemoryCurrent`.
+Mudou a unidade ou os valores de `BESAVE_MEM_*`: `daemon-reload` e `systemctl --user restart besave-captura-whatsapp`.
 
 ## Voltar para o PC
 

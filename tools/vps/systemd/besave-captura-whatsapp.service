@@ -14,14 +14,22 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 WorkingDirectory=/srv/besave/repo/tools/capture-chat-groups
-Environment=BESAVE_DISPLAY=:2
+# Teto de memoria do robo (BSV-54), lido pelo iniciar_captura.sh: valores provisorios, o dono fecha com a serie de 24 h.
+# SWAP_MAX=0: o MemoryMax nao conta swap; sem isso o excesso vai ao swap (thrashing) e o robo nao e morto.
+Environment=BESAVE_DISPLAY=:2 BESAVE_MEM_HIGH=3500M BESAVE_MEM_MAX=4500M BESAVE_MEM_SWAP_MAX=0
 # a tela :2 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
 ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X2 ] && exit 0; sleep 1; done; exit 1'
 ExecStart=/srv/besave/repo/tools/vps/iniciar_captura.sh --aguardar
+# O tmux do Ubuntu poe cada painel num scope proprio (app.slice/tmux-spawn-*.scope): o python e o Chromium
+# NAO ficam nesta unidade; aqui fica so o servidor tmux. O robo roda no scope besave-whatsapp-robo (systemd-run,
+# com o teto de memoria e KillSignal=SIGINT, ver iniciar_captura.sh). O ExecStop para esse scope com SIGINT
+# para o `finally` gravar o contador; o '-' deixa o stop passar se o scope ja nao existe.
+ExecStop=-/usr/bin/systemctl --user stop besave-whatsapp-robo.scope
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=30
-TimeoutStopSec=30
+# ExecStop espera o scope (ate 30 s) e depois o tmux sai
+TimeoutStopSec=45
 
 [Install]
 WantedBy=default.target

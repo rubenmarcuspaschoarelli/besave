@@ -1,0 +1,12 @@
+# Reinicio diario do robo do WhatsApp (BSV-54): 05:30, dentro da janela noturna
+# (22:00-08:00). Sem Persistent: se a maquina estava desligada as 05:30, nao reinicia
+# depois, no meio do dia.
+[Unit]
+Description=Besave - reinicio diario do robo do WhatsApp (05:30)
+
+[Timer]
+OnCalendar=*-*-* 05:30:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target
