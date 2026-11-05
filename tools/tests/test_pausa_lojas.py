@@ -33,6 +33,9 @@ class Pagina:
     def wait_for_timeout(self, ms):
         pass
 
+    def is_closed(self):
+        return False
+
 
 class Db:
     sem_conexao = False
@@ -259,3 +262,37 @@ def test_doc01_readme_da_vps_explica_sem_perguntas_pausa_e_telegram():
         assert termo in leia, termo
     exemplo = (TOOLS / "capture-store-pages" / "conf" / "config.example.json").read_text(encoding="utf-8")
     assert '"pausa_minutos": 60' in exemplo and '"telegram_token": ""' in exemplo
+
+
+def test_pau01_tel01_monitor_mantem_a_pausa_entre_varreduras_e_lembra(ambiente, lojas, monkeypatch):
+    """Laco real do --monitorar com o _processar_lote real (licao 23): a pausa vale nas varreduras seguintes
+    e o lembrete de 6 h sai do proprio monitor."""
+    _, bloqueadas, pausa, rel, enviados = ambiente
+    bloqueadas.update({1, 2, 3})
+    monkeypatch.setattr(lojas, "_pausa_padrao", lambda: pausa)
+    for nome in ("_gravar_csv", "_resumo_oracle", "_varrer_validade", "_recuperar_publicacoes"):
+        monkeypatch.setattr(lojas, nome, lambda *a, **k: None)
+
+    def linha(i):
+        return {"ID_OFERTA": i, "url": f"https://shopee.com.br/p/{i}", "numero_da_captura": str(i), "DS_ORIGEM": "g"}
+    filas = iter([[linha(1), linha(2), linha(3)], [linha(4)]])
+
+    def ler(*a, **k):
+        try:
+            return next(filas)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+    monkeypatch.setattr(lojas, "_ler_pendentes_resiliente", ler)
+    monkeypatch.setattr(lojas, "_esperar", lambda s: rel.andar(hours=6))
+    pagina = Pagina()
+    lojas._monitorar(None, pagina, Db(), argparse.Namespace(desde=None, limite=0), [], "img", 3, None)
+    assert pagina.visitas == [1, 2, 3]          # a 4 (2a varredura) nao navegou: loja seguiu pausada
+    assert len(enviados) == 2 and "em pausa por" in enviados[0] and "continua em pausa" in enviados[1]
+
+
+@pytest.mark.parametrize("bloco", [{"telegram_token": TOKEN}, {"telegram_chat_id": CHAT}])
+def test_tel02_so_uma_das_chaves_so_loga(lojas, capsys, bloco):
+    enviados = []
+    lojas.bloqueio.Avisador({"alerta": bloco}, enviar=lambda *a: enviados.append(a)).avisar("teste")
+    saida = capsys.readouterr().out
+    assert enviados == [] and "so log" in saida and TOKEN not in saida
