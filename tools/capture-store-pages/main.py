@@ -69,7 +69,7 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 
 # Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
 # ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
-STATUS_RETER = {'bloqueado_ou_login'}
+STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente'}
 
 
 def _url_bloqueada(url):
@@ -570,7 +570,12 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         out.update(link_afiliado.capturar(
                             page, loja, out['url_final']))
                         cron.marcar('afil')
-                        out['status_captura'] = 'ok'
+                        # Sessao de afiliado caida: sem DS_URL_AFILIADO a oferta
+                        # nao vai ao site; a linha espera o novo login (BSV-55).
+                        if out.get(link_afiliado.MOTIVO) == link_afiliado.SESSAO:
+                            out['status_captura'] = 'sessao_afiliado_ausente'
+                        else:
+                            out['status_captura'] = 'ok'
                 except Exception as e:
                     out['status_captura'] = _status_erro(e)
                     print(f'[captura {captura}] erro: {e}')

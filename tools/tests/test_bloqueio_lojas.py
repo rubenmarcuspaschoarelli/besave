@@ -119,3 +119,128 @@ def test_blq02_ponteiro_nao_passa_da_linha_bloqueada(lote, lojas):
     assert lojas.ponteiro == [10]
     lote({13: ok}, db=db)               # lote seguinte do monitor: continua travado
     assert lojas.ponteiro == [10]
+
+
+# --- AFI: motivo do link de afiliado (sem a fixture `lojas`, que troca capturar por um falso) ---
+
+class Elemento:
+    def __init__(self, aparece):
+        self.aparece = aparece
+
+    @property
+    def first(self):
+        return self
+
+    def wait_for(self, **k):
+        if not self.aparece:
+            raise TimeoutError("nao apareceu")
+
+    def fill(self, texto):
+        pass
+
+    def click(self, **k):
+        pass
+
+
+class AbaAfiliado:
+    """Painel affiliate.shopee: `formulario` = sessao logada; `gera` = o gerador devolve link."""
+
+    def __init__(self, contexto, formulario, gera):
+        self.context, self.formulario, self.gera = contexto, formulario, gera
+        self.url = "https://affiliate.shopee.com.br/offer/custom_link"
+
+    def bring_to_front(self):
+        pass
+
+    def goto(self, url, **k):
+        if not self.formulario:
+            self.url = "https://shopee.com.br/buyer/login?next=REDACTED"
+
+    def is_closed(self):
+        return False
+
+    def set_default_timeout(self, ms):
+        pass
+
+    def locator(self, seletor):
+        from core import link_afiliado
+        if seletor == link_afiliado.SHP_TEXTAREA:
+            return Elemento(self.formulario)
+        if seletor == link_afiliado.SHP_COPIAR:
+            return Elemento(self.gera)
+        return Elemento(True)
+
+
+class ContextoAfiliado:
+    def __init__(self, formulario, gera):
+        self.formulario, self.gera, self.pages = formulario, gera, []
+
+    def new_page(self):
+        aba = AbaAfiliado(self, self.formulario, self.gera)
+        self.pages.append(aba)
+        return aba
+
+
+class PaginaProduto:
+    url = "https://shopee.com.br/Kit-Batom-i.REDACTED.REDACTED"
+
+    def __init__(self, contexto):
+        self.context = contexto
+
+    def bring_to_front(self):
+        pass
+
+
+def _shopee(formulario, gera):
+    from core import link_afiliado
+    link_afiliado.configurar(True)
+    pagina = PaginaProduto(ContextoAfiliado(formulario, gera))
+    return link_afiliado.capturar(pagina, "shopee", pagina.url)
+
+
+def test_afi01_formulario_do_gerador_nao_abre_e_sessao():
+    from core import link_afiliado
+    r = _shopee(formulario=False, gera=False)
+    assert r["url_afiliado"] == "" and r[link_afiliado.MOTIVO] == link_afiliado.SESSAO
+
+
+def test_afi01_gerador_sem_link_para_a_url_e_outro():
+    from core import link_afiliado
+    r = _shopee(formulario=True, gera=False)
+    assert r["url_afiliado"] == "" and r[link_afiliado.MOTIVO] == link_afiliado.OUTRO
+
+
+def test_afi01_sessao_nao_desliga_a_loja_no_corta_circuito():
+    from core import link_afiliado
+    link_afiliado.configurar(True)
+    for _ in range(link_afiliado.LIMITE_FALHAS + 1):
+        pagina = PaginaProduto(ContextoAfiliado(False, False))
+        r = link_afiliado.capturar(pagina, "shopee", pagina.url)
+    # depois do novo login a loja volta a gerar link (o corta-circuito nao a desligou)
+    assert r[link_afiliado.MOTIVO] == link_afiliado.SESSAO
+
+
+def _afiliado(lojas, monkeypatch, motivo):
+    from core import link_afiliado
+    monkeypatch.setattr(lojas.link_afiliado, "capturar",
+                        lambda *a: {**link_afiliado.vazio(), link_afiliado.MOTIVO: motivo})
+
+
+def test_afi02_sessao_deixa_a_linha_em_0_sem_oferta_e_trava_o_ponteiro(lote, lojas, monkeypatch):
+    _afiliado(lojas, monkeypatch, "sessao")
+    adiados = set()
+    db, saidas = lote({20: PRODUTOS[1]}, adiados=adiados)
+    assert saidas[20]["status_captura"] == "sessao_afiliado_ausente"
+    assert db.capturas == [] and db.erros == [] and db.ofertas == []
+    assert 20 not in adiados
+    _afiliado(lojas, monkeypatch, "")
+    lote({21: PRODUTOS[1]}, db=db)
+    assert lojas.ponteiro == []        # 21 gravada, mas o ponteiro nao passa da 20
+
+
+def test_afi02_outro_grava_como_hoje(lote, lojas, monkeypatch):
+    _afiliado(lojas, monkeypatch, "outro")
+    db, saidas = lote({22: PRODUTOS[1]})
+    assert saidas[22]["status_captura"] == "ok"
+    assert db.capturas == [22] and db.ofertas == [22]
+    assert lojas.ponteiro == [22]

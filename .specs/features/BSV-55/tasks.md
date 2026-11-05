@@ -35,7 +35,7 @@ T4 → T5
 **Tests**: `tools/tests/test_bloqueio_lojas.py`
 **Gate**: `pytest`
 
-### T3: Motivo do afiliado
+### T3: Motivo do afiliado ✅
 **What**: `link_afiliado.capturar` devolve `motivo_afiliado` (`sessao`/`outro`); `sessao` segura a linha; corta-circuito conta só `outro`.
 **Where**: `tools/capture-store-pages/core/link_afiliado.py`, `tools/capture-store-pages/main.py`
 **Depends on**: T2
