@@ -39,6 +39,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -59,8 +60,21 @@ STATUS_MANTER_PENDENTE = {'loja_nao_implementada'}
 # pagina que simplesmente nao tem produto. Distinguir importa: o
 # 'bloqueado_ou_login' e TRANSITORIO (vale reprocessar depois), enquanto o
 # 'pagina_sem_produto' e definitivo (o link nunca levou a um produto).
-# 'verify/' e a Shopee; 'account-verification' e o Mercado Livre.
-MARCAS_BLOQUEIO = ('verify/', 'account-verification')
+# Casam no CAMINHO da URL, em minusculas (a Amazon escreve 'validateCaptcha').
+# Shopee: 'verify/' (traffic/captcha), 'buyer/login'. Mercado Livre:
+# 'account-verification', 'captcha' (/captcha/wall/logged), 'lgz/login'.
+# Amazon: 'captcha' (/errors/validateCaptcha), 'ap/signin'.
+MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
+                   'lgz/login', 'ap/signin')
+
+# Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
+# ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
+STATUS_RETER = {'bloqueado_ou_login'}
+
+
+def _url_bloqueada(url):
+    caminho = urlparse(url or '').path.lower()
+    return any(m in caminho for m in MARCAS_BLOQUEIO)
 
 # --sem-perguntas (BSV-55): partida pelo systemd, sem ninguem no terminal. Ligada,
 # nenhum input() e chamado: logins valem pela sessao salva no perfil.
@@ -430,11 +444,14 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
     # Guardada no db para valer tambem nos lotes seguintes do monitor.
     trava = getattr(db, 'trava_ponteiro', None)
 
-    def _adiar(id_oferta, perdida_por_conexao=False):
+    def _travar(id_oferta):
         nonlocal trava
+        trava = id_oferta if trava is None else min(trava, id_oferta)
+        db.trava_ponteiro = trava
+
+    def _adiar(id_oferta, perdida_por_conexao=False):
         if perdida_por_conexao:
-            trava = id_oferta if trava is None else min(trava, id_oferta)
-            db.trava_ponteiro = trava
+            _travar(id_oferta)
         if adiados is not None:
             adiados.add(id_oferta)
 
@@ -516,7 +533,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         descarte = store.status_descarte(page)
                     except Exception:  # noqa: BLE001
                         descarte = None
-                    if any(m in page.url for m in MARCAS_BLOQUEIO):
+                    if _url_bloqueada(page.url):
                         out['status_captura'] = 'bloqueado_ou_login'
                         print(f'[captura {captura}] bloqueio/login/captcha: {page.url[:70]}')
                     elif descarte:
@@ -701,6 +718,11 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
                     _adiar(id_oferta, db.sem_conexao)
+            elif out['status_captura'] in STATUS_RETER:
+                # Transitorio (sessao/captcha): relida na proxima varredura,
+                # sem entrar em `adiados`; o ponteiro para antes dela.
+                status_db = ' | oracle=retida(0)'
+                _travar(id_oferta)
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha

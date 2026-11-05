@@ -27,7 +27,7 @@ T4 → T5
 **Tests**: `tools/tests/test_sem_perguntas.py`, `tools/tests/test_unidades.py`
 **Gate**: `pytest` (em `tools/`)
 
-### T2: Marcas de bloqueio e linha retida
+### T2: Marcas de bloqueio e linha retida ✅
 **What**: marcas das três lojas no caminho da URL; `bloqueado_ou_login` fica `'0'` e trava o ponteiro.
 **Where**: `tools/capture-store-pages/main.py`
 **Depends on**: none

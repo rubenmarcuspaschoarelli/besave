@@ -69,8 +69,8 @@ Open questions: none
 | SEM-02 | P1 | Execute | Done |
 | SEM-03 | P1 | Execute | Done |
 | SEM-04 | P1 | Execute | Done |
-| BLQ-01 | P1 | Execute | Pending |
-| BLQ-02 | P1 | Execute | Pending |
+| BLQ-01 | P1 | Execute | Done |
+| BLQ-02 | P1 | Execute | Done |
 | AFI-01 | P1 | Execute | Pending |
 | AFI-02 | P1 | Execute | Pending |
 | PAU-01 | P1 | Execute | Pending |
