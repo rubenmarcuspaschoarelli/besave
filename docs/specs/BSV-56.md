@@ -2,7 +2,8 @@
 
 **Papel:** Python + SQL · **Pasta:** `tools/capture-chat-groups/` (+ `tools/vps/iniciar_captura.sh` e
 `tools/capture-chat-groups/iniciar_captura.ps1`, só a remoção da conferência do contador) ·
-**Depende de:** BSV-54 (reinício diário; esta spec tira dele o risco do contador). Lições 28, 29, 31
+**Depende de:** BSV-54 (reinício diário; esta spec tira dele o risco do contador), **mergeada em `develop`
+antes de abrir o worktree** (as duas mexem em `tools/vps/iniciar_captura.sh`). Lições 28, 29, 31
 
 ## Contexto
 O `ID_OFERTA` nasce no robô do WhatsApp: `controle.ultimo_id_processado` do `config.json`, somado em 1 a
@@ -54,7 +55,12 @@ Então:
    diagnóstico) e **não** é mais lido para numerar.
    - `diag/checa_contador.py` deixa de ser chamado na partida (`iniciar_captura.sh` passo 3 e
      `iniciar_captura.ps1`); o arquivo fica, com nota de que é histórico.
-   - A frase "Retomando contador de ofertas em …" sai do log.
+   - A frase "Retomando contador de ofertas em …" sai do log. O `tools/vps/reiniciar_whatsapp.sh` (BSV-54)
+     confirma a partida por essa frase **ou** por `Grupo aberto`: ele e os testes dele passam a usar só
+     `Grupo aberto`. Os casos de teste do reinício com `ABORTADO: contador atrasado` trocam para outro
+     `ABORTADO:` (ex.: perfil travado), sem perder a discriminação.
+   - A partida no scope `besave-whatsapp-robo` (BSV-54: `systemd-run --scope --collect`, teto de memória,
+     `reset-failed`/`revert`) não muda; o teste de comando montado dela continua passando inteiro.
 5. **README** do robô e de `tools/vps`: a ordem de virada (abaixo) e o fim da conferência do contador.
 
 ## Ordem de virada (vai no README e no PR)
@@ -93,19 +99,23 @@ Testes com Oracle falso e sem Playwright, no padrão dos testes de `tools/captur
   CSV, 1 aviso. Banco volta → a mesma mensagem é processada com id novo e chega o "voltou". Lembrete só
   depois de 2 h (relógio falso).
 - **Partida:** `iniciar_captura.sh` não chama mais o `checa_contador.py` (teste de comando montado
-  inteiro, lição 14). As outras conferências (run vivo, perfil travado) continuam.
+  inteiro, lição 14). As outras conferências (run vivo, perfil travado, scope vivo) continuam.
+- **Reinício diário:** log novo só com `Grupo aberto` → confirmado, sem aviso; log novo sem marca de partida
+  → aviso. Um mutante que ainda exige "Retomando contador" falha.
 - **SQL**, conferido pelo Verifier lendo o arquivo:
   - `START WITH` calculado por `GREATEST` das duas tabelas;
   - trigger só com `WHEN (NEW.ID_OFERTA IS NULL)`;
   - `NOCACHE`;
   - bloco de reversão presente.
-- **Gates:** `python -m unittest discover -s tests`, ruff do CI de `tools/`, `shellcheck tools/vps/*.sh`.
+- **Gates:** `python -m unittest discover -s tests`, `cd tools && python -m pytest -q` (testes de
+  `tools/vps`), ruff do CI de `tools/`, `shellcheck tools/vps/*.sh`.
 - **Real (dono, bloqueia o merge), na inst1 seguindo a ordem de virada:**
   1. 1ª captura com o id inicial da sequence;
   2. `INSERT` de teste com `ID_OFERTA` nulo numa transação (`ROLLBACK` no fim), para provar a trigger;
   3. `KILL SESSION` da conexão do robô seguido de `systemctl restart` com `SIGKILL` (`kill -9` no
      `run_captura.py`): o robô sobe sem conferência de contador e o id seguinte vem da sequence, sem
-     repetir.
+     repetir;
+  4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
 
 ## Definition of done
 PR para `develop` com SQL, código, scripts de partida, README, testes, `validation.md` do Verifier
