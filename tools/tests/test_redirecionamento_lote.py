@@ -337,6 +337,10 @@ def test_cf01_tres_seguidas_pausam_o_dominio_e_avisam_com_a_sugestao(amb):
     assert len(amb.enviados) == 1
     assert "achadinhos.exemplo.com.br bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?" \
         in amb.enviados[0]
+    amb.rel.t += timedelta(hours=6)
+    amb.pausa.lembrar()
+    assert len(amb.enviados) == 2 and "continua bloqueado pelo Cloudflare" in amb.enviados[1]
+    assert "incluir em redirecionamento.dominios?" in amb.enviados[1]
 
 
 def test_cf01_vale_sem_o_bloco_de_redirecionamento(amb):
@@ -370,3 +374,13 @@ def test_cf01_dominio_ja_na_lista_barrado_nao_sugere_incluir(amb, capsys):
     out = capsys.readouterr().out
     assert status[1] == "redirecionamento_indisponivel" and db.erros == []
     assert "bloqueado pelo Cloudflare" in out and "incluir em redirecionamento.dominios?" not in out
+
+
+def test_cf01_dominio_ja_na_lista_barrado_tres_vezes_avisa_tunel_sem_sugerir(amb):
+    for i in (1, 2, 3):
+        amb.curl.respostas[curto(i)] = (0, "200 ")
+        amb.destinos[curto(i)] = (curto(i), BLOQUEIO_CF)
+    amb.rodar([(1, curto(1)), (2, curto(2)), (3, curto(3))])
+    assert len(amb.enviados) == 1
+    assert "promos.link em pausa: túnel residencial fora?" in amb.enviados[0]
+    assert "incluir em" not in amb.enviados[0]
