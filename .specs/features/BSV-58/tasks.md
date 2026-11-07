@@ -37,7 +37,7 @@ cd tools && python -m pytest -q && ruff check vps/ tests/ && shellcheck vps/*.sh
 **Tests**: `tools/tests/test_redirecionamento.py`
 **Gate**: `pytest` (em `tools/`)
 
-### T2: Integração no lote e pausa por domínio
+### T2: Integração no lote e pausa por domínio ✅
 **What**: `main.py` resolve antes do `_resolver_ponte`; `redirecionamento_indisponivel` em `STATUS_RETER`; pausa e filtro do monitor pela chave domínio; mensagens da pausa por motivo em `core/bloqueio.py`.
 **Where**: `tools/capture-store-pages/main.py`, `core/bloqueio.py`
 **Depends on**: T1

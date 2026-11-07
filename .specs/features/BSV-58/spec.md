@@ -69,18 +69,18 @@ Open questions: none
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CFG-01 | P1 | Execute | Pending |
+| CFG-01 | P1 | Execute | Done |
 | DOM-01 | P1 | Execute | Done |
 | CMD-01 | P1 | Execute | Done |
-| RES-01 | P1 | Execute | Pending |
+| RES-01 | P1 | Execute | Done |
 | RES-02 | P1 | Execute | Done |
-| RES-03 | P1 | Execute | Pending |
-| FAL-01 | P1 | Execute | Pending |
-| FAL-02 | P1 | Execute | Pending |
-| PAU-01 | P1 | Execute | Pending |
+| RES-03 | P1 | Execute | Done |
+| FAL-01 | P1 | Execute | Done |
+| FAL-02 | P1 | Execute | Done |
+| PAU-01 | P1 | Execute | Done |
 | CF-01 | P1 | Execute | Pending |
 | CF-02 | P1 | Execute | Pending |
-| SEG-01 | P1 | Execute | Pending |
+| SEG-01 | P1 | Execute | Done |
 | TUN-01 | P1 | Execute | Pending |
 | DOC-01 | P1 | Execute | Pending |
 

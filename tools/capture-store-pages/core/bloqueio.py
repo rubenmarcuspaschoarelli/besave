@@ -20,6 +20,7 @@ PAUSA_MINUTOS_PADRAO = 60
 
 PAGINA = 'pagina'        # captcha/login/verificacao na pagina da loja
 AFILIADO = 'afiliado'    # sessao do programa de afiliados
+REDIRECIONAMENTO = 'redirecionamento'  # redirect pelo proxy residencial (BSV-58); chave = dominio
 
 
 def ler_pausa_minutos(cfg):
@@ -83,6 +84,12 @@ class PausaLojas:
         e.ate = agora + self.pausa
         e.desde = e.alertado_em = agora
         e.retidas.update(i for i in restantes if i is not None)
+        if motivo == REDIRECIONAMENTO:
+            self.avisar(f'Robo das lojas: {self._rotulo(loja)} em pausa: túnel residencial fora? '
+                        f'{len(e.retidas)} linha(s) retida(s) (ST_CAPTURA=0; {SEGUIDOS} falhas seguidas '
+                        f'do redirect pelo proxy). Conferir o tunel_residencial.ps1 no PC; o robo tenta '
+                        f'de novo sozinho em {self.minutos:g} min.')
+            return
         self.avisar(f'Robo das lojas: {self._rotulo(loja)} em pausa por {self.minutos:g} min '
                     f'({SEGUIDOS} bloqueios seguidos, motivo {motivo}). '
                     f'{len(e.retidas)} linha(s) retida(s) na fila (ST_CAPTURA=0). '
@@ -104,5 +111,10 @@ class PausaLojas:
             if e.ate is not None and agora - e.alertado_em >= LEMBRETE:
                 e.alertado_em = agora
                 horas = (agora - e.desde).total_seconds() / 3600
+                if e.motivo == REDIRECIONAMENTO:
+                    self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
+                                f'(túnel residencial fora?, {len(e.retidas)} linha(s) retida(s)). '
+                                'Conferir o tunel_residencial.ps1 no PC.')
+                    continue
                 self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
                             f'(motivo {e.motivo}, {len(e.retidas)} linha(s) retida(s)). Entrar no VNC :1 e logar.')
