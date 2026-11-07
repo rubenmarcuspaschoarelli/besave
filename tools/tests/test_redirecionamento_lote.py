@@ -384,3 +384,17 @@ def test_cf01_dominio_ja_na_lista_barrado_tres_vezes_avisa_tunel_sem_sugerir(amb
     assert len(amb.enviados) == 1
     assert "promos.link em pausa: túnel residencial fora?" in amb.enviados[0]
     assert "incluir em" not in amb.enviados[0]
+
+
+def test_cf01_dominio_da_lista_barrado_pausa_pelo_dominio_nao_pelo_host(amb):
+    """M45: a chave da pausa e o dominio da lista; outro subdominio dele fica pausado sem curl nem navegador."""
+    for i in (1, 2, 3):
+        amb.curl.respostas[curto(i)] = (0, "200 ")
+        amb.destinos[curto(i)] = (curto(i), BLOQUEIO_CF)
+    amb.rodar([(1, curto(1)), (2, curto(2)), (3, curto(3))])
+    assert amb.pausa.em_pausa("promos.link")
+    curl_antes = len(amb.curl.comandos)
+    outro = "https://ml.promos.link/REDACTED4"
+    status, visitas, db = amb.rodar([(4, outro)])
+    assert status[4] == "loja_pausada" and db.erros == [] and db.capturas == []
+    assert len(amb.curl.comandos) - curl_antes == 0 and visitas == []
