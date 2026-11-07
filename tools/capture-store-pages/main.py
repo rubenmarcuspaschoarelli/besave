@@ -551,11 +551,19 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 pausa.registrar_sucesso(chave)      # dominio que bloqueava voltou a responder
             else:
                 # Encurtador novo bloqueando o IP da inst1: retida, nunca '9' (BSV-58).
-                print(f'[captura {captura}] {redirecionamento.host_sem_www(page.url or url) or chave} '
-                      'bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?')
+                bloqueado = redirecionamento.host_sem_www(page.url or url) or chave
+                na_lista = bool(redir and redir.dominio(url))
+                if na_lista:
+                    # Ja esta na lista: o proxy respondeu sem redirect e o navegador foi barrado.
+                    print(f'[captura {captura}] {bloqueado} bloqueado pelo Cloudflare '
+                          '(ja em redirecionamento.dominios; o proxy nao redirecionou).')
+                else:
+                    print(f'[captura {captura}] {bloqueado} '
+                          'bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?')
                 restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
                              if _chave_pausa((r.get('url') or '').strip(), redir) == chave]
-                pausa.registrar_bloqueio(chave, bloqueio.CLOUDFLARE, row.get('ID_OFERTA'), restantes)
+                motivo = bloqueio.REDIRECIONAMENTO if na_lista else bloqueio.CLOUDFLARE
+                pausa.registrar_bloqueio(chave, motivo, row.get('ID_OFERTA'), restantes)
                 status_pre = 'redirecionamento_indisponivel'
             if loja:
                 url = destino

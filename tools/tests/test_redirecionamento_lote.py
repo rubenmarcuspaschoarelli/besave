@@ -290,9 +290,11 @@ def test_pau01_monitor_real_resolve_pelo_proxy(amb, lojas, monkeypatch):
 
 def test_seg01_proxy_nunca_aparece_na_saida(amb, lojas, monkeypatch, capsys):
     amb.curl.padrao = (7, "000 ")
-    amb.rodar([(1, curto(1)), (2, curto(2)), (3, curto(3)), (4, curto(4))])
+    amb.curl.respostas[curto(0)] = (0, "200 ")       # ramo sem_redirect tambem loga
+    amb.rodar([(0, curto(0)), (1, curto(1)), (2, curto(2)), (3, curto(3)), (4, curto(4))])
     amb.rel.t += timedelta(hours=7)
     amb.pausa.lembrar()
+    assert "túnel residencial fora?" in amb.enviados[1] and "continua em pausa" in amb.enviados[1]
     amb.curl.padrao = (0, f"302 {amz(5)}")
     amb.rodar([(5, curto(5))])
     monkeypatch.setattr(lojas, "_ler_pendentes_resiliente", lambda *a, **k: (_ for _ in ()).throw(KeyboardInterrupt))
@@ -359,3 +361,12 @@ def test_cf01_dominio_que_volta_a_responder_avisa_voltou(amb):
     status, _, db = amb.rodar([(4, desc(4))])
     assert status[4] == "ok" and db.capturas == [4]
     assert len(amb.enviados) == 2 and "voltou" in amb.enviados[1]
+
+
+def test_cf01_dominio_ja_na_lista_barrado_nao_sugere_incluir(amb, capsys):
+    amb.curl.respostas[curto(1)] = (0, "200 ")       # proxy responde sem redirect
+    amb.destinos[curto(1)] = (curto(1), BLOQUEIO_CF)  # e o navegador cai no Cloudflare
+    status, _, db = amb.rodar([(1, curto(1))])
+    out = capsys.readouterr().out
+    assert status[1] == "redirecionamento_indisponivel" and db.erros == []
+    assert "bloqueado pelo Cloudflare" in out and "incluir em redirecionamento.dominios?" not in out
