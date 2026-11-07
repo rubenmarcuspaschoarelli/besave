@@ -21,6 +21,15 @@
     "confirmar_no_arranque": true,
     "_obs": "false = o robo nao pergunta (input) pelos logins de afiliado no arranque; so avisa no log se o login nao estiver ativo. Use na VPS."
   },
+  "bloqueio": {
+    "pausa_minutos": 60,
+    "_obs": "3 bloqueios seguidos (captcha/login/sessao de afiliado) de uma loja a pausam por pausa_minutos; as outras seguem (BSV-55)."
+  },
+  "alerta": {
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "_obs": "Opcional. Vazio = so log. Aviso quando uma loja entra em pausa, lembrete a cada 6 h e 'voltou'."
+  },
   "link_afiliado": {
     "habilitado": true
   },

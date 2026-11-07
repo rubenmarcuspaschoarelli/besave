@@ -53,8 +53,9 @@ def test_lojas_roda_o_main_em_modo_monitor():
     servico = _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
     partes = servico["ExecStart"].split()
     assert partes[1:3] == ["executar", "besave-lojas"]
-    assert partes[-3:] == ["-u", "main.py", "--monitorar"]
-    assert partes[-4].endswith("/capture-store-pages/.venv/bin/python")
+    # BSV-55: --sem-perguntas, senao o arranque para num input() que ninguem responde
+    assert partes[-4:] == ["-u", "main.py", "--monitorar", "--sem-perguntas"]
+    assert partes[-5].endswith("/capture-store-pages/.venv/bin/python")
 
 
 @pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)

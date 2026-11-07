@@ -30,6 +30,7 @@ Uso:
     python main.py --desde 0           # ignora o ponteiro e reprocessa pendentes
     python main.py --sem-oracle        # captura e grava so no CSV (nao atualiza)
     python main.py --sem-link-afiliado # nao captura o link oficial de afiliado
+    python main.py --monitorar --sem-perguntas # systemd: nenhum input()
     python main.py --csv origem/x.csv  # modo antigo: le de um CSV de origem
 """
 
@@ -38,12 +39,13 @@ import os
 import sys
 import time
 from datetime import datetime
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod)
+                  validade, janela as janela_mod, bloqueio)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -58,8 +60,25 @@ STATUS_MANTER_PENDENTE = {'loja_nao_implementada'}
 # pagina que simplesmente nao tem produto. Distinguir importa: o
 # 'bloqueado_ou_login' e TRANSITORIO (vale reprocessar depois), enquanto o
 # 'pagina_sem_produto' e definitivo (o link nunca levou a um produto).
-# 'verify/' e a Shopee; 'account-verification' e o Mercado Livre.
-MARCAS_BLOQUEIO = ('verify/', 'account-verification')
+# Casam no CAMINHO da URL, em minusculas (a Amazon escreve 'validateCaptcha').
+# Shopee: 'verify/' (traffic/captcha), 'buyer/login'. Mercado Livre:
+# 'account-verification', 'captcha' (/captcha/wall/logged), 'lgz/login'.
+# Amazon: 'captcha' (/errors/validateCaptcha), 'ap/signin'.
+MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
+                   'lgz/login', 'ap/signin')
+
+# Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
+# ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
+STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente'}
+
+
+def _url_bloqueada(url):
+    caminho = urlparse(url or '').path.lower()
+    return any(m in caminho for m in MARCAS_BLOQUEIO)
+
+# --sem-perguntas (BSV-55): partida pelo systemd, sem ninguem no terminal. Ligada,
+# nenhum input() e chamado: logins valem pela sessao salva no perfil.
+SEM_PERGUNTAS = False
 
 
 def _gate_fechar_navegadores():
@@ -68,6 +87,11 @@ def _gate_fechar_navegadores():
     # logar na janela errada) e nao ha conflito de perfil.
     if not processos.chrome_aberto():
         return
+    if SEM_PERGUNTAS:
+        # Ninguem para fechar e nada e morto daqui: sai com erro e o systemd tenta de novo.
+        print('[arranque] ERRO: ha navegador aberto e --sem-perguntas nao pergunta nem '
+              'fecha processo. Feche-o pela tela (VNC); a unidade tenta de novo sozinha.')
+        sys.exit(2)
     while True:
         print('\n' + '=' * 64)
         print('Ha Chrome ABERTO. Feche TODAS as janelas do Chrome (inclusive as')
@@ -142,6 +166,9 @@ def _resolver_ponte(page, url, captura):
 def _gate_login_manual(page):
     # Abre a tela de login da Shopee na janela de automacao e espera o usuario
     # logar manualmente, confirmando com "S". A sessao fica salva no perfil.
+    if SEM_PERGUNTAS:
+        print('[login] --sem-perguntas: Shopee segue com a sessao salva no perfil.')
+        return
     try:
         page.goto('https://shopee.com.br/buyer/login',
                   wait_until='domcontentloaded', timeout=60000)
@@ -178,6 +205,9 @@ def _gate_login_shopee_arranque(page):
     # o login e oferecido UMA vez, no arranque, e depois o loop nunca mais para.
     # A sessao dura ~1 dia; expirando, ofertas da Shopee caem em
     # 'bloqueado_ou_login' ate um novo login.
+    if SEM_PERGUNTAS:
+        print('[login] --sem-perguntas: Shopee segue com a sessao salva no perfil.')
+        return
     print('\n' + '=' * 64)
     print('MODO MONITOR: o programa vai ficar ligado vigiando a fila.')
     print('A Shopee exige sessao logada e o login e MANUAL (captcha/OTP).')
@@ -205,8 +235,9 @@ MARCAS_LOGIN = ('login', 'signin', 'sign-in', 'authenticate')
 
 def _pode_perguntar():
     """Confirma os logins de afiliado pelo teclado? So com terminal e se o
-    config.json nao desligar (afiliados.confirmar_no_arranque=false)."""
-    return sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
+    config.json nao desligar (afiliados.confirmar_no_arranque=false) nem houver
+    --sem-perguntas."""
+    return not SEM_PERGUNTAS and sys.stdin.isatty() and estado.ler_confirmar_no_arranque()
 
 
 def _gate_login_afiliado(page, titulo, url, instrucao):
@@ -397,12 +428,20 @@ def _nova_page(context):
     return page
 
 
-def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
+def _pausa_padrao():
+    return bloqueio.PausaLojas(estado._ler_config(), nome=registry.nome_loja)
+
+
+def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None):
     """Captura cada linha do lote e devolve (out_rows, gravadas, com_erro).
 
     `adiados` (set, usado pelo monitor): recebe os IDs que continuam pendentes
     de proposito — sem isso o monitor releria a mesma linha a cada varredura.
+    `pausa` (core/bloqueio.PausaLojas): lojas em pausa por bloqueios seguidos;
+    o monitor passa a mesma entre os lotes.
     """
+    if pausa is None:
+        pausa = _pausa_padrao()
     out_rows = []
     gravadas = 0
     com_erro = 0
@@ -413,11 +452,14 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
     # Guardada no db para valer tambem nos lotes seguintes do monitor.
     trava = getattr(db, 'trava_ponteiro', None)
 
-    def _adiar(id_oferta, perdida_por_conexao=False):
+    def _travar(id_oferta):
         nonlocal trava
+        trava = id_oferta if trava is None else min(trava, id_oferta)
+        db.trava_ponteiro = trava
+
+    def _adiar(id_oferta, perdida_por_conexao=False):
         if perdida_por_conexao:
-            trava = id_oferta if trava is None else min(trava, id_oferta)
-            db.trava_ponteiro = trava
+            _travar(id_oferta)
         if adiados is not None:
             adiados.add(id_oferta)
 
@@ -431,7 +473,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
         if adiados is not None:
             adiados.add(id_oferta)
 
-    for row in rows:
+    for pos, row in enumerate(rows):
         cron = _Cronometro()
         out = dict(row)
         url = (row.get('url') or '').strip()
@@ -468,6 +510,10 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
             store = registry.get_store(loja)
             if store is None:
                 out['status_captura'] = 'loja_nao_implementada'
+            elif pausa.em_pausa(loja):
+                # Fica '0' sem navegar; as outras lojas seguem (BSV-55).
+                out['status_captura'] = 'loja_pausada'
+                pausa.reter(loja, row.get('ID_OFERTA'))
             else:
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
@@ -499,7 +545,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         descarte = store.status_descarte(page)
                     except Exception:  # noqa: BLE001
                         descarte = None
-                    if any(m in page.url for m in MARCAS_BLOQUEIO):
+                    if _url_bloqueada(page.url):
                         out['status_captura'] = 'bloqueado_ou_login'
                         print(f'[captura {captura}] bloqueio/login/captcha: {page.url[:70]}')
                     elif descarte:
@@ -536,10 +582,25 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                         out.update(link_afiliado.capturar(
                             page, loja, out['url_final']))
                         cron.marcar('afil')
-                        out['status_captura'] = 'ok'
+                        # Sessao de afiliado caida: sem DS_URL_AFILIADO a oferta
+                        # nao vai ao site; a linha espera o novo login (BSV-55).
+                        if out.get(link_afiliado.MOTIVO) == link_afiliado.SESSAO:
+                            out['status_captura'] = 'sessao_afiliado_ausente'
+                        else:
+                            out['status_captura'] = 'ok'
                 except Exception as e:
                     out['status_captura'] = _status_erro(e)
                     print(f'[captura {captura}] erro: {e}')
+
+        # Contagem de bloqueios seguidos por loja (pagina ou sessao de afiliado).
+        if loja and out['status_captura'] in STATUS_RETER:
+            restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
+                         if registry.resolver_loja((r.get('url') or '').strip()) == loja]
+            motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
+                      else bloqueio.PAGINA)
+            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes)
+        elif loja and out['status_captura'] == 'ok':
+            pausa.registrar_sucesso(loja)
 
         # Loja "ativa" = entra em producao agora (conf/config.json ->
         # "lojas_ativas"). As demais sao capturadas e mapeadas do mesmo jeito,
@@ -684,6 +745,15 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None):
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
                     _adiar(id_oferta, db.sem_conexao)
+            elif out['status_captura'] in STATUS_RETER:
+                # Transitorio (sessao/captcha): relida na proxima varredura,
+                # sem entrar em `adiados`; o ponteiro para antes dela.
+                status_db = ' | oracle=retida(0)'
+                _travar(id_oferta)
+            elif out['status_captura'] == 'loja_pausada':
+                # De proposito, como STATUS_MANTER_PENDENTE, mas sem `adiados`:
+                # volta a ser lida quando a pausa vencer.
+                status_db = ' | oracle=pausada(0)'
             elif out['status_captura'] in STATUS_MANTER_PENDENTE:
                 # A falha e NOSSA (loja ainda sem implementacao), nao da
                 # oferta: mantem ST_CAPTURA='0' para reprocessar sozinha
@@ -793,6 +863,19 @@ def _varrer_validade(db):
         print(f'[validade] falhou: {e}')
 
 
+def _sem_lojas_em_pausa(rows, pausa):
+    """Tira do lote as linhas de loja em pausa (ficam '0'), para o monitor nao
+    reler a fila na hora quando so elas sobram. Devolve (linhas, retidas)."""
+    ficam = []
+    for r in rows:
+        loja = registry.resolver_loja((r.get('url') or '').strip())
+        if loja and pausa.em_pausa(loja):
+            pausa.reter(loja, r.get('ID_OFERTA'))
+        else:
+            ficam.append(r)
+    return ficam, len(rows) - len(ficam)
+
+
 def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None):
     """Varre a fila ate o usuario interromper (Ctrl+C).
 
@@ -821,8 +904,10 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
         print(f'[monitor] janela noturna {janela[0]:%H:%M}-{janela[1]:%H:%M}: '
               f'varredura a cada {janela[2] / 60:g} min dentro dela.')
     ult_validade = 0.0
+    pausa = _pausa_padrao()
     try:
         while True:
+            pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
                 _varrer_validade(db)
@@ -832,9 +917,11 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
                 _esperar(espera_s())
                 continue
+            rows, retidas = _sem_lojas_em_pausa(rows, pausa)
             if not rows:
-                print(f'[{datetime.now():%H:%M:%S}] fila vazia; proxima leitura '
-                      f'em {espera_s() / 60:g} min.')
+                print(f'[{datetime.now():%H:%M:%S}] fila vazia'
+                      + (f' ({retidas} linha(s) de loja em pausa)' if retidas else '')
+                      + f'; proxima leitura em {espera_s() / 60:g} min.')
                 _esperar(espera_s())
                 continue
 
@@ -847,7 +934,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 page = _nova_page(context)
 
             out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, True, img_root, adiados)
+                page, rows, db, True, img_root, adiados, pausa)
             total_grav += gravadas
             total_erro += com_erro
             _gravar_csv(out_rows, header, f'oracle_{datetime.now():%d_%m_%Y_%H_%M_%S}')
@@ -887,7 +974,12 @@ def main():
                     help='Nao captura o link oficial de afiliado (DS_URL_AFILIADO) '
                          'nem pede os logins dos programas de afiliado. A captura '
                          'dos dados do produto continua igual.')
+    ap.add_argument('--sem-perguntas', action='store_true', dest='sem_perguntas',
+                    help='Partida automatica (systemd): nunca pergunta nada. Logins '
+                         'valem pela sessao do perfil; navegador aberto = sai com erro.')
     args = ap.parse_args()
+    global SEM_PERGUNTAS
+    SEM_PERGUNTAS = args.sem_perguntas
 
     # Captura do link de afiliado: ligada por padrao (conf/config.json ->
     # link_afiliado.habilitado); a linha de comando so consegue DESLIGAR.

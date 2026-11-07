@@ -52,6 +52,15 @@ CAMPOS = ('url_afiliado', 'categoria_afiliado', 'taxa_comissao_afiliado',
 # Lojas com fluxo implementado (as demais devolvem tudo vazio).
 LOJAS = ('amazon', 'mercadolivre', 'shopee')
 
+# Por que nao veio link (BSV-55), na chave MOTIVO do resultado de capturar():
+# SESSAO = a pagina do programa de afiliados nao abriu (independe do produto: a
+# sessao caiu) -> o main.py segura a linha na fila; OUTRO = o gerador nao
+# devolveu link para esta URL, widget ausente na pagina, erro -> grava como
+# sempre. '' = veio link (ou a captura nem foi tentada).
+MOTIVO = 'motivo_afiliado'
+SESSAO = 'sessao'
+OUTRO = 'outro'
+
 _habilitado = True
 
 # Corta-circuito: loja com LIMITE_FALHAS ofertas seguidas sem link sai do ar
@@ -455,7 +464,7 @@ def _shopee(page, url_final):
         except Exception:  # noqa: BLE001
             print('[link_afiliado] shopee: formulario do custom_link nao abriu '
                   f'(sessao de afiliado nao logada? url={aba.url[:70]}).')
-            return {}
+            return {MOTIVO: SESSAO}
         campo.fill(alvo)
         aba.locator(SHP_SUBMIT).first.click(timeout=10000)
         copiar = aba.locator(SHP_COPIAR).first
@@ -505,17 +514,29 @@ def capturar(page, loja, url_final=''):
     produto e do download das imagens -- o fluxo clica em botoes e, na Shopee,
     usa outra aba.
 
-    Devolve sempre um dict com todas as chaves de CAMPOS ('' quando nao veio).
-    Nunca levanta excecao: loja sem fluxo, sessao deslogada ou layout mudado
-    resultam em campos vazios (NULL no banco), nunca em captura perdida."""
+    Devolve sempre um dict com todas as chaves de CAMPOS ('' quando nao veio)
+    e MOTIVO (SESSAO/OUTRO quando nao veio link, '' quando veio). Nunca levanta
+    excecao: loja sem fluxo, sessao deslogada ou layout mudado resultam em
+    campos vazios; quem chama decide o que fazer com MOTIVO=SESSAO."""
     resultado = vazio()
+    resultado[MOTIVO] = ''
     fluxo = _FLUXOS.get(loja)
-    if not _habilitado or fluxo is None or loja in _desistidas:
+    if not _habilitado or fluxo is None:
         return resultado
+    if loja in _desistidas:
+        resultado[MOTIVO] = OUTRO
+        return resultado
+    motivo = ''
     try:
-        resultado.update({k: v for k, v in (fluxo(page, url_final) or {}).items()
-                          if k in CAMPOS and v})
+        dados = fluxo(page, url_final) or {}
+        motivo = dados.get(MOTIVO) or ''
+        resultado.update({k: v for k, v in dados.items() if k in CAMPOS and v})
     except Exception as e:  # noqa: BLE001
         print(f'[link_afiliado] {loja}: {type(e).__name__}: {str(e).splitlines()[0]}')
-    _desistir_da_loja(loja, bool(resultado['url_afiliado']))
+    veio = bool(resultado['url_afiliado'])
+    resultado[MOTIVO] = '' if veio else (motivo or OUTRO)
+    # Sessao caida e tratada pela pausa do main.py (BSV-55): nao desliga a loja
+    # aqui, senao depois do novo login ela seguiria sem link ate reiniciar.
+    if resultado[MOTIVO] != SESSAO:
+        _desistir_da_loja(loja, veio)
     return resultado
