@@ -45,7 +45,7 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod, bloqueio)
+                  validade, janela as janela_mod, bloqueio, redirecionamento)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -69,7 +69,7 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 
 # Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
 # ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
-STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente'}
+STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel'}
 
 
 def _url_bloqueada(url):
@@ -135,11 +135,16 @@ def _goto_robusto(page, url, timeout=60000):
             raise
 
 
+PONTE_EXPIRADA = 'expirada'
+PONTE_CLOUDFLARE = 'cloudflare'
+
+
 def _resolver_ponte(page, url, captura):
     # Dominio fora do registry: antes de desistir, abre a pagina e ve se ela e
     # uma PONTE (vitrine de divulgador) — nesse caso o link da loja de verdade
-    # esta no proprio HTML. Retorna (url_da_loja, nome_da_loja, expirada), com
-    # `expirada` True quando a vitrine responde mas a oferta ja saiu do ar.
+    # esta no proprio HTML. Retorna (url_da_loja, nome_da_loja, marca), com
+    # `marca` PONTE_EXPIRADA quando a vitrine responde mas a oferta ja saiu do
+    # ar, PONTE_CLOUDFLARE na pagina de bloqueio do Cloudflare (BSV-58), senao None.
     try:
         _goto_robusto(page, url, timeout=60000)
         # Encurtador generico (amzn.promos.link, amzn.to, GA.MA, onelink...):
@@ -149,18 +154,20 @@ def _resolver_ponte(page, url, captura):
         loja = registry.resolver_loja(page.url)
         if loja:
             print(f'[captura {captura}] redirect -> {loja}: {page.url[:70]}')
-            return page.url, loja, False
+            return page.url, loja, None
+        if redirecionamento.pagina_bloqueada_cloudflare(page):
+            return None, None, PONTE_CLOUDFLARE
         destino, loja = pontes.resolver_destino(page)
     except Exception as e:
         print(f'[captura {captura}] ponte: {e}')
-        return None, None, False
+        return None, None, None
     if destino:
         print(f'[captura {captura}] ponte -> {loja}: {destino[:70]}')
-        return destino, loja, False
-    expirada = pontes.oferta_expirada(page)
-    if expirada:
+        return destino, loja, None
+    if pontes.oferta_expirada(page):
         print(f'[captura {captura}] ponte: promocao encerrada ({page.url[:70]})')
-    return None, None, expirada
+        return None, None, PONTE_EXPIRADA
+    return None, None, None
 
 
 def _gate_login_manual(page):
@@ -372,7 +379,7 @@ class _Cronometro:
     """
 
     # Fases na ordem em que acontecem (so as > 0,05s entram no log).
-    ORDEM = ('ponte', 'nav', 'capt', 'img', 'afil', 'db')
+    ORDEM = ('redir', 'ponte', 'nav', 'capt', 'img', 'afil', 'db')
 
     def __init__(self):
         self.inicio = datetime.now()
@@ -432,16 +439,59 @@ def _pausa_padrao():
     return bloqueio.PausaLojas(estado._ler_config(), nome=registry.nome_loja)
 
 
-def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None):
+def _redir_padrao():
+    return redirecionamento.ler_config(estado._ler_config())
+
+
+def _chave_pausa(url, redir):
+    """Chave da PausaLojas para a URL (BSV-58): loja do registry, dominio de redirecionamento ou host."""
+    loja = registry.resolver_loja(url)
+    if loja:
+        return loja
+    return (redir.dominio(url) if redir else None) or redirecionamento.host_sem_www(url) or None
+
+
+def _redirecionar(url, redir, pausa, row, rows_seguintes, captura):
+    """Encurtador da lista de redirecionamento (BSV-58): resolve o redirect pelo proxy residencial.
+
+    Devolve (url, status): url de destino (ou a original) e status final da linha, ou None para seguir.
+    """
+    chave = _chave_pausa(url, redir)
+    if chave and pausa.em_pausa(chave):
+        pausa.reter(chave, row.get('ID_OFERTA'))
+        return url, 'loja_pausada'
+    dominio = redir.dominio(url) if redir else None
+    if not dominio:
+        return url, None
+    destino, motivo = redirecionamento.resolver(url, redir)
+    if destino:
+        pausa.registrar_sucesso(dominio)
+        print(f'[captura {captura}] redirect (proxy) -> {registry.resolver_loja(destino) or "?"}: '
+              f'{destino[:70]}')
+        return destino, None
+    if motivo == redirecionamento.SEM_REDIRECT:
+        print(f'[captura {captura}] redirect (proxy) {dominio}: sem redirect; segue o navegador.')
+        return url, None
+    print(f'[captura {captura}] redirect (proxy) {dominio}: {motivo}; linha retida.')
+    restantes = [r.get('ID_OFERTA') for r in rows_seguintes
+                 if _chave_pausa((r.get('url') or '').strip(), redir) == dominio]
+    pausa.registrar_bloqueio(dominio, bloqueio.REDIRECIONAMENTO, row.get('ID_OFERTA'), restantes)
+    return url, 'redirecionamento_indisponivel'
+
+
+def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None, redir=None):
     """Captura cada linha do lote e devolve (out_rows, gravadas, com_erro).
 
     `adiados` (set, usado pelo monitor): recebe os IDs que continuam pendentes
     de proposito — sem isso o monitor releria a mesma linha a cada varredura.
     `pausa` (core/bloqueio.PausaLojas): lojas em pausa por bloqueios seguidos;
     o monitor passa a mesma entre os lotes.
+    `redir` (core/redirecionamento.Config): encurtadores resolvidos pelo proxy; None = le do config.json.
     """
     if pausa is None:
         pausa = _pausa_padrao()
+    if redir is None:
+        redir = _redir_padrao()
     out_rows = []
     gravadas = 0
     com_erro = 0
@@ -484,11 +534,37 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         out['url_besave'] = ''  # idem, com o NOSSO codigo de afiliado
 
         expirada = False
+        status_pre = None
         if url and loja is None:
+            url, status_pre = _redirecionar(url, redir, pausa, row, rows[pos + 1:], captura)
+            cron.marcar('redir')
+            loja = registry.resolver_loja(url)
+            out['loja'] = loja or ''
+        if url and loja is None and status_pre is None:
             # Pode ser uma pagina-ponte de divulgador: a oferta esta la, mas
             # quem vende e outra loja. A URL de origem continua em out['url'].
-            destino, loja, expirada = _resolver_ponte(page, url, captura)
+            destino, loja, marca = _resolver_ponte(page, url, captura)
             cron.marcar('ponte')
+            expirada = marca == PONTE_EXPIRADA
+            chave = _chave_pausa(url, redir)
+            if marca != PONTE_CLOUDFLARE:
+                pausa.registrar_sucesso(chave)      # dominio que bloqueava voltou a responder
+            else:
+                # Encurtador novo bloqueando o IP da inst1: retida, nunca '9' (BSV-58).
+                bloqueado = redirecionamento.host_sem_www(page.url or url) or chave
+                na_lista = bool(redir and redir.dominio(url))
+                if na_lista:
+                    # Ja esta na lista: o proxy respondeu sem redirect e o navegador foi barrado.
+                    print(f'[captura {captura}] {bloqueado} bloqueado pelo Cloudflare '
+                          '(ja em redirecionamento.dominios; o proxy nao redirecionou).')
+                else:
+                    print(f'[captura {captura}] {bloqueado} '
+                          'bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?')
+                restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
+                             if _chave_pausa((r.get('url') or '').strip(), redir) == chave]
+                motivo = bloqueio.REDIRECIONAMENTO if na_lista else bloqueio.CLOUDFLARE
+                pausa.registrar_bloqueio(chave, motivo, row.get('ID_OFERTA'), restantes)
+                status_pre = 'redirecionamento_indisponivel'
             if loja:
                 url = destino
             else:
@@ -499,7 +575,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                     pass
             out['loja'] = loja or ''
 
-        if not url:
+        if status_pre:
+            out['status_captura'] = status_pre
+        elif not url:
             out['status_captura'] = 'url_vazia'
         elif loja is None:
             # 'oferta_expirada' e definitivo como o 'loja_desconhecida' (ambos
@@ -863,12 +941,12 @@ def _varrer_validade(db):
         print(f'[validade] falhou: {e}')
 
 
-def _sem_lojas_em_pausa(rows, pausa):
-    """Tira do lote as linhas de loja em pausa (ficam '0'), para o monitor nao
-    reler a fila na hora quando so elas sobram. Devolve (linhas, retidas)."""
+def _sem_lojas_em_pausa(rows, pausa, redir=None):
+    """Tira do lote as linhas de loja (ou dominio de redirecionamento) em pausa (ficam '0'), para o
+    monitor nao reler a fila na hora quando so elas sobram. Devolve (linhas, retidas)."""
     ficam = []
     for r in rows:
-        loja = registry.resolver_loja((r.get('url') or '').strip())
+        loja = _chave_pausa((r.get('url') or '').strip(), redir)
         if loja and pausa.em_pausa(loja):
             pausa.reter(loja, r.get('ID_OFERTA'))
         else:
@@ -905,8 +983,15 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
               f'varredura a cada {janela[2] / 60:g} min dentro dela.')
     ult_validade = 0.0
     pausa = _pausa_padrao()
+    redir = _redir_padrao()
+    print(redirecionamento.descrever(redir))
     try:
         while True:
+            # Relido a cada volta: incluir um dominio nao exige reiniciar o robo.
+            novo = _redir_padrao()
+            if novo != redir:
+                redir = novo
+                print(redirecionamento.descrever(redir))
             pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
@@ -917,7 +1002,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
                 _esperar(espera_s())
                 continue
-            rows, retidas = _sem_lojas_em_pausa(rows, pausa)
+            rows, retidas = _sem_lojas_em_pausa(rows, pausa, redir)
             if not rows:
                 print(f'[{datetime.now():%H:%M:%S}] fila vazia'
                       + (f' ({retidas} linha(s) de loja em pausa)' if retidas else '')
@@ -934,7 +1019,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 page = _nova_page(context)
 
             out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, True, img_root, adiados, pausa)
+                page, rows, db, True, img_root, adiados, pausa, redir)
             total_grav += gravadas
             total_erro += com_erro
             _gravar_csv(out_rows, header, f'oracle_{datetime.now():%d_%m_%Y_%H_%M_%S}')
@@ -1090,8 +1175,10 @@ def main():
             # 3) Logins dos programas de afiliado (so p/ o DS_URL_AFILIADO).
             if capturar_link:
                 _gates_login_afiliados(page)
+            redir = _redir_padrao()
+            print(redirecionamento.descrever(redir))
             out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, atualiza_banco, img_root)
+                page, rows, db, atualiza_banco, img_root, redir=redir)
             _gravar_csv(out_rows, header, base)
             if atualiza_banco:
                 _resumo_oracle(len(out_rows), gravadas, com_erro)

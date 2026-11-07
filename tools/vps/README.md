@@ -138,6 +138,62 @@ aberta ou feche-a; não feche a janela nem as abas do robô. Não precisa `tmux`
 sonda usa a sessão nova e o "voltou" chega no Telegram. Para não esperar a pausa inteira, reinicie a unidade
 (`systemctl --user restart besave-captura-lojas`): sobe sem perguntas e com a contagem zerada.
 
+## Robô das lojas: encurtador bloqueado e túnel residencial (BSV-58)
+
+Alguns encurtadores (hoje o `amzn.promos.link`) bloqueiam o IP de datacenter da inst1 no Cloudflare ("Sorry,
+you have been blocked"). Só o **redirect** desses domínios sai pelo IP residencial do PC do dono, por um túnel
+SSH; a página da loja, as imagens, os logins de afiliado e a fila continuam na inst1.
+
+- **Como funciona:** no PC, `tunel_residencial.ps1` mantém `ssh -N -R 127.0.0.1:1080` para a inst1. Lá a porta
+  `1080` vira um proxy SOCKS que escuta **só no `127.0.0.1` da inst1** (o bind é explícito no `-R`, e o `sshd`
+  não publica encaminhamento reverso em outra interface sem `GatewayPorts`, que fica desligado). O robô chama
+  `curl --proxy socks5h://127.0.0.1:1080` sem seguir redirect, um salto por vez, até o primeiro destino fora da
+  lista, e abre esse destino pelo navegador da inst1, direto. No log: `redirect (proxy) -> amazon`.
+- **Configuração** (`conf/config.json` do robô das lojas, bloco `redirecionamento`; modelo em
+  `conf/config.example.json`): `proxy`, `dominios`, `timeout_segundos`, `max_saltos`. Sem o bloco, ou com
+  `dominios` vazio, o robô segue como antes.
+- **PC desligado, túnel fora ou proxy bloqueado:** nada se perde. A linha fica `redirecionamento_indisponivel`
+  (`oracle=retida(0)`, `ST_CAPTURA=0`, ponteiro travado). Três seguidas pausam o domínio (as outras lojas
+  seguem) e chega no Telegram `promos.link em pausa: túnel residencial fora? N linha(s) retida(s)`, lembrete a
+  cada 6 h e "voltou" quando o túnel volta; as retidas são processadas sozinhas.
+- **Incluir um domínio:** acrescente em `redirecionamento.dominios` (sem `www`, sem caminho: `promos.link` vale
+  para `amzn.promos.link`, não para `xpromos.link`). O monitor relê o bloco a cada varredura; não precisa
+  reiniciar. Domínio **fora** da lista que cair na página de bloqueio do Cloudflare também não vira `'9'`: a
+  linha fica retida e o log (e, depois de três seguidas, o Telegram) diz
+  `<dominio> bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?`.
+
+### Túnel no PC (Windows, OpenSSH ≥ 7.6)
+
+Destino e chave **não** vão para o repositório; ficam em variáveis do usuário (uma vez, num PowerShell):
+
+```powershell
+setx BESAVE_TUNEL_DESTINO "ubuntu@<ip-da-inst1>"
+setx BESAVE_TUNEL_CHAVE "<pasta-do-usuario>\.ssh\<chave-da-inst1>"
+```
+
+Antes da tarefa, conecte uma vez à mão para aceitar a chave do host (o script usa `BatchMode=yes` e não
+pergunta nada): `ssh -i <chave> ubuntu@<ip-da-inst1> exit`.
+
+Tarefa agendada (ao logar, sem janela; reinicia se o PowerShell morrer):
+
+```powershell
+$acao = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "<repo>\tools\vps\tunel_residencial.ps1"'
+$gatilho = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$ajustes = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName 'besave-tunel-residencial' -Action $acao -Trigger $gatilho -Settings $ajustes
+Start-ScheduledTask -TaskName 'besave-tunel-residencial'
+```
+
+- **Log:** `%LOCALAPPDATA%\besave\tunel_residencial.log` (conectando / caiu, com o código de saída do `ssh`;
+  sem IP nem chave; passou de 1 MB, fica com as últimas 500 linhas). Caiu, reconecta em 30 s.
+- **Parar:** `Stop-ScheduledTask -TaskName 'besave-tunel-residencial'`; para não subir no próximo logon,
+  `Disable-ScheduledTask -TaskName 'besave-tunel-residencial'`. Se sobrar um `ssh.exe` do túnel, feche-o no
+  Gerenciador de Tarefas. Para testar à mão (e derrubar fechando a janela), com a tarefa parada:
+  `powershell -NoProfile -ExecutionPolicy Bypass -File tools\vps\tunel_residencial.ps1`.
+- **Conferir na inst1:**
+  `curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --proxy socks5h://127.0.0.1:1080 https://amzn.promos.link/<codigo>`
+  → `302 https://www.amazon.com.br/...`.
+
 ## Parar
 
 ```bash
