@@ -21,7 +21,8 @@ def _ler(caminho):
 
 def test_existem_as_duas_unidades():
     assert [u.name for u in UNIDADES] == [
-        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-vnc@.service",
+        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-reinicio-whatsapp.service",
+        "besave-vnc@.service",
     ]
 
 
@@ -30,7 +31,7 @@ def test_reinicia_em_falha_e_roda_no_tmux_com_display(unidade):
     cfg = _ler(unidade)
     servico = cfg["Service"]
     assert servico["Restart"] == "on-failure"
-    assert servico["Environment"] == f"BESAVE_DISPLAY=:{TELA[unidade.name]}"
+    assert f"BESAVE_DISPLAY=:{TELA[unidade.name]}" in servico["Environment"].split()
     exec_start = servico["ExecStart"]
     assert re.search(r"/tools/vps/(rodar_em_tmux|iniciar_captura)\.sh\b", exec_start)
     assert cfg["Install"]["WantedBy"] == "default.target"
@@ -112,3 +113,37 @@ def test_vnc_detalhes_da_tela():
     servico = _ler(VPS / "systemd" / "besave-vnc@.service")["Service"]
     assert servico["ExecStartPre"].startswith("-")  # limpa tela velha, mas nao falha se nao ha
     assert servico["ExecStartPre"].endswith("vncserver -kill :%i")
+
+
+# --- BSV-54: reinicio diario e teto de memoria --------------------------------
+def test_timer_do_reinicio_as_0530_sem_persistent():
+    t = _ler(VPS / "systemd" / "besave-reinicio-whatsapp.timer")
+    assert t["Timer"]["OnCalendar"] == "*-*-* 05:30:00"
+    assert t["Timer"]["Persistent"] == "false"
+    assert t["Install"]["WantedBy"] == "timers.target"
+
+
+def test_service_do_reinicio_e_oneshot_e_chama_o_script():
+    s = _ler(VPS / "systemd" / "besave-reinicio-whatsapp.service")["Service"]
+    assert s["Type"] == "oneshot"
+    assert s["ExecStart"].endswith("/tools/vps/reiniciar_whatsapp.sh")
+    assert int(s["TimeoutStartSec"]) >= 240  # restart + 3 min de confirmacao
+
+
+def test_whatsapp_teto_vem_do_environment_e_nao_da_unidade():
+    # o painel do tmux fica fora da unidade (scope proprio): MemoryHigh/Max aqui nao pegariam o navegador
+    servico = _ler(VPS / "systemd" / "besave-captura-whatsapp.service")["Service"]
+    env = servico["Environment"].split()
+    assert "BESAVE_MEM_HIGH=3500M" in env and "BESAVE_MEM_MAX=4500M" in env
+    assert "BESAVE_MEM_SWAP_MAX=0" in env  # sem swap o MemoryMax vira thrashing, nao OOM-kill
+    for chave in ("MemoryHigh", "MemoryMax"):
+        assert chave not in servico
+    assert servico["Restart"] == "on-failure"
+    assert "MemoryMax" not in _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
+
+
+def test_whatsapp_execstop_para_o_scope_do_robo():
+    servico = _ler(VPS / "systemd" / "besave-captura-whatsapp.service")["Service"]
+    # '-' = scope ja ausente nao falha o stop; nada de encerrar_captura.sh (ele para a propria unidade)
+    assert servico["ExecStop"] == "-/usr/bin/systemctl --user stop besave-whatsapp-robo.scope"
+    assert int(servico["TimeoutStopSec"]) >= 40  # scope (30 s) + folga

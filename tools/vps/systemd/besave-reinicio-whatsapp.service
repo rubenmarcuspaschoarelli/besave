@@ -1,0 +1,10 @@
+# Reinicio diario do robo do WhatsApp (BSV-54) - unidade de USUARIO, oneshot.
+# Disparada por besave-reinicio-whatsapp.timer. Ver tools/vps/README.md.
+[Unit]
+Description=Besave - reinicio diario do robo do WhatsApp
+
+[Service]
+Type=oneshot
+ExecStart=/srv/besave/repo/tools/vps/reiniciar_whatsapp.sh
+# restart (<=30 s) + espera de ate 3 min pela confirmacao
+TimeoutStartSec=300
