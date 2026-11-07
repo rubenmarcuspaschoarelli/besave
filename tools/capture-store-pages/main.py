@@ -135,11 +135,16 @@ def _goto_robusto(page, url, timeout=60000):
             raise
 
 
+PONTE_EXPIRADA = 'expirada'
+PONTE_CLOUDFLARE = 'cloudflare'
+
+
 def _resolver_ponte(page, url, captura):
     # Dominio fora do registry: antes de desistir, abre a pagina e ve se ela e
     # uma PONTE (vitrine de divulgador) — nesse caso o link da loja de verdade
-    # esta no proprio HTML. Retorna (url_da_loja, nome_da_loja, expirada), com
-    # `expirada` True quando a vitrine responde mas a oferta ja saiu do ar.
+    # esta no proprio HTML. Retorna (url_da_loja, nome_da_loja, marca), com
+    # `marca` PONTE_EXPIRADA quando a vitrine responde mas a oferta ja saiu do
+    # ar, PONTE_CLOUDFLARE na pagina de bloqueio do Cloudflare (BSV-58), senao None.
     try:
         _goto_robusto(page, url, timeout=60000)
         # Encurtador generico (amzn.promos.link, amzn.to, GA.MA, onelink...):
@@ -149,18 +154,20 @@ def _resolver_ponte(page, url, captura):
         loja = registry.resolver_loja(page.url)
         if loja:
             print(f'[captura {captura}] redirect -> {loja}: {page.url[:70]}')
-            return page.url, loja, False
+            return page.url, loja, None
+        if redirecionamento.pagina_bloqueada_cloudflare(page):
+            return None, None, PONTE_CLOUDFLARE
         destino, loja = pontes.resolver_destino(page)
     except Exception as e:
         print(f'[captura {captura}] ponte: {e}')
-        return None, None, False
+        return None, None, None
     if destino:
         print(f'[captura {captura}] ponte -> {loja}: {destino[:70]}')
-        return destino, loja, False
-    expirada = pontes.oferta_expirada(page)
-    if expirada:
+        return destino, loja, None
+    if pontes.oferta_expirada(page):
         print(f'[captura {captura}] ponte: promocao encerrada ({page.url[:70]})')
-    return None, None, expirada
+        return None, None, PONTE_EXPIRADA
+    return None, None, None
 
 
 def _gate_login_manual(page):
@@ -437,11 +444,11 @@ def _redir_padrao():
 
 
 def _chave_pausa(url, redir):
-    """Chave da PausaLojas para a URL: loja do registry ou dominio de redirecionamento (BSV-58)."""
+    """Chave da PausaLojas para a URL (BSV-58): loja do registry, dominio de redirecionamento ou host."""
     loja = registry.resolver_loja(url)
     if loja:
         return loja
-    return redir.dominio(url) if redir else None
+    return (redir.dominio(url) if redir else None) or redirecionamento.host_sem_www(url) or None
 
 
 def _redirecionar(url, redir, pausa, row, rows_seguintes, captura):
@@ -449,12 +456,13 @@ def _redirecionar(url, redir, pausa, row, rows_seguintes, captura):
 
     Devolve (url, status): url de destino (ou a original) e status final da linha, ou None para seguir.
     """
+    chave = _chave_pausa(url, redir)
+    if chave and pausa.em_pausa(chave):
+        pausa.reter(chave, row.get('ID_OFERTA'))
+        return url, 'loja_pausada'
     dominio = redir.dominio(url) if redir else None
     if not dominio:
         return url, None
-    if pausa.em_pausa(dominio):
-        pausa.reter(dominio, row.get('ID_OFERTA'))
-        return url, 'loja_pausada'
     destino, motivo = redirecionamento.resolver(url, redir)
     if destino:
         pausa.registrar_sucesso(dominio)
@@ -535,8 +543,20 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         if url and loja is None and status_pre is None:
             # Pode ser uma pagina-ponte de divulgador: a oferta esta la, mas
             # quem vende e outra loja. A URL de origem continua em out['url'].
-            destino, loja, expirada = _resolver_ponte(page, url, captura)
+            destino, loja, marca = _resolver_ponte(page, url, captura)
             cron.marcar('ponte')
+            expirada = marca == PONTE_EXPIRADA
+            chave = _chave_pausa(url, redir)
+            if marca != PONTE_CLOUDFLARE:
+                pausa.registrar_sucesso(chave)      # dominio que bloqueava voltou a responder
+            else:
+                # Encurtador novo bloqueando o IP da inst1: retida, nunca '9' (BSV-58).
+                print(f'[captura {captura}] {redirecionamento.host_sem_www(page.url or url) or chave} '
+                      'bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?')
+                restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
+                             if _chave_pausa((r.get('url') or '').strip(), redir) == chave]
+                pausa.registrar_bloqueio(chave, bloqueio.CLOUDFLARE, row.get('ID_OFERTA'), restantes)
+                status_pre = 'redirecionamento_indisponivel'
             if loja:
                 url = destino
             else:

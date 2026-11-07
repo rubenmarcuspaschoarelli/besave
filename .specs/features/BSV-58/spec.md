@@ -78,8 +78,8 @@ Open questions: none
 | FAL-01 | P1 | Execute | Done |
 | FAL-02 | P1 | Execute | Done |
 | PAU-01 | P1 | Execute | Done |
-| CF-01 | P1 | Execute | Pending |
-| CF-02 | P1 | Execute | Pending |
+| CF-01 | P1 | Execute | Done |
+| CF-02 | P1 | Execute | Done |
 | SEG-01 | P1 | Execute | Done |
 | TUN-01 | P1 | Execute | Pending |
 | DOC-01 | P1 | Execute | Pending |

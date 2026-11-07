@@ -303,3 +303,59 @@ def test_seg01_proxy_nunca_aparece_na_saida(amb, lojas, monkeypatch, capsys):
     texto = saida.out + saida.err + "\n".join(amb.enviados)
     assert "promos.link" in texto and len(amb.enviados) == 3
     assert PROXY not in texto and "1080" not in texto and "127.0.0.1" not in texto
+
+
+# --- CF-01 / CF-02 ---------------------------------------------------------------------------------
+
+def desc(i):
+    return DESCONHECIDO.format(i)
+
+
+SO_TITULO = "<html><head><title>Attention Required! | Cloudflare</title></head><body>Error 1020</body></html>"
+SO_TEXTO = "<html><head><title>Just a moment</title></head><body><h2>You have been blocked</h2></body></html>"
+
+
+@pytest.mark.parametrize("html", [BLOQUEIO_CF, SO_TITULO, SO_TEXTO])
+def test_cf01_bloqueio_do_cloudflare_fora_da_lista_retem_e_sugere(amb, lojas, capsys, html):
+    amb.destinos[desc(1)] = (desc(1), html)
+    status, _, db = amb.rodar([(1, desc(1)), (2, amz(2))])
+    assert status[1] == "redirecionamento_indisponivel" and status[2] == "ok"
+    assert db.erros == [] and db.capturas == [2] and lojas.ponteiro == []
+    out = capsys.readouterr().out
+    assert ("achadinhos.exemplo.com.br bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?"
+            in out)
+    assert "oracle=retida(0)" in out and amb.curl.comandos == []
+
+
+def test_cf01_tres_seguidas_pausam_o_dominio_e_avisam_com_a_sugestao(amb):
+    for i in (1, 2, 3, 4):
+        amb.destinos[desc(i)] = (desc(i), BLOQUEIO_CF)
+    status, visitas, _ = amb.rodar([(1, desc(1)), (2, desc(2)), (3, desc(3)), (4, desc(4)), (5, amz(5))])
+    assert status[4] == "loja_pausada" and desc(4) not in visitas and status[5] == "ok"
+    assert len(amb.enviados) == 1
+    assert "achadinhos.exemplo.com.br bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?" \
+        in amb.enviados[0]
+
+
+def test_cf01_vale_sem_o_bloco_de_redirecionamento(amb):
+    del amb.cfg["redirecionamento"]
+    amb.destinos[desc(1)] = (desc(1), BLOQUEIO_CF)
+    status, _, db = amb.rodar([(1, desc(1))])
+    assert status[1] == "redirecionamento_indisponivel" and db.erros == []
+
+
+def test_cf02_pagina_comum_de_dominio_desconhecido_continua_9(amb):
+    amb.destinos[desc(1)] = (desc(1), "<html><title>Achadinhos da Carol</title><body>Promo blocked? nao</body></html>")
+    status, _, db = amb.rodar([(1, desc(1))])
+    assert status[1] == "loja_desconhecida" and db.erros == [(1, "loja_desconhecida")]
+
+
+def test_cf01_dominio_que_volta_a_responder_avisa_voltou(amb):
+    for i in (1, 2, 3):
+        amb.destinos[desc(i)] = (desc(i), BLOQUEIO_CF)
+    amb.rodar([(1, desc(1)), (2, desc(2)), (3, desc(3))])
+    amb.rel.t += timedelta(minutes=61)
+    amb.destinos[desc(4)] = (amz(4), "")             # agora redireciona para a loja
+    status, _, db = amb.rodar([(4, desc(4))])
+    assert status[4] == "ok" and db.capturas == [4]
+    assert len(amb.enviados) == 2 and "voltou" in amb.enviados[1]

@@ -45,7 +45,7 @@ cd tools && python -m pytest -q && ruff check vps/ tests/ && shellcheck vps/*.sh
 **Tests**: `tools/tests/test_redirecionamento_lote.py`
 **Gate**: `pytest`
 
-### T3: Cloudflare fora da lista
+### T3: Cloudflare fora da lista ✅
 **What**: página de bloqueio do Cloudflare no `_resolver_ponte` retém a linha, loga e pausa pelo host com a sugestão.
 **Where**: `tools/capture-store-pages/main.py`, `core/redirecionamento.py`, `core/bloqueio.py`
 **Depends on**: none

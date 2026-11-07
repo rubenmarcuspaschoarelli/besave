@@ -21,6 +21,7 @@ PAUSA_MINUTOS_PADRAO = 60
 PAGINA = 'pagina'        # captcha/login/verificacao na pagina da loja
 AFILIADO = 'afiliado'    # sessao do programa de afiliados
 REDIRECIONAMENTO = 'redirecionamento'  # redirect pelo proxy residencial (BSV-58); chave = dominio
+CLOUDFLARE = 'cloudflare'  # bloqueio do Cloudflare em dominio fora da lista (BSV-58); chave = host
 
 
 def ler_pausa_minutos(cfg):
@@ -90,6 +91,11 @@ class PausaLojas:
                         f'do redirect pelo proxy). Conferir o tunel_residencial.ps1 no PC; o robo tenta '
                         f'de novo sozinho em {self.minutos:g} min.')
             return
+        if motivo == CLOUDFLARE:
+            self.avisar(f'Robo das lojas: {self._rotulo(loja)} bloqueado pelo Cloudflare; incluir em '
+                        f'redirecionamento.dominios? {len(e.retidas)} linha(s) retida(s) (ST_CAPTURA=0; '
+                        f'{SEGUIDOS} seguidas). O robo tenta de novo sozinho em {self.minutos:g} min.')
+            return
         self.avisar(f'Robo das lojas: {self._rotulo(loja)} em pausa por {self.minutos:g} min '
                     f'({SEGUIDOS} bloqueios seguidos, motivo {motivo}). '
                     f'{len(e.retidas)} linha(s) retida(s) na fila (ST_CAPTURA=0). '
@@ -115,6 +121,11 @@ class PausaLojas:
                     self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
                                 f'(túnel residencial fora?, {len(e.retidas)} linha(s) retida(s)). '
                                 'Conferir o tunel_residencial.ps1 no PC.')
+                    continue
+                if e.motivo == CLOUDFLARE:
+                    self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua bloqueado pelo Cloudflare ha '
+                                f'{horas:.0f} h ({len(e.retidas)} linha(s) retida(s)); incluir em '
+                                'redirecionamento.dominios?')
                     continue
                 self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
                             f'(motivo {e.motivo}, {len(e.retidas)} linha(s) retida(s)). Entrar no VNC :1 e logar.')

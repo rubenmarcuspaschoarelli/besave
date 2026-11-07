@@ -21,6 +21,10 @@ CODIGOS_BLOQUEIO = {403, 429, 503}
 TIMEOUT_PADRAO = 20
 MAX_SALTOS_PADRAO = 5
 
+# Pagina de bloqueio do Cloudflare ("Sorry, you have been blocked").
+TITULO_CLOUDFLARE = 'attention required! | cloudflare'
+TEXTO_CLOUDFLARE = 'you have been blocked'
+
 
 def host(url):
     """Host minusculo, sem porta; '' se nao houver."""
@@ -28,6 +32,11 @@ def host(url):
         return (urlparse(url or '').hostname or '').lower()
     except ValueError:
         return ''
+
+
+def host_sem_www(url):
+    h = host(url)
+    return h.removeprefix('www.')
 
 
 def casa(nome_host, dominio):
@@ -114,3 +123,12 @@ def resolver(url, config, executar=None):
         atual = destino
     return None, SEM_REDIRECT
 
+
+def pagina_bloqueada_cloudflare(page):
+    """True se a pagina aberta e a de bloqueio do Cloudflare (por titulo ou texto)."""
+    try:
+        if (page.title() or '').strip().lower() == TITULO_CLOUDFLARE:
+            return True
+        return TEXTO_CLOUDFLARE in (page.content() or '').lower()
+    except Exception:  # noqa: BLE001
+        return False
