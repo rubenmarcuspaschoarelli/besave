@@ -193,6 +193,9 @@ Start-ScheduledTask -TaskName 'besave-tunel-residencial'
 - **Conferir na inst1:**
   `curl -sS -o /dev/null -w '%{http_code} %{redirect_url}\n' --proxy socks5h://127.0.0.1:1080 https://amzn.promos.link/<codigo>`
   → `302 https://www.amazon.com.br/...`.
+- **Simular túnel fora sem mexer no PC:** na inst1, aponte `redirecionamento.proxy` para uma porta sem nada
+  (ex.: `socks5h://127.0.0.1:1081`); o robô relê o bloco a cada varredura. Para encerrar, volte ao valor certo
+  **sem reiniciar** o robô: a pausa vive em memória, e um reinício a apaga sem mandar o "voltou".
 
 ## Parar
 
