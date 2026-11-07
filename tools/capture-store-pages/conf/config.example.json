@@ -25,6 +25,13 @@
     "pausa_minutos": 60,
     "_obs": "3 bloqueios seguidos (captcha/login/sessao de afiliado) de uma loja a pausam por pausa_minutos; as outras seguem (BSV-55)."
   },
+  "redirecionamento": {
+    "proxy": "socks5h://127.0.0.1:1080",
+    "dominios": ["promos.link"],
+    "timeout_segundos": 20,
+    "max_saltos": 5,
+    "_obs": "Encurtadores que bloqueiam o IP da VPS (BSV-58): so o redirect deles sai pelo tunel do PC (tools/vps/tunel_residencial.ps1). Casa por sufixo de rotulo (promos.link vale para amzn.promos.link). Sem o bloco ou com dominios vazio = fluxo antigo."
+  },
   "alerta": {
     "telegram_token": "",
     "telegram_chat_id": "",

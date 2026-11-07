@@ -53,7 +53,7 @@ cd tools && python -m pytest -q && ruff check vps/ tests/ && shellcheck vps/*.sh
 **Tests**: `tools/tests/test_redirecionamento_lote.py`
 **Gate**: `pytest`
 
-### T4: Túnel, README e config de exemplo
+### T4: Túnel, README e config de exemplo ✅
 **What**: `tools/vps/tunel_residencial.ps1`, seção no `tools/vps/README.md`, bloco em `conf/config.example.json`.
 **Where**: `tools/vps/`, `tools/capture-store-pages/conf/config.example.json`
 **Depends on**: T3

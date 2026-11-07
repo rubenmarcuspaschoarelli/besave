@@ -38,7 +38,7 @@ aplica), vigia do túnel além da pausa, robô do WhatsApp, execução real na i
 | Detecção do Cloudflare | Título `Attention Required! \| Cloudflare` ou HTML com `you have been blocked` (sem caixa) | Spec saída 5 | y |
 | `sem_redirect` | Neutro para a pausa; segue `_resolver_ponte` pela URL original | Spec saída 3 | y |
 | Destino desconhecido | Destino fora da lista e fora do registry segue `_resolver_ponte(destino)` (página aberta direto) | Regra 1 | n |
-| Túnel | `tools/vps/tunel_residencial.ps1` (PowerShell 5.1), destino e chave por parâmetro ou `BESAVE_TUNEL_DESTINO`/`BESAVE_TUNEL_CHAVE`; `-Ssh` e `-MaxTentativas` para teste | Regra 4: nada de IP/chave no repo | n |
+| Túnel | `BatchMode=yes` a mais que a pré-condição (tarefa sem janela não pode parar numa pergunta do `ssh`); `tools/vps/tunel_residencial.ps1` (PowerShell 5.1), destino e chave por parâmetro ou `BESAVE_TUNEL_DESTINO`/`BESAVE_TUNEL_CHAVE`; `-Ssh` e `-MaxTentativas` para teste | Regra 4: nada de IP/chave no repo | n |
 
 Open questions: none
 
@@ -62,7 +62,7 @@ Open questions: none
 10. CF-01: WHEN o navegador cai na página de bloqueio do Cloudflare num domínio fora da lista, THE SYSTEM SHALL reter a linha (`redirecionamento_indisponivel`) e logar `<dominio> bloqueado pelo Cloudflare; incluir em redirecionamento.dominios?`; 3 seguidas → pausa e Telegram com a mesma frase.
 11. CF-02: WHEN a página de domínio desconhecido é comum, THE SYSTEM SHALL continuar gravando `'9' loja_desconhecida`.
 12. SEG-01: THE SYSTEM SHALL NOT escrever o valor de `proxy` em nenhuma saída.
-13. TUN-01: THE SYSTEM SHALL manter o túnel com `ssh -i <chave> -N -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes -R 127.0.0.1:1080 <destino>` em laço, reconectando 30 s depois de cair, com log curto sem destino nem chave, lidos de parâmetro ou ambiente.
+13. TUN-01: THE SYSTEM SHALL manter o túnel com `ssh -i <chave> -N -o ServerAliveInterval=30 -o ExitOnForwardFailure=yes -o BatchMode=yes -R 127.0.0.1:1080 <destino>` em laço, reconectando 30 s depois de cair, com log curto sem destino nem chave, lidos de parâmetro ou ambiente.
 14. DOC-01: THE SYSTEM SHALL documentar em `tools/vps/README.md` o túnel, a porta só no `127.0.0.1` da inst1, o PC desligado (retidas + aviso), a tarefa agendada, como parar e como incluir domínio; e o bloco em `config.example.json`.
 
 ## Requirement Traceability
@@ -81,8 +81,8 @@ Open questions: none
 | CF-01 | P1 | Execute | Done |
 | CF-02 | P1 | Execute | Done |
 | SEG-01 | P1 | Execute | Done |
-| TUN-01 | P1 | Execute | Pending |
-| DOC-01 | P1 | Execute | Pending |
+| TUN-01 | P1 | Execute | Done |
+| DOC-01 | P1 | Execute | Done |
 
 ## Success Criteria
 
