@@ -184,7 +184,7 @@ linha `Rodizio destravado` apareceu. Chaves novas (ver `conf/config.example.json
 A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_data` chegou a 6,4 GB em
 3 dias e levou a máquina ao swap). Duas defesas:
 
-1. **Reinício às 05:30** (dentro da janela noturna): `besave-reinicio-whatsapp.timer` dispara o
+1. **Reinício a cada 6 h (05:30, 11:30, 17:30, 23:30):** na medição da inst1 (06/11) o renderer cresceu ~0,2 GB/h de dia (1,26 → 3,48 GB entre 06:10 e 17:10) e ficou parado à noite; um reinício só às 05:30 não bastava. `besave-reinicio-whatsapp.timer` (`Persistent=false`) dispara o
    `besave-reinicio-whatsapp.service`, que roda `reiniciar_whatsapp.sh`. Ele registra o RSS do maior
    processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava o
    contador) e espera até 3 min a unidade ficar `active` **e** o log novo ter `Retomando contador` ou

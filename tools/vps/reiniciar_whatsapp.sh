@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Reinicio diario do robo do WhatsApp (BSV-54). Chamado por
-# besave-reinicio-whatsapp.service (timer 05:30).
+# besave-reinicio-whatsapp.service (timer a cada 6 h: 05:30, 11:30, 17:30, 23:30).
 #
 # O Chromium do WhatsApp Web cresce ~2,2 GB/dia; reiniciar a unidade devolve a memoria.
 #   1. unidade parada de proposito (inactive, sem falha) -> so registra e sai

@@ -115,9 +115,9 @@ def test_vnc_detalhes_da_tela():
 
 
 # --- BSV-54: reinicio diario e teto de memoria --------------------------------
-def test_timer_do_reinicio_as_0530_sem_persistent():
+def test_timer_do_reinicio_a_cada_6h_sem_persistent():
     t = _ler(VPS / "systemd" / "besave-reinicio-whatsapp.timer")
-    assert t["Timer"]["OnCalendar"] == "*-*-* 05:30:00"
+    assert t["Timer"]["OnCalendar"] == "*-*-* 05,11,17,23:30:00"  # linha inteira: 05:30, 11:30, 17:30 e 23:30
     assert t["Timer"]["Persistent"] == "false"
     assert t["Install"]["WantedBy"] == "timers.target"
 

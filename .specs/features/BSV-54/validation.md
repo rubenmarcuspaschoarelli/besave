@@ -73,7 +73,7 @@ Testes relevantes rodados por mutante; arquivos restaurados (`git status` limpo 
 4. Confirmar que o `--user-data-dir` visto no `ps` do Chromium real bate com `$RAIZ/user_data` (`pwd -P`), senão o RSS sai 0 MB (só afeta o log).
 5. Deixar 2 noites; anotar RSS antes de cada reinício (esperado <= ~2,5 GB) e `free -h` às 08:00 (redigir antes de commitar, regra 11).
 6. Testar o aviso real: `cd tools/capture-chat-groups && .venv/bin/python -m wa.avisar "teste"` com o config real.
-7. Decisões a propor ao DECISOES.md: horário 05:30, `MemoryHigh=3G`/`MemoryMax=4G` (com a medição real).
+7. Decisões a propor ao DECISOES.md: horários 05:30/11:30/17:30/23:30 (a cada 6 h, medição de 06–07/11), `MemoryHigh=3500M`/`MemoryMax=4500M` (mantidos) (com a medição real).
 
 ---
 
