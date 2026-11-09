@@ -56,7 +56,7 @@ T6 → T7
 **Reqs**: SEQ-01, SEQ-02, SEQ-03, SEQ-05, FORA-01, FORA-03, FORA-04, FORA-05
 **Tests**: `tools/tests/test_id_sequence_whatsapp.py`
 **Gate**: `pytest` (em `tools/`)
-- [ ] Done
+- [x] Done
 
 ### T5: Partida sem conferência do contador
 **What**: tira o passo 3 de `iniciar_captura.sh` e `iniciar_captura.ps1`; nota histórica em `checa_contador.py`.

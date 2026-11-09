@@ -797,20 +797,31 @@ def _log_iteracao(it_n, info, depois, n_novas, total, n_vistos, mais_antiga,
 def _gravar_cronologico(itens, nome_grupo, caminho_csv, numero_inicial: int, estado: dict,
                         db=None) -> int:
     """
-    Numera, renomeia as imagens (tmp -> definitivo), grava as linhas no CSV e
-    atualiza o estado do grupo com a mensagem mais recente processada. Recebe a
-    lista JA na ordem cronologica. Retorna o novo contador.
+    Numera pela sequence do banco (BSV-56), renomeia as imagens (tmp -> definitivo),
+    grava as linhas no CSV e atualiza o estado do grupo com a mensagem mais recente
+    processada. Recebe a lista JA na ordem cronologica. Retorna o ultimo id usado.
+
+    Banco fora (ErroSemId): os itens que faltam nao sao gravados, as imagens
+    temporarias deles sao apagadas e o marcador fica no ultimo gravado; o erro sobe
+    para quem chama esperar o banco e retomar pelo marcador.
     """
     numero = numero_inicial
-    for it in itens:
-        numero += 1
+    for pos, it in enumerate(itens):
         campos = it["campos"]
+        try:
+            numero = db.proximo_id()
+        except oracle_db.ErroSemId:
+            for resto in itens[pos:]:
+                _descartar_tmp(resto["img_tmp"])
+            print(f"[monitor] ({nome_grupo}) banco fora: {len(itens) - pos} item(ns) ficam para o "
+                  "resgate; marcador parado.")
+            raise
         img_final = storage.renomear_imagem(it["img_tmp"], numero, _rotulo_imagem(campos))
         linha = _montar_linha(campos, nome_grupo, numero, img_final, it["data_hora"])
         storage.gravar_linha(caminho_csv, linha)
         db_ok = db.inserir_oferta(linha) if (db is not None and db.habilitado) else None
-        # A cada leitura persiste CSV (acima) + config.json (contador global e
-        # estado do grupo), para o arquivo ficar atualizado se o processo cair.
+        # A cada leitura persiste CSV (acima) + config.json (marcador do grupo; o
+        # ultimo_id_processado e so informativo desde a BSV-56).
         estado_mod.set_ultimo_id(estado, numero, salvar_agora=False)
         estado_mod.atualizar_grupo(estado, nome_grupo, it["data_hora"], it["data_id"])
         print(
@@ -830,7 +841,7 @@ def _varrer_ultimas(page, nome_grupo, caminho_csv, max_msgs: int, numero_inicial
     print(f"[monitor] Sweep '{nome_grupo}': subindo e capturando ate ~{max_msgs} promocoes...")
     cronologico, _achou, processados = _coletar_subindo(page, limite=max_msgs)
     numero = _gravar_cronologico(cronologico, nome_grupo, caminho_csv, numero_inicial, estado, db)
-    print(f"[monitor] Sweep '{nome_grupo}' concluido: {numero - numero_inicial} promocoes.")
+    print(f"[monitor] Sweep '{nome_grupo}' concluido: {len(cronologico)} promocoes.")
     return numero, processados
 
 
@@ -884,7 +895,7 @@ def _capturar_desde_ultima(page, nome_grupo, caminho_csv, numero_inicial: int, e
             _descartar_tmp(it["img_tmp"])
 
     numero = _gravar_cronologico(resultado, nome_grupo, caminho_csv, numero_inicial, estado, db)
-    print(f"[monitor] Catch-up '{nome_grupo}' concluido: {numero - numero_inicial} nova(s) desde a ultima captura.")
+    print(f"[monitor] Catch-up '{nome_grupo}' concluido: {len(resultado)} nova(s) desde a ultima captura.")
     return numero, processados
 
 
@@ -944,6 +955,10 @@ def _ler_novas_do_grupo(page, nome_grupo, vistos, numero, caminho_csv, estado, d
         lidas += 1
         try:
             numero = _processar(msg, nome_grupo, numero, caminho_csv, data_id, estado, db)
+        except oracle_db.ErroSemId:
+            # Banco fora: esta e as seguintes ficam para o resgate (marcador parado).
+            vistos.discard(data_id)
+            raise
         except Exception as e:  # noqa: BLE001
             print(f"[monitor] Erro ao processar {data_id}: {e}")
     return numero, lidas
@@ -1077,12 +1092,42 @@ def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict
             )
             vistos |= ja
             vistos.update(_ids_baloes(page))
+        except oracle_db.ErroSemId:
+            raise                         # banco fora: quem chama espera e o resgate segue pendente
         except Exception as e:  # noqa: BLE001
             print(f"[monitor] Falha ao recuperar a lacuna de {nome!r}: {e}")
             ok = False
     if ok:
         print("[monitor] Lacuna recuperada; voltando ao rodizio ao vivo.")
     return numero, ok
+
+
+# Codigo de saida quando a gravacao no Oracle esta desligada no config: sem banco
+# nao ha ID_OFERTA (BSV-56), entao o robo nem sobe.
+SAIDA_SEM_BANCO = 4
+
+
+def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
+    """
+    Banco fora (BSV-56): avisa no Telegram e espera, tentando a cada
+    db.espera_segundos. Nada e numerado nem gravado enquanto isso, e nenhum grupo
+    anda; quem chama marca o resgate, que rele desde o marcador de cada grupo.
+    Devolve os segundos esperados.
+    """
+    dormir = dormir or time.sleep
+    agora = agora or datetime.now
+    inicio = agora()
+    motivo = str(erro) or type(erro).__name__
+    print(f"[monitor] BANCO FORA ({motivo}): nenhuma mensagem e numerada e os marcadores nao andam. "
+          f"Tentando de novo a cada {db.espera_segundos:g}s.")
+    vigia_banco.falhou(motivo, inicio)
+    while True:
+        dormir(db.espera_segundos)
+        if db.disponivel():
+            vigia_banco.voltou(agora())
+            print("[monitor] Banco voltou; resgate pelo marcador de cada grupo.")
+            return (agora() - inicio).total_seconds()
+        vigia_banco.falhou(motivo, agora())
 
 
 def captura_msg_whatsapp(
@@ -1123,21 +1168,26 @@ def captura_msg_whatsapp(
     print(f"[monitor] Estado: {estado_mod.ESTADO_PATH}")
     print(f"[monitor] Grupos ({len(nomes_grupos)}): {nomes_grupos}")
 
-    # Gravacao em Oracle (best-effort): se o bloco 'db' estiver desligado/ausente
-    # ou a conexao falhar, segue so com CSV (comportamento identico ao de hoje).
+    # O ID_OFERTA vem da sequence do banco (BSV-56): sem o bloco 'db' ligado nao
+    # ha como numerar. Banco fora na partida nao impede: o 1o id reconecta e, se
+    # falhar, o robo avisa e espera (_esperar_banco).
     db = oracle_db.OracleDB()
-    if db.habilitado:
-        db.conectar()
-    print(f"[monitor] Gravacao no Oracle: {'ligada' if db.habilitado else 'desligada'}.")
+    if not db.configurado:
+        print("[monitor] Gravacao no Oracle DESLIGADA (db.habilitado ou oracledb ausente): o ID_OFERTA "
+              "vem da sequence do banco e nao ha como numerar. Encerrando.")
+        return SAIDA_SEM_BANCO
+    conectado = db.conectar()
+    print(f"[monitor] Oracle: {'conectado' if conectado else 'SEM CONEXAO (o 1o id tenta de novo)'}.")
+    vigia_banco = alerta.VigiaBanco(estado)
 
     vistos: set = set()
     # Codigo de saida do run: 0 = encerramento normal (Ctrl+C / fim), != 0 avisa
     # quem lancou que a parada NAO foi normal. Ver SAIDA_BROWSER_MORTO.
     saida = 0
-    # Contador GLOBAL e CONTINUO entre execucoes: retoma do ultimo_id_processado
-    # salvo no config.json. Cada nova mensagem soma 1 e vira o ID_OFERTA no CSV.
-    numero = estado_mod.get_ultimo_id(estado)
-    print(f"[monitor] Retomando contador de ofertas em ultimo_id_processado={numero}.")
+    # Ultimo ID_OFERTA usado NESTE run (so para log). O id vem de SQ_OFERTA_FILA.NEXTVAL
+    # (BSV-56); o ultimo_id_processado do config.json e so informativo e nao e lido.
+    numero = 0
+    resgate_banco = False
 
     with sync_playwright() as pw:
         context = None
@@ -1155,30 +1205,36 @@ def captura_msg_whatsapp(
                     continue
 
                 grupo_estado = estado_mod.get_grupo(estado, nome)
-                if max_historico and max_historico > 0:
-                    numero, ja = _varrer_ultimas(page, nome, caminho_csv, max_historico, numero, estado, db)
-                elif force_capture_today:
-                    print(f"[{nome}] Capturando mensagens de hoje (>= {hoje_0h.strftime('%d/%m/%Y')})...")
-                    numero, ja = _capturar_desde_ultima(
-                        page, nome, caminho_csv, numero, estado, db,
-                        cutoff_dt=hoje_0h, marker_id=None, inclusivo=True,
-                    )
-                elif grupo_estado and (estado_mod.parse_dt(grupo_estado.get("ultima_data_hora"))
-                                       or grupo_estado.get("ultimo_data_id")):
-                    cutoff = estado_mod.parse_dt(grupo_estado.get("ultima_data_hora"))
-                    marker = grupo_estado.get("ultimo_data_id")
-                    print(f"[{nome}] Retomando desde {grupo_estado.get('ultima_data_hora') or marker}...")
-                    numero, ja = _capturar_desde_ultima(
-                        page, nome, caminho_csv, numero, estado, db,
-                        cutoff_dt=cutoff, marker_id=marker, inclusivo=False,
-                    )
-                else:
-                    _marcar_baseline(page, nome, estado)
-                    ja = set(_ids_baloes(page))
+                try:
+                    if max_historico and max_historico > 0:
+                        numero, ja = _varrer_ultimas(page, nome, caminho_csv, max_historico, numero, estado, db)
+                    elif force_capture_today:
+                        print(f"[{nome}] Capturando mensagens de hoje (>= {hoje_0h.strftime('%d/%m/%Y')})...")
+                        numero, ja = _capturar_desde_ultima(
+                            page, nome, caminho_csv, numero, estado, db,
+                            cutoff_dt=hoje_0h, marker_id=None, inclusivo=True,
+                        )
+                    elif grupo_estado and (estado_mod.parse_dt(grupo_estado.get("ultima_data_hora"))
+                                           or grupo_estado.get("ultimo_data_id")):
+                        cutoff = estado_mod.parse_dt(grupo_estado.get("ultima_data_hora"))
+                        marker = grupo_estado.get("ultimo_data_id")
+                        print(f"[{nome}] Retomando desde {grupo_estado.get('ultima_data_hora') or marker}...")
+                        numero, ja = _capturar_desde_ultima(
+                            page, nome, caminho_csv, numero, estado, db,
+                            cutoff_dt=cutoff, marker_id=marker, inclusivo=False,
+                        )
+                    else:
+                        _marcar_baseline(page, nome, estado)
+                        ja = set(_ids_baloes(page))
+                except oracle_db.ErroSemId as e:
+                    # O que faltou deste grupo sai no resgate, pelo marcador (que nao andou).
+                    _esperar_banco(db, vigia_banco, e)
+                    resgate_banco = True
+                    ja = set()
 
                 vistos |= ja
                 vistos.update(_ids_baloes(page))
-            print(f"[monitor] Arranque concluido (total #{numero}).")
+            print(f"[monitor] Arranque concluido (ultimo id #{numero or '-'}).")
 
             # --- Fase 2: RODIZIO ao vivo ---
             print(f"[monitor] Rodizio ao vivo ({seg_grupo}s/grupo). Ctrl+C para parar.")
@@ -1191,7 +1247,7 @@ def captura_msg_whatsapp(
             # que precisamos detectar (ver _recuperar_lacuna).
             fim_da_volta = datetime.now()
             lacuna_s = 0.0
-            resgate_pendente = False
+            resgate_pendente = resgate_banco
             voltas_cegas = 0
             inicio_do_cegueira = None
             browser_morto = False
@@ -1199,20 +1255,27 @@ def captura_msg_whatsapp(
             vigia = alerta.VigiaCaptura(estado, janela)
             while True:
                 if resgate_pendente:
-                    numero, feito = _recuperar_lacuna(
-                        page, nomes_grupos, caminho_csv, numero, estado, vistos, db, lacuna_s,
-                    )
-                    resgate_pendente = not feito
+                    try:
+                        numero, feito = _recuperar_lacuna(
+                            page, nomes_grupos, caminho_csv, numero, estado, vistos, db, lacuna_s,
+                        )
+                        resgate_pendente = not feito
+                    except oracle_db.ErroSemId as e:
+                        lacuna_s += _esperar_banco(db, vigia_banco, e)   # resgate segue pendente
                     fim_da_volta = datetime.now()
 
                 falhas_na_volta = 0
+                banco_fora = None
                 for nome in nomes_grupos:
                     try:
                         browser.abrir_grupo(page, nome)
                         page.wait_for_timeout(1200)
                         numero, n = _ler_novas_do_grupo(page, nome, vistos, numero, caminho_csv, estado, db)
                         if n:
-                            print(f"[{nome}] {n} nova(s) processada(s) (total #{numero}).")
+                            print(f"[{nome}] {n} nova(s) processada(s) (ultimo id #{numero}).")
+                    except oracle_db.ErroSemId as e:
+                        banco_fora = e            # os outros grupos nao andam sem id
+                        break
                     except Exception as e:  # noqa: BLE001
                         falhas_na_volta += 1
                         print(f"[monitor] Erro no grupo {nome!r}: {e}")
@@ -1220,6 +1283,12 @@ def captura_msg_whatsapp(
                             browser_morto = True
                             break
                     time.sleep(seg_grupo)
+
+                if banco_fora is not None:
+                    lacuna_s = _esperar_banco(db, vigia_banco, banco_fora)
+                    resgate_pendente = True       # rele pelo marcador o que ficou sem id
+                    fim_da_volta = datetime.now()
+                    continue
 
                 # Browser morto NAO se recupera girando: sem pagina, o resgate
                 # da guarda de voltas cegas tambem falharia para sempre. Sair e'
@@ -1251,7 +1320,7 @@ def captura_msg_whatsapp(
                         resgate_pendente = True
                     # Ultimo recurso (BSV-51): Escape/fechar ja foram tentados em cada
                     # clique. Recarrega e deixa o resgate pendente: ele retoma pelo
-                    # marcador de cada grupo (contador e marcadores nao andam aqui).
+                    # marcador de cada grupo (ids e marcadores nao andam aqui).
                     if voltas_cegas % recarregar_a_cada == 0:
                         destravar.recarregar(page)
                         lacuna_s = (datetime.now() - inicio_do_cegueira).total_seconds()
@@ -1280,8 +1349,8 @@ def captura_msg_whatsapp(
         finally:
             # Cada passo protegido: quando se sai por browser morto, fechar o
             # contexto levanta excecao — e uma excecao aqui pularia o resto da
-            # limpeza, inclusive o salvar do estado (que e o que impede o
-            # contador de reemitir IDs no proximo run).
+            # limpeza, inclusive o salvar do estado (marcadores dos grupos; o id
+            # nao depende mais dele desde a BSV-56).
             try:
                 estado_mod.salvar(estado)
             except Exception as e:  # noqa: BLE001
@@ -1295,7 +1364,7 @@ def captura_msg_whatsapp(
                     context.close()
                 except Exception as e:  # noqa: BLE001
                     print(f"[monitor] Contexto ja estava fechado: {e}")
-            print(f"[monitor] Total capturado neste run: {numero}")
+            print(f"[monitor] Ultimo ID_OFERTA usado neste run: {numero or '-'}")
     return saida
 
 
@@ -1378,14 +1447,16 @@ def _processar(msg, nome_grupo: str, numero: int, caminho_csv, data_id: str, est
     if not _tem_conteudo(campos):
         return numero
 
-    numero += 1
+    # BSV-56: id do banco ANTES da imagem (o id e o nome do arquivo). Banco fora
+    # levanta ErroSemId aqui: nada salvo, nada no CSV, marcador parado.
+    numero = db.proximo_id()
     data_hora_msg = parser.extrair_data_hora(bruto)
     caminho_img = storage.salvar_imagem(msg, bruto, numero, _rotulo_imagem(campos))
     linha = _montar_linha(campos, nome_grupo, numero, caminho_img, data_hora_msg)
     storage.gravar_linha(caminho_csv, linha)
     db_ok = db.inserir_oferta(linha) if (db is not None and db.habilitado) else None
-    # Persiste CSV (acima) + config.json (contador global + estado do grupo) a
-    # cada leitura, para o arquivo estar sempre atualizado se o processo cair.
+    # Persiste CSV (acima) + config.json (estado do grupo; ultimo_id_processado so
+    # informativo) a cada leitura, para o arquivo estar atualizado se o processo cair.
     estado_mod.set_ultimo_id(estado, numero, salvar_agora=False)
     estado_mod.atualizar_grupo(estado, nome_grupo, data_hora_msg, data_id)
     print(

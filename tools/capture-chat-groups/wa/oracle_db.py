@@ -374,7 +374,7 @@ class OracleDB:
         sql = f"SELECT {NOME_SEQUENCE}.NEXTVAL FROM DUAL"
         try:
             return int(self._consultar_um(sql))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             if not _erro_conexao(e):
                 raise ErroSemId(_codigo(e)) from e
             print(f"[oracle] Conexao perdida no NEXTVAL ({_codigo(e)}). Reconectando...")
@@ -382,25 +382,24 @@ class OracleDB:
             raise ErroSemId("sem conexao Oracle")
         try:
             return int(self._consultar_um(sql))
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise ErroSemId(_codigo(e)) from e
 
     def disponivel(self) -> bool:
         """Banco respondendo? (SELECT 1 FROM DUAL, reconectando uma vez.) Nao gasta numero da sequence."""
         if not self.configurado:
             return False
+        if self._responde():
+            return True
+        return self._reconectar() and self._responde()
+
+    def _responde(self) -> bool:
         try:
             self._consultar_um("SELECT 1 FROM DUAL")
-            return True
-        except Exception:  # noqa: BLE001
-            pass
-        if not self._reconectar():
+        except Exception as e:  # noqa: BLE001
+            print(f"[oracle] Banco nao responde ({_codigo(e)}).")
             return False
-        try:
-            self._consultar_um("SELECT 1 FROM DUAL")
-            return True
-        except Exception:  # noqa: BLE001
-            return False
+        return True
 
     # -- execucao -------------------------------------------------------------
     def executar_stored_procedure(self, nome, params, out_vars):

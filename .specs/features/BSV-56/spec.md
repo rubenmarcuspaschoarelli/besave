@@ -71,16 +71,16 @@ Open questions: none
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| SEQ-01 | Id pela sequence | Execute | Pending |
-| SEQ-02 | Id pela sequence | Execute | Pending |
-| SEQ-03 | Id pela sequence | Execute | Pending |
+| SEQ-01 | Id pela sequence | Execute | Done |
+| SEQ-02 | Id pela sequence | Execute | Done |
+| SEQ-03 | Id pela sequence | Execute | Done |
 | SEQ-04 | Id pela sequence | Execute | Done |
-| SEQ-05 | Id pela sequence | Execute | Pending |
-| FORA-01 | Banco fora | Execute | Pending |
+| SEQ-05 | Id pela sequence | Execute | Done |
+| FORA-01 | Banco fora | Execute | Done |
 | FORA-02 | Banco fora | Execute | Done |
-| FORA-03 | Banco fora | Execute | Pending |
-| FORA-04 | Banco fora | Execute | Pending |
-| FORA-05 | Banco fora | Execute | Pending |
+| FORA-03 | Banco fora | Execute | Done |
+| FORA-04 | Banco fora | Execute | Done |
+| FORA-05 | Banco fora | Execute | Done |
 | PAR-01 | Partida e reinício | Execute | Pending |
 | PAR-02 | Partida e reinício | Execute | Pending |
 | SQL-01 | SQL | Execute | Done |

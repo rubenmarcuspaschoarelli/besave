@@ -45,7 +45,9 @@
         "porta": 1521,
         "servico": "XE",
         "usuario": "",
-        "senha": ""
+        "senha": "",
+        "espera_segundos": 60,
+        "_obs": "O ID_OFERTA vem da sequence SQ_OFERTA_FILA (BSV-56): sem banco o robo nao numera. Banco fora: avisa no Telegram (bloco alerta) e tenta de novo a cada espera_segundos."
     },
     "imagem": {
         "imagem_marca_dagua": "besave.jpg",
