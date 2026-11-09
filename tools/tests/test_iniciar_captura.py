@@ -1,6 +1,7 @@
 """SH-01..05: conferencias do iniciar_captura.sh / encerrar_captura.sh com
 processos, tmux e Python simulados (nada real e lancado)."""
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -357,18 +358,72 @@ def test_sh04_sem_python_do_venv_aborta_com_mensagem(amb):
     assert "new-session" not in amb.log("tmux.log")
 
 
-def test_sh04_nao_reaproveita_log_do_mesmo_dia(amb):
-    from datetime import datetime
+def _relogio(amb, carimbos):
+    """date falso: devolve o proximo carimbo de `%d_%m_%H%M%S` (o ultimo se acabarem); o resto vai ao date real."""
+    e = amb.est.as_posix()
+    fila = amb.est / "carimbos"
+    fila.write_text("\n".join(carimbos) + "\n", encoding="utf-8", newline="\n")
+    real = shutil.which("date", path="/usr/bin:/bin") or "date"
+    _script(amb.raiz / "bin" / "date", "\n".join([
+        'if [ "$*" = "+%d_%m_%H%M%S" ]; then',
+        f'  n=$(cat "{e}/idx" 2>/dev/null || echo 0)',
+        f'  linha=$(sed -n "$((n + 1))p" "{e}/carimbos")',
+        f'  [ -n "$linha" ] || linha=$(tail -n 1 "{e}/carimbos")',
+        f'  echo $((n + 1)) > "{e}/idx"',
+        '  echo "$linha"',
+        "else",
+        f'  exec "{real}" "$@"',
+        "fi",
+        "",
+    ]))
+    amb.env["BESAVE_DATE"] = (amb.raiz / "bin" / "date").as_posix()
+    # o tmux falso cria o log (o tee real faz isso); sem ele o nome nunca "existiria" para a proxima partida
+    _script(Path(amb.env["BESAVE_TMUX"]), "\n".join([
+        f'echo "$@" >> "{e}/tmux.log"',
+        f'case " $* " in *" new-session "*) touch "{e}/lancado"; for t in $*; do case "$t" in *.log) echo "log do run" > "$t";; esac; done;; esac',
+        "exit 0",
+        "",
+    ]))
+
+
+def _logs_lancados(amb):
+    return re.findall(r"(\S*run_captura_\S+?\.log)", amb.log("tmux.log"))
+
+
+def _partidas(amb, n):
+    for _ in range(n):
+        lancado = amb.est / "lancado"
+        if lancado.exists():
+            lancado.unlink()
+        r = amb.rodar("iniciar_captura.sh")
+        assert r.returncode == 0, r.stderr
+
+
+def test_sh04_dez_partidas_no_mesmo_dia_geram_dez_logs_distintos(amb):
+    _relogio(amb, [f"05_11_16{m:02d}00" for m in range(10)])
+    _partidas(amb, 10)
+    logs = _logs_lancados(amb)
+    assert len(logs) == 10 and len(set(logs)) == 10
+    assert all(re.search(r"run_captura_05_11_16\d{4}\.log$", x) for x in logs)  # DD_MM_HHMMSS
+
+
+def test_sh04_partidas_no_mesmo_segundo_nao_colidem_e_nao_reaproveitam(amb):
+    _relogio(amb, ["05_11_160000"])  # o relogio nunca anda
+    _partidas(amb, 10)  # passa de 8: um limite por dia quebraria aqui
+    logs = _logs_lancados(amb)
+    assert [Path(x).name for x in logs] == ["run_captura_05_11_160000.log"] + [
+        f"run_captura_05_11_160000_{n}.log" for n in range(2, 11)]
+    assert all((amb.chat / "log" / Path(x).name).read_text(encoding="utf-8") == "log do run\n" for x in logs)  # nenhum reescrito
+
+
+def test_sh04_nao_sobrescreve_log_preexistente(amb):
+    _relogio(amb, ["05_11_160000"])
     log = amb.chat / "log"
     log.mkdir()
-    base = "run_captura_" + datetime.now().strftime("%d_%m")
-    (log / f"{base}.log").write_text("antigo")
-    amb.rodar("iniciar_captura.sh")
-    assert f"{base}_b.log" in amb.log("tmux.log")
-    (log / f"{base}_b.log").write_text("antigo")
-    (amb.est / "lancado").unlink()
-    amb.rodar("iniciar_captura.sh")
-    assert f"{base}_c.log" in amb.log("tmux.log")
+    (log / "run_captura_05_11_160000.log").write_text("antigo")
+    _partidas(amb, 1)
+    assert (log / "run_captura_05_11_160000.log").read_text() == "antigo"
+    assert "run_captura_05_11_160000_2.log" in amb.log("tmux.log")
 
 
 def test_sh06_iniciar_mata_sessao_velha_antes_e_cria_pasta_do_log(amb):
