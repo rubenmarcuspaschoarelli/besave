@@ -90,7 +90,7 @@ def amb(tmp_path):
 
 
 def test_partida_confirmada_nao_avisa(amb):  # REI-01
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=46041.\n")
+    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=46041.\nGrupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0, r.stdout + r.stderr
     assert amb.reiniciou
@@ -108,14 +108,28 @@ def test_log_de_ontem_nao_confirma(amb):  # REI-02: so o log NOVO conta
     # o log antigo ja tem "Grupo aberto"; o restart nao gerou log novo nem journal
     r = amb.rodar()
     assert r.returncode != 0
-    assert len(amb.avisos) == 1 and "sem 'Retomando contador'" in amb.avisos[0]
+    assert len(amb.avisos) == 1 and "sem 'Grupo aberto'" in amb.avisos[0]
 
 
 def test_log_novo_com_sufixo_nao_se_confunde_com_o_antigo(amb):  # REI-02b: X_2.log e novo, mesmo existindo X.log
     amb.arquivo("log_novo_nome", "run_captura_04_11_053001_2.log")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=3.\n")
+    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=3.\nGrupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0 and amb.avisos == []
+
+
+def test_retomando_contador_sem_grupo_aberto_nao_confirma(amb):  # REI-07: 08/11, laco de QR
+    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=9.\n"
+                            "[browser] Aguardando o WhatsApp Web carregar...\n")
+    r = amb.rodar()
+    assert r.returncode != 0
+    assert len(amb.avisos) == 1 and "sem 'Grupo aberto'" in amb.avisos[0]
+    assert "OK:" not in r.stdout
+
+
+def test_sem_broken_pipe_no_stderr(amb):  # REI-08
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    assert "Broken pipe" not in amb.rodar().stderr
 
 
 def test_contador_atrasado_avisa_com_o_motivo(amb):  # REI-03
@@ -153,7 +167,7 @@ def test_unidade_parada_de_proposito_nao_reinicia(tmp_path):  # REI-05
 
 def test_unidade_failed_antes_ainda_reinicia(tmp_path):  # REI-05b: so 'inactive' e parada de proposito
     amb = Ambiente(tmp_path, estado_antes="failed")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=2.\n")
+    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=2.\nGrupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0 and amb.reiniciou
 

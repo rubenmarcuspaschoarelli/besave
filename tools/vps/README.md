@@ -187,7 +187,7 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
 1. **Reinício a cada 6 h (05:30, 11:30, 17:30, 23:30):** na medição da inst1 (06/11) o renderer cresceu ~0,2 GB/h de dia (1,26 → 3,48 GB entre 06:10 e 17:10) e ficou parado à noite; um reinício só às 05:30 não bastava. `besave-reinicio-whatsapp.timer` (`Persistent=false`) dispara o
    `besave-reinicio-whatsapp.service`, que roda `reiniciar_whatsapp.sh`. Ele registra o RSS do maior
    processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava o
-   contador) e espera até 3 min a unidade ficar `active` **e** o log novo ter `Retomando contador` ou
+   contador) e espera até 3 min a unidade ficar `active` **e** o log novo ter
    `Grupo aberto`. Confirmou: só log. Não confirmou (contador atrasado, QR pedido, falha de partida): mensagem
    no Telegram com o motivo (`python -m wa.avisar`, token e chat lidos do `alerta` do `config.json`; sem eles,
    só log). Unidade parada de propósito (`inactive`): não reinicia. Só `systemctl restart`; nunca mata

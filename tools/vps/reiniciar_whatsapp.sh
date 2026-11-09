@@ -8,7 +8,7 @@
 #   3. systemctl --user restart (o ExecStop da unidade para o scope do robo com SIGINT; o `finally`
 #      grava o contador)
 #   4. espera ate BESAVE_ESPERA_MAX s: unidade `active` E log novo com
-#      "Retomando contador" ou "Grupo aberto"
+#      "Grupo aberto" (o "Retomando contador" sai ANTES da espera do QR: nao prova nada)
 #   5. nao confirmou -> aviso no Telegram com o motivo; confirmou -> so log
 # Nunca mata processo por nome: so `systemctl restart`.
 #
@@ -27,7 +27,7 @@ PY=${BESAVE_PY:-$RAIZ/.venv/bin/python}
 UNIDADE=${BESAVE_UNIDADE:-besave-captura-whatsapp.service}
 ESPERA_MAX=${BESAVE_ESPERA_MAX:-180}
 INTERVALO=${BESAVE_INTERVALO:-5}
-PADRAO_OK='Retomando contador|Grupo aberto'
+PADRAO_OK='Grupo aberto'
 PERFIL="--user-data-dir=$RAIZ/user_data"
 
 registrar() { echo "[reinicio] $(date '+%d/%m/%Y %H:%M:%S') $*"; }
@@ -66,7 +66,7 @@ novos_logs() {
     for f in "$RAIZ"/log/run_captura_*.log; do
         [ -e "$f" ] || continue
         # linha inteira: run_captura_X.log nao pode "casar" dentro de run_captura_X_2.log
-        printf '%s\n' "$logs_antes" | grep -qxF -- "$f" && continue
+        grep -qxF -- "$f" <<<"$logs_antes" && continue
         echo "$f"
     done
 }
@@ -96,7 +96,7 @@ if [ -n "$aborto" ]; then
 elif [ "$est" != "active" ]; then
     motivo="a unidade nao subiu em ${ESPERA_MAX}s (estado: ${est:-desconhecido})."
 else
-    motivo="unidade active, mas sem 'Retomando contador' nem 'Grupo aberto' no log em ${ESPERA_MAX}s (pode estar pedindo QR/login: veja a tela VNC :2)."
+    motivo="unidade active, mas sem 'Grupo aberto' no log em ${ESPERA_MAX}s (pode estar pedindo QR/login: veja a tela VNC :2)."
 fi
 avisar "nao confirmei a retomada. $motivo"
 exit 1
