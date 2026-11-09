@@ -143,8 +143,8 @@ def test_contador_atrasado_avisa_com_o_motivo(amb):  # REI-03
 
 def test_unidade_que_nao_sobe_avisa(amb):  # REI-04
     amb.arquivo("estado_depois", "failed")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=1.\n")
-    r = amb.rodar()  # mesmo com a frase no log, unidade failed nao confirma
+    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=1.\n[browser] Grupo aberto, painel pronto.\n")
+    r = amb.rodar()  # mesmo com 'Grupo aberto' no log, unidade failed nao confirma
     assert r.returncode != 0
     assert len(amb.avisos) == 1 and "failed" in amb.avisos[0]
 

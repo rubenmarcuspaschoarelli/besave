@@ -254,3 +254,48 @@ Itens 1-4 implementados e discriminados; limite reintroduzido morre; 2 sobrevive
 1. Decidir limpeza/rotacao de `log/` (nao existe) e, se quiser, trocar o `ls` do `reiniciar_whatsapp.sh:54` por `printf` (builtin) para eliminar o risco de ARG_MAX.
 2. `iniciar_captura.ps1` (PC) ainda tem o limite `_b.._h` e "muitos logs para hoje": ticket proprio se o PC ainda for usado.
 3. Continuam valendo as pendencias de execucao real das rodadas 2 e 3 (inst1).
+
+---
+
+## Rodada 5 - 5d25ea1
+
+Verifier independente (autor != verificador). Escopo: so o commit 5d25ea1 (`PADRAO_OK='Grupo aberto'` em `tools/vps/reiniciar_whatsapp.sh:30`; `grep -qxF -- "$f" <<<"$logs_antes"` em `:69`; testes REI-07/REI-08 e ajustados em `tools/tests/test_reinicio_whatsapp.py:92-134`, `:168-172`).
+
+Execucao: `test_reinicio_whatsapp.py` 13 passed; suite `tools/tests` 262 passed; `ruff check` do arquivo de teste verde.
+
+### Criterios
+| item | evidencia | resultado |
+|---|---|---|
+| So `Grupo aberto` confirma; `Retomando contador` sozinho nao (falso positivo de 08/11) | `reiniciar_whatsapp.sh:30,83`; `test_reinicio_whatsapp.py:121-127` (REI-07: exige returncode != 0, 1 aviso com "sem 'Grupo aberto'", sem "OK:") | PASS |
+| Motivo do aviso atualizado | `reiniciar_whatsapp.sh:99`; asserts em `test_reinicio_whatsapp.py:111,127` | PASS |
+| `printf\|grep -qxF` trocado por here-string em `novos_logs` | `reiniciar_whatsapp.sh:69` | PASS no codigo; teste REI-08 nao discrimina (ver abaixo) |
+
+### Mutantes (um por vez, arquivo restaurado e `cmp` com copia apos cada)
+| # | mutante | resultado |
+|---|---|---|
+| M1 | `PADRAO_OK='Retomando contador\|Grupo aberto'` | MORTO (REI-07) |
+| M2 | `PADRAO_OK=''` | MORTO (3 testes: log_de_ontem, REI-07, contador_atrasado) |
+| M3 | `PADRAO_OK='.'` | MORTO (REI-07, contador_atrasado) |
+| M4 | `grep -Eq "$PADRAO_OK"` trocado por `true` (sempre casa) | MORTO (3 testes) |
+| M5 | remove a checagem `est = active` (`true && printf ...`) | SOBREVIVEU - lacuna real, ver nota 1 |
+| M6 | volta a `printf '%s\n' "$logs_antes" \| grep -qxF` | SOBREVIVEU - REI-08 nao detecta, ver nota 2 |
+| M7 | `grep -qxF` -> `grep -qx` (sem `-F`) | SOBREVIVEU - equivalente na pratica: `.` do path casa a si mesmo e `-x` ja exige linha inteira; so difere se o nome tiver metacaractere que case outro arquivo (nomes sao `run_captura_DD_MM_HHMMSS[_n].log`) |
+| M8 | `grep -qxF` -> `grep -qF` (sem `-x`) | SOBREVIVEU - equivalente (mesmo argumento do M7 da rodada 4: sufixo antes de `.log`, nenhum path e substring de outro) |
+| M9 | `false && continue` (todo log conta como novo) | MORTO (3 testes) |
+| M10 | `true && continue` (nenhum log conta como novo) | MORTO (4 testes) |
+| M11 | `logs_antes=$(true; for ...)` | EQUIVALENTE (no-op; mutante mal formado, nao conta) |
+
+Dos 10 validos (M1-M10): 7 mortos, 2 equivalentes (M7, M8), 2 sobreviventes que exigem nota (M5, M6) - M6 e a limitacao do REI-08.
+
+### Notas
+1. **M5 (lacuna de teste, severidade baixa).** Nenhum teste tem unidade `!= active` junto com `Grupo aberto` no log novo; `test_unidade_que_nao_sobe_avisa` (REI-04) nao poe o padrao no log. Sem a checagem `est=active`, uma unidade morta com log novo contendo `Grupo aberto` confirmaria OK. Pre-existente (nao foi tocado pelo commit), mas o commit reescreveu esse caminho. Sugestao: REI-04 com `log_novo = "Grupo aberto\n"` e `estado_depois = "failed"`.
+2. **REI-08 (`test_sem_broken_pipe_no_stderr`) nao pega o mutante M6.** O ambiente tem 1 log antigo (`logs_antes` com ~60 bytes): `printf` termina de escrever antes de o `grep -q` fechar o pipe, entao nunca ha `EPIPE`. O erro so aparece com a lista maior que o buffer do pipe (64 KB, ~800+ logs). Tentei reproduzir fora do teste (git-bash/MSYS no Windows, lista de 3.000 paths = 204 KB, 3 tentativas): sem mensagem de erro nem com o codigo antigo - o MSYS nao reproduz; sem WSL para testar em Linux. Logo: nao confirmei o defeito aqui, so o raciocinio (que e correto no Linux), e o teste e fraco/ornamental. Para ficar discriminante: criar >= 1.000 logs antigos no `Ambiente` (nomes longos) - ainda so valida em Linux/VPS. Registrado como limitacao.
+3. **Residual (fora do diff, informativo).** `reiniciar_whatsapp.sh:83` (`printf '%s\n' "$texto" | grep -Eq`) e `:93` (`| grep -E ... | tail -n 1`, esse sem `-q`, ok) mantem o mesmo padrao `printf | grep -q`; `texto` e log novo + journal (pequeno), risco baixo, mas o mesmo `Broken pipe` pode aparecer se o journal passar de 64 KB. Trocar por `grep -Eq "$PADRAO_OK" <<<"$texto"` por consistencia.
+
+### Veredito rodada 5: PASS (com ressalvas)
+Mudanca funcional correta e discriminada (M1-M4, M9, M10 mortos; REI-07 pega o falso positivo de 08/11). Ressalvas nao bloqueantes: M5 (sem teste para `est != active` + `Grupo aberto`) e REI-08 sem poder de discriminacao do mutante printf|grep.
+
+### Rodada 5 - follow-up do 5d25ea1 (autor, depois do Verifier)
+- M5 (remover `est=active`) sobreviveu no 5d25ea1: REI-04 passou a trazer `Grupo aberto` no log com `estado_depois=failed`; o mutante M5 agora morre (`test_unidade_que_nao_sobe_avisa`).
+- Resíduo `printf | grep` das linhas 83 e 93 trocado por here-string (mesmo risco de Broken pipe com journal > 64 KB).
+- REI-08 segue limitado: só discriminaria com ~1000+ logs, no Linux; registrado, não forçado.

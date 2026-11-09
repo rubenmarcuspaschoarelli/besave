@@ -80,7 +80,7 @@ decorrido=0
 while :; do
     est=$(estado)
     texto=$(texto_novo)
-    if [ "$est" = "active" ] && printf '%s\n' "$texto" | grep -Eq "$PADRAO_OK"; then
+    if [ "$est" = "active" ] && grep -Eq "$PADRAO_OK" <<<"$texto"; then
         registrar "OK: $UNIDADE active e captura retomada."
         exit 0
     fi
@@ -90,7 +90,7 @@ while :; do
 done
 
 # --- 5. nao confirmou --------------------------------------------------------
-aborto=$(printf '%s\n' "$texto" | grep -E 'ABORTADO' | tail -n 1 | cut -c1-200)
+aborto=$(grep -E 'ABORTADO' <<<"$texto" | tail -n 1 | cut -c1-200)
 if [ -n "$aborto" ]; then
     motivo="$aborto"
 elif [ "$est" != "active" ]; then
