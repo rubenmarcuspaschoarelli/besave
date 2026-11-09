@@ -74,7 +74,7 @@ T6 → T7
 **Reqs**: PAR-02
 **Tests**: `tools/tests/test_reinicio_whatsapp.py`
 **Gate**: `pytest tests/test_reinicio_whatsapp.py`
-- [ ] Done
+- [x] Done
 
 ### T7: README e ordem de virada
 **What**: ordem de virada e fim da conferência do contador nos dois README.

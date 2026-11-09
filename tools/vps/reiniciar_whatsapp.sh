@@ -6,9 +6,9 @@
 #   1. unidade parada de proposito (inactive, sem falha) -> so registra e sai
 #   2. registra o RSS do maior processo do perfil user_data
 #   3. systemctl --user restart (o ExecStop da unidade para o scope do robo com SIGINT; o `finally`
-#      grava o contador)
-#   4. espera ate BESAVE_ESPERA_MAX s: unidade `active` E log novo com
-#      "Grupo aberto" (o "Retomando contador" sai ANTES da espera do QR: nao prova nada)
+#      grava os marcadores; o ID_OFERTA vem da sequence do banco desde a BSV-56)
+#   4. espera ate BESAVE_ESPERA_MAX s: unidade `active` E log novo com "Grupo aberto" (a unica marca de
+#      partida: so sai depois do login/QR, com o rodizio de pe)
 #   5. nao confirmou -> aviso no Telegram com o motivo; confirmou -> so log
 # Nunca mata processo por nome: so `systemctl restart`.
 #
