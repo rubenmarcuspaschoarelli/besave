@@ -153,3 +153,23 @@ def test_espera_segundos(novo, valor, esperado):
         cfg["espera_segundos"] = valor
     db, _, _ = novo(Conn(Sequence(1)), cfg=cfg)
     assert db.espera_segundos == esperado
+
+
+def test_ids_entregues_conta_so_numero_de_verdade(novo):
+    # o "voltou" do monitor depende deste contador (BSV-56, FORA-02)
+    seq = Sequence(10)
+    db, _, oracle_db = novo(Conn(seq), Conn(seq, "ORA-02289: sequence does not exist"),
+                            RuntimeError("DPY-6005"), Conn(seq))
+    assert db.ids_entregues == 0
+    assert db.proximo_id() == 10 and db.ids_entregues == 1
+    assert db.disponivel() is True and db.ids_entregues == 1          # SELECT 1 nao conta
+    db._conn = Conn(seq, "DPY-1001: x")                                  # cai; reconexao pega a fila
+    with pytest.raises(oracle_db.ErroSemId):
+        db.proximo_id()                                                  # ORA-02289 na nova conexao
+    assert db.ids_entregues == 1                                         # falha nao conta
+    db._conn = Conn(seq, "DPY-1001: x")
+    with pytest.raises(oracle_db.ErroSemId):
+        db.proximo_id()                                                  # reconexao falha
+    assert db.ids_entregues == 1
+    db._conn = Conn(seq, "DPY-1001: x")
+    assert db.proximo_id() == 11 and db.ids_entregues == 2              # id depois de reconectar conta

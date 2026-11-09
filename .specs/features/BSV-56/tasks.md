@@ -9,7 +9,7 @@ T1 → T2 → T3
 T4
 
 ### Phase 3: Partida, reinício e docs
-T5 → T6 → T7 → T8
+T5 → T6 → T7 → T8 → T9
 
 ```
 T1 → T2
@@ -19,6 +19,7 @@ T4 → T5
 T5 → T6
 T6 → T7
 T7 → T8
+T8 → T9
 ```
 
 ## Task Breakdown
@@ -92,6 +93,15 @@ T7 → T8
 **Depends on**: T7
 **Reqs**: FORA-02, FORA-03
 **Tests**: `tools/tests/test_id_sequence_whatsapp.py`
+**Gate**: `pytest` (em `tools/`)
+- [x] Done
+
+### T9: Testes da 2a verificacao
+**What**: `ids_entregues` do OracleDB real (conta so id entregue, inclusive depois de reconectar); queda depois de ids ja entregues com 2 grupos (1 "fora", 1 "voltou" depois do id novo); ordem do "voltou" depois do id.
+**Where**: `tools/tests/test_id_sequence_whatsapp.py`
+**Depends on**: T8
+**Reqs**: FORA-02
+**Tests**: `tools/tests/test_id_sequence_whatsapp.py`, `tools/tests/test_sequence_oracle.py`
 **Gate**: `pytest` (em `tools/`)
 - [x] Done
 

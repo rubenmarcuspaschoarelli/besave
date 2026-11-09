@@ -29,7 +29,8 @@ class Banco:
     habilitado = True
     espera_segundos = 60
 
-    def __init__(self, erro_cls, inicio=1000, fora=False, ids_ate_cair=None, volta_apos=0, falhas_nextval=0):
+    def __init__(self, erro_cls, inicio=1000, fora=False, ids_ate_cair=None, volta_apos=0, falhas_nextval=0,
+                 falhas_apos_ids=None):
         self.erro_cls = erro_cls
         self.valor = inicio
         self.fora = fora
@@ -40,8 +41,11 @@ class Banco:
         self.inseridos = []
         self.ids_entregues = 0
         self.eventos = []
+        self.falhas_apos_ids = falhas_apos_ids   # (k, n): depois de k ids, o NEXTVAL falha n vezes
 
     def proximo_id(self):
+        if self.falhas_apos_ids and self.ids_entregues == self.falhas_apos_ids[0]:
+            self.falhas_nextval, self.falhas_apos_ids = self.falhas_apos_ids[1], None
         if self.ids_ate_cair is not None and self.ids_ate_cair <= 0:
             self.fora = True
         if self.falhas_nextval > 0:
@@ -208,7 +212,8 @@ def test_fora05_catch_up_para_no_meio_apaga_tmp_e_marcador_no_ultimo_gravado(zap
 
 # --- laco inteiro: espera, aviso, lembrete, voltou e reprocessamento -----------
 
-def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None, grupos=("g1",), falhas_nextval=0):
+def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None, grupos=("g1",), falhas_nextval=0,
+           falhas_apos_ids=None):
     """captura_msg_whatsapp com 1 grupo cujo catch-up tem 1 mensagem nova ('a'). O banco cai no 1o id
     e volta depois de `volta_apos` tentativas de disponivel(); cada sleep anda o relogio. Para (Ctrl+C
     simulado) no fim da 1a volta ao vivo. Devolve (db, enviados, sleeps, estado)."""
@@ -244,10 +249,11 @@ def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None, gr
 
     est = est or estado()
     db = Banco(zap.oracle_db.ErroSemId, inicio=46100, fora=fora_na_partida, volta_apos=volta_apos,
-               falhas_nextval=falhas_nextval)
+               falhas_nextval=falhas_nextval, falhas_apos_ids=falhas_apos_ids)
     monkeypatch.setattr(zap, "datetime", Rel)
     monkeypatch.setattr(time, "sleep", dorme)
-    monkeypatch.setattr(zap.alerta, "enviar_telegram", lambda t, c, m: enviados.append((t, c, m)))
+    monkeypatch.setattr(zap.alerta, "enviar_telegram",
+                        lambda t, c, m: (enviados.append((t, c, m)), db.eventos.append(f"tg:{m}")))
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
     monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: db.eventos.append(f"abrir:{nome}"))
@@ -402,3 +408,29 @@ def test_sem_banco_configurado_nao_sobe(zap, monkeypatch, capsys):
     assert zap.captura_msg_whatsapp(["g1"]) == zap.SAIDA_SEM_BANCO
     assert abriu == []
     assert "DESLIGADA" in capsys.readouterr().out
+
+
+def test_fora02_queda_depois_de_ids_entregues_avisa_uma_vez_e_voltou_depois_do_id_novo(zap, reg, monkeypatch):
+    """g1 numera; depois o NEXTVAL falha 2 vezes com o banco respondendo (g2 na partida e no resgate).
+    Ids antigos nao contam como volta: 1 'fora' e 1 'voltou', este so depois do id novo."""
+    est = estado()
+    est["grupos"]["g2"] = {"ultima_data_hora": "09/11/2026 09:00", "ultimo_data_id": "m0"}
+    db, enviados, _, _ = _rodar(zap, reg, monkeypatch, volta_apos=0, fora_na_partida=False, est=est,
+                                grupos=("g1", "g2"), falhas_apos_ids=(1, 2))
+    textos = [m for _, _, m in enviados]
+    assert len(textos) == 2, textos
+    assert "Banco Oracle fora" in textos[0] and "voltou" in textos[1]
+    ev = db.eventos
+    i_fora = next(i for i, e in enumerate(ev) if e.startswith("tg:Banco Oracle fora"))
+    i_voltou = next(i for i, e in enumerate(ev) if e.startswith("tg:") and "voltou" in e)
+    assert ev.index("id:46100") < i_fora < ev.index("id:46101") < i_voltou
+    assert sorted(linha["ID_OFERTA"] for linha in reg.csv) == [46100, 46101]
+
+
+def test_fora02_voltou_vem_depois_do_id(zap, reg, monkeypatch):
+    db, _, _, _ = _rodar(zap, reg, monkeypatch, volta_apos=0, fora_na_partida=False, falhas_nextval=3)
+    ev = db.eventos
+    i_voltou = next(i for i, e in enumerate(ev) if e.startswith("tg:") and "voltou" in e)
+    assert ev.index("id:46100") < i_voltou
+    assert [e for e in ev[:i_voltou] if e.startswith("tg:")] == [ev[next(
+        i for i, e in enumerate(ev) if e.startswith("tg:"))]]          # so o "fora" antes do "voltou"
