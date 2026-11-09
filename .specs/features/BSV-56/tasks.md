@@ -65,7 +65,7 @@ T6 → T7
 **Reqs**: PAR-01
 **Tests**: `tools/tests/test_iniciar_captura.py`, `tools/tests/test_scope_whatsapp.py`
 **Gate**: `pytest tests/test_iniciar_captura.py tests/test_scope_whatsapp.py` + `shellcheck vps/*.sh`
-- [ ] Done
+- [x] Done
 
 ### T6: Reinício diário só com `Grupo aberto`
 **What**: testes do reinício sem "Retomando contador"; REI-03 com outro `ABORTADO:`; comentário do script.

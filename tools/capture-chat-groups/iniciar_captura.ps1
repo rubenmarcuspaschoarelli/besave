@@ -12,7 +12,7 @@
 # O que ele garante ANTES de subir:
 #   1. nenhum run_captura.py vivo   (lancar o 2o MATA o 1o - armadilha de 03/08 21:26)
 #   2. nenhum chrome.exe segurando o perfil user_data
-#   3. contador do config nao esta atrasado (senao REEMITE ID_OFERTA)
+#   3. (removido na BSV-56: o ID_OFERTA vem da sequence do banco; nao ha contador a conferir)
 # E DEPOIS de subir:
 #   4. o processo continua vivo e recebeu mesmo o run_captura.py na linha de comando
 #      (a falha exata de 04/08)
@@ -48,14 +48,6 @@ if ($chromes.Count -gt 0) {
     Write-Host "Sobraram $($chromes.Count) chrome.exe do perfil do projeto:" -ForegroundColor Yellow
     $chromes | ForEach-Object { Write-Host "  PID $($_.ProcessId)" }
     Falhar "o perfil user_data esta travado. Encerre esses processos e tente de novo."
-}
-
-# --- 3. contador atrasado? ----------------------------------------------------
-Write-Host ""
-Write-Host "--- conferindo o contador (config x CSV x Oracle) ---"
-& $Py (Join-Path $Raiz 'diag\checa_contador.py')
-if ($LASTEXITCODE -ne 0) {
-    Falhar "contador atrasado - corrija o config (com backup) antes de relancar."
 }
 
 # --- 4. nome do log (nao reaproveita arquivo de run anterior) -----------------

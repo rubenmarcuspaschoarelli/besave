@@ -98,7 +98,7 @@ def test_sh01_dois_processos_recusa_sem_lancar(amb):
     assert r.returncode != 0
     assert "Ja existe captura rodando" in r.stderr
     assert "new-session" not in amb.log("tmux.log")
-    assert amb.log("py.log") == ""  # nem o contador chegou a rodar
+    assert amb.log("py.log") == ""  # nenhum python rodou
 
 
 def test_sh01_um_processo_tambem_recusa(amb):
@@ -118,13 +118,14 @@ def test_sh02_perfil_preso_recusa_sem_lancar(amb):
     assert amb.log("py.log") == ""
 
 
-def test_sh03_contador_atrasado_recusa_sem_lancar(amb):
+def test_sh03_partida_nao_confere_mais_o_contador(amb):  # BSV-56 PAR-01
+    # o checa_contador falso acusaria "atrasado": se o lancador ainda o chamasse, recusaria subir
     amb.contador_atrasado()
     r = amb.rodar("iniciar_captura.sh")
-    assert r.returncode != 0
-    assert "checa_contador.py" in amb.log("py.log")
-    assert "contador atrasado" in r.stderr
-    assert "new-session" not in amb.log("tmux.log")
+    assert r.returncode == 0, r.stderr
+    assert amb.log("py.log") == ""  # nenhum python roda antes do robo (que sobe pelo tmux)
+    assert "contador" not in r.stdout + r.stderr
+    assert "new-session" in amb.log("tmux.log")
 
 
 def test_sh04_tudo_ok_lanca_no_tmux_com_display(amb):

@@ -1,4 +1,8 @@
-"""Confere o contador do config contra MAX(ID_OFERTA) do Oracle e o maior ID dos CSVs.
+"""HISTORICO (BSV-56): desde que o ID_OFERTA vem da sequence SQ_OFERTA_FILA do banco, o
+contador do config e so informativo e este script nao e mais chamado na partida
+(iniciar_captura.sh / iniciar_captura.ps1). Fica para diagnostico de dados antigos.
+
+Confere o contador do config contra MAX(ID_OFERTA) do Oracle e o maior ID dos CSVs.
 
 So REPORTA - nao altera nada. Codigo de saida:
     0 = contador OK (e o maior), pode relancar

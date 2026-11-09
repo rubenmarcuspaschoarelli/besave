@@ -81,7 +81,7 @@ Open questions: none
 | FORA-03 | Banco fora | Execute | Done |
 | FORA-04 | Banco fora | Execute | Done |
 | FORA-05 | Banco fora | Execute | Done |
-| PAR-01 | Partida e reinício | Execute | Pending |
+| PAR-01 | Partida e reinício | Execute | Done |
 | PAR-02 | Partida e reinício | Execute | Pending |
 | SQL-01 | SQL | Execute | Done |
 | SQL-02 | SQL | Execute | Done |
