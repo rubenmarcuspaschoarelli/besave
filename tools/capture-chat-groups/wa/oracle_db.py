@@ -149,6 +149,23 @@ class ErroSemConexao(RuntimeError):
     """Nao ha conexao Oracle utilizavel (nem depois de reconectar)."""
 
 
+class ErroSemId(RuntimeError):
+    """NEXTVAL nao devolveu numero (banco fora, sequence ausente...). Nunca vira id local (BSV-56)."""
+
+
+# ID_OFERTA vem do banco desde a BSV-56 (sql/BSV-56_sequence_id_oferta.sql).
+NOME_SEQUENCE = "SQ_OFERTA_FILA"
+ESPERA_PADRAO_S = 60
+
+_RE_CODIGO = re.compile(r"(?:ORA|DPY|DPI|PLS)-\d+")
+
+
+def _codigo(exc) -> str:
+    """Codigo do erro para log/aviso (ORA-03113...), sem a mensagem: ela pode trazer DSN/host."""
+    m = _RE_CODIGO.search(str(exc))
+    return m.group(0) if m else type(exc).__name__
+
+
 def _erro_conexao(exc) -> bool:
     return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
 
@@ -224,6 +241,20 @@ class OracleDB:
         # falhar (PLS-00306) -- entao perguntamos ao dicionario e so mandamos se
         # existir. Assim codigo novo + banco velho continua gravando.
         self._sp_tem_ds_loja = False
+
+    @property
+    def configurado(self) -> bool:
+        """Gravacao ligada no config e lib disponivel (independe da conexao estar de pe)."""
+        return bool(self._cfg.get("habilitado")) and oracledb is not None
+
+    @property
+    def espera_segundos(self) -> float:
+        """Intervalo entre tentativas com o banco fora (db.espera_segundos, padrao 60)."""
+        try:
+            v = float(self._cfg.get("espera_segundos", ESPERA_PADRAO_S))
+        except (TypeError, ValueError):
+            return ESPERA_PADRAO_S
+        return v if v > 0 else ESPERA_PADRAO_S
 
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
@@ -318,6 +349,58 @@ class OracleDB:
     def __exit__(self, *_exc):
         self.desconectar()
         return False
+
+    # -- id da oferta (BSV-56) ------------------------------------------------
+    def _consultar_um(self, sql):
+        if self._conn is None:
+            raise ErroSemConexao("sem conexao Oracle")
+        cur = self._conn.cursor()
+        try:
+            cur.execute(sql)
+            linha = cur.fetchone()
+        finally:
+            cur.close()
+        if not linha or linha[0] is None:
+            raise ErroSemId(f"{sql} sem resultado")
+        return linha[0]
+
+    def proximo_id(self) -> int:
+        """
+        Proximo ID_OFERTA: SQ_OFERTA_FILA.NEXTVAL. Erro de conexao reconecta e repete
+        UMA vez; qualquer falha restante levanta ErroSemId (nunca devolve numero local).
+        """
+        if not self.configurado:
+            raise ErroSemId("gravacao no Oracle desligada (db.habilitado)")
+        sql = f"SELECT {NOME_SEQUENCE}.NEXTVAL FROM DUAL"
+        try:
+            return int(self._consultar_um(sql))
+        except Exception as e:  # noqa: BLE001
+            if not _erro_conexao(e):
+                raise ErroSemId(_codigo(e)) from e
+            print(f"[oracle] Conexao perdida no NEXTVAL ({_codigo(e)}). Reconectando...")
+        if not self._reconectar():
+            raise ErroSemId("sem conexao Oracle")
+        try:
+            return int(self._consultar_um(sql))
+        except Exception as e:  # noqa: BLE001
+            raise ErroSemId(_codigo(e)) from e
+
+    def disponivel(self) -> bool:
+        """Banco respondendo? (SELECT 1 FROM DUAL, reconectando uma vez.) Nao gasta numero da sequence."""
+        if not self.configurado:
+            return False
+        try:
+            self._consultar_um("SELECT 1 FROM DUAL")
+            return True
+        except Exception:  # noqa: BLE001
+            pass
+        if not self._reconectar():
+            return False
+        try:
+            self._consultar_um("SELECT 1 FROM DUAL")
+            return True
+        except Exception:  # noqa: BLE001
+            return False
 
     # -- execucao -------------------------------------------------------------
     def executar_stored_procedure(self, nome, params, out_vars):

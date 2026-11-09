@@ -74,7 +74,7 @@ Open questions: none
 | SEQ-01 | Id pela sequence | Execute | Pending |
 | SEQ-02 | Id pela sequence | Execute | Pending |
 | SEQ-03 | Id pela sequence | Execute | Pending |
-| SEQ-04 | Id pela sequence | Execute | Pending |
+| SEQ-04 | Id pela sequence | Execute | Done |
 | SEQ-05 | Id pela sequence | Execute | Pending |
 | FORA-01 | Banco fora | Execute | Pending |
 | FORA-02 | Banco fora | Execute | Pending |

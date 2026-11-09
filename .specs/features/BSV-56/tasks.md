@@ -38,7 +38,7 @@ T6 → T7
 **Reqs**: SEQ-04
 **Tests**: `tools/tests/test_sequence_oracle.py`
 **Gate**: `pytest tests/test_sequence_oracle.py tests/test_reconexao_oracle.py`
-- [ ] Done
+- [x] Done
 
 ### T3: Aviso de banco fora
 **What**: `VigiaBanco` (1 aviso, lembrete 2 h, "voltou"), relógio e envio injetados, sem token no log.
