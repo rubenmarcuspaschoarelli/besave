@@ -83,7 +83,7 @@ T6 → T7
 **Reqs**: spec saída 5
 **Tests**: none (docs)
 **Gate**: `pytest` + `ruff check vps/ tests/` (em `tools/`)
-- [ ] Done
+- [x] Done
 
 ## Test Coverage Matrix
 

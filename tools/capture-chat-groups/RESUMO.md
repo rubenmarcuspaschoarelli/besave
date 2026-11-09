@@ -2,6 +2,11 @@
 
 _Última atualização: 14/10/2026_
 
+> **BSV-56 (09/11/2026):** o `ID_OFERTA` vem da sequence `SQ_OFERTA_FILA` do banco (`wa/oracle_db.proximo_id`);
+> `controle.ultimo_id_processado` é só informativo e `diag/checa_contador.py` saiu da partida (fica como
+> histórico). Banco fora: o robô não grava nada, não move marcador, avisa no Telegram e espera. As notas
+> abaixo sobre contador atrasado são do tempo do contador em arquivo. Ordem de virada: `tools/vps/README.md`.
+
 ## ONDE PARAMOS (08/10/2026, noite) — captura PARADA; trava de "conversa errada" pronta (vale após relançar)
 
 **NADA RODANDO.** Último run: hoje 17:15 → 17:32 (`run_captura_08_10.log`, 55 ofertas), encerrado
@@ -1226,18 +1231,18 @@ wa/
   monitor.py       # captura_msg_whatsapp(): sweep + catch-up + rodízio multi-grupo + dedupe
   parser.py        # reconstrói texto (emoji->alt) + classifica (PRODUTO/CUPOM) + extrai
   storage.py       # salva imagem + escreve CSV
-  estado.py        # marcador por grupo + contador global (conf/config.json)
-  oracle_db.py     # gravação no Oracle via stored procedure (best-effort)
+  estado.py        # marcador por grupo + ultimo id usado, informativo (conf/config.json)
+  oracle_db.py     # NEXTVAL do ID_OFERTA (BSV-56) + gravação via stored procedure
 diag/
   diag_ordem.py    # confere a ORDEM da subida — rodar ao mexer na caminhada (30/07)
-  checa_contador.py  # contador x CSV x Oracle — rodar antes de relançar após parada anormal
+  checa_contador.py  # HISTÓRICO (BSV-56): contador x CSV x Oracle; fora da partida
   gerar_thumbs.py    # backfill das miniaturas _small
   publicar_s3.py     # backfill/reconversão das imagens do bucket local do site
   normaliza_loja_cupom.py   # normalização histórica de DS_CUPOM_LOJA (22/09)
   limpa_conversa_e_cupom.py # limpeza de conversa fiada + cupons da OFERTA (07/10)
 iniciar_captura.ps1 / encerrar_captura.ps1  # subir/parar em produção
 conf/config.json   # marcadores por grupo, ultimo_id_processado, bloco db e imagem
-sql/               # a stored procedure de insert
+sql/               # a stored procedure de insert + BSV-56_sequence_id_oferta.sql
 user_data/         # sessão salva (NÃO commitar) — QR só na 1ª vez
 captura/csv/       # saída: um CSV por run, DD_MM_AAAA_HH_MM.csv (NÃO commitar) — storage.CSV_DIR
 captura/img/       # imagens dos anúncios (NÃO commitar) — storage.IMG_DIR
@@ -1258,8 +1263,8 @@ run lançado antes da mudança).
 `conf/backup_*.csv`. O `config.json` tem usuário/senha do Oracle e é estado vivo (contador +
 marcadores) — **nunca versionar**. Versionado no lugar: `conf/config.example.json` (mesma
 estrutura, credenciais vazias, marcadores vazios, contador 0). Máquina nova: copiar para
-`config.json`, preencher `db.usuario`/`db.senha` e acertar `controle.ultimo_id_processado` com
-`MAX(ID_OFERTA)` do Oracle (o `checa_contador.py` do `iniciar_captura.ps1` barra se ficar 0).
+`config.json` e preencher `db.usuario`/`db.senha` (o id vem da sequence do banco desde a BSV-56; o
+`controle.ultimo_id_processado` não precisa ser acertado).
 Ao criar chave nova no config, replicar no example.
 
 ## Como rodar
