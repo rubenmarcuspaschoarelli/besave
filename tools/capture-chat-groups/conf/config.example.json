@@ -22,6 +22,16 @@
         "intervalo_minutos": 0,
         "_obs": "Vazio = sem janela (ritmo normal). Preencha inicio/fim (HH:MM, relogio do sistema; pode cruzar a meia-noite) e intervalo_minutos, ex.: 22:00, 08:00, 120. Dentro dela o robo faz uma rodada a cada intervalo."
     },
+    "alerta": {
+        "sem_abrir_minutos": 45,
+        "telegram_token": "",
+        "telegram_chat_id": "",
+        "_obs": "Captura parada: se (fora da janela noturna) nenhum grupo abrir por sem_abrir_minutos, manda aviso ao Telegram e outro quando voltar. Sem token/chat so grava no log."
+    },
+    "destravar": {
+        "recarregar_voltas": 8,
+        "_obs": "Voltas seguidas sem abrir nenhum grupo ate recarregar o WhatsApp Web (~10 min); depois o resgate roda."
+    },
     "controle": {
         "ultimo_id_processado": 0
     },

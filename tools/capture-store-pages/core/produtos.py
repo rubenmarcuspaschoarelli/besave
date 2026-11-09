@@ -29,14 +29,12 @@ def _mapa_comunidades(db):
     global _comunidades_cache
     if _comunidades_cache:
         return _comunidades_cache
-    mapa = {}
+    def ler(cur):
+        cur.execute('SELECT DS_COMUNIDADE, ID_COMUNIDADE FROM BESAVE.COMUNIDADE')
+        return {nome: id_ for nome, id_ in cur}
+
     try:
-        cur = db._conn.cursor()
-        try:
-            cur.execute('SELECT DS_COMUNIDADE, ID_COMUNIDADE FROM BESAVE.COMUNIDADE')
-            mapa = {nome: id_ for nome, id_ in cur}
-        finally:
-            cur.close()
+        mapa = db.transacao(ler, commit=False)
     except Exception as e:  # noqa: BLE001
         print(f'[produtos] falha ao ler COMUNIDADE: {e}')
         return {}
@@ -49,30 +47,28 @@ def gravar_classificacao(db, id_produto, comunidades, publico):
     INSERT, idempotente). Best-effort: nunca propaga excecao -- o ID_PRODUTO
     ja foi obtido com sucesso antes de chamar isto, essa gravacao e so
     enriquecimento."""
+    def gravar(cur):
+        cur.execute('DELETE FROM BESAVE.PRODUTO_COMUNIDADE WHERE ID_PRODUTO = :id', {'id': id_produto})
+        for ordem, (nome, score) in enumerate(comunidades, start=1):
+            id_comunidade = mapa.get(nome)
+            if id_comunidade is None:
+                continue
+            cur.execute(
+                'INSERT INTO BESAVE.PRODUTO_COMUNIDADE (ID_PRODUTO, ID_COMUNIDADE, NR_ORDEM, NR_SCORE) '
+                'VALUES (:id_produto, :id_comunidade, :ordem, :score)',
+                {'id_produto': id_produto, 'id_comunidade': id_comunidade, 'ordem': ordem, 'score': score},
+            )
+        cur.execute('DELETE FROM BESAVE.PRODUTO_PUBLICO WHERE ID_PRODUTO = :id', {'id': id_produto})
+        if publico:
+            cur.execute(
+                'INSERT INTO BESAVE.PRODUTO_PUBLICO (ID_PRODUTO, DS_PUBLICO, NR_ORDEM) '
+                'VALUES (:id_produto, :publico, 1)',
+                {'id_produto': id_produto, 'publico': publico},
+            )
+
     try:
         mapa = _mapa_comunidades(db)
-        cur = db._conn.cursor()
-        try:
-            cur.execute('DELETE FROM BESAVE.PRODUTO_COMUNIDADE WHERE ID_PRODUTO = :id', {'id': id_produto})
-            for ordem, (nome, score) in enumerate(comunidades, start=1):
-                id_comunidade = mapa.get(nome)
-                if id_comunidade is None:
-                    continue
-                cur.execute(
-                    'INSERT INTO BESAVE.PRODUTO_COMUNIDADE (ID_PRODUTO, ID_COMUNIDADE, NR_ORDEM, NR_SCORE) '
-                    'VALUES (:id_produto, :id_comunidade, :ordem, :score)',
-                    {'id_produto': id_produto, 'id_comunidade': id_comunidade, 'ordem': ordem, 'score': score},
-                )
-            cur.execute('DELETE FROM BESAVE.PRODUTO_PUBLICO WHERE ID_PRODUTO = :id', {'id': id_produto})
-            if publico:
-                cur.execute(
-                    'INSERT INTO BESAVE.PRODUTO_PUBLICO (ID_PRODUTO, DS_PUBLICO, NR_ORDEM) '
-                    'VALUES (:id_produto, :publico, 1)',
-                    {'id_produto': id_produto, 'publico': publico},
-                )
-            db._conn.commit()
-        finally:
-            cur.close()
+        db.transacao(gravar)
     except Exception as e:  # noqa: BLE001
         print(f'[produtos] falha ao gravar PRODUTO_COMUNIDADE/PRODUTO_PUBLICO ({id_produto}): {e}')
 

@@ -11,7 +11,8 @@
     "_obs": "Vazio = sem janela (ritmo normal). Preencha inicio/fim (HH:MM, relogio do sistema; pode cruzar a meia-noite) e intervalo_minutos, ex.: 22:00, 08:00, 120. Dentro dela o robo faz uma rodada a cada intervalo."
   },
   "controle": {
-    "ultimo_id_processado": 0
+    "ultimo_id_processado": 0,
+    "publicacao_pendente": []
   },
   "monitor": {
     "intervalo_minutos": 3
@@ -19,6 +20,22 @@
   "afiliados": {
     "confirmar_no_arranque": true,
     "_obs": "false = o robo nao pergunta (input) pelos logins de afiliado no arranque; so avisa no log se o login nao estiver ativo. Use na VPS."
+  },
+  "bloqueio": {
+    "pausa_minutos": 60,
+    "_obs": "3 bloqueios seguidos (captcha/login/sessao de afiliado) de uma loja a pausam por pausa_minutos; as outras seguem (BSV-55)."
+  },
+  "redirecionamento": {
+    "proxy": "socks5h://127.0.0.1:1080",
+    "dominios": ["promos.link"],
+    "timeout_segundos": 20,
+    "max_saltos": 5,
+    "_obs": "Encurtadores que bloqueiam o IP da VPS (BSV-58): so o redirect deles sai pelo tunel do PC (tools/vps/tunel_residencial.ps1). Casa por sufixo de rotulo (promos.link vale para amzn.promos.link). Sem o bloco ou com dominios vazio = fluxo antigo."
+  },
+  "alerta": {
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "_obs": "Opcional. Vazio = so log. Aviso quando uma loja entra em pausa, lembrete a cada 6 h e 'voltou'."
   },
   "link_afiliado": {
     "habilitado": true

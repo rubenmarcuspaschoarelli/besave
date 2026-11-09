@@ -53,10 +53,14 @@ _ERROS_CONEXAO = re.compile(
 
 class ErroSemConexao(RuntimeError):
     """Nao ha conexao Oracle utilizavel (nem depois de reconectar)."""
+    sem_conexao = True      # marca por atributo: vale mesmo se o modulo for recarregado
 
 
 def _erro_conexao(exc) -> bool:
-    return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
+    return bool(getattr(exc, 'sem_conexao', False)) or bool(_ERROS_CONEXAO.search(str(exc)))
+
+
+erro_conexao = _erro_conexao
 
 
 def _reconecta(metodo):
@@ -565,6 +569,32 @@ class OracleDB:
             return {k: v.getvalue() for k, v in outs.items()}
         finally:
             cur.close()
+
+    @_reconecta
+    def transacao(self, funcao, commit=True):
+        """SQL avulso sob a regra de reconexao: abre o cursor, chama `funcao(cur)`,
+        faz commit se pedido (rollback em qualquer erro) e fecha o cursor. Em erro
+        de conexao reconecta e repete a funcao INTEIRA uma vez -- ela tem de ser uma
+        transacao completa e idempotente. Devolve o que `funcao` devolver."""
+        if self._conn is None:
+            raise ErroSemConexao("sem conexao Oracle")
+        cur = self._conn.cursor()
+        try:
+            resultado = funcao(cur)
+            if commit:
+                self._conn.commit()
+            return resultado
+        except Exception:
+            try:
+                self._conn.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            raise
+        finally:
+            try:
+                cur.close()
+            except Exception:  # noqa: BLE001
+                pass
 
     def _chamar_sp(self, nome, params, clob_params=None):
         """Executa a SP e traduz PV_RETORNO/PV_ERRO em (ok, erro). Best-effort:

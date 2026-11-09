@@ -149,12 +149,12 @@ def grupos_com_imagem_loja(caminho=CONFIG_PATH):
             if isinstance(cfg, dict) and cfg.get('usa_imagem_loja')]
 
 
-def gravar_ultimo_id(valor, caminho=CONFIG_PATH):
-    """Anota o ultimo ID processado, preservando o resto do config.json."""
+def _gravar_controle(chave, valor, caminho=CONFIG_PATH):
+    """Grava `controle.<chave>` preservando o resto do config.json."""
     cfg = _ler_config(caminho)
     if not cfg:
         return
-    cfg.setdefault('controle', {})['ultimo_id_processado'] = int(valor)
+    cfg.setdefault('controle', {})[chave] = valor
     # Grava num .tmp e so entao troca (os.replace e atomico): se o disco encher
     # no meio da gravacao, o config.json original fica intacto em vez de vazio
     # (incidente 2026-10-09: disco E: cheio zerou o arquivo).
@@ -171,3 +171,28 @@ def gravar_ultimo_id(valor, caminho=CONFIG_PATH):
             os.remove(tmp)
         except OSError:
             pass
+
+
+def gravar_ultimo_id(valor, caminho=CONFIG_PATH):
+    """Anota o ultimo ID processado, preservando o resto do config.json."""
+    _gravar_controle('ultimo_id_processado', int(valor), caminho)
+
+
+def ler_publicacao_pendente(caminho=CONFIG_PATH):
+    """IDs capturados ('1') cuja publicacao em OFERTA ficou para depois por falta
+    de conexao/afiliados (BSV-52). Ordenados; [] se ausente/invalido."""
+    try:
+        lista = (_ler_config(caminho).get('controle') or {}).get('publicacao_pendente') or []
+        return sorted({int(i) for i in lista})
+    except (TypeError, ValueError):
+        return []
+
+
+def gravar_publicacao_pendente(ids, caminho=CONFIG_PATH):
+    _gravar_controle('publicacao_pendente', sorted({int(i) for i in ids}), caminho)
+
+
+def adicionar_publicacao_pendente(id_oferta, caminho=CONFIG_PATH):
+    pend = ler_publicacao_pendente(caminho)
+    if int(id_oferta) not in pend:
+        gravar_publicacao_pendente(pend + [int(id_oferta)], caminho)

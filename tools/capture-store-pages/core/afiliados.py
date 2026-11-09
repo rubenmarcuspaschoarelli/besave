@@ -10,6 +10,7 @@ tabela ou sem regra implementada aqui -> gerar_url() devolve None (o campo
 fica NULL no banco, sem quebrar a captura).
 """
 
+import time
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 # DS_LOJA (tabela LOJA_AFILIADA) -> nome interno da store (stores/*.py -> nome)
@@ -19,41 +20,68 @@ _DS_LOJA_PARA_STORE = {
     'SHOPEE': 'shopee',
 }
 
+# Releitura de LOJA_AFILIADA quando o cache nao carregou: no maximo 1x por minuto.
+INTERVALO_RETENTATIVA_S = 60
+
 _afiliados = {}
 _carregado = False
+_falhou = False
+_ultima_tentativa = None
+_relogio = time.monotonic
 
 
 def carregar(db):
-    """Le LOJA_AFILIADA (ST_ATIVO=1) e guarda em memoria. Idempotente (chamar
-    de novo rele do banco). Best-effort: erro de leitura so zera o cache
-    (gerar_url devolve None para todas as lojas) -- nunca derruba a captura.
-    """
-    global _afiliados, _carregado
-    _afiliados = {}
-    _carregado = True
-    if db is None or db._conn is None:
+    """Le LOJA_AFILIADA (ST_ATIVO=1) e guarda em memoria. Falha de leitura NAO
+    marca o cache como carregado (ver garantir_carregado): sem ele nenhuma loja
+    e ativa e a oferta nao entra em OFERTA. Nunca derruba a captura."""
+    global _afiliados, _carregado, _falhou, _ultima_tentativa
+    _ultima_tentativa = _relogio()
+    if db is None:
         print('[afiliados] sem conexao Oracle; DS_URL_BESAVE nao sera gerado.')
+        _afiliados, _carregado = {}, True
         return dict(_afiliados)
-    cur = db._conn.cursor()
-    try:
+
+    def ler(cur):
         cur.execute(
             "SELECT DS_LOJA, ID_AFILIADO, ID_REF_AFILIADO "
             "FROM BESAVE.LOJA_AFILIADA WHERE ST_ATIVO = 1"
         )
-        for ds_loja, id_afiliado, id_ref_afiliado in cur:
-            nome = _DS_LOJA_PARA_STORE.get((ds_loja or '').strip().upper())
-            if nome:
-                _afiliados[nome] = {
-                    'id_afiliado': (id_afiliado or '').strip(),
-                    'id_ref_afiliado': (id_ref_afiliado or '').strip(),
-                }
-        print(f'[afiliados] {len(_afiliados)} loja(s) com afiliado ativo: '
-              f'{", ".join(sorted(_afiliados)) or "-"}.')
+        return list(cur)
+
+    try:
+        linhas = db.transacao(ler, commit=False)
     except Exception as e:  # noqa: BLE001
-        print(f'[afiliados] falha ao ler LOJA_AFILIADA: {e}')
-    finally:
-        cur.close()
+        if not _falhou:
+            print(f'[afiliados] cache não carregado: {e}')
+        _falhou = True
+        return dict(_afiliados)
+    novos = {}
+    for ds_loja, id_afiliado, id_ref_afiliado in linhas:
+        nome = _DS_LOJA_PARA_STORE.get((ds_loja or '').strip().upper())
+        if nome:
+            novos[nome] = {
+                'id_afiliado': (id_afiliado or '').strip(),
+                'id_ref_afiliado': (id_ref_afiliado or '').strip(),
+            }
+    _afiliados, _carregado = novos, True
+    if _falhou:
+        print('[afiliados] cache carregado (banco voltou).')
+    _falhou = False
+    print(f'[afiliados] {len(_afiliados)} loja(s) com afiliado ativo: '
+          f'{", ".join(sorted(_afiliados)) or "-"}.')
     return dict(_afiliados)
+
+
+def garantir_carregado(db):
+    """True se o cache esta carregado. Se nao, tenta de novo (no maximo 1x por
+    INTERVALO_RETENTATIVA_S). Quem recebe False nao pode publicar a linha."""
+    if _carregado:
+        return True
+    if (_ultima_tentativa is not None
+            and _relogio() - _ultima_tentativa < INTERVALO_RETENTATIVA_S):
+        return False
+    carregar(db)
+    return _carregado
 
 
 def _set_query_param(url, key, value):

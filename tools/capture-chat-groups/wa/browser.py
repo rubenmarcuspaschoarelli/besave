@@ -11,6 +11,8 @@ import re
 import unicodedata
 from pathlib import Path
 
+from . import destravar
+
 WHATSAPP_URL = "https://web.whatsapp.com/"
 
 # Diretorio onde a sessao (cookies/login) fica persistida.
@@ -115,7 +117,7 @@ def abrir_grupo(page, nome_grupo: str, timeout: int = 30_000):
     if busca is None:
         raise RuntimeError("Nao encontrei a caixa de pesquisa do WhatsApp.")
 
-    busca.click()
+    destravar.clicar(page, busca)
     # Limpa qualquer texto residual e digita o nome do grupo.
     page.keyboard.press("Control+A")
     page.keyboard.press("Delete")
@@ -149,7 +151,15 @@ def abrir_grupo(page, nome_grupo: str, timeout: int = 30_000):
     elif chave not in normalizar_nome(texto_item):
         raise ConversaErrada(
             f"1o resultado da busca nao e {nome_grupo!r}: {texto_item[:80]!r}")
-    item.click()
+
+    def conferir_item():
+        # Escape pode limpar a busca: antes de repetir, o 1o resultado ainda tem de ser o grupo.
+        texto = _texto(page, '[data-testid="list-item-1"]')             or _texto(page, '#pane-side [role="listitem"]')
+        if texto is not None and chave not in normalizar_nome(texto):
+            raise ConversaErrada(
+                f"depois de destravar, o 1o resultado nao e {nome_grupo!r}: {texto[:80]!r}")
+
+    destravar.clicar(page, item, antes_de_repetir=conferir_item)
 
     # 3) Espera o painel de conversa carregar.
     page.wait_for_selector("#main", timeout=timeout)

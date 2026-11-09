@@ -30,6 +30,9 @@ __pycache__/
 # zip das Lambdas gerado pelo archive_file (BSV-15)
 infra/.build/
 infra/*.tfplan
+infra/**/*.plan
+# state local da raiz de bootstrap (BSV-53); o da raiz infra/ vai para o S3
+infra/estado/terraform.tfstate*
 infra/plan.bin 
 infra/plan.txt
 infra/saida.json

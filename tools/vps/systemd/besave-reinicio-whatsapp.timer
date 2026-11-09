@@ -1,0 +1,12 @@
+# Reinicio do robo do WhatsApp (BSV-54) a cada 6 h: 05:30, 11:30, 17:30 e 23:30. Medido na inst1 (06/11):
+# o renderer cresce ~0,2 GB/h de dia e fica parado a noite; um reinicio so as 05:30 deixava chegar a 3,5 GB.
+# Sem Persistent: se a maquina estava desligada no horario, nao reinicia depois, fora de hora.
+[Unit]
+Description=Besave - reinicio do robo do WhatsApp (a cada 6 h, as :30)
+
+[Timer]
+OnCalendar=*-*-* 05,11,17,23:30:00
+Persistent=false
+
+[Install]
+WantedBy=timers.target
