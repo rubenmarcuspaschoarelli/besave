@@ -88,3 +88,45 @@ class VigiaCaptura:
         elif agora - self.alertado_em >= LEMBRETE:
             self.alertado_em = agora
             self._avisar(f"Robo do WhatsApp continua parado ha {parado.total_seconds() / 60:.0f} min.")
+
+
+class VigiaBanco:
+    """
+    Banco Oracle fora (BSV-56): sem ele nao ha ID_OFERTA e o robo para esperando.
+    Um aviso por ocorrencia, lembrete a cada 2 h e "voltou" ao normalizar.
+    O motivo e so o codigo do erro (a mensagem do driver pode trazer DSN/host).
+    """
+
+    def __init__(self, cfg, enviar=None):
+        bloco = (cfg or {}).get("alerta")
+        bloco = bloco if isinstance(bloco, dict) else {}
+        self.token = str(bloco.get("telegram_token") or "").strip()
+        self.chat = str(bloco.get("telegram_chat_id") or "").strip()
+        self.enviar = enviar or enviar_telegram
+        self.alertado_em = None          # instante do ultimo aviso/lembrete; None = banco ok
+        self.desde = None                # inicio da ocorrencia
+
+    _avisar = VigiaCaptura._avisar
+
+    @property
+    def fora(self) -> bool:
+        return self.alertado_em is not None
+
+    def falhou(self, motivo: str, agora=None) -> None:
+        agora = agora or datetime.now()
+        if self.alertado_em is None:
+            self.desde = self.alertado_em = agora
+            self._avisar(f"Banco Oracle fora ({motivo}): robo do WhatsApp parado esperando o banco. "
+                         "Nenhuma oferta e numerada nem gravada ate ele voltar; nada se perde.")
+        elif agora - self.alertado_em >= LEMBRETE:
+            self.alertado_em = agora
+            fora = (agora - self.desde).total_seconds() / 60
+            self._avisar(f"Banco Oracle continua fora ha {fora:.0f} min ({motivo}); robo do WhatsApp esperando.")
+
+    def voltou(self, agora=None) -> None:
+        if self.alertado_em is None:
+            return
+        agora = agora or datetime.now()
+        fora = (agora - self.desde).total_seconds() / 60
+        self._avisar(f"Banco Oracle voltou (ficou fora ~{fora:.0f} min); robo do WhatsApp retomando pelo marcador.")
+        self.alertado_em = self.desde = None

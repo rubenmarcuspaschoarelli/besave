@@ -47,7 +47,7 @@ T6 → T7
 **Reqs**: FORA-02
 **Tests**: `tools/tests/test_alerta_banco.py`
 **Gate**: `pytest tests/test_alerta_banco.py tests/test_alerta.py`
-- [ ] Done
+- [x] Done
 
 ### T4: Monitor numera pela sequence e espera o banco
 **What**: ao vivo e catch-up com `proximo_id()`; banco fora não grava nem move marcador; espera com aviso; resgate depois; sai sem banco configurado; sem "Retomando contador".
