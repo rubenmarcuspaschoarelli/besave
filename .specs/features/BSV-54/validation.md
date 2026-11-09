@@ -299,3 +299,8 @@ Mudanca funcional correta e discriminada (M1-M4, M9, M10 mortos; REI-07 pega o f
 - M5 (remover `est=active`) sobreviveu no 5d25ea1: REI-04 passou a trazer `Grupo aberto` no log com `estado_depois=failed`; o mutante M5 agora morre (`test_unidade_que_nao_sobe_avisa`).
 - Resíduo `printf | grep` das linhas 83 e 93 trocado por here-string (mesmo risco de Broken pipe com journal > 64 KB).
 - REI-08 segue limitado: só discriminaria com ~1000+ logs, no Linux; registrado, não forçado.
+
+### Rodada 6 - REI-08 discriminante
+- Causa do Broken pipe: o systemd ignora SIGPIPE (`IgnoreSIGPIPE=yes`); com SIGPIPE ignorado, `printf lista | grep -qxF` escreve `write error: Broken pipe` quando a lista passa de 64 KB e o grep sai no 1º acerto (reproduzido pelo dono na inst1: antigo 3/3, here-string 0/3).
+- REI-08 agora roda o script com `trap '' PIPE; exec bash ...` e 500 logs antigos de nome longo (> 64 KB de `logs_antes`).
+- Mutante M6 (voltar `printf | grep -qxF`): **morto** (`test_sem_broken_pipe_no_stderr`). Limitação anterior removida. Suíte: 262 passed.

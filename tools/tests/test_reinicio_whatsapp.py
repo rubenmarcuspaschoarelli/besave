@@ -128,8 +128,16 @@ def test_retomando_contador_sem_grupo_aberto_nao_confirma(amb):  # REI-07: 08/11
 
 
 def test_sem_broken_pipe_no_stderr(amb):  # REI-08
+    # o systemd roda a unidade com SIGPIPE ignorado (IgnoreSIGPIPE=yes): `printf lista | grep -q` entao
+    # escreve "write error: Broken pipe" quando a lista passa de 64 KB (buffer do pipe) e o grep sai no 1o acerto
+    for i in range(500):
+        (amb.chat / "log" / f"run_captura_01_01_{i:06d}_{'x' * 200}.log").write_text("antigo", encoding="utf-8")
     amb.arquivo("log_novo", "Grupo aberto\n")
-    assert "Broken pipe" not in amb.rodar().stderr
+    script = (VPS / "reiniciar_whatsapp.sh").as_posix()
+    r = subprocess.run([BASH, "-c", f"trap '' PIPE; exec bash {script}"], env=amb.env,
+                       check=False, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "Broken pipe" not in r.stderr and "write error" not in r.stderr
 
 
 def test_contador_atrasado_avisa_com_o_motivo(amb):  # REI-03
