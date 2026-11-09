@@ -241,6 +241,9 @@ class OracleDB:
         # falhar (PLS-00306) -- entao perguntamos ao dicionario e so mandamos se
         # existir. Assim codigo novo + banco velho continua gravando.
         self._sp_tem_ds_loja = False
+        # Ids entregues pelo NEXTVAL neste processo: o "voltou" do banco fora so sai
+        # depois de um id de verdade, nao so com o banco respondendo (BSV-56).
+        self.ids_entregues = 0
 
     @property
     def configurado(self) -> bool:
@@ -373,17 +376,19 @@ class OracleDB:
             raise ErroSemId("gravacao no Oracle desligada (db.habilitado)")
         sql = f"SELECT {NOME_SEQUENCE}.NEXTVAL FROM DUAL"
         try:
-            return int(self._consultar_um(sql))
+            valor = int(self._consultar_um(sql))
         except Exception as e:
             if not _erro_conexao(e):
                 raise ErroSemId(_codigo(e)) from e
             print(f"[oracle] Conexao perdida no NEXTVAL ({_codigo(e)}). Reconectando...")
-        if not self._reconectar():
-            raise ErroSemId("sem conexao Oracle")
-        try:
-            return int(self._consultar_um(sql))
-        except Exception as e:
-            raise ErroSemId(_codigo(e)) from e
+            if not self._reconectar():
+                raise ErroSemId("sem conexao Oracle") from e
+            try:
+                valor = int(self._consultar_um(sql))
+            except Exception as e2:
+                raise ErroSemId(_codigo(e2)) from e2
+        self.ids_entregues += 1
+        return valor
 
     def disponivel(self) -> bool:
         """Banco respondendo? (SELECT 1 FROM DUAL, reconectando uma vez.) Nao gasta numero da sequence."""

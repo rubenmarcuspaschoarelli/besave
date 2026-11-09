@@ -1113,6 +1113,9 @@ def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
     db.espera_segundos. Nada e numerado nem gravado enquanto isso, e nenhum grupo
     anda; quem chama marca o resgate, que rele desde o marcador de cada grupo.
     Devolve os segundos esperados.
+
+    O "voltou" NAO sai aqui: o banco responder ao SELECT 1 nao prova que o NEXTVAL
+    funciona (sequence ausente, sem grant). Sai em _confirmar_volta, depois do 1o id.
     """
     dormir = dormir or time.sleep
     agora = agora or datetime.now
@@ -1121,13 +1124,19 @@ def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
     print(f"[monitor] BANCO FORA ({motivo}): nenhuma mensagem e numerada e os marcadores nao andam. "
           f"Tentando de novo a cada {db.espera_segundos:g}s.")
     vigia_banco.falhou(motivo, inicio)
+    vigia_banco.ids_na_queda = db.ids_entregues
     while True:
         dormir(db.espera_segundos)
         if db.disponivel():
-            vigia_banco.voltou(agora())
-            print("[monitor] Banco voltou; resgate pelo marcador de cada grupo.")
+            print("[monitor] Banco responde; resgate pelo marcador de cada grupo (o 'voltou' sai no 1o id).")
             return (agora() - inicio).total_seconds()
         vigia_banco.falhou(motivo, agora())
+
+
+def _confirmar_volta(db, vigia_banco) -> None:
+    """Banco fora e ja saiu um id novo pelo NEXTVAL: manda o "voltou" (uma vez)."""
+    if vigia_banco.fora and db.ids_entregues > vigia_banco.ids_na_queda:
+        vigia_banco.voltou()
 
 
 def captura_msg_whatsapp(
@@ -1231,6 +1240,7 @@ def captura_msg_whatsapp(
                     _esperar_banco(db, vigia_banco, e)
                     resgate_banco = True
                     ja = set()
+                _confirmar_volta(db, vigia_banco)
 
                 vistos |= ja
                 vistos.update(_ids_baloes(page))
@@ -1261,7 +1271,11 @@ def captura_msg_whatsapp(
                         )
                         resgate_pendente = not feito
                     except oracle_db.ErroSemId as e:
-                        lacuna_s += _esperar_banco(db, vigia_banco, e)   # resgate segue pendente
+                        # resgate segue pendente e roda de novo ANTES do rodizio: o marcador parou ali
+                        lacuna_s += _esperar_banco(db, vigia_banco, e)
+                        fim_da_volta = datetime.now()
+                        continue
+                    _confirmar_volta(db, vigia_banco)
                     fim_da_volta = datetime.now()
 
                 falhas_na_volta = 0
@@ -1273,6 +1287,7 @@ def captura_msg_whatsapp(
                         numero, n = _ler_novas_do_grupo(page, nome, vistos, numero, caminho_csv, estado, db)
                         if n:
                             print(f"[{nome}] {n} nova(s) processada(s) (ultimo id #{numero}).")
+                        _confirmar_volta(db, vigia_banco)
                     except oracle_db.ErroSemId as e:
                         banco_fora = e            # os outros grupos nao andam sem id
                         break

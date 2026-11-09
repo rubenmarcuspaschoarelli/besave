@@ -29,27 +29,38 @@ class Banco:
     habilitado = True
     espera_segundos = 60
 
-    def __init__(self, erro_cls, inicio=1000, fora=False, ids_ate_cair=None, volta_apos=0):
+    def __init__(self, erro_cls, inicio=1000, fora=False, ids_ate_cair=None, volta_apos=0, falhas_nextval=0):
         self.erro_cls = erro_cls
         self.valor = inicio
         self.fora = fora
         self.ids_ate_cair = ids_ate_cair
         self.volta_apos = volta_apos
+        self.falhas_nextval = falhas_nextval   # NEXTVAL falha (ORA-02289) com o banco respondendo
         self.tentativas = 0
         self.inseridos = []
+        self.ids_entregues = 0
+        self.eventos = []
 
     def proximo_id(self):
         if self.ids_ate_cair is not None and self.ids_ate_cair <= 0:
             self.fora = True
+        if self.falhas_nextval > 0:
+            self.falhas_nextval -= 1
+            self.eventos.append("id_falhou")
+            raise self.erro_cls("ORA-02289")
         if self.fora:
+            self.eventos.append("id_falhou")
             raise self.erro_cls("ORA-03113")
         if self.ids_ate_cair is not None:
             self.ids_ate_cair -= 1
         v, self.valor = self.valor, self.valor + 1
+        self.ids_entregues += 1
+        self.eventos.append(f"id:{v}")
         return v
 
     def disponivel(self):
         self.tentativas += 1
+        self.eventos.append("disponivel")
         if self.tentativas > self.volta_apos:
             self.fora = False
             self.ids_ate_cair = None
@@ -197,7 +208,7 @@ def test_fora05_catch_up_para_no_meio_apaga_tmp_e_marcador_no_ultimo_gravado(zap
 
 # --- laco inteiro: espera, aviso, lembrete, voltou e reprocessamento -----------
 
-def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None):
+def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None, grupos=("g1",), falhas_nextval=0):
     """captura_msg_whatsapp com 1 grupo cujo catch-up tem 1 mensagem nova ('a'). O banco cai no 1o id
     e volta depois de `volta_apos` tentativas de disponivel(); cada sleep anda o relogio. Para (Ctrl+C
     simulado) no fim da 1a volta ao vivo. Devolve (db, enviados, sleeps, estado)."""
@@ -232,13 +243,14 @@ def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None):
         raise KeyboardInterrupt
 
     est = est or estado()
-    db = Banco(zap.oracle_db.ErroSemId, inicio=46100, fora=fora_na_partida, volta_apos=volta_apos)
+    db = Banco(zap.oracle_db.ErroSemId, inicio=46100, fora=fora_na_partida, volta_apos=volta_apos,
+               falhas_nextval=falhas_nextval)
     monkeypatch.setattr(zap, "datetime", Rel)
     monkeypatch.setattr(time, "sleep", dorme)
     monkeypatch.setattr(zap.alerta, "enviar_telegram", lambda t, c, m: enviados.append((t, c, m)))
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
     monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
-    monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: None)
+    monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: db.eventos.append(f"abrir:{nome}"))
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: est)
     monkeypatch.setattr(zap.oracle_db, "OracleDB", lambda: db)
@@ -247,9 +259,40 @@ def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None):
     monkeypatch.setattr(zap, "_ids_baloes", lambda page: [])
     monkeypatch.setattr(zap.janela_mod, "carregar", lambda caminho: None)
     monkeypatch.setattr(zap.janela_mod, "dormir_ate_proxima_rodada", parar)
-    zap.captura_msg_whatsapp(["g1"], seg_grupo=0)
+    zap.captura_msg_whatsapp(list(grupos), seg_grupo=0)
     db.coletas = coletas
     return db, enviados, sleeps, est
+
+
+def test_fora02_sequence_falhando_com_banco_respondendo_nao_alterna_fora_e_voltou(zap, reg, monkeypatch):
+    """SELECT 1 responde mas o NEXTVAL falha (ORA-02289, sem grant): 1 aviso so, e o 'voltou' so no 1o id."""
+    db, enviados, sleeps, _ = _rodar(zap, reg, monkeypatch, volta_apos=0, fora_na_partida=False, falhas_nextval=3)
+    textos = [m for _, _, m in enviados]
+    assert len(textos) == 2, textos
+    assert "Banco Oracle fora" in textos[0] and "ORA-02289" in textos[0] and "voltou" in textos[1]
+    assert [s for s in sleeps if s == 60] == [60] * 3          # espera a cada falha, sem laco cego
+    assert [linha["ID_OFERTA"] for linha in reg.csv] == [46100]
+    # "voltou" so depois do id: nenhum aviso de volta antes de o NEXTVAL entregar numero
+    assert db.eventos.count("id_falhou") == 3 and "id:46100" in db.eventos
+
+
+def test_fora03_banco_cai_no_resgate_espera_sem_andar_grupo_e_retoma(zap, reg, monkeypatch):
+    """2 grupos com marcador; o NEXTVAL falha na partida e de novo no resgate. Entre cada falha e a
+    tentativa seguinte de disponivel() nenhum grupo e aberto; o robo nao cai e a mensagem sai depois."""
+    est = estado()
+    est["grupos"]["g2"] = {"ultima_data_hora": "09/11/2026 09:00", "ultimo_data_id": "m0"}
+    db, enviados, sleeps, est = _rodar(zap, reg, monkeypatch, volta_apos=0, fora_na_partida=False,
+                                       est=est, grupos=("g1", "g2"), falhas_nextval=3)
+    ev = db.eventos
+    for i, e in enumerate(ev):
+        if e == "id_falhou":
+            prox = ev.index("disponivel", i)
+            assert not [x for x in ev[i:prox] if x.startswith("abrir:")], ev
+    assert ev.count("id_falhou") == 3 and ev.count("disponivel") == 3
+    assert [s for s in sleeps if s == 60] == [60] * 3
+    # g1 e g2 saem cada um com seu id, uma vez so, depois do banco voltar
+    assert sorted(linha["ID_OFERTA"] for linha in reg.csv) == [46100, 46101]
+    assert len(enviados) == 2 and "voltou" in enviados[1][2]
 
 
 def test_fora02_04_banco_volta_mesma_mensagem_com_id_novo_e_voltou(zap, reg, monkeypatch, capsys):

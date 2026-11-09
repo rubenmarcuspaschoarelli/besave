@@ -9,7 +9,7 @@ T1 → T2 → T3
 T4
 
 ### Phase 3: Partida, reinício e docs
-T5 → T6 → T7
+T5 → T6 → T7 → T8
 
 ```
 T1 → T2
@@ -18,6 +18,7 @@ T3 → T4
 T4 → T5
 T5 → T6
 T6 → T7
+T7 → T8
 ```
 
 ## Task Breakdown
@@ -83,6 +84,15 @@ T6 → T7
 **Reqs**: spec saída 5
 **Tests**: none (docs)
 **Gate**: `pytest` + `ruff check vps/ tests/` (em `tools/`)
+- [x] Done
+
+### T8: Correcoes da 1a verificacao
+**What**: "voltou" so depois do 1o id do NEXTVAL (nao com o SELECT 1); resgate que falha refaz o resgate antes do rodizio; testes de NEXTVAL falhando com banco respondendo e de banco caindo no resgate com 2 grupos; docstring do main.py.
+**Where**: `tools/capture-chat-groups/wa/monitor.py`
+**Depends on**: T7
+**Reqs**: FORA-02, FORA-03
+**Tests**: `tools/tests/test_id_sequence_whatsapp.py`
+**Gate**: `pytest` (em `tools/`)
 - [x] Done
 
 ## Test Coverage Matrix

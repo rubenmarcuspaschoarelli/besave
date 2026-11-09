@@ -105,6 +105,7 @@ class VigiaBanco:
         self.enviar = enviar or enviar_telegram
         self.alertado_em = None          # instante do ultimo aviso/lembrete; None = banco ok
         self.desde = None                # inicio da ocorrencia
+        self.ids_na_queda = 0            # ids do NEXTVAL ja entregues quando o banco caiu
 
     _avisar = VigiaCaptura._avisar
 
