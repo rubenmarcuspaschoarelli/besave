@@ -1,14 +1,16 @@
 # BSV-56 Validation — PASS
 
-**Veredito: PASS** (3ª verificação, ciclo 3 de 3). Todos os critérios de aceite da spec do dono têm teste com o valor que a
+**Veredito: PASS** (3ª verificação, ciclo 3 de 3, mais a rodada T10 só sobre SQL e README, também PASS). Todos os critérios de aceite da spec do dono têm teste com o valor que a
 spec manda. O sensor de discriminação não deixou mutante não equivalente vivo: os sobreviventes das rodadas anteriores
 (M19, M27, N1, N4) e a regressão do "voltou" cedo morrem. Os gates do job `tools` passam. **O merge continua bloqueado
 pela execução real do dono na inst1** (seção final).
 
 **Date**: 2026-11-09
 **Spec**: `docs/specs/BSV-56.md` (fonte da verdade) e `.specs/features/BSV-56/spec.md`
-**Diff range**: `origin/develop...HEAD`, 9 commits (`8cba013`..`9bde70a`): 7 da implementação, `7a1a1ec` (T8, correções da
-1ª verificação) e `9bde70a` (T9, só testes; `git diff 7a1a1ec..9bde70a -- tools/capture-chat-groups tools/vps` vazio)
+**Diff range**: `origin/develop...HEAD`, 11 commits (`8cba013`..`ef456d1`): 7 da implementação, `7a1a1ec` (T8, correções da
+1ª verificação), `9bde70a` (T9, só testes; `git diff 7a1a1ec..9bde70a -- tools/capture-chat-groups tools/vps` vazio),
+`4ff6e47` (este `validation.md`) e `ef456d1` (T10: SQL reexecutável e roteiro real no README; `git diff 9bde70a..ef456d1`
+não toca em `wa/` nem nos `.sh`)
 **Verifier**: Verifier independente (sub-agente); autor ≠ verificador. Worktree nasceu de `develop`
 (`git merge-base --is-ancestor origin/develop HEAD` OK).
 
@@ -27,6 +29,7 @@ pela execução real do dono na inst1** (seção final).
 | T7 README | ✅ Done | `tools/vps/README.md:315-345`, `tools/capture-chat-groups/RESUMO.md:5-8` |
 | T8 correções da 1ª verificação | ✅ Done | "voltou" só depois do 1º id; resgate refeito antes do rodízio |
 | T9 testes da 2ª verificação | ✅ Done | N1 e N4 cobertos |
+| T10 SQL reexecutável e roteiro real | ✅ Done | rodada T10 abaixo |
 
 ---
 
@@ -95,19 +98,23 @@ pela execução real do dono na inst1** (seção final).
 
 | Item | Linha | Resultado |
 | --- | --- | --- |
-| `START WITH` = `GREATEST(NVL(MAX fila,0), NVL(MAX OFERTA,0)) + 1`, por `EXECUTE IMMEDIATE` | 19-31 | ✅ |
-| `INCREMENT BY 1 NOCACHE NOCYCLE` | 28-29 | ✅ |
-| Trigger `BEFORE INSERT … FOR EACH ROW WHEN (NEW.ID_OFERTA IS NULL)`, `:NEW.ID_OFERTA := SQ_OFERTA_FILA.NEXTVAL` | 35-42 | ✅ |
-| Conferência (`LAST_NUMBER > maior` e trigger `ENABLED`, senão `RAISE_APPLICATION_ERROR(-20056)`) | 44-67 | ✅ |
-| Reversão comentada (`DROP TRIGGER`, `DROP SEQUENCE`) | 69-71 | ✅ |
+| Cabeçalho: aplicar como `BESAVE` (o robô também conecta como `BESAVE`); produção Oracle Autonomous (`bsvdb_tp`) | 4-6 | ✅ |
+| Reexecutável: sequence existente (`COUNT(*)` em `USER_SEQUENCES`) → só imprime o `LAST_NUMBER`, sem `CREATE`/`ALTER`/`DROP` | 25-34, 44-46 | ✅ |
+| `START WITH` = `GREATEST(NVL(MAX fila,0), NVL(MAX OFERTA,0)) + 1`, por `EXECUTE IMMEDIATE` (só no `ELSE`) | 34-43 | ✅ |
+| `INCREMENT BY 1 NOCACHE NOCYCLE` | 41-42 | ✅ |
+| Trigger `CREATE OR REPLACE … BEFORE INSERT … FOR EACH ROW WHEN (NEW.ID_OFERTA IS NULL)`, `:NEW.ID_OFERTA := SQ_OFERTA_FILA.NEXTVAL` (idêntica a `9bde70a`) | 48-56 | ✅ |
+| Conferência (`LAST_NUMBER > maior` e trigger `ENABLED`, senão `RAISE_APPLICATION_ERROR(-20056)`), **idêntica a `9bde70a`** (diff do bloco vazio) | 58-81 | ✅ |
+| Reversão comentada (`DROP TRIGGER`, `DROP SEQUENCE`) | 83-85 | ✅ |
 | SP `STP_OFERTA_FILA_CAPTURA_INSERT` não muda | ausente do arquivo | ✅ |
 
-Validade em Oracle XE 11.2, até onde dá sem banco: subconsulta escalar em `SELECT … INTO … FROM DUAL` no PL/SQL é válida;
-`WHEN (NEW.ID_OFERTA IS NULL)` sem dois-pontos e `:NEW` no corpo estão certos; `SQ.NEXTVAL` como expressão PL/SQL é aceito
-desde o 11.1; a trigger é criada depois da sequence; `LAST_NUMBER` é o próximo valor exato porque a sequence é `NOCACHE`;
-terminadores `/` certos para SQL*Plus/SQL Developer. Observações (não bloqueiam): o script não é reexecutável (ORA-00955
-no `CREATE SEQUENCE` na 2ª vez; aplicar a reversão antes) e `SQ_OFERTA_FILA` vai sem schema (o usuário do robô precisa ser
-`BESAVE` ou ter grant + sinônimo).
+Validade em Oracle Autonomous, até onde dá sem banco: `SELECT COUNT(*) INTO …` em `USER_SEQUENCES` nunca levanta
+`NO_DATA_FOUND`; o `SELECT LAST_NUMBER INTO` só roda com a linha existente; subconsulta escalar dentro de `GREATEST(NVL(...))`
+em `SELECT … INTO … FROM DUAL` é válida; DDL por `EXECUTE IMMEDIATE` em bloco anônimo é permitida (o dono do schema cria a
+sequence); `WHEN (NEW.ID_OFERTA IS NULL)` sem dois-pontos e `:NEW` no corpo estão certos; `SQ.NEXTVAL` como expressão
+PL/SQL é aceito; a trigger é criada depois da sequence; `LAST_NUMBER` é o próximo valor exato porque a sequence é
+`NOCACHE`; terminadores `/` certos. Na 2ª execução seguida: o bloco 1 só imprime, a trigger é substituída por ela mesma e o
+bloco 3 confere de novo; nenhum número da sequence é consumido (não há `NEXTVAL` no script fora do corpo da trigger). O robô
+conecta como `BESAVE`, então `SQ_OFERTA_FILA` sem schema resolve sem grant nem sinônimo.
 
 ---
 
@@ -244,15 +251,54 @@ Nenhum aberto. Itens para o PR (não bloqueiam a validação):
 
 ## Execução real (dono) — bloqueia o merge
 
-Na inst1, pela ordem de virada (`tools/vps/README.md:329-339`):
+Na inst1, pela ordem de virada (`tools/vps/README.md:329-338`) e a conferência real (`tools/vps/README.md:340-349`):
 1. 1ª captura com o id inicial da sequence (o `DBMS_OUTPUT` do bloco 1 mostra o `START WITH`) e `db=ok`;
 2. `INSERT` de teste com `ID_OFERTA` nulo numa transação, `ROLLBACK` no fim (prova a trigger);
-3. `KILL SESSION` da conexão do robô + `systemctl restart` com `kill -9` no `run_captura.py`: sobe sem conferir contador, o
-   id seguinte vem da sequence sem repetir; no Telegram, 1 "fora" e 1 "voltou", este só depois da 1ª captura;
-4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram;
-5. conferir que o usuário do robô enxerga `SQ_OFERTA_FILA` sem schema (se não for `BESAVE`, grant + sinônimo).
+3. `KILL SESSION` da conexão do robô + `kill -9` no `run_captura.py` (a unidade sobe de novo): sobe sem conferir contador,
+   **sem id repetido, sem aviso de "fora"** (o `proximo_id` reconecta sozinho);
+4. banco fora de verdade: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois `-D` com a mesma regra.
+   Esperado: 1 "Banco Oracle fora" no Telegram, nada novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai
+   com id novo e chega o "voltou";
+5. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
+
+Riscos do item 4 para o dono observar (não verificáveis sem banco; não bloqueiam a validação):
+- **`DROP` não derruba a conexão aberta, ele a congela.** `wa/oracle_db.py` não define `call_timeout` nem `expire_time`;
+  com a regra ativa, o `NEXTVAL` numa conexão já estabelecida pode ficar bloqueado até o timeout de retransmissão do TCP do
+  Linux (~15 min com `tcp_retries2` padrão), em vez de falhar. Aí, em ~3 min não chega o "fora" e, ao tirar a regra, a chamada
+  continua sem "fora" nem "voltou". Se acontecer: manter o `DROP` até o "fora" aparecer, ou conferir
+  `retry_count`/`connect_timeout`/`expire_time` no `tnsnames.ora` do wallet. É comportamento do teste, não regressão da
+  BSV-56; se o dono quiser o "fora" em minutos, vale um ticket para `call_timeout`.
+- **"A mesma mensagem"** só existe se chegar oferta durante a janela: sem mensagem, nada é numerado e nada avisa (o `NEXTVAL`
+  só é pedido quando há o que gravar).
+
+Regra 3 da spec, para o PR: o robô das lojas lê a fila desde 0 no modo monitor em `tools/capture-store-pages/main.py:968`
+(a spec cita `:807`).
 
 Evidência redigida pela regra 11 antes do commit.
+
+---
+
+## Rodada T10 (`ef456d1`, só SQL e README) — PASS
+
+| Item pedido | Evidência | Resultado |
+| --- | --- | --- |
+| (a) bloco 1 reexecutável: sequence existente não é criada nem alterada, imprime `LAST_NUMBER` e segue; 2ª execução sem erro e sem mudar a sequence | SQL `:25-46`; trigger `CREATE OR REPLACE` `:49`; `tools/tests/test_sql_sequence.py:56-68` (`CREATE`/`ALTER`/`DROP` ausentes do ramo "existe", `count("CREATE SEQUENCE") == 1`, sem `ALTER SEQUENCE`) | ✅ |
+| (b) bloco 3 inalterado desde `9bde70a` e barrando sequence ≤ maior id | `diff` do bloco `-- 3. Conferencia` entre `9bde70a` e `ef456d1` vazio; `IF v_proximo > v_maior AND v_status = 'ENABLED'`, senão `RAISE_APPLICATION_ERROR` (`:73-78`) | ✅ |
+| (c) cabeçalho: produção Oracle Autonomous (`bsvdb_tp`), não XE 11.2 | SQL `:4-6` | ✅ |
+| (d) PL/SQL válido para Autonomous (sem banco) | seção SQL acima | ✅ |
+| README sem grant/sinônimo; robô conecta como `BESAVE` | `tools/vps/README.md:333-334`; busca por grant/sinônimo/synonym sem resultado | ✅ |
+| README: `KILL SESSION` + `kill -9` esperando só "sem id repetido" (sem "fora") | `tools/vps/README.md:343-345` | ✅ |
+| README: teste real com `iptables` por ~3 min e `-D`; 1 "fora", nada no CSV, marcador parado; ao liberar, a mesma mensagem com id novo e o "voltou" | `tools/vps/README.md:346-348` | ✅ (riscos na seção de execução real) |
+
+Mutante T10 (worktree temporário em `C:\Users\REDACTED\AppData\Local\Temp\claude\…\scratchpad\vrf`, removido; sem `git stash`):
+
+| # | Arquivo:linha | Mutação | Resultado |
+| --- | --- | --- | --- |
+| S1 | `BSV-56_sequence_id_oferta.sql:30-44` | sem `COUNT`/`IF`/`ELSE`/`END IF`; `CREATE SEQUENCE` incondicional | ✅ morto (`test_sql_sequence.py::test_sql_reexecutavel_nao_recria_sequence_existente`) |
+
+Gates T10: `cd tools && python -m pytest -q tests/test_sql_sequence.py` → `7 passed`; `python -m ruff check vps/ tests/` →
+`All checks passed!`; `shellcheck vps/*.sh` → rc 0. O diff do T10 não toca em `.sh` nem em código Python de produção; a
+suíte inteira (410 testes) rodou verde sobre `9bde70a`. `git status --porcelain` da árvore real vazio antes e depois.
 
 ---
 
@@ -263,9 +309,10 @@ Evidência redigida pela regra 11 antes do commit.
 **Spec-anchored check**: 20/20 critérios automatizáveis com teste e valor exato; nenhuma lacuna de precisão aberta.
 **Sensor**: rodada 3 com 8/8 mortos (M19, M27, "voltou" cedo, N1, N4 e controles); 45 mutações nas 3 rodadas, sobreviventes
 anteriores fechados por T8 e T9; N5/N7 equivalentes na prática.
-**Gate**: unittest 15 OK; pytest 410 passed; ruff OK; shellcheck OK.
+**Gate**: unittest 15 OK; pytest 410 passed (sobre `9bde70a`); T10: `test_sql_sequence.py` 7 passed, ruff OK, shellcheck OK.
 
 **What works**: id pela sequence nos dois caminhos; banco fora sem gravar nem mover marcador; espera de 60 s; um aviso por
 ocorrência, lembrete aos 120 min e "voltou" só depois de um id novo (sem alternar com ORA-02289, inclusive depois de ids já
 entregues); resgate com banco fora espera e se refaz antes do rodízio; partida sem `checa_contador.py` com o comando montado
-inteiro; reinício só por `Grupo aberto`; SQL conforme a spec; regra 3 confirmada.
+inteiro; reinício só por `Grupo aberto`; SQL conforme a spec e reexecutável (mutante S1 morto); regra 3 confirmada
+(`tools/capture-store-pages/main.py:968`).
