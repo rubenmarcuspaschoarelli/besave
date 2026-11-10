@@ -1,8 +1,13 @@
 -- =============================================================================
 -- BSV-56: ID_OFERTA gerado pelo banco (sequence + trigger) na OFERTA_FILA_CAPTURA
 --
--- Aplicar como BESAVE (dono da tabela), COM O ROBO DO WHATSAPP PARADO, no
--- SQL*Plus / SQL Developer. Oracle XE 11.2.
+-- Aplicar como BESAVE (dono da tabela; o robo tambem conecta como BESAVE), COM O
+-- ROBO DO WHATSAPP PARADO, no SQL*Plus / SQL Developer. Producao: Oracle
+-- Autonomous (bsvdb_tp).
+--
+-- REEXECUTAVEL: se SQ_OFERTA_FILA ja existe, o bloco 1 nao recria (so imprime o
+-- LAST_NUMBER); a trigger e CREATE OR REPLACE. Rodar duas vezes nao da erro nem
+-- muda a sequence; a conferencia (bloco 3) continua barrando sequence <= maior id.
 --
 --   * SQ_OFERTA_FILA: o robo pede NEXTVAL ANTES de salvar a imagem (o id e o
 --     nome do arquivo). START WITH = maior ID_OFERTA ja usado (fila ou OFERTA) + 1.
@@ -16,18 +21,27 @@
 SET SERVEROUTPUT ON
 
 -- 1. Sequence. START WITH exige literal: calcula e cria por EXECUTE IMMEDIATE.
+--    Ja existe -> nao recria nem altera; so informa o LAST_NUMBER (proximo valor, NOCACHE).
 DECLARE
   v_inicio NUMBER;
+  v_existe NUMBER;
+  v_ultimo NUMBER;
 BEGIN
-  SELECT GREATEST(
-           NVL((SELECT MAX(ID_OFERTA) FROM OFERTA_FILA_CAPTURA), 0),
-           NVL((SELECT MAX(ID_OFERTA) FROM OFERTA), 0)
-         ) + 1
-    INTO v_inicio
-    FROM DUAL;
-  EXECUTE IMMEDIATE 'CREATE SEQUENCE SQ_OFERTA_FILA START WITH ' || TO_CHAR(v_inicio)
-                 || ' INCREMENT BY 1 NOCACHE NOCYCLE';
-  DBMS_OUTPUT.PUT_LINE('SQ_OFERTA_FILA criada com START WITH ' || v_inicio);
+  SELECT COUNT(*) INTO v_existe FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SQ_OFERTA_FILA';
+  IF v_existe > 0 THEN
+    SELECT LAST_NUMBER INTO v_ultimo FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SQ_OFERTA_FILA';
+    DBMS_OUTPUT.PUT_LINE('SQ_OFERTA_FILA ja existe (LAST_NUMBER ' || v_ultimo || '); nao recriada.');
+  ELSE
+    SELECT GREATEST(
+             NVL((SELECT MAX(ID_OFERTA) FROM OFERTA_FILA_CAPTURA), 0),
+             NVL((SELECT MAX(ID_OFERTA) FROM OFERTA), 0)
+           ) + 1
+      INTO v_inicio
+      FROM DUAL;
+    EXECUTE IMMEDIATE 'CREATE SEQUENCE SQ_OFERTA_FILA START WITH ' || TO_CHAR(v_inicio)
+                   || ' INCREMENT BY 1 NOCACHE NOCYCLE';
+    DBMS_OUTPUT.PUT_LINE('SQ_OFERTA_FILA criada com START WITH ' || v_inicio);
+  END IF;
 END;
 /
 

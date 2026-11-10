@@ -9,7 +9,7 @@ T1 → T2 → T3
 T4
 
 ### Phase 3: Partida, reinício e docs
-T5 → T6 → T7 → T8 → T9
+T5 → T6 → T7 → T8 → T9 → T10
 
 ```
 T1 → T2
@@ -20,6 +20,7 @@ T5 → T6
 T6 → T7
 T7 → T8
 T8 → T9
+T9 → T10
 ```
 
 ## Task Breakdown
@@ -103,6 +104,15 @@ T8 → T9
 **Reqs**: FORA-02
 **Tests**: `tools/tests/test_id_sequence_whatsapp.py`, `tools/tests/test_sequence_oracle.py`
 **Gate**: `pytest` (em `tools/`)
+- [x] Done
+
+### T10: SQL reexecutavel e roteiro real
+**What**: bloco 1 nao recria a sequence existente (so informa o LAST_NUMBER); cabecalho com producao Autonomous; README sem grant/sinonimo, KILL SESSION so "sem id repetido", teste real de banco fora com iptables.
+**Where**: `tools/capture-chat-groups/sql/BSV-56_sequence_id_oferta.sql`
+**Depends on**: T9
+**Reqs**: SQL-01, SQL-03
+**Tests**: `tools/tests/test_sql_sequence.py`
+**Gate**: `pytest tests/test_sql_sequence.py` (em `tools/`)
 - [x] Done
 
 ## Test Coverage Matrix

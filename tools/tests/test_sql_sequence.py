@@ -11,7 +11,7 @@ UNICO = re.sub(r"\s+", " ", CODIGO).upper()
 
 def _bloco_da_sequence():
     i = UNICO.index("DECLARE")
-    return UNICO[i:UNICO.index("END;", i)]
+    return UNICO[i:UNICO.index("END IF; END;", i)]
 
 
 def test_sql01_start_with_pelo_maior_das_duas_tabelas():
@@ -51,3 +51,18 @@ def test_sql03_reversao_presente_e_comentada():
 
 def test_sql_sp_nao_muda():
     assert "STP_OFERTA_FILA_CAPTURA_INSERT" not in UNICO
+
+
+def test_sql_reexecutavel_nao_recria_sequence_existente():
+    # 2a execucao: com a sequence existente o CREATE nao roda (so informa o LAST_NUMBER)
+    bloco = _bloco_da_sequence()
+    m = re.search(r"SELECT COUNT\(\*\) INTO V_EXISTE FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SQ_OFERTA_FILA'; "
+                  r"IF V_EXISTE > 0 THEN (.*?) ELSE (.*)$", bloco)
+    assert m, bloco
+    existe, nova = m.group(1), m.group(2)
+    assert "SELECT LAST_NUMBER INTO V_ULTIMO FROM USER_SEQUENCES" in existe
+    assert "CREATE" not in existe and "ALTER" not in existe and "DROP" not in existe
+    assert "EXECUTE IMMEDIATE 'CREATE SEQUENCE SQ_OFERTA_FILA" in nova
+    assert UNICO.count("CREATE SEQUENCE") == 1           # nenhum CREATE fora do ELSE
+    assert "ALTER SEQUENCE" not in UNICO
+    assert "CREATE OR REPLACE TRIGGER TRG_OFERTA_FILA_ID" in UNICO

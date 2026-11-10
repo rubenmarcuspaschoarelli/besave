@@ -330,10 +330,23 @@ mensagem sai com id novo. Sem o bloco `db` ligado no `config.json` o robô nem s
 
 1. Parar o robô do WhatsApp (`systemctl --user stop besave-captura-whatsapp`) e conferir que nenhum
    `run_captura.py` está vivo (`pgrep -af run_captura.py`).
-2. Aplicar `tools/capture-chat-groups/sql/BSV-56_sequence_id_oferta.sql` como `BESAVE`; o bloco de conferência
-   imprime `OK: proximo id N > maior existente M`.
+2. Aplicar `tools/capture-chat-groups/sql/BSV-56_sequence_id_oferta.sql` como `BESAVE` (o robô também conecta
+   como `BESAVE`, dono da tabela e da sequence); o bloco de conferência imprime
+   `OK: proximo id N > maior existente M`. O arquivo é reexecutável: com a sequence já criada ele só informa o
+   `LAST_NUMBER` e confere de novo.
 3. Atualizar o código na inst1 (branch da PR) e subir o robô.
 4. Conferir no log a 1ª captura com id = valor inicial da sequence e `db=ok`.
+
+**Conferência real depois da virada** (bloqueia o merge da PR):
+
+1. `INSERT` de teste com `ID_OFERTA` nulo numa transação (`ROLLBACK` no fim): a trigger preenche o id.
+2. `KILL SESSION` da conexão do robô e `kill -9` no `run_captura.py` (a unidade sobe de novo): o robô sobe sem
+   conferência de contador e o id seguinte vem da sequence, **sem id repetido**. Não há aviso de "fora": o
+   `proximo_id` reconecta sozinho.
+3. Banco fora de verdade, de dia: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois
+   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora" no Telegram, nada
+   novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e chega o "voltou".
+4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
 
 Não pode haver dois robôs do WhatsApp (PC e VPS) em versões diferentes: o antigo numeraria pelo arquivo e
 colidiria com a sequence.
