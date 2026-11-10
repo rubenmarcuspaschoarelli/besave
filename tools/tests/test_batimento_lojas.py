@@ -3,6 +3,7 @@ Sem Playwright nem Oracle; relogio e gravacao controlados."""
 import argparse
 import json
 import os
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -113,7 +114,26 @@ def test_bat08_navegador_fechado_nao_renova(lojas, gravados, monkeypatch, mensag
     assert gravados == []
 
 
-def _monitorar(lojas, monkeypatch, agora, filas, retidas=0):
+UPTIME_ALTO = 10_000.0   # > 1 h de maquina ligada: e "hora da validade"
+UPTIME_BAIXO = 100.0     # recem-ligada: a 1a validade ainda nao venceu
+
+
+class _Tempo:
+    """Proxy do modulo `time` do robo com `monotonic` fixo; o resto delega ao `time` real."""
+
+    def __init__(self, monotonic):
+        self._mono = monotonic
+
+    def monotonic(self):
+        return self._mono
+
+    def __getattr__(self, nome):
+        return getattr(time, nome)
+
+
+def _monitorar(lojas, monkeypatch, agora, filas, retidas=0, uptime=UPTIME_ALTO):
+    monkeypatch.setattr(lojas, "time", _Tempo(uptime))
+
     class Rel(datetime):
         @classmethod
         def now(cls, tz=None):
@@ -148,6 +168,13 @@ def test_bat07_varredura_com_fila_vazia_renova_e_dorme_com_prazo(lojas, gravados
     assert fases[:3] == ["varredura", "validade", "dormindo"]   # a varredura de validade tambem bate
     # prazo = acordar (agora + 3 min) + 10 min
     assert gravados[2]["prazo"] == iso(T0 + timedelta(minutes=13))
+
+
+def test_bat07_uptime_baixo_pula_validade_e_so_bate_varredura_e_dormindo(lojas, gravados, monkeypatch):
+    # depois de um reboot a 1a validade so roda com 1 h de uptime (comportamento de producao, nao muda)
+    pausas = _monitorar(lojas, monkeypatch, datetime(2026, 11, 10, 12, 0), [[]], uptime=UPTIME_BAIXO)
+    assert pausas == [180]
+    assert [g["fase"] for g in gravados][:2] == ["varredura", "dormindo"]
 
 
 def test_bat05_madrugada_prazo_e_acordar_mais_dez_minutos(lojas, gravados, monkeypatch):
