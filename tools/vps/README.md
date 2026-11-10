@@ -344,8 +344,11 @@ mensagem sai com id novo. Sem o bloco `db` ligado no `config.json` o robô nem s
    conferência de contador e o id seguinte vem da sequence, **sem id repetido**. Não há aviso de "fora": o
    `proximo_id` reconecta sozinho.
 3. Banco fora de verdade, de dia: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois
-   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora" no Telegram, nada
-   novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e chega o "voltou".
+   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora (DPI-1067)" no
+   Telegram em ~1 min depois da 1ª oferta da janela (30 s de `db.call_timeout_segundos` + a espera), nada novo no
+   CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e chega o "voltou". Sem o
+   `call_timeout`, a chamada congelaria até o timeout do TCP (~15 min). Se nenhuma oferta chegar na janela, nada
+   é numerado e nada avisa.
 4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
 
 Não pode haver dois robôs do WhatsApp (PC e VPS) em versões diferentes: o antigo numeraria pelo arquivo e

@@ -9,7 +9,7 @@ T1 → T2 → T3
 T4
 
 ### Phase 3: Partida, reinício e docs
-T5 → T6 → T7 → T8 → T9 → T10
+T5 → T6 → T7 → T8 → T9 → T10 → T11
 
 ```
 T1 → T2
@@ -21,6 +21,7 @@ T6 → T7
 T7 → T8
 T8 → T9
 T9 → T10
+T10 → T11
 ```
 
 ## Task Breakdown
@@ -113,6 +114,15 @@ T9 → T10
 **Reqs**: SQL-01, SQL-03
 **Tests**: `tools/tests/test_sql_sequence.py`
 **Gate**: `pytest tests/test_sql_sequence.py` (em `tools/`)
+- [x] Done
+
+### T11: call_timeout em toda conexao
+**What**: `Connection.call_timeout` (ms) depois de cada connect/reconnect, de `db.call_timeout_segundos` (padrao 30); tempo esgotado (DPI-1067/ORA-3156 thick, DPY-4024 thin) = banco fora: NEXTVAL vira ErroSemId sem reconectar, insert falha pelo caminho de sempre; README do teste com iptables.
+**Where**: `tools/capture-chat-groups/wa/oracle_db.py`
+**Depends on**: T10
+**Reqs**: SEQ-04, FORA-01, FORA-02
+**Tests**: `tools/tests/test_call_timeout.py`
+**Gate**: `pytest` (em `tools/`)
 - [x] Done
 
 ## Test Coverage Matrix

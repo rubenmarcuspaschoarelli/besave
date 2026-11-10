@@ -170,6 +170,20 @@ def _erro_conexao(exc) -> bool:
     return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
 
 
+# Tempo de chamada esgotado (Connection.call_timeout): DPI-1067 "call timeout of N ms
+# exceeded with ORA-3156" no modo thick, DPY-4024 no thin. A conexao continua utilizavel
+# (se nao estiver, o driver devolve DPI-1080, que ja e erro de conexao). Rede caida sem
+# RST (DROP) congela a chamada em vez de falhar; o call_timeout transforma isso em erro
+# em segundos. NAO reconecta aqui: reconectar com a rede caida trava de novo. E banco
+# fora: o NEXTVAL vira ErroSemId e o insert falha pelo caminho de sempre (BSV-56).
+_ERROS_TEMPO = re.compile(r"DPI-1067|DPY-4024|ORA-0?3156")
+CALL_TIMEOUT_PADRAO_S = 30
+
+
+def _erro_tempo(exc) -> bool:
+    return bool(_ERROS_TEMPO.search(str(exc)))
+
+
 # --- Conversores de tipo (str do CSV -> tipo Oracle) ------------------------
 def _preco_para_numero(s):
     """
@@ -259,6 +273,15 @@ class OracleDB:
             return ESPERA_PADRAO_S
         return v if v > 0 else ESPERA_PADRAO_S
 
+    @property
+    def call_timeout_ms(self) -> int:
+        """Limite de cada ida ao banco (db.call_timeout_segundos, padrao 30), em ms."""
+        try:
+            v = float(self._cfg.get("call_timeout_segundos", CALL_TIMEOUT_PADRAO_S))
+        except (TypeError, ValueError):
+            v = CALL_TIMEOUT_PADRAO_S
+        return int((v if v > 0 else CALL_TIMEOUT_PADRAO_S) * 1000)
+
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
         # 'dsn' (alias do tnsnames.ora; banco com wallet) vence host/porta/servico.
@@ -298,7 +321,10 @@ class OracleDB:
                 password=self._cfg.get("senha"),
                 dsn=dsn,
             )
-            print(f"[oracle] Conectado ({modo}) em {dsn}.")
+            # Toda conexao (partida e reconexao passam aqui) com tempo maximo por chamada:
+            # vale para o NEXTVAL, o SELECT 1 e a SP de insert (BSV-56).
+            self._conn.call_timeout = self.call_timeout_ms
+            print(f"[oracle] Conectado ({modo}) em {dsn}; call_timeout {self.call_timeout_ms} ms.")
             self._sp_tem_ds_loja = self._sp_aceita("P_DS_LOJA")
             if not self._sp_tem_ds_loja:
                 print(f"[oracle] {NOME_SP} ainda nao tem P_DS_LOJA: a loja da "
@@ -488,7 +514,7 @@ class OracleDB:
                       f"{out.get('PV_ERRO')}")
             return ok
         except Exception as e:  # noqa: BLE001
-            self.sem_conexao = _erro_conexao(e)
+            self.sem_conexao = _erro_conexao(e) or _erro_tempo(e)
             print(f"[oracle] Erro ao inserir ID {linha.get('ID_OFERTA')}: {e}")
             try:
                 self._conn.rollback()
