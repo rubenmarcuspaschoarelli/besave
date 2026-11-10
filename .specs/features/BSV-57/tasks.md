@@ -28,7 +28,7 @@ T5 → T6
 **Reqs**: BAT-01, BAT-02, BAT-03, BAT-04, BAT-05, BAT-06
 **Tests**: `tools/tests/test_batimento_whatsapp.py`
 **Gate**: `pytest tests/test_batimento_whatsapp.py` (em `tools/`)
-- [ ] Done
+- [x] Done
 
 ### T2: Batimento das lojas
 **What**: `core/batimento.py` e ligação em `_processar_lote` e `_monitorar`: linha concluída, varredura, fila vazia, pausa; exceção de navegador não renova; sono grava prazo.
