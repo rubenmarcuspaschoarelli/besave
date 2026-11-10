@@ -55,7 +55,7 @@ T5 → T6
 **Reqs**: VIG-01, VIG-02, VIG-03, VIG-04, VIG-05, VIG-06, VIG-07, VIG-08, VIG-09, VIG-10
 **Tests**: `tools/tests/test_vigia_robos.py`
 **Gate**: `pytest tests/test_vigia_robos.py`
-- [ ] Done
+- [x] Done
 
 ### T5: Mensagens e rotação de logs
 **What**: texto do aviso, redação de token e URL, credencial do `worker.env`, rotação diária.
