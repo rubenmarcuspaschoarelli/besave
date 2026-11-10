@@ -37,7 +37,7 @@ T5 → T6
 **Reqs**: BAT-05, BAT-06, BAT-07, BAT-08
 **Tests**: `tools/tests/test_batimento_lojas.py`
 **Gate**: `pytest tests/test_batimento_lojas.py`
-- [ ] Done
+- [x] Done
 
 ### T3: Scope das lojas
 **What**: trecho comum `scope.sh`, `iniciar_lojas.sh`, unidade das lojas com `ExecStop` e `TimeoutStopSec=45`.
