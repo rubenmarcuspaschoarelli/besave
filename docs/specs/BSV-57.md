@@ -1,7 +1,8 @@
 # BSV-57 · VPS: vigia externo dos robôs (batimento, reinício e Telegram)
 
 **Papel:** Python (stdlib) + systemd · **Pasta:** `tools/vps/` (+ uma função de batimento em
-`tools/capture-chat-groups/` e `tools/capture-store-pages/`, só a escrita do arquivo) ·
+`tools/capture-chat-groups/` e `tools/capture-store-pages/`, só a escrita do arquivo e, no WhatsApp, a
+conta de grupos falhando) ·
 **Depende de:** BSV-54, **BSV-55** (sem ela, reiniciar o robô das lojas o deixa parado na pergunta da Shopee),
 BSV-56 (sem ela, reiniciar o WhatsApp depois de uma parada brusca esbarra no contador), **todas mergeadas em
 `develop` antes de abrir o worktree**. AD-107, AD-108; lições 11, 14, 16, 29
@@ -17,6 +18,21 @@ BSV-56 (sem ela, reiniciar o WhatsApp depois de uma parada brusca esbarra no con
   um só, `destino/log/main_monitorar.log`, aberto em `tee -a`. Nenhum dos dois tem rotação (Saída 5).
 - Com `--sem-perguntas` (BSV-55) o robô das lojas não pergunta mais nada; loja em pausa é estado normal,
   avisado pelo próprio robô. A BSV-56 tira a frase "Retomando contador" e o `ABORTADO: contador atrasado`.
+
+**Revisão 10/11 (incidentes de 06–09/11 e virada da BSV-56):**
+- **Vivo e quebrado:** em 07/11 ~21:00 o renderer do Chromium do WhatsApp morreu (3,56 GB) e o python seguiu
+  8,5 h dando a volta do rodízio só com erro (`#side`), sem capturar nada. Um batimento gravado "a cada volta"
+  continuaria em dia e o vigia não veria nada. O batimento passa a exigir **progresso**, não só volta (Saída 1).
+- **Um grupo morto com o robô vivo:** de 06/11 08:12 a 09/11 o grupo `@achadinhoscomcarol` (renomeado no
+  WhatsApp) falhou em **todas** as voltas, ~25% do volume, sem ninguém notar. Os outros dois grupos
+  capturavam. Reiniciar não resolve: é aviso de operador por grupo (Saída 2, passo 4b).
+- **Laço de partidas:** em 08/11 o reinício das 05:30 caiu no QR e a unidade relançou o robô 84 vezes
+  (05:30→13:02), um log por partida. O passo 4 já pega o QR no log mais recente; agora também conta
+  partidas sem `Grupo aberto`, com ou sem a palavra QR (Saída 2, passo 4c).
+- A BSV-56 está em `develop`: sem contador no arquivo, partida sem conferência; "banco fora" é estado do robô
+  (avisa e espera, aviso próprio no Telegram) e **não** é robô parado.
+- O alerta de "nenhuma oferta nova há 8 h" que chega de madrugada (o WhatsApp não captura das 23h às 07h)
+  é do worker (AD-108) e continua fora desta spec (ticket próprio em `apps/worker`).
 
 ## Contexto
 Em 02–05/11 o site ficou 3 dias sem oferta nova. O Telegram avisou ("nenhuma oferta nova há 32/56/80 h",
@@ -45,9 +61,14 @@ da madrugada, **tente reiniciar e avise no Telegram**.
    ```json
    {"robo":"lojas","pid":833317,"em":"2026-11-05T12:00:00Z","prazo":"2026-11-05T12:10:00Z","fase":"varredura"}
    ```
-   - **WhatsApp:** a cada volta do rodízio.
-   - **Lojas:** a cada linha processada e a cada varredura, inclusive com a fila vazia **e com lojas em
-     pausa** (BSV-55): loja pausada não é robô parado.
+   - **WhatsApp:** a cada volta do rodízio **em que ao menos um grupo abriu** (`Grupo aberto`). Volta em que
+     todos os grupos falharam não renova o prazo (caso de 07/11). Banco fora (BSV-56) renova: o robô está
+     esperando de propósito e já avisa sozinho.
+   - **WhatsApp, por grupo:** o batimento leva `"grupos_falhando": {"<nome>": "<desde, ISO UTC>"}`, com o
+     grupo que falhou em todas as voltas desde aquele instante; sai do mapa na primeira volta em que abrir.
+   - **Lojas:** a cada linha concluída (ok, retida, pausada, rejeitada) e a cada varredura, inclusive com a
+     fila vazia **e com lojas em pausa** (BSV-55): loja pausada não é robô parado. Exceção do navegador
+     (página ou contexto fechado) não renova.
    - **Prazo:** `em` + 10 min. Antes de dormir (janela noturna, fila vazia), o robô grava
      `prazo` = hora de acordar + 10 min. É assim que a madrugada fica fora sem o vigia precisar ler a
      janela de cada robô.
@@ -63,6 +84,11 @@ da madrugada, **tente reiniciar e avise no Telegram**.
    4. Últimas linhas do log com pedido de QR ou `ABORTADO:` → **precisa de operador**: avisa, e **não**
       reinicia (reiniciar não resolve). O log lido é o **mais recente** do robô (WhatsApp: maior mtime em
       `log/run_captura_*.log`; lojas: `destino/log/main_monitorar.log`), só o fim do arquivo.
+      - **4b. Grupo morto:** grupo em `grupos_falhando` há mais de `BESAVE_GRUPO_FALHA_HORAS` (padrão 2) → aviso de operador **por grupo** ("grupo X falha em todas as voltas desde …;
+        nome mudou ou o número saiu?"), sem reinício. O robô segue sendo vigiado normalmente.
+      - **4c. Laço de partidas:** 3 ou mais logs `run_captura_*.log` criados nos últimos 30 min sem
+        `Grupo aberto` em nenhum deles → precisa de operador, mesmo sem a palavra QR. Conta pelos arquivos,
+        não pelo journal.
    5. Senão, `systemctl --user restart <unidade>` e aviso. **No máximo 2 reinícios por robô em 60 min.**
       Depois disso, só "precisa de operador" até o batimento voltar.
    6. Batimento voltou depois de um aviso → "voltou (parado por N min)".
@@ -110,6 +136,15 @@ Testes com relógio, `systemctl`, log, batimento e Telegram falsos. Nenhum espel
   velho com unidade nova → parado.
 - **Precisa de operador:** log com QR ou com `ABORTADO:` → aviso sem reinício. QR só em log anterior ao mais
   recente → não conta.
+- **Vivo e quebrado:** robô do WhatsApp dando voltas com todos os grupos falhando por 11 min → o prazo vence
+  e é **parado** (1 reinício + aviso). Uma volta com 1 grupo aberto renova. Mutante que renova em toda volta
+  falha.
+- **Grupo morto:** grupo em `grupos_falhando` há 2 h 01 min, de dia → 1 aviso de operador com o nome, sem
+  reinício; há 1 h 59 min → nada. Lembrete só depois de 2 h; grupo saiu do
+  mapa → "voltou" do grupo.
+- **Laço de partidas:** 3 logs novos em 30 min sem `Grupo aberto` e sem QR → operador, sem reinício; 2 logs →
+  nada; 3 logs com `Grupo aberto` no último → nada.
+- **Banco fora:** batimento renovado com fase de banco fora → nada do vigia (o robô avisa sozinho).
 - **Reinício diário:** `besave-reinicio-whatsapp.service` ativo e prazo vencido → nada.
 - **Pausa de loja:** log com `oracle=pausada(0)` e batimento em dia → nada.
 - **Scope:** pid do batimento fora do `cgroup.procs` do scope → parado; dentro → vivo. Cgroup falso com pids
@@ -133,12 +168,16 @@ Testes com relógio, `systemctl`, log, batimento e Telegram falsos. Nenhum espel
      python congelado **some** (só o novo aparece no scope) e o robô volta a capturar;
   2. o mesmo no WhatsApp (`kill -STOP` no `run_captura.py`) → reinício e Telegram;
   3. `systemctl --user stop` de cada unidade → nenhum aviso e nenhum religamento;
-  4. madrugada sem aviso falso e o reinício das 05:30 sem aviso do vigia (journal do vigia às 08:00);
+  4. madrugada sem aviso falso e os reinícios das 23:30 e 05:30 sem aviso do vigia (journal do vigia às 08:00);
+  4b. grupo morto: no `config.json` do WhatsApp (robô parado, com backup), trocar o nome de um grupo por um
+     inexistente, subir; em ~2 h, 1 aviso com o nome do grupo e nenhum reinício; desfazer (backup) e ver o
+     "voltou" do grupo;
   5. rotação: contagem de logs apagados no journal do vigia no 1º dia.
 
 ## Definition of done
 PR para `develop` com vigia, unidades, batimento nos dois robôs, README, testes, `validation.md` do Verifier
 independente (com sensor de discriminação), evidência da execução real redigida (regra 11) e as decisões
 propostas (10 min, 2 reinícios por hora, lembrete de 2 h, credencial do `worker.env`, scope das lojas sem
-teto, rotação 14 dias/50 MB) para o
+teto, rotação 14 dias/50 MB, batimento só com progresso, grupo morto em 2 h, laço = 3 partidas em 30 min)
+para o
 `docs/DECISOES.md`.
