@@ -126,7 +126,7 @@ def _cupom(valor, id_oferta):
         pass
     return cortado or None
 
-try:                                 # sem a lib instalada -> seguimos so com CSV
+try:                                 # sem a lib instalada -> banco fora (sem id, nada gravado)
     import oracledb
 except Exception:                    # noqa: BLE001
     oracledb = None
@@ -300,7 +300,7 @@ class OracleDB:
 
     def conectar(self):
         """Abre a conexao. Retorna True se conectou. Best-effort: em erro, loga,
-        marca habilitado=False e retorna False (a captura segue so com CSV)."""
+        marca habilitado=False e retorna False (banco fora: sem id nada e gravado, nem CSV)."""
         if not self.habilitado:
             return False
         global _client_iniciado
@@ -331,7 +331,8 @@ class OracleDB:
                       f"oferta vai so para o CSV (coluna DS_LOJA).")
             return True
         except Exception as e:  # noqa: BLE001
-            print(f"[oracle] Falha ao conectar ({e}). Seguindo so com CSV.")
+            # So o codigo: a mensagem do driver traz o endereco do banco.
+            print(f"[oracle] Falha ao conectar ({_codigo(e)}): banco fora; aguardando.")
             self.habilitado = False
             self._conn = None
             return False
@@ -444,7 +445,7 @@ class OracleDB:
         except Exception as e:  # noqa: BLE001
             if not _erro_conexao(e):
                 raise
-            print(f"[oracle] Conexao perdida ({e}). Reconectando...")
+            print(f"[oracle] Conexao perdida ({_codigo(e)}). Reconectando...")
         if not self._reconectar():
             raise ErroSemConexao("sem conexao Oracle")
         return self._executar_sp(nome, params, out_vars)

@@ -323,8 +323,9 @@ normais (id pedido e mensagem que não gravou).
 
 **Banco fora:** sem id nada é gravado (nem CSV) e o marcador do grupo não anda; nenhum grupo anda. O robô avisa no
 Telegram ("Banco Oracle fora", bloco `alerta`), lembra a cada 2 h, tenta de novo a cada `db.espera_segundos`
-(padrão 60) e, quando o banco volta, avisa "voltou" e roda o resgate (catch-up pelo marcador de cada grupo): a mesma
-mensagem sai com id novo. Sem o bloco `db` ligado no `config.json` o robô nem sobe (código de saída 4).
+(padrão 60) e, quando o banco volta, roda o resgate (catch-up pelo marcador de cada grupo): a mesma mensagem sai
+com id novo. O "voltou" chega depois do resgate de todos os grupos (se o resgate não numerou nada, no 1º id do
+rodízio), não no 1º id do 1º grupo. Sem o bloco `db` ligado no `config.json` o robô nem sobe (código de saída 4).
 
 **Ordem de virada** (uma vez, na inst1):
 
@@ -344,11 +345,17 @@ mensagem sai com id novo. Sem o bloco `db` ligado no `config.json` o robô nem s
    conferência de contador e o id seguinte vem da sequence, **sem id repetido**. Não há aviso de "fora": o
    `proximo_id` reconecta sozinho.
 3. Banco fora de verdade, de dia: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois
-   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora (DPY-4024)" no
-   Telegram em ~1 min depois da 1ª oferta da janela (30 s de `db.call_timeout_segundos` + a espera), nada novo no
-   CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e chega o "voltou". Sem o
-   `call_timeout`, a chamada congelaria até o timeout do TCP (~15 min). Se nenhuma oferta chegar na janela, nada
-   é numerado e nada avisa.
+   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora" no Telegram, nada
+   novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e, depois do resgate de
+   todos os grupos, chega o "voltou". Quanto o "fora" demora depende de como a falha chega:
+   - tempo esgotado puro (`DPY-4024`): ~1 min depois da 1ª oferta da janela (30 s de `db.call_timeout_segundos`
+     + a espera);
+   - erro de conexão (`DPY-1001` e afins): o `proximo_id` reconecta e o `connect` fica preso nas tentativas do
+     wallet (`retry_count=20` × ~18 s no `tnsnames.ora`), então o "fora" chega em até ~7 min. Manter o DROP até
+     ele chegar.
+
+   Sem o `call_timeout`, a chamada congelaria até o timeout do TCP (~15 min). Se nenhuma oferta chegar na
+   janela, nada é numerado e nada avisa.
 4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
 
 Não pode haver dois robôs do WhatsApp (PC e VPS) em versões diferentes: o antigo numeraria pelo arquivo e

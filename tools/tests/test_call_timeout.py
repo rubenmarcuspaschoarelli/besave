@@ -225,3 +225,36 @@ def test_rede_travada_vira_um_aviso_e_a_mesma_mensagem_sai_com_id_novo(zap, reg,
     assert drv.conexoes and all(c.call_timeout == 30000 for c in drv.conexoes)
     assert len(drv.conexoes) >= 2                                  # houve reconexao no caminho
     assert TOKEN not in "".join(enviados)
+
+
+# --- log de falha de conexao: so o codigo, sem o endereco do banco --------------
+
+HOST = "adb.sa-saopaulo-1.oraclecloud.com"
+QUEDA = f"DPY-6005: cannot connect to database (CONNECTION_ID=abc).\n[Errno 110] Connection timed out ({HOST}:1522)"
+
+
+def test_falha_ao_conectar_loga_so_o_codigo_e_banco_fora(novo, monkeypatch, capsys):
+    rede = Rede()
+    db, drv, oracle_db = novo(rede)
+    capsys.readouterr()
+
+    def recusa(**kw):
+        raise RuntimeError(QUEDA)
+    monkeypatch.setattr(drv, "connect", recusa)
+    rede.travadas, rede.erro = 1, "DPY-1001: not connected"
+    with pytest.raises(oracle_db.ErroSemId):
+        db.proximo_id()
+    log = capsys.readouterr().out
+    assert "Falha ao conectar (DPY-6005): banco fora; aguardando." in log
+    assert HOST not in log and "1522" not in log and "CSV" not in log
+
+
+def test_conexao_perdida_no_insert_loga_so_o_codigo(novo, capsys):
+    rede = Rede()
+    db, _, _ = novo(rede)
+    capsys.readouterr()
+    rede.travadas, rede.erro = 1, f"DPY-4011: the database or network closed the connection ({HOST})"
+    assert db.inserir_oferta({"ID_OFERTA": "46100", "DS_OFERTA": "x"}) is True
+    log = capsys.readouterr().out
+    assert "Conexao perdida (DPY-4011). Reconectando..." in log
+    assert HOST not in log

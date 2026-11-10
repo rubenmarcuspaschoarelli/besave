@@ -1115,7 +1115,8 @@ def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
     Devolve os segundos esperados.
 
     O "voltou" NAO sai aqui: o banco responder ao SELECT 1 nao prova que o NEXTVAL
-    funciona (sequence ausente, sem grant). Sai em _confirmar_volta, depois do 1o id.
+    funciona (sequence ausente, sem grant). Sai em _confirmar_volta, depois do resgate de
+    todos os grupos, se ele entregou algum id (senao, no 1o id do rodizio).
     """
     dormir = dormir or time.sleep
     agora = agora or datetime.now
@@ -1128,7 +1129,7 @@ def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
     while True:
         dormir(db.espera_segundos)
         if db.disponivel():
-            print("[monitor] Banco responde; resgate pelo marcador de cada grupo (o 'voltou' sai no 1o id).")
+            print("[monitor] Banco responde; resgate pelo marcador de cada grupo (o 'voltou' sai depois dele).")
             return (agora() - inicio).total_seconds()
         vigia_banco.falhou(motivo, agora())
 
