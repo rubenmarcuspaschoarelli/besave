@@ -137,3 +137,23 @@ def test_msg03_escalada_do_reinicio_ao_operador_avisa_a_cada_mudanca_de_acao(m):
         m.andar(minutes=5)
     assert len(m.enviados) == 3
     assert "reiniciado 1/2" in m.enviados[0] and "reiniciado 2/2" in m.enviados[1] and "operador" in m.enviados[2]
+
+
+def test_g5_avisar_redige_token_e_url_antes_de_enviar(m):
+    v.avisar(m.amb, f"falha com {TOKEN} em https://api.telegram.org/bot{TOKEN}/x")
+    assert m.enviados == ["falha com REDACTED em [url]"]
+
+
+def test_g5_log_do_vigia_redige_token(m, capsys):
+    v.log(f"erro com {TOKEN} em https://x.y/z")
+    saida = capsys.readouterr().out
+    assert TOKEN not in saida and "https://" not in saida
+
+
+def test_g5_excecao_com_token_nao_vaza_no_journal(m, monkeypatch, capsys):
+    def quebra(amb, robo, estado, agora):
+        raise RuntimeError(f"falhou {TOKEN}")
+
+    monkeypatch.setattr(v, "vigiar_robo", quebra)
+    assert m.rodar_vigia() == 0
+    assert TOKEN not in capsys.readouterr().out

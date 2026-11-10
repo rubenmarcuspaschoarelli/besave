@@ -1277,6 +1277,8 @@ def captura_msg_whatsapp(
                             page, nomes_grupos, caminho_csv, numero, estado, vistos, db, lacuna_s,
                         )
                         resgate_pendente = not feito
+                        if feito:
+                            batimento.bater("resgate")   # resgate concluido = progresso (BSV-57)
                     except oracle_db.ErroSemId as e:
                         # resgate segue pendente e roda de novo ANTES do rodizio: o marcador parou ali
                         lacuna_s += _esperar_banco(db, vigia_banco, e, batimento=batimento)

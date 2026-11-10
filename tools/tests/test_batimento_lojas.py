@@ -145,28 +145,28 @@ def test_bat07_varredura_com_fila_vazia_renova_e_dorme_com_prazo(lojas, gravados
     pausas = _monitorar(lojas, monkeypatch, datetime(2026, 11, 10, 12, 0), [[]])
     assert pausas == [180]
     fases = [g["fase"] for g in gravados]
-    assert fases[:2] == ["varredura", "dormindo"]
+    assert fases[:3] == ["varredura", "validade", "dormindo"]   # a varredura de validade tambem bate
     # prazo = acordar (agora + 3 min) + 10 min
-    assert gravados[1]["prazo"] == iso(T0 + timedelta(minutes=13))
+    assert gravados[2]["prazo"] == iso(T0 + timedelta(minutes=13))
 
 
 def test_bat05_madrugada_prazo_e_acordar_mais_dez_minutos(lojas, gravados, monkeypatch):
     pausas = _monitorar(lojas, monkeypatch, datetime(2026, 11, 10, 23, 0), [[]])
     assert pausas == [7200]
-    assert gravados[1]["fase"] == "dormindo"
-    assert gravados[1]["prazo"] == iso(T0 + timedelta(hours=2, minutes=10))
+    assert gravados[2]["fase"] == "dormindo"
+    assert gravados[2]["prazo"] == iso(T0 + timedelta(hours=2, minutes=10))
 
 
 def test_bat07_fila_so_de_loja_em_pausa_renova(lojas, gravados, monkeypatch):
     pausas = _monitorar(lojas, monkeypatch, datetime(2026, 11, 10, 12, 0), [[{"x": 1}]], retidas=2)
     assert pausas == [180]
-    assert [g["fase"] for g in gravados][:2] == ["varredura", "dormindo"]
+    assert [g["fase"] for g in gravados][:3] == ["varredura", "validade", "dormindo"]
 
 
 def test_bat07_banco_fora_na_leitura_renova(lojas, gravados, monkeypatch):
     pausas = _monitorar(lojas, monkeypatch, datetime(2026, 11, 10, 12, 0), [None])
     assert pausas == [180]
-    assert [g["fase"] for g in gravados][:2] == ["varredura", "dormindo"]
+    assert [g["fase"] for g in gravados][:3] == ["varredura", "validade", "dormindo"]
 
 
 def test_bat06_escrita_real_em_disco_e_json_valido(lojas, tmp_path, monkeypatch):

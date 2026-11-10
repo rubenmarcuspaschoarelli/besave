@@ -1003,6 +1003,7 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
             pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
+                batimento.bater('validade')  # a varredura de validade e trabalho e pode demorar (BSV-57)
                 _varrer_validade(db)
                 ult_validade = time.monotonic()
             rows = _ler_pendentes_resiliente(db, ultimo_id, args.limite, adiados)

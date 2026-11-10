@@ -430,3 +430,73 @@ def test_restart_que_falha_e_dito_na_mensagem_e_conta_no_limite(m):
     m.rodar_vigia()
     assert "restart falhou" in m.enviados[0]
     assert len(m.estado()["robos"]["lojas"]["reinicios"]) == 1
+
+
+# --- lacunas apontadas pelo Verifier (G2-G4) -----------------------------------------------------------
+
+
+def test_g2_scope_vazio_com_prazo_vencido_e_parado(m):
+    m.scope_pids("lojas", set())
+    m.bater("lojas", em=T0 - min_(11))                        # prazo vencido ha 1 min, processo sumiu
+    m.rodar_vigia()
+    assert m.restarts() == [comando_restart("lojas")]
+    assert "processo do robo sumiu" in m.enviados[0]
+
+
+def test_g2_scope_vazio_com_prazo_igual_ao_agora_nao_age(m):
+    m.scope_pids("lojas", set())
+    m.bater("lojas", em=T0 - min_(10))                        # prazo == agora
+    m.rodar_vigia()
+    assert m.restarts() == [] and m.enviados == []
+
+
+def test_g2_scope_vazio_com_prazo_no_futuro_espera(m):
+    m.scope_pids("lojas", set())
+    m.bater("lojas", em=T0 - min_(2))
+    m.rodar_vigia()
+    assert m.restarts() == [] and m.enviados == []
+
+
+def test_g3_unidade_activating_e_ignorada(m):
+    m.estados[UNIDADE["lojas"]] = "activating"
+    m.bater("lojas", em=T0 - timedelta(hours=2))
+    m.rodar_vigia()
+    assert m.restarts() == [] and m.enviados == []
+
+
+def test_g3_sem_hora_de_partida_usa_o_prazo_do_batimento_como_referencia(m):
+    m.inicio_scope.pop(SCOPE["lojas"])                        # systemctl nao informa o ActiveEnterTimestamp
+    m.bater("lojas", em=T0 - min_(15), prazo=T0 - min_(5), pid=999)    # prazo vencido ha 5 min: ainda nao > 10 min
+    m.rodar_vigia()
+    assert m.restarts() == []
+    m.bater("lojas", em=T0 - min_(25), prazo=T0 - min_(15), pid=999)   # vencido ha 15 min
+    m.rodar_vigia()
+    assert m.restarts() == [comando_restart("lojas")]
+
+
+def test_g4_mensagem_traz_a_ultima_linha_do_log_nao_a_primeira(m):
+    m.bater("lojas", em=T0 - min_(30))
+    filler = "".join(f"[10:00:00] linha de enchimento numero {i} com texto comprido para encher o log\n"
+                     for i in range(2000))
+    m.log_lojas("PRIMEIRA-LINHA-DO-ARQUIVO\n" + filler + "ULTIMA-LINHA-REAL\n")
+    assert (m.tools / "capture-store-pages" / "destino" / "log" / "main_monitorar.log").stat().st_size > 70000
+    m.rodar_vigia()
+    assert "ULTIMA-LINHA-REAL" in m.enviados[0] and "PRIMEIRA-LINHA" not in m.enviados[0]
+
+
+def test_g4_voltou_exige_batimento_posterior_a_ultima_acao_mesmo_para_o_laco(m):
+    m.so("whatsapp")
+    for atras in (25, 15, 5):
+        m.log_whatsapp(T0 - min_(atras), "partida sem grupo\n")
+    m.bater("whatsapp", em=T0 - min_(1))
+    m.rodar_vigia()                                           # laco: operador
+    assert len(m.enviados) == 1 and "partidas" in m.enviados[0]
+    m.andar(minutes=5)
+    for p in (m.tools / "capture-chat-groups" / "log").glob("*.log"):
+        p.unlink()                                            # o laco some, mas o batimento continua o mesmo
+    m.rodar_vigia()
+    assert len(m.enviados) == 1                               # sem batimento novo nao ha "voltou"
+    m.andar(minutes=1)
+    m.bater("whatsapp", em=m.t - min_(1))
+    m.rodar_vigia()
+    assert len(m.enviados) == 2 and "voltou" in m.enviados[1]

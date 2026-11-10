@@ -38,7 +38,7 @@ def bat():
     return batimento
 
 
-def _rodar(zap, monkeypatch, abre, voltas_max=8, janela_dorme_s=None, banco_fora_vezes=0):
+def _rodar(zap, monkeypatch, abre, voltas_max=8, janela_dorme_s=None, banco_fora_vezes=0, resgate_ok=False):
     """Roda captura_msg_whatsapp com 1 grupo. `abre(volta)` -> True se abre. Devolve a lista de batimentos gravados."""
     gravados = []
     n = {"volta": 0, "falhas_banco": banco_fora_vezes, "chamadas_ler": 0}
@@ -110,7 +110,7 @@ def _rodar(zap, monkeypatch, abre, voltas_max=8, janela_dorme_s=None, banco_fora
     monkeypatch.setattr(zap, "_marcar_baseline", lambda *a, **k: None)
     monkeypatch.setattr(zap, "_ids_baloes", lambda page: [])
     monkeypatch.setattr(zap, "_ler_novas_do_grupo", ler)
-    monkeypatch.setattr(zap, "_recuperar_lacuna", lambda page, nomes, csv, numero, *a, **k: (numero, True))
+    monkeypatch.setattr(zap, "_recuperar_lacuna", lambda page, nomes, csv, numero, *a, **k: (numero, resgate_ok))
     monkeypatch.setattr(zap, "_relatar_bloqueio", lambda page: None)
     monkeypatch.setattr(zap.destravar, "recarregar", lambda page: None)
     if janela_dorme_s is None:
@@ -235,3 +235,15 @@ def test_bat06_falha_de_escrita_so_loga_e_preserva_o_arquivo(bat, tmp_path, monk
     assert alvo.read_text(encoding="utf-8") == '{"antigo":1}'
     assert sorted(p.name for p in tmp_path.iterdir()) == ["batimento.json"]    # sem sobra .tmp
     assert "OSError" in capsys.readouterr().out
+
+
+def test_bat_resgate_pendente_sem_concluir_nao_renova(zap, monkeypatch):
+    # 8 voltas cegas deixam o resgate pendente; resgate que nao conclui (pagina cega) nao e progresso
+    g = _rodar(zap, monkeypatch, lambda v: v == 1, voltas_max=11, resgate_ok=False)
+    assert not any(b["fase"] == "resgate" for b in g)
+    assert g[-1]["em"] == iso(T0 + timedelta(minutes=5))
+
+
+def test_bat_resgate_concluido_renova(zap, monkeypatch):
+    g = _rodar(zap, monkeypatch, lambda v: v == 1, voltas_max=11, resgate_ok=True)
+    assert any(b["fase"] == "resgate" for b in g)
