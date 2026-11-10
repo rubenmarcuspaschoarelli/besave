@@ -10,7 +10,7 @@
 # ANTES de subir:
 #   1. nenhum run_captura.py vivo   (lancar o 2o MATA o 1o - armadilha de 03/08)
 #   2. nenhum navegador segurando o perfil user_data
-#   3. contador do config nao esta atrasado (senao REEMITE ID_OFERTA)
+#   3. (removido na BSV-56: o ID_OFERTA vem da sequence do banco; nao ha contador a conferir)
 # E DEPOIS de subir:
 #   4. o processo continua vivo e recebeu mesmo o run_captura.py na linha de comando
 #
@@ -85,11 +85,6 @@ fi
 # de `set-property --runtime`; erros ignorados (scope inexistente).
 "$SYSTEMCTL" --user reset-failed "$SCOPE.scope" >/dev/null 2>&1 || true
 "$SYSTEMCTL" --user revert "$SCOPE.scope" >/dev/null 2>&1 || true
-
-# --- 3. contador atrasado? ---------------------------------------------------
-echo
-echo "--- conferindo o contador (config x CSV x Oracle) ---"
-"$PY" "$RAIZ/diag/checa_contador.py" || falhar "contador atrasado - corrija o config (com backup) antes de relancar."
 
 # --- 4. nome do log (nao reaproveita arquivo de run anterior) ----------------
 mkdir -p "$RAIZ/log"
