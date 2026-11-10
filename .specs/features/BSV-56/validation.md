@@ -1,16 +1,21 @@
 # BSV-56 Validation — PASS
 
-**Veredito: PASS** (3ª verificação, ciclo 3 de 3, mais a rodada T10 só sobre SQL e README, também PASS). Todos os critérios de aceite da spec do dono têm teste com o valor que a
+**Veredito final: PASS** (rodada T11b sobre `b65d145`). Os dois itens Minor da rodada T11 foram corrigidos sem mudar
+código de produção: o README espera "Banco Oracle fora (DPY-4024)" e o teste usa a mensagem real do driver; o C4 agora
+morre e o C1 continua morto. Rodadas anteriores: 3ª verificação PASS, T10 PASS, T11 FAIL (Minor) → corrigida em T11b.
+**O merge continua bloqueado pela execução real do dono na inst1** (seção "Execução real"). Todos os critérios de aceite da spec do dono têm teste com o valor que a
 spec manda. O sensor de discriminação não deixou mutante não equivalente vivo: os sobreviventes das rodadas anteriores
 (M19, M27, N1, N4) e a regressão do "voltou" cedo morrem. Os gates do job `tools` passam. **O merge continua bloqueado
 pela execução real do dono na inst1** (seção final).
 
 **Date**: 2026-11-09
 **Spec**: `docs/specs/BSV-56.md` (fonte da verdade) e `.specs/features/BSV-56/spec.md`
-**Diff range**: `origin/develop...HEAD`, 11 commits (`8cba013`..`ef456d1`): 7 da implementação, `7a1a1ec` (T8, correções da
+**Diff range**: `origin/develop...HEAD`, 14 commits (`8cba013`..`b65d145`): 7 da implementação, `7a1a1ec` (T8, correções da
 1ª verificação), `9bde70a` (T9, só testes; `git diff 7a1a1ec..9bde70a -- tools/capture-chat-groups tools/vps` vazio),
-`4ff6e47` (este `validation.md`) e `ef456d1` (T10: SQL reexecutável e roteiro real no README; `git diff 9bde70a..ef456d1`
-não toca em `wa/` nem nos `.sh`)
+`4ff6e47` e `263402f` (este `validation.md`), `ef456d1` (T10: SQL reexecutável e roteiro real no README) e `7fc0e5f`
+(T11: `call_timeout` em toda conexão, tempo esgotado = banco fora, `tools/tests/test_call_timeout.py`, README) e
+`b65d145` (correções Minor da T11: só `tools/tests/test_call_timeout.py` e `tools/vps/README.md`;
+`git diff 7fc0e5f..b65d145 -- tools/capture-chat-groups tools/vps/*.sh` vazio)
 **Verifier**: Verifier independente (sub-agente); autor ≠ verificador. Worktree nasceu de `develop`
 (`git merge-base --is-ancestor origin/develop HEAD` OK).
 
@@ -30,6 +35,7 @@ não toca em `wa/` nem nos `.sh`)
 | T8 correções da 1ª verificação | ✅ Done | "voltou" só depois do 1º id; resgate refeito antes do rodízio |
 | T9 testes da 2ª verificação | ✅ Done | N1 e N4 cobertos |
 | T10 SQL reexecutável e roteiro real | ✅ Done | rodada T10 abaixo |
+| T11 `call_timeout` | ✅ Done | correções Minor em `b65d145` (rodada T11b abaixo) |
 
 ---
 
@@ -181,7 +187,7 @@ que falhou é sempre renumerada no resgate, e um dos dois pontos manda o "voltou
 | N3 | `monitor.py:1277` | tira o `continue` do resgate | ✅ morto (`test_fora02_sequence_falhando…`) |
 
 **Sensor depth**: P0 (integridade do id), 45 mutações em 3 rodadas.
-**Result**: **PASS** — rodada 3 com 8/8 mortos; nenhum sobrevivente não equivalente em aberto (N5 e N7 equivalentes na prática).
+**Resultado da rodada 3**: **PASS** — rodada 3 com 8/8 mortos; nenhum sobrevivente não equivalente em aberto (N5 e N7 equivalentes na prática).
 
 ---
 
@@ -257,17 +263,19 @@ Na inst1, pela ordem de virada (`tools/vps/README.md:329-338`) e a conferência 
 3. `KILL SESSION` da conexão do robô + `kill -9` no `run_captura.py` (a unidade sobe de novo): sobe sem conferir contador,
    **sem id repetido, sem aviso de "fora"** (o `proximo_id` reconecta sozinho);
 4. banco fora de verdade: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois `-D` com a mesma regra.
-   Esperado: 1 "Banco Oracle fora" no Telegram, nada novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai
-   com id novo e chega o "voltou";
+   Esperado: **em ~1 min depois da 1ª oferta da janela** (30 s de `db.call_timeout_segundos` + a espera), 1 "Banco Oracle
+   fora (DPY-4024)" no Telegram (`tools/vps/README.md:347`; com o driver thick o DPI-1067 vira DPY-4024),
+   nada novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e chega o "voltou";
 5. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
 
 Riscos do item 4 para o dono observar (não verificáveis sem banco; não bloqueiam a validação):
-- **`DROP` não derruba a conexão aberta, ele a congela.** `wa/oracle_db.py` não define `call_timeout` nem `expire_time`;
-  com a regra ativa, o `NEXTVAL` numa conexão já estabelecida pode ficar bloqueado até o timeout de retransmissão do TCP do
-  Linux (~15 min com `tcp_retries2` padrão), em vez de falhar. Aí, em ~3 min não chega o "fora" e, ao tirar a regra, a chamada
-  continua sem "fora" nem "voltou". Se acontecer: manter o `DROP` até o "fora" aparecer, ou conferir
-  `retry_count`/`connect_timeout`/`expire_time` no `tnsnames.ora` do wallet. É comportamento do teste, não regressão da
-  BSV-56; se o dono quiser o "fora" em minutos, vale um ticket para `call_timeout`.
+- O congelamento de ~15 min do `DROP` foi resolvido pelo T11 (`call_timeout` de 30 s em toda conexão). Resta um caso: se o
+  driver devolver **DPI-1080** (conexão inválida depois do tempo esgotado; vira `DPY-4011`, que é erro de conexão), o
+  `proximo_id` tenta **reconectar**, e o `connect` não é limitado pelo `call_timeout` (ele só vale depois de conectar). Com a
+  rede em `DROP`, a reconexão espera o `connect_timeout`/`retry_count` do `tnsnames.ora` do wallet (no Autonomous costuma ter
+  `retry_count=20`), e o "fora" pode demorar vários minutos. Se acontecer, manter o `DROP` até o "fora" aparecer. O mesmo vale
+  para o `disponivel()` durante a espera (só atrasa a percepção da volta). Melhoria possível, fora desta spec:
+  `tcp_connect_timeout`/`retry_count` explícitos na conexão.
 - **"A mesma mensagem"** só existe se chegar oferta durante a janela: sem mensagem, nada é numerado e nada avisa (o `NEXTVAL`
   só é pedido quando há o que gravar).
 
@@ -302,14 +310,117 @@ suíte inteira (410 testes) rodou verde sobre `9bde70a`. `git status --porcelain
 
 ---
 
+## Rodada T11 (`7fc0e5f`, `call_timeout`) — FAIL (Minor)
+
+### O que o dono pediu e onde está
+
+| Pedido | Evidência | Resultado |
+| --- | --- | --- |
+| `con.call_timeout = <ms>` depois de cada connect e reconnect | `tools/capture-chat-groups/wa/oracle_db.py:326`, dentro de `conectar()`, por onde passam a partida e o `_reconectar()` (`:339-347`); `tools/tests/test_call_timeout.py:117-131` (`[7000, 7000]` nas duas conexões) | ✅ |
+| Valor de `db.call_timeout_segundos`, padrão 30, em ms | `oracle_db.py:277-283`; `test_call_timeout.py:116-122` (None→30000, 5→5000, 0.5→500, 0/"x"/-3→30000); `conf/config.example.json` | ✅ |
+| Vale para `NEXTVAL`, `SELECT 1` e SP de insert | é atributo da conexão; o `_sp_aceita` também roda depois da atribuição | ✅ |
+| Tempo esgotado no `proximo_id` → `ErroSemId`, sem reconectar | `oracle_db.py` (`proximo_id` só reconecta em `_erro_conexao`); `test_call_timeout.py:134-144` (código `DPI-1067`/`DPY-4024`, 1 conexão, `ids_entregues == 0`, conexão volta a servir) | ✅ |
+| Insert: mesmo caminho de falha | `oracle_db.py:517`; `test_call_timeout.py:147-154` (`False`, `sem_conexao`, SP não repetida, sem reconexão) | ✅ |
+| Laço inteiro com o `OracleDB` real: 1 aviso, nada no CSV, marcador parado, mesma mensagem com id novo, "voltou" | `test_call_timeout.py:159-223` | ✅ |
+| README: "fora" em ~1 min | `tools/vps/README.md:346-351` | ⚠️ tempo certo, **código do aviso errado** (abaixo) |
+
+### Códigos de erro conferidos na documentação e na fonte oficial
+
+- `Connection.call_timeout` (doc oficial, `api_manual/connection.html`): em **milissegundos**, 0 = sem limite; no thick exige
+  Oracle Client 18c ou superior (a inst1 usa 23.26); no tempo esgotado devolve **DPI-1067** se a conexão continua utilizável e
+  **DPI-1080** se ficou inválida. ✅ o código bate.
+- **DPY-4024** existe: `src/oracledb/errors.py` do repositório oficial, `ERR_CALL_TIMEOUT_EXCEEDED = 4024`, texto
+  "call timeout of {timeout} ms exceeded". As release notes não o citam (só a 3.4.2 fala de `call_timeout`, sobre o pool no
+  thin); a fonte é o `errors.py`. ✅
+- **Faltava no raciocínio do autor:** o `errors.py` tem `ERR_DPI_ERROR_XREF`, que **converte** o DPI-1067 do thick em DPY-4024.
+  A mensagem real no thick é `"DPY-4024: call timeout of N ms exceeded\nDPI-1067: …"`, e o DPI-1080 vira
+  `"DPY-4011: the database or network closed the connection\nDPI-1080: …"`. Consequências:
+  - o `_codigo()` pega o primeiro código, então o aviso no Telegram sai **"Banco Oracle fora (DPY-4024)"**; o README
+    (`:347`) promete "(DPI-1067)". Conferido aplicando os regexes do próprio `oracle_db.py` à mensagem real: `DPY-4024`;
+  - o DPI-1080 continua tratado como queda, porque `DPY-4011` e `DPI-1080` estão em `_ERROS_CONEXAO` (`:141-145`) ✅;
+  - o dublê do teste (`test_call_timeout.py:11`) usa só a linha do DPI-1067; não é o texto que o driver produz.
+- **ORA-03156** ("OCI call timed out") não é mapeado pelo driver; ele aparece dentro do texto do DPI-1067. O regex
+  `ORA-0?3156` cobre as duas grafias. Nada inventado.
+- **Decisão do autor (tempo esgotado não reconecta):** correta. A doc diz que o DPI-1067 deixa a conexão utilizável, e
+  reconectar com a rede em `DROP` travaria no `connect`, que o `call_timeout` não limita. Se a conexão ficou inválida, o driver
+  devolve o DPI-1080 (DPY-4011), que já reconecta.
+
+### Mutantes (worktree temporário em `C:\Users\REDACTED\AppData\Local\Temp\claude\…\scratchpad\vrf`, removido; sem `git stash`)
+
+Testes: `test_call_timeout.py`, `test_sequence_oracle.py`, `test_reconexao_oracle.py`, `test_id_sequence_whatsapp.py`.
+
+| # | Arquivo:linha | Mutação | Resultado |
+| --- | --- | --- | --- |
+| C1 (obrigatório) | `oracle_db.py:326` | `call_timeout` só na 1ª conexão (reconexão sem) | ✅ morto (`test_call_timeout_tambem_na_reconexao`) |
+| C2 | `oracle_db.py:326` | `call_timeout` nunca atribuído | ✅ morto (`test_call_timeout_do_config_na_conexao`) |
+| C3 | `oracle_db.py:179` | regex de tempo sem `DPI-1067` | ⚪ sobreviveu, **equivalente** com o driver real (a mensagem thick traz `DPY-4024` e `ORA-3156`) |
+| C4 | `oracle_db.py:179` | regex de tempo sem `DPY-4024` | ❌ **sobreviveu** (o teste do insert só usa o texto thick, que ainda casa por `DPI-1067`/`ORA-3156`; no thin real, `"DPY-4024: …"` puro, o log perderia o "(sem conexão)") |
+| C5 | `oracle_db.py:141-142` | `DPI-1067`/`DPY-4024` como erro de conexão (reconecta) | ✅ morto (`test_tempo_esgotado_no_nextval…`) |
+| C6 | `oracle_db.py:283` | `call_timeout` em segundos, não ms | ✅ morto (`test_call_timeout_do_config_na_conexao`) |
+| C7 | `oracle_db.py:517` | `sem_conexao` sem o `_erro_tempo` | ✅ morto (`test_tempo_esgotado_no_insert…`) |
+| C8 | `oracle_db.py:180` | padrão 0 (sem limite) | ✅ morto (`test_call_timeout_do_config_na_conexao[None-30000]`) |
+| C9 | `oracle_db.py` `proximo_id` | reconecta em tempo esgotado | ✅ morto (`test_tempo_esgotado_no_nextval…`) |
+
+Resultado da rodada T11: FAIL (Minor) — 7 mortos, 1 equivalente, 1 sobrevivente (C4).
+
+### Gates sobre `7fc0e5f`
+
+| Comando | Resultado |
+| --- | --- |
+| `cd tools && python -m pytest -q tests/test_call_timeout.py tests/test_sequence_oracle.py tests/test_reconexao_oracle.py tests/test_id_sequence_whatsapp.py` | `51 passed` |
+| `cd tools && python -m pytest -q` | `422 passed in 133.16s` |
+| `cd tools/capture-chat-groups && python -m unittest discover -s tests -v` | `Ran 15 tests … OK` |
+| `cd tools && python -m ruff check vps/ tests/` | `All checks passed!` |
+| `cd tools && shellcheck vps/*.sh` | rc 0 |
+
+`git status --porcelain` da árvore real vazio antes e depois da rodada.
+
+### Fix Plans T11 (só README e teste)
+
+- **Fix T11-1 (Minor):** `tools/vps/README.md:347`: trocar "Banco Oracle fora (DPI-1067)" por "(DPY-4024)" (é o que o
+  `_codigo()` extrai da mensagem real do thick).
+- **Fix T11-2 (Minor):** em `tools/tests/test_call_timeout.py`, usar como texto do thick a mensagem real do driver
+  (`"DPY-4024: call timeout of 30000 ms exceeded\nDPI-1067: call timeout of 30000 ms exceeded with ORA-3156"`, esperando o
+  código `DPY-4024` no aviso) e parametrizar o teste do insert também com o texto thin (`TIMEOUT_THIN`). **Done when**: C4
+  morre e o teste do laço espera "Banco Oracle fora (DPY-4024)".
+
+## Rodada T11b (`b65d145`, correções Minor) — PASS
+
+| Item | Evidência | Resultado |
+| --- | --- | --- |
+| README espera "Banco Oracle fora (DPY-4024)" | `tools/vps/README.md:347` | ✅ |
+| Teste usa a mensagem real do thick (`DPY-4024 …\nDPI-1067 … ORA-3156`), a do thin e DPI-1067 sozinho | `tools/tests/test_call_timeout.py:11-14` | ✅ |
+| `proximo_id`: código no aviso `DPY-4024` (thick e thin) e `DPI-1067` (sem conversão) | `test_call_timeout.py:136-147` | ✅ |
+| Insert parametrizado com os três textos: `False`, `sem_conexao`, SP não repetida | `test_call_timeout.py:150-158` | ✅ |
+| Laço inteiro espera "Banco Oracle fora (DPY-4024)" | `test_call_timeout.py:220` | ✅ |
+| Nenhuma mudança de código de produção | `git diff 7fc0e5f..b65d145 -- tools/capture-chat-groups tools/vps/*.sh` vazio | ✅ |
+
+Mutantes (worktree temporário em `C:\Users\REDACTED\AppData\Local\Temp\claude\…\scratchpad\vrf`, removido; sem `git stash`):
+
+| # | Arquivo:linha | Mutação | Resultado |
+| --- | --- | --- | --- |
+| C1 | `oracle_db.py:326` | `call_timeout` só na 1ª conexão | ✅ morto (`test_call_timeout_tambem_na_reconexao`) |
+| C4 | `oracle_db.py:179` | regex de tempo sem `DPY-4024` | ✅ morto (`test_tempo_esgotado_no_insert_falha_pelo_caminho_de_sempre[DPY-4024: …]`, texto thin) |
+| C3 | `oracle_db.py:179` | regex de tempo sem `DPI-1067` | ⚪ equivalente (todas as mensagens possíveis também trazem `DPY-4024` ou `ORA-3156`) |
+
+**Result**: **PASS** — C1 e C4 mortos; C3 equivalente.
+
+Gates sobre `b65d145`: `tools/tests/test_call_timeout.py` → `14 passed`; `cd tools && python -m pytest -q` → `425 passed in
+133.27s`; unittest → `OK` (15); `ruff check vps/ tests/` → `All checks passed!`; `shellcheck vps/*.sh` → rc 0.
+`git status --porcelain` da árvore real igual antes e depois (só este `validation.md` modificado).
+
+---
+
 ## Summary
 
-**Overall**: ✅ Ready para PR; merge só depois da execução real do dono.
+**Overall**: ✅ Pronto para a PR. O merge continua dependendo da execução real do dono na inst1.
 
 **Spec-anchored check**: 20/20 critérios automatizáveis com teste e valor exato; nenhuma lacuna de precisão aberta.
 **Sensor**: rodada 3 com 8/8 mortos (M19, M27, "voltou" cedo, N1, N4 e controles); 45 mutações nas 3 rodadas, sobreviventes
 anteriores fechados por T8 e T9; N5/N7 equivalentes na prática.
-**Gate**: unittest 15 OK; pytest 410 passed (sobre `9bde70a`); T10: `test_sql_sequence.py` 7 passed, ruff OK, shellcheck OK.
+**Gate**: sobre `b65d145`: unittest 15 OK; pytest 425 passed; ruff OK; shellcheck OK.
+**Sensor T11/T11b**: 9 mutantes na T11 (7 mortos, C3 equivalente, C4 sobrevivente); na T11b, C4 e C1 mortos. Nenhum
+sobrevivente não equivalente em aberto.
 
 **What works**: id pela sequence nos dois caminhos; banco fora sem gravar nem mover marcador; espera de 60 s; um aviso por
 ocorrência, lembrete aos 120 min e "voltou" só depois de um id novo (sem alternar com ORA-02289, inclusive depois de ids já
