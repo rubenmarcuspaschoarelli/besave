@@ -267,7 +267,7 @@ class PaginaOk:
         return False
 
 
-def _arranque(zap, monkeypatch, abrem, min_por_grupo):
+def _arranque(zap, monkeypatch, abrem, min_por_grupo, banco_cai_no_1o_catchup=False):
     """Arranque de 3 grupos; `abrem[i]` = o i-esimo grupo abre. Cada grupo consome `min_por_grupo` min (catch-up
     ou timeout). Devolve (batimentos gravados com o instante da gravacao, instante em que o arranque acabou)."""
     rel = {"t": T0}
@@ -290,6 +290,9 @@ def _arranque(zap, monkeypatch, abrem, min_por_grupo):
         def desconectar(self):
             pass
 
+        def disponivel(self):
+            return True
+
     class PW:
         def __enter__(self):
             return object()
@@ -299,14 +302,17 @@ def _arranque(zap, monkeypatch, abrem, min_por_grupo):
 
     def abrir(page, nome):
         chamadas["abrir"] += 1
-        if chamadas["abrir"] > len(GRUPOS):               # acabou o arranque: o rodizio nao interessa
+        if chamadas["abrir"] > len(GRUPOS) * (2 if banco_cai_no_1o_catchup else 1):   # acabou arranque (+ resgate)
             fim["t"] = rel["t"]
             raise KeyboardInterrupt
-        if not abrem[chamadas["abrir"] - 1]:
+        if not abrem[(chamadas["abrir"] - 1) % len(GRUPOS)]:
             rel["t"] += timedelta(minutes=min_por_grupo)  # o timeout tambem leva tempo
             raise RuntimeError("falhou")
 
     def catchup(page, nome, csv, numero, est, db, **k):
+        if banco_cai_no_1o_catchup and not fim.get("caiu"):
+            fim["caiu"] = True
+            raise zap.oracle_db.ErroSemId("ORA-03113")
         rel["t"] += timedelta(minutes=min_por_grupo)
         return numero, set()
 
@@ -408,3 +414,17 @@ def test_resgate_grupo_que_falha_nao_renova(zap, monkeypatch):
 def test_resgate_com_todos_os_grupos_falhando_nao_renova(zap, monkeypatch):
     gravados, ok, _ = _resgate(zap, monkeypatch, [False, False, False], 3)
     assert ok is False and gravados == []
+
+
+def test_resgate_pela_partida_real_bate_por_grupo_sem_ligar_o_batimento_a_mao(zap, monkeypatch):
+    # Banco cai no catch-up do 1o grupo do arranque -> o resgate fica pendente e roda no rodizio, com o
+    # `_recuperar_lacuna` REAL e o batimento ligado pela propria partida (nenhum `zap._BAT[...] =` aqui).
+    gravados, _ = _arranque(zap, monkeypatch, [True, True, True], 3, banco_cai_no_1o_catchup=True)
+    resgate = [(t, d) for t, d in gravados if d["fase"] == "resgate"]
+    # 1 por grupo que concluiu (a 3 min um do outro) + o do fim do resgate, no mesmo instante do ultimo grupo
+    instantes = sorted({t for t, _ in resgate})
+    assert len(instantes) == 3
+    for a, b in itertools.pairwise(instantes):
+        assert b - a == timedelta(minutes=3)               # um por grupo, nao um so no fim
+    assert any(d["fase"] == "banco fora" for _, d in gravados)
+    assert zap._BAT["atual"] is None                       # solto no fim do run
