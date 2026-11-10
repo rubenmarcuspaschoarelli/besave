@@ -8,8 +8,10 @@ import falsos
 import pytest
 from test_id_sequence_whatsapp import T0, TOKEN, Pagina, estado, item, reg, zap  # noqa: F401
 
-TIMEOUT_THICK = "DPI-1067: call timeout of 30000 ms exceeded with ORA-3156"
+# Texto real do driver: no thick o python-oracledb converte o DPI-1067 em DPY-4024 e mantem o original abaixo.
+TIMEOUT_THICK = "DPY-4024: call timeout of 30000 ms exceeded\nDPI-1067: call timeout of 30000 ms exceeded with ORA-3156"
 TIMEOUT_THIN = "DPY-4024: call timeout of 30000 ms exceeded"
+TIMEOUT_DPI_SO = "DPI-1067: call timeout of 30000 ms exceeded with ORA-3156"   # driver sem a conversao
 
 
 class Rede:
@@ -131,7 +133,8 @@ def test_call_timeout_tambem_na_reconexao(novo):
     assert [c.call_timeout for c in drv.conexoes] == [7000, 7000]
 
 
-@pytest.mark.parametrize("erro, codigo", [(TIMEOUT_THICK, "DPI-1067"), (TIMEOUT_THIN, "DPY-4024")])
+@pytest.mark.parametrize("erro, codigo", [(TIMEOUT_THICK, "DPY-4024"), (TIMEOUT_THIN, "DPY-4024"),
+                                          (TIMEOUT_DPI_SO, "DPI-1067")])
 def test_tempo_esgotado_no_nextval_e_banco_fora_sem_reconectar(novo, erro, codigo):
     rede = Rede()
     db, drv, oracle_db = novo(rede)
@@ -144,10 +147,11 @@ def test_tempo_esgotado_no_nextval_e_banco_fora_sem_reconectar(novo, erro, codig
     assert db.proximo_id() == 46100        # a conexao segue utilizavel quando a rede volta
 
 
-def test_tempo_esgotado_no_insert_falha_pelo_caminho_de_sempre(novo):
+@pytest.mark.parametrize("erro", [TIMEOUT_THICK, TIMEOUT_THIN, TIMEOUT_DPI_SO])
+def test_tempo_esgotado_no_insert_falha_pelo_caminho_de_sempre(novo, erro):
     rede = Rede()
     db, drv, _ = novo(rede)
-    rede.travadas = 1
+    rede.travadas, rede.erro = 1, erro
     assert db.inserir_oferta({"ID_OFERTA": "46100", "DS_OFERTA": "x"}) is False
     assert db.sem_conexao is True          # log do monitor: "db=ERRO (sem conexão)"
     assert rede.chamadas == ["SP"]         # sem repetir a SP
@@ -213,7 +217,7 @@ def test_rede_travada_vira_um_aviso_e_a_mesma_mensagem_sai_com_id_novo(zap, reg,
     monkeypatch.setattr(zap.janela_mod, "dormir_ate_proxima_rodada", parar)
     zap.captura_msg_whatsapp(["g1"], seg_grupo=0)
 
-    assert len(enviados) == 2 and "Banco Oracle fora (DPI-1067)" in enviados[0] and "voltou" in enviados[1]
+    assert len(enviados) == 2 and "Banco Oracle fora (DPY-4024)" in enviados[0] and "voltou" in enviados[1]
     assert csv_na_queda[0] == 0                                    # nada no CSV quando o aviso saiu
     assert [linha["ID_OFERTA"] for linha in reg.csv] == [46100] and reg.csv[0]["DS_OFERTA"] == "Fone"
     assert est["grupos"]["g1"]["ultimo_data_id"] == "a"
