@@ -297,7 +297,8 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
    scope que termina em `failed` (OOM-kill, `kill -9`) seria mantido carregado e todo `systemd-run` seguinte com o
    mesmo `--unit` falharia com "already loaded", em laço. Na partida, com o scope inativo, o lançador ainda roda
    `systemctl --user reset-failed` e `revert` (resíduo de `set-property --runtime`), ignorando erros; se o robô morrer
-   nos primeiros segundos, o `ABORTADO` traz a última linha do log (a mensagem do `systemd-run`). O robô das lojas não muda.
+   nos primeiros segundos, o `ABORTADO` traz a última linha do log (a mensagem do `systemd-run`). O robô das lojas roda no
+   mesmo desenho, sem teto de memória (BSV-57, abaixo).
 
 ```bash
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
@@ -360,6 +361,62 @@ rodízio), não no 1º id do 1º grupo. Sem o bloco `db` ligado no `config.json`
 
 Não pode haver dois robôs do WhatsApp (PC e VPS) em versões diferentes: o antigo numeraria pelo arquivo e
 colidiria com a sequence.
+
+## Vigia externo dos robôs (BSV-57)
+
+O aviso do robô do WhatsApp (BSV-51) roda **dentro** do processo e cai junto com ele; o das lojas não avisava
+nada. O vigia roda **fora**: `besave-vigia-robos.timer` chama `vigia_robos.py` (só stdlib) a cada 5 min.
+
+**Batimento.** Cada robô grava `conf/batimento.json` (fora do git) por arquivo temporário + `rename`:
+`{"robo","pid","em","prazo","fase"}` e, no WhatsApp, `grupos_falhando`. `prazo` = `em` + 10 min; antes de dormir
+(janela noturna, intervalo) o robô grava `prazo` = hora de acordar + 10 min, e é assim que a madrugada não vira
+alarme. Só bate com **progresso**: WhatsApp = volta em que ao menos um grupo abriu (volta com todos falhando
+não renova; banco fora renova, o robô já avisa sozinho); lojas = linha concluída ou varredura (fila vazia e loja
+em pausa renovam; exceção de navegador fechado não).
+
+**O que o vigia faz**, por robô, nesta ordem:
+
+1. unidade `inactive` (parada de propósito) → nada; reinício diário do WhatsApp em andamento → nada;
+2. `agora > prazo`, ou o `pid` do batimento fora do scope do robô → **parado**. Processo novo sem batimento
+   ainda, até 10 min depois do início do scope → nada. Os pids vêm do `cgroup.procs` do scope
+   (`besave-whatsapp-robo.scope`, `besave-lojas-robo.scope`), não do `MainPID` da unidade, que é o tmux;
+3. parado com QR pendente (log mais recente com `Aguardando o WhatsApp Web carregar` e sem `Sessao autenticada`
+   depois) ou `ABORTADO:` nas últimas linhas → **avisa o operador e não reinicia**;
+4. grupo em `grupos_falhando` há 2 h ou mais (`BESAVE_GRUPO_FALHA_HORAS`) → aviso de operador **por grupo**, sem
+   reinício (nome mudou ou o número saiu do grupo?); 3 ou mais logs `run_captura_*.log` nos últimos 30 min sem
+   `Grupo aberto` (laço de partidas) → operador, sem reinício;
+5. senão `systemctl --user restart <unidade>` e aviso, **no máximo 2 reinícios por robô em 60 min**; depois disso
+   só "precisa de operador" até o batimento voltar;
+6. batimento novo depois de um aviso → "voltou (parado por N min)".
+
+Uma mensagem por ocorrência (e uma nova a cada mudança de ação: reiniciado 1/2 → 2/2 → operador); lembrete
+a cada 2 h. O texto traz robô, motivo, ação, última linha útil do log (cortada, sem URL e sem token), a memória
+do scope e o RSS do maior `chrome` dele. Token e chat vêm de `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` do
+`/srv/besave/worker.env` (`BESAVE_WORKER_ENV` troca o caminho); sem eles, só journal. O estado fica em
+`~/.local/state/besave/vigia_robos.json`.
+
+**Rotação de logs** (uma vez por dia, pelo vigia): `log/run_captura_*.log` com mais de `BESAVE_LOG_DIAS` dias
+(padrão 14), nunca o mais recente; `main_monitorar.log` acima de `BESAVE_LOG_MB` (padrão 50) é copiado para
+`main_monitorar_AAAAMMDD.log` e truncado no lugar (o `tee -a` do robô segue escrevendo), cópias com mais de 14
+dias são apagadas. Só esses nomes, só nessas duas pastas. A contagem sai no journal do vigia.
+
+**Robô das lojas no próprio scope.** Como o WhatsApp, o `iniciar_lojas.sh` roda o python por
+`systemd-run --user --scope --collect --unit=besave-lojas-robo -p KillSignal=SIGINT -p TimeoutStopSec=30`
+dentro do painel do tmux (sem teto de memória). O `ExecStop` da unidade faz
+`systemctl --user stop besave-lojas-robo.scope`: SIGINT e, vencido o prazo, SIGKILL, que também mata um python
+congelado por `kill -STOP`. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
+
+```bash
+cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
+systemctl --user enable --now besave-vigia-robos.timer
+systemctl --user list-timers besave-vigia-robos.timer                  # próximo disparo
+journalctl --user -u besave-vigia-robos.service --since today          # o que o vigia viu e fez
+```
+
+**Silenciar um robô:** `systemctl --user stop besave-captura-lojas` (ou `…-whatsapp`). Unidade `inactive` o vigia
+nunca religa e não avisa. Para voltar: `systemctl --user start …`.
+**Desligar o vigia:** `systemctl --user disable --now besave-vigia-robos.timer`.
+Reiniciar o `besave-captura-lojas` com a unidade trocada: `daemon-reload` e `systemctl --user restart besave-captura-lojas`.
 
 ## Voltar para o PC
 

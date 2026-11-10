@@ -1,0 +1,11 @@
+# Vigia externo dos robos (BSV-57) - unidade de USUARIO, oneshot.
+# Disparada por besave-vigia-robos.timer a cada 5 min. Ver tools/vps/README.md.
+# Credencial do aviso: o proprio script le o worker.env (600 do besave); nada vem desta unidade.
+[Unit]
+Description=Besave - vigia externo dos robos de captura
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /srv/besave/repo/tools/vps/vigia_robos.py
+# systemctl, leitura de logs e envio ao Telegram: nada passa de alguns segundos
+TimeoutStartSec=120

@@ -31,8 +31,11 @@ PY=${BESAVE_PY:-$RAIZ/.venv/bin/python}
 PGREP=${BESAVE_PGREP:-pgrep}
 SESSAO=${BESAVE_SESSAO:-besave-whatsapp}
 ESPERA=${BESAVE_ESPERA:-8}
+# SYSTEMD_RUN e SYSTEMCTL sao lidas pelo scope.sh (carregado com `.` mais abaixo)
+# shellcheck disable=SC2034
 SYSTEMD_RUN=${BESAVE_SYSTEMD_RUN:-systemd-run}
 DATE_BIN=${BESAVE_DATE:-date}
+# shellcheck disable=SC2034
 SYSTEMCTL=${BESAVE_SYSTEMCTL:-systemctl}
 SCOPE=besave-whatsapp-robo
 MEM_HIGH=${BESAVE_MEM_HIGH:-3500M}
@@ -52,7 +55,7 @@ falhar() {
 
 pids() { "$PGREP" -f -- "$1" 2>/dev/null || true; }
 
-# shellcheck source=scope.sh
+# shellcheck source=/dev/null
 . "$AQUI/scope.sh"
 
 aguardar=0

@@ -20,7 +20,10 @@ AQUI=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RAIZ=$(cd "${BESAVE_LOJAS_DIR:-$AQUI/../capture-store-pages}" && pwd -P)
 PY=${BESAVE_PY:-$RAIZ/.venv/bin/python}
 SESSAO=${BESAVE_SESSAO:-besave-lojas}
+# SYSTEMD_RUN e SYSTEMCTL sao lidas pelo scope.sh (carregado com `.` mais abaixo)
+# shellcheck disable=SC2034
 SYSTEMD_RUN=${BESAVE_SYSTEMD_RUN:-systemd-run}
+# shellcheck disable=SC2034
 SYSTEMCTL=${BESAVE_SYSTEMCTL:-systemctl}
 SCOPE=besave-lojas-robo
 LOG="$RAIZ/destino/log/main_monitorar.log"
@@ -31,7 +34,7 @@ falhar() {
     exit 1
 }
 
-# shellcheck source=scope.sh
+# shellcheck source=/dev/null
 . "$AQUI/scope.sh"
 
 aguardar=0

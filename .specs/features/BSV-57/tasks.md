@@ -73,7 +73,7 @@ T5 → T6
 **Reqs**: UNI-01
 **Tests**: `tools/tests/test_unidades.py`
 **Gate**: `pytest tests/test_unidades.py`
-- [ ] Done
+- [x] Done
 
 ## Test Coverage Matrix
 

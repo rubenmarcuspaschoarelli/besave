@@ -22,7 +22,7 @@ def _ler(caminho):
 def test_existem_as_duas_unidades():
     assert [u.name for u in UNIDADES] == [
         "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-reinicio-whatsapp.service",
-        "besave-vnc@.service",
+        "besave-vigia-robos.service", "besave-vnc@.service",
     ]
 
 
@@ -58,3 +58,14 @@ def test_lojas_usa_o_lancador_com_scope():  # BSV-57 ESC-01, ESC-03
     # BSV-55: --sem-perguntas, senao o arranque para num input() que ninguem responde
     texto = (VPS / "iniciar_lojas.sh").read_text(encoding="utf-8")
     assert "main.py --monitorar --sem-perguntas" in texto
+
+
+def test_vigia_e_oneshot_com_timer_de_5_minutos():  # BSV-57 UNI-01
+    servico = _ler(VPS / "systemd" / "besave-vigia-robos.service")["Service"]
+    assert servico["Type"] == "oneshot"
+    assert servico["ExecStart"] == "/usr/bin/python3 /srv/besave/repo/tools/vps/vigia_robos.py"
+    assert (VPS / "vigia_robos.py").exists()
+    timer = _ler(VPS / "systemd" / "besave-vigia-robos.timer")
+    assert timer["Timer"]["OnUnitActiveSec"] == "5min"
+    assert timer["Timer"]["OnBootSec"] == "5min"
+    assert timer["Install"]["WantedBy"] == "timers.target"

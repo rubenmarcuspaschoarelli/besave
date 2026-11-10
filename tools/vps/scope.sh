@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034  # CMD e lido por quem carrega este arquivo
 # Trecho comum dos lancadores dos robos (BSV-54, BSV-57): o robo roda num scope systemd-run dentro do painel do
 # tmux. Uso: `source scope.sh` depois de definir SYSTEMCTL, SYSTEMD_RUN e a funcao `falhar` (sai com ABORTADO).
 #
