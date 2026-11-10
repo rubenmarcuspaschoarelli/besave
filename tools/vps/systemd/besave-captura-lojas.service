@@ -16,11 +16,17 @@ WorkingDirectory=/srv/besave/repo/tools/capture-store-pages
 Environment=BESAVE_DISPLAY=:1
 # a tela :1 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
 ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
-ExecStart=/srv/besave/repo/tools/vps/rodar_em_tmux.sh executar besave-lojas /srv/besave/repo/tools/capture-store-pages /srv/besave/repo/tools/capture-store-pages/destino/log/main_monitorar.log /srv/besave/repo/tools/capture-store-pages/.venv/bin/python -u main.py --monitorar --sem-perguntas
+ExecStart=/srv/besave/repo/tools/vps/iniciar_lojas.sh --aguardar
+# O tmux do Ubuntu poe cada painel num scope proprio (app.slice/tmux-spawn-*.scope): o python e o Chromium NAO
+# ficam nesta unidade. O robo roda no scope besave-lojas-robo (systemd-run, ver iniciar_lojas.sh); o ExecStop
+# para esse scope (SIGINT e, vencido o prazo, SIGKILL, que mata ate processo congelado). O '-' deixa o stop
+# passar se o scope ja nao existe.
+ExecStop=-/usr/bin/systemctl --user stop besave-lojas-robo.scope
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=30
-TimeoutStopSec=30
+# ExecStop espera o scope (ate 30 s) e depois o tmux sai
+TimeoutStopSec=45
 
 [Install]
 WantedBy=default.target

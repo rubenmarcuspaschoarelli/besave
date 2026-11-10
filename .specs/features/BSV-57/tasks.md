@@ -46,7 +46,7 @@ T5 → T6
 **Reqs**: ESC-01, ESC-02, ESC-03
 **Tests**: `tools/tests/test_scope_lojas.py`, `test_scope_whatsapp.py`, `test_iniciar_captura.py`, `test_unidades.py`
 **Gate**: `pytest tests/test_scope_lojas.py tests/test_scope_whatsapp.py tests/test_iniciar_captura.py tests/test_unidades.py`
-- [ ] Done
+- [x] Done
 
 ### T4: Vigia, decisão e estado
 **What**: `vigia_robos.py` com parado, madrugada, pid, operador, grupo morto, laço, limite, voltou, estado.

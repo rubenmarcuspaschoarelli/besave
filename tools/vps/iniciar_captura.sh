@@ -52,6 +52,9 @@ falhar() {
 
 pids() { "$PGREP" -f -- "$1" 2>/dev/null || true; }
 
+# shellcheck source=scope.sh
+. "$AQUI/scope.sh"
+
 aguardar=0
 [ "${1:-}" = "--aguardar" ] && aguardar=1
 
@@ -76,15 +79,8 @@ if [ -n "$presos" ]; then
 fi
 
 # --- 2b. sobra do scope do robo? ---------------------------------------------
-if "$SYSTEMCTL" --user is-active --quiet "$SCOPE.scope" 2>/dev/null; then
-    falhar "o scope $SCOPE.scope ainda existe (robo anterior vivo?): subir outro duplicaria o robo. Rode systemctl --user stop $SCOPE.scope."
-fi
-
-# Scope que terminou em `failed` (OOM-kill, kill -9) fica carregado e o proximo systemd-run com o mesmo
-# --unit falha ("already loaded"). Com o scope NAO ativo (conferido acima), limpa o residuo e o que sobrou
-# de `set-property --runtime`; erros ignorados (scope inexistente).
-"$SYSTEMCTL" --user reset-failed "$SCOPE.scope" >/dev/null 2>&1 || true
-"$SYSTEMCTL" --user revert "$SCOPE.scope" >/dev/null 2>&1 || true
+# (scope.sh, comum aos dois lancadores) recusa se ativo; senao limpa reset-failed/revert
+scope_preparar "$SCOPE"
 
 # --- 4. nome do log (nao reaproveita arquivo de run anterior) ----------------
 mkdir -p "$RAIZ/log"
@@ -102,16 +98,8 @@ done
 echo
 echo "Lancando... log: $(basename "$log")"
 # o WhatsApp tem a tela :2 (a :1 e do robo das lojas)
-# --collect: o scope e descarregado ao terminar, mesmo em `failed`; sem isso o 1o OOM-kill deixaria todo
-# systemd-run seguinte falhando com "already loaded", em laco.
-# O rc do systemd-run --scope e o do proprio robo (ele vira o processo do scope): OOM-kill = rc != 0.
-if command -v "$SYSTEMD_RUN" >/dev/null 2>&1; then
-    cmd=("$SYSTEMD_RUN" --user --scope --collect "--unit=$SCOPE" -p "MemoryHigh=$MEM_HIGH" -p "MemoryMax=$MEM_MAX" \
-        -p "MemorySwapMax=$MEM_SWAP_MAX" -p KillSignal=SIGINT -p TimeoutStopSec=30 -- "$PY" -u run_captura.py)
-else
-    echo "AVISO: systemd-run nao encontrado; subindo SEM teto de memoria e sem scope." >&2
-    cmd=("$PY" -u run_captura.py)
-fi
+scope_montar "$SCOPE" -p "MemoryHigh=$MEM_HIGH" -p "MemoryMax=$MEM_MAX" -p "MemorySwapMax=$MEM_SWAP_MAX" -- "$PY" -u run_captura.py
+cmd=("${CMD[@]}")
 BESAVE_DISPLAY=${BESAVE_DISPLAY:-:2} "$AQUI/rodar_em_tmux.sh" iniciar "$SESSAO" "$RAIZ" "$log" "${cmd[@]}" ||
     falhar "nao consegui criar a sessao tmux $SESSAO."
 
