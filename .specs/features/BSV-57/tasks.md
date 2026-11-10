@@ -64,7 +64,7 @@ T5 → T6
 **Reqs**: MSG-01, MSG-02, MSG-03, ROT-01, ROT-02, ROT-03
 **Tests**: `tools/tests/test_vigia_mensagens.py`, `tools/tests/test_vigia_rotacao.py`
 **Gate**: `pytest tests/test_vigia_mensagens.py tests/test_vigia_rotacao.py`
-- [ ] Done
+- [x] Done
 
 ### T6: Unidades e README
 **What**: `besave-vigia-robos.service` e `.timer`, README, teste das unidades.
