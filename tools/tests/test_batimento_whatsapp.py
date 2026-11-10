@@ -1,5 +1,6 @@
 """BSV-57 BAT-01..06: batimento do robo do WhatsApp (progresso, grupos falhando, sono, escrita atomica).
 Playwright, Oracle e Telegram falsos; relogio e disco (diretorio temporario) controlados."""
+import itertools
 import json
 import os
 import sys
@@ -247,3 +248,163 @@ def test_bat_resgate_pendente_sem_concluir_nao_renova(zap, monkeypatch):
 def test_bat_resgate_concluido_renova(zap, monkeypatch):
     g = _rodar(zap, monkeypatch, lambda v: v == 1, voltas_max=11, resgate_ok=True)
     assert any(b["fase"] == "resgate" for b in g)
+
+
+# --- arranque e resgate lentos: batimento por grupo que abriu (caso real: arranque de 5-8,7 min) ------------
+
+GRUPOS = ["g1", "g2", "g3"]
+MARCADORES = {n: {"ultima_data_hora": "10/11/2026 09:00", "ultimo_data_id": f"m_{n}"} for n in GRUPOS}
+
+
+class PaginaOk:
+    def wait_for_timeout(self, ms):
+        pass
+
+    def evaluate(self, js, arg=None):
+        return {"dialogos": [], "tem_lista": True}
+
+    def is_closed(self):
+        return False
+
+
+def _arranque(zap, monkeypatch, abrem, min_por_grupo):
+    """Arranque de 3 grupos; `abrem[i]` = o i-esimo grupo abre. Cada grupo consome `min_por_grupo` min (catch-up
+    ou timeout). Devolve (batimentos gravados com o instante da gravacao, instante em que o arranque acabou)."""
+    rel = {"t": T0}
+    gravados, fim = [], {}
+    chamadas = {"abrir": 0}
+
+    class Ctx:
+        def close(self):
+            pass
+
+    class Banco:
+        habilitado = True
+        configurado = True
+        espera_segundos = 60
+        ids_entregues = 0
+
+        def conectar(self):
+            return True
+
+        def desconectar(self):
+            pass
+
+    class PW:
+        def __enter__(self):
+            return object()
+
+        def __exit__(self, *a):
+            return False
+
+    def abrir(page, nome):
+        chamadas["abrir"] += 1
+        if chamadas["abrir"] > len(GRUPOS):               # acabou o arranque: o rodizio nao interessa
+            fim["t"] = rel["t"]
+            raise KeyboardInterrupt
+        if not abrem[chamadas["abrir"] - 1]:
+            rel["t"] += timedelta(minutes=min_por_grupo)  # o timeout tambem leva tempo
+            raise RuntimeError("falhou")
+
+    def catchup(page, nome, csv, numero, est, db, **k):
+        rel["t"] += timedelta(minutes=min_por_grupo)
+        return numero, set()
+
+    batim = zap.batimento_mod
+    monkeypatch.setattr(batim, "agora_utc", lambda: rel["t"])
+    monkeypatch.setattr(batim, "gravar_atomico",
+                        lambda caminho, dados: gravados.append((rel["t"], dict(dados))) or True)
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), PaginaOk()))
+    monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
+    monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
+    monkeypatch.setattr(zap.estado_mod, "carregar", lambda: {"grupos": json.loads(json.dumps(MARCADORES)),
+                                                              "controle": {"ultimo_id_processado": 0}})
+    monkeypatch.setattr(zap.estado_mod, "salvar", lambda e: None)
+    monkeypatch.setattr(zap.oracle_db, "OracleDB", Banco)
+    monkeypatch.setattr(zap, "_capturar_desde_ultima", catchup)
+    monkeypatch.setattr(zap, "_ids_baloes", lambda page: [])
+    monkeypatch.setattr(zap.janela_mod, "carregar", lambda caminho: None)
+    zap.captura_msg_whatsapp(GRUPOS, seg_grupo=0)
+    return gravados, fim["t"]
+
+
+def test_arranque_lento_de_3_grupos_de_4_min_nunca_deixa_o_prazo_vencer(zap, monkeypatch):
+    gravados, fim = _arranque(zap, monkeypatch, [True, True, True], 4)
+    assert fim == T0 + timedelta(minutes=12)               # arranque de 12 min, mais lento que o de 8,7 do caso real
+    instantes = [t for t, _ in gravados]
+    assert len(gravados) == 4                              # partida + 1 por grupo
+    for (t, d) in gravados:
+        assert d["fase"] in ("partida", "arranque")
+    for a, b in itertools.pairwise(instantes):
+        assert b - a <= timedelta(minutes=10)              # nenhum buraco maior que o prazo
+    # no fim do arranque o ultimo prazo ainda vale
+    assert fim <= datetime.strptime(gravados[-1][1]["prazo"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+
+
+def test_arranque_com_os_3_grupos_falhando_por_11_min_fica_vencido(zap, monkeypatch):
+    gravados, fim = _arranque(zap, monkeypatch, [False, False, False], 11 / 3)
+    assert [d["fase"] for _, d in gravados] == ["partida"]  # grupo que falhou nao renova
+    prazo = datetime.strptime(gravados[-1][1]["prazo"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+    assert fim - timedelta(minutes=11) == T0
+    assert fim > prazo                                     # o vigia ve parado
+
+
+def test_arranque_grupo_que_falha_nao_renova_mas_os_outros_sim(zap, monkeypatch):
+    gravados, _ = _arranque(zap, monkeypatch, [True, False, True], 4)
+    assert [d["fase"] for _, d in gravados] == ["partida", "arranque", "arranque"]
+    assert [t for t, _ in gravados] == [T0, T0 + timedelta(minutes=4), T0 + timedelta(minutes=12)]
+
+
+def _resgate(zap, monkeypatch, abrem, min_por_grupo):
+    rel = {"t": T0}
+    gravados = []
+    chamadas = {"n": 0}
+    batim = zap.batimento_mod
+
+    def abrir(page, nome):
+        chamadas["n"] += 1
+        if not abrem[chamadas["n"] - 1]:
+            raise RuntimeError("falhou")
+
+    def catchup(page, nome, csv, numero, est, db, **k):
+        rel["t"] += timedelta(minutes=min_por_grupo)
+        return numero, set()
+
+    monkeypatch.setattr(batim, "agora_utc", lambda: rel["t"])
+    monkeypatch.setattr(batim, "gravar_atomico",
+                        lambda caminho, dados: gravados.append((rel["t"], dict(dados))) or True)
+    monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
+    monkeypatch.setattr(zap, "_capturar_desde_ultima", catchup)
+    monkeypatch.setattr(zap, "_ids_baloes", lambda page: [])
+
+    class Pagina:
+        def wait_for_timeout(self, ms):
+            pass
+
+    zap._BAT["atual"] = batim.Batimento(relogio=lambda: rel["t"])
+    try:
+        _numero, ok = zap._recuperar_lacuna(Pagina(), GRUPOS, "csv", 0, {"grupos": json.loads(json.dumps(MARCADORES))},
+                                           set(), object(), 2 * 3600)
+    finally:
+        zap._BAT["atual"] = None
+    return gravados, ok, rel["t"]
+
+
+def test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo(zap, monkeypatch):
+    gravados, ok, fim = _resgate(zap, monkeypatch, [True, True, True], 3)
+    assert ok is True and fim == T0 + timedelta(minutes=9)
+    assert [d["fase"] for _, d in gravados] == ["resgate"] * 3
+    assert [t for t, _ in gravados] == [T0 + timedelta(minutes=m) for m in (3, 6, 9)]
+
+
+def test_resgate_grupo_que_falha_nao_renova(zap, monkeypatch):
+    gravados, ok, _ = _resgate(zap, monkeypatch, [True, False, True], 3)
+    assert ok is False
+    assert [t for t, _ in gravados] == [T0 + timedelta(minutes=3), T0 + timedelta(minutes=6)]
+
+
+def test_resgate_com_todos_os_grupos_falhando_nao_renova(zap, monkeypatch):
+    gravados, ok, _ = _resgate(zap, monkeypatch, [False, False, False], 3)
+    assert ok is False and gravados == []

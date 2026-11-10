@@ -1052,6 +1052,18 @@ def _relatar_bloqueio(page):
         print(f"[monitor]   modal {rotulo!r}: {d.get('texto', '')!r}")
 
 
+# Batimento do run em andamento (BSV-57). O resgate e o arranque levam minutos por grupo (medido: arranque de
+# 5-8,7 min, resgate de 2-3 min por grupo); cada grupo que abriu e concluiu renova o batimento, senao um arranque
+# lento passa de 10 min e o vigia reinicia em pleno arranque. Grupo que falhou NAO renova.
+_BAT = {"atual": None}
+
+
+def _bater_progresso(fase: str) -> None:
+    b = _BAT["atual"]
+    if b is not None:
+        b.bater(fase)
+
+
 def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict,
                       vistos: set, db, parado_s: float):
     """
@@ -1092,6 +1104,7 @@ def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict
             )
             vistos |= ja
             vistos.update(_ids_baloes(page))
+            _bater_progresso("resgate")   # este grupo abriu e concluiu: progresso (BSV-57)
         except oracle_db.ErroSemId:
             raise                         # banco fora: quem chama espera e o resgate segue pendente
         except Exception as e:  # noqa: BLE001
@@ -1194,6 +1207,7 @@ def captura_msg_whatsapp(
     vigia_banco = alerta.VigiaBanco(estado)
     batimento = batimento_mod.Batimento()
     batimento.bater("partida")
+    _BAT["atual"] = batimento
 
     vistos: set = set()
     # Codigo de saida do run: 0 = encerramento normal (Ctrl+C / fim), != 0 avisa
@@ -1400,6 +1414,7 @@ def captura_msg_whatsapp(
                 except Exception as e:  # noqa: BLE001
                     print(f"[monitor] Contexto ja estava fechado: {e}")
             print(f"[monitor] Ultimo ID_OFERTA usado neste run: {numero or '-'}")
+            _BAT["atual"] = None
     return saida
 
 
