@@ -129,7 +129,7 @@ da madrugada, **tente reiniciar e avise no Telegram**.
 ## Critério de aceite
 Testes com relógio, `systemctl`, log, batimento e Telegram falsos. Nenhum espelha a implementação.
 
-- **Parado:** prazo vencido há 11 min → 1 reinício e 1 aviso. Prazo vencido há 9 min → nada (fronteira).
+- **Parado:** `em` há 11 min (prazo vencido há 1 min) → 1 reinício e 1 aviso. `em` há 9 min (prazo ainda não vencido) → nada (fronteira).
 - **Madrugada:** batimento com `prazo` = acordar + 10 min, relógio antes do prazo → nada, mesmo com `em`
   de horas atrás.
 - **PID trocado** (processo novo sem batimento ainda, dentro de 10 min da partida) → nada. O mesmo PID
