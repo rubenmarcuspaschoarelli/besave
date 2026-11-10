@@ -6,7 +6,9 @@
 
 ## Validation
 
-**Result:** PASS
+**Result:** PASS (veredito final, ciclo 3 fechado em `bc8fc17`)
+
+Ciclo 3 fechado (HEAD `bc8fc17`): G7 corrigido; M4 e M2 morrem; G8 aceito pelo dono e M5 equivalente. Histórico do ciclo 3 abaixo (a primeira rodada, em `2b592e8`, tinha reprovado só por G7).
 
 Ciclo 2 (HEAD `33324bc`): o G1 (testes de `test_unidades.py` apagados no ciclo 1) foi corrigido, e G2, G3, G4 e G5 ganharam testes que matam os mutantes sobreviventes, exceto `x5` (menor, abaixo). O ciclo 1 foi FAIL só por G1. Todos os gates executáveis aqui passam. Pendentes fora do alcance do verificador: `systemd-analyze` e a execução real na inst1 (riscos no fim), que bloqueiam o merge por regra da spec, não este relatório.
 
@@ -42,6 +44,47 @@ Total acumulado (ciclos 1 e 2): 109 mutantes distintos (103 + z1, y1-y5), **100 
 **q9 (ABORTADO além das 20 últimas linhas):** fica como decisão proposta ao dono, não defeito (spec fala em "últimas linhas" sem número).
 
 Observação sobre os testes de resgate: `resgate_ok=False` como padrão do falso é correto (o `True` antigo é o que renovaria o batimento em toda volta cega); só o par `bat_resgate_*` exercita o `True`.
+
+## Ciclo 3 (escopo restrito: batimento por grupo no arranque e no resgate, HEAD `2b592e8`)
+
+**Leitura do diff.** `wa/monitor.py` ganha `_BAT`, `_bater_progresso` (guarda `None`), a chamada em `_recuperar_lacuna` depois de cada grupo concluído (`monitor.py:1107`), `_BAT["atual"] = batimento` na partida (`:1210`) e o zeramento no `finally` (`:1417`). O `batimento.bater("arranque")` por grupo da Fase 1 (`monitor.py:1263`) **já existia** desde `e17d6c1`, depois do catch-up e depois do `continue` de falha de abertura; o diff do commit não o altera (a mensagem do commit sugere o contrário; é só descrição).
+
+**Os testes derivam do caso real, não da implementação.** `test_batimento_whatsapp.py` (novos): `test_arranque_lento_de_3_grupos_de_4_min_nunca_deixa_o_prazo_vencer` (arranque de 12 min, pior que os 8,7 medidos; asserta que nenhum intervalo entre gravações passa de 10 min e que o fim cabe no último prazo), `test_arranque_com_os_3_grupos_falhando_por_11_min_fica_vencido` (só `partida`; `fim > prazo`), `test_arranque_grupo_que_falha_nao_renova_mas_os_outros_sim` (instantes exatos T0, +4, +12), `test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo` (+3, +6, +9), `test_resgate_grupo_que_falha_nao_renova`, `test_resgate_com_todos_os_grupos_falhando_nao_renova`. Relógio e catch-up falsos avançam o tempo; as asserções são sobre o prazo e os instantes, não sobre chamadas internas. Ressalva: os três testes de resgate chamam `_recuperar_lacuna` direto e põem `zap._BAT["atual"]` à mão, então não provam a ligação feita na partida (G7).
+
+**Gates.** `test_batimento_whatsapp`, `test_rodizio_destravar`, `test_id_sequence_whatsapp`, `test_fiacao_whatsapp`: 45 passed. Vigia x3, `test_batimento_lojas`, `test_unidades`: 110 passed. Coletados: 537. `ruff check vps/ tests/` limpo, `shellcheck vps/*.sh` rc 0, `unittest` do chat: OK. Suíte inteira não reexecutada (o autor reporta 537 passed; a coleta bate).
+
+**Sensor (scratch descartável em `HEAD`, removido; `git status --porcelain` do real igual ao baseline).** 11 mutantes, 8 mortos, 3 sobreviveram.
+
+| Mutante | Resultado | Teste que mata / justificativa |
+| --- | --- | --- |
+| M1 só bate no fim do arranque (**obrigatório**) | morto | `test_arranque_lento_de_3_grupos_de_4_min_nunca_deixa_o_prazo_vencer` |
+| M2 só bate no fim do resgate | morto | `test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo` |
+| M3a arranque renova quando o grupo falha | morto | `test_arranque_com_os_3_grupos_falhando_por_11_min_fica_vencido` |
+| M3b resgate renova quando o grupo falha | morto | `test_resgate_grupo_que_falha_nao_renova` |
+| M4 `_BAT["atual"]` nunca definido na partida | **sobrevive** | **lacuna real G7** |
+| M5 `_BAT["atual"]` nunca zerado no `finally` | sobrevive, **equivalente** | um run por processo, e a partida seguinte reatribui `_BAT["atual"]` (`monitor.py:1210`); em teste, cada teste define e zera o seu |
+| M6a resgate bate antes do catch-up | morto | `test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo` |
+| M6b arranque bate antes do catch-up | morto | `test_arranque_grupo_que_falha_nao_renova_mas_os_outros_sim` |
+| M7a fase do resgate trocada | morto | `test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo` |
+| M7b fase do arranque trocada | morto | `test_bat02_volta_com_todos_os_grupos_falhando_nao_renova` |
+| M8 `_bater_progresso` sem guarda `None` | **sobrevive** | lacuna menor G8 |
+
+**G7 (bloqueia o PASS do ciclo 3).** Nenhum teste passa pelo resgate real do rodízio com o `_BAT` ligado pela própria `captura_msg_whatsapp`; se a linha da partida sumir, o batimento do resgate morre em silêncio e o vigia reinicia em pleno resgate longo. Teste que falta: rodar `captura_msg_whatsapp` com `_recuperar_lacuna` real (só `abrir_grupo` e `_capturar_desde_ultima` falsos, ver `_arranque`), forçar a lacuna (volta cega até deixar o resgate pendente, depois grupos abrindo) e afirmar que aparecem gravações de fase `resgate` nos instantes de cada grupo, sem passar por `zap._BAT[...] =` manual.
+
+**G8 (menor).** Falta um teste de `_recuperar_lacuna` com `_BAT["atual"] is None` que conclua com `ok is True` (hoje, sem guarda, o `AttributeError` seria engolido por `except Exception` e viraria "falha ao recuperar a lacuna").
+
+**Veredito final do ciclo 3:** FAIL só por G7 (um teste). Todo o resto do ciclo 3 está coberto e M1 morre. Fechando G7, o veredito é PASS, e G8 pode ficar como decisão do dono.
+
+## Ciclo 3, fechamento do G7 (HEAD `bc8fc17`)
+
+Teste novo: `test_batimento_whatsapp.py::test_resgate_pela_partida_real_bate_por_grupo_sem_ligar_o_batimento_a_mao`. Roda `captura_msg_whatsapp` com o `_recuperar_lacuna` real; o banco cai no catch-up do 1º grupo do arranque (`ErroSemId`), o resgate fica pendente e roda no rodízio, sem nenhum `zap._BAT[...] =` manual. Exige 3 instantes distintos de gravação de fase `resgate`, a 3 min exatos um do outro (um por grupo, não um só no fim), uma gravação `banco fora` e `_BAT["atual"] is None` no fim do run. Deriva do caso real (resgate de 2-3 min por grupo), não da implementação.
+
+- Arquivo `test_batimento_whatsapp.py` inteiro: 19 passed.
+- Sensor (scratch descartável em `HEAD`, removido; `git status --porcelain` do real igual ao baseline): **M4 (remover `_BAT["atual"] = batimento` na partida): morto** pelo teste novo; **M2 (bater só no fim do resgate): morto** por `test_resgate_de_3_grupos_de_3_min_bate_a_cada_grupo`.
+- Registros: G8 (guarda `None` em `_bater_progresso`, M8) fica **aceito pelo dono** como menor; M5 (`_BAT["atual"]` não zerado no `finally`) é **equivalente** (um run por processo; a partida seguinte reatribui). A G6 (x5) do ciclo 2 segue como menor, também sem bloqueio.
+- Acumulado do sensor: 120 mutantes distintos (109 até o ciclo 2, mais M1-M8 com variantes do ciclo 3), nenhum sobrevivente real que bloqueie; os que sobrevivem são equivalentes, de precisão de spec ou menores aceitos (o9, q1, q4, q9, q17, q20, x2, x5, x6, M5, M8).
+
+**Veredito final: PASS.** Continuam pendentes só o que o verificador não alcança: `systemd-analyze --user verify` e a execução real na inst1 (riscos listados no fim), que bloqueiam o merge por regra da spec.
 
 ## Tarefas
 
