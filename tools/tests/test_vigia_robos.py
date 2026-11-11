@@ -500,3 +500,87 @@ def test_g4_voltou_exige_batimento_posterior_a_ultima_acao_mesmo_para_o_laco(m):
     m.bater("whatsapp", em=m.t - min_(1))
     m.rodar_vigia()
     assert len(m.enviados) == 2 and "voltou" in m.enviados[1]
+
+
+# --- item 3 (inst1 11/11): so unidade active/activating e religada; failed avisa; inactive e silencio -----
+
+
+def test_item3_active_com_robo_parado_reinicia(m):
+    m.so("lojas")
+    m.estados[UNIDADE["lojas"]] = "active"
+    m.bater("lojas", em=T0 - min_(30))
+    m.rodar_vigia()
+    assert m.restarts() == [comando_restart("lojas")] and len(m.enviados) == 1
+
+
+def test_item3_failed_avisa_o_operador_sem_restart_mesmo_com_robo_parado(m):
+    m.so("lojas")
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.bater("lojas", em=T0 - min_(30))                         # parado E failed: nao religa
+    m.rodar_vigia()
+    assert m.restarts() == []
+    assert len(m.enviados) == 1
+    assert "lojas em failed" in m.enviados[0]
+    assert "unidade failed: o systemd ja desistiu" in m.enviados[0]
+    assert "nenhuma (precisa de operador)" in m.enviados[0]
+
+
+def test_item3_failed_1_aviso_por_ocorrencia_e_lembrete_de_2h(m):
+    m.so("lojas")
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    for _ in range(3):
+        m.andar(minutes=5)
+        m.rodar_vigia()
+    assert len(m.enviados) == 1
+    m.andar(hours=1, minutes=44)                               # 1 h 59 min depois do aviso
+    m.rodar_vigia()
+    assert len(m.enviados) == 1
+    m.andar(minutes=2)                                         # 2 h 01 min
+    m.rodar_vigia()
+    assert len(m.enviados) == 2 and "continua em failed" in m.enviados[1]
+    assert m.restarts() == []
+
+
+def test_item3_failed_que_vira_inactive_ou_active_fecha_a_ocorrencia_e_avisa_de_novo_se_voltar(m):
+    m.so("lojas")
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    m.andar(minutes=5)
+    m.estados[UNIDADE["lojas"]] = "inactive"                   # o operador resolveu: silencio
+    m.rodar_vigia()
+    assert len(m.enviados) == 1 and m.restarts() == []
+    assert "unidade" not in m.estado()["robos"]["lojas"]["ocorrencias"]
+    m.andar(minutes=5)
+    m.estados[UNIDADE["lojas"]] = "active"
+    m.bater("lojas", em=m.t - min_(1))
+    m.rodar_vigia()                                            # active e saudavel: nada
+    m.andar(minutes=5)
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    assert len(m.enviados) == 2                                # nova ocorrencia, novo aviso
+
+
+def test_item3_inactive_nada_mesmo_com_batimento_vencido(m):
+    m.estados[UNIDADE["lojas"]] = "inactive"
+    m.estados[UNIDADE["whatsapp"]] = "inactive"
+    m.bater("lojas", em=T0 - timedelta(hours=5))
+    m.bater("whatsapp", em=T0 - timedelta(hours=5))
+    m.rodar_vigia()
+    assert m.restarts() == [] and m.enviados == []
+
+
+def test_item3_failed_do_whatsapp_tambem_nao_e_religado(m):
+    m.so("whatsapp")
+    m.estados[UNIDADE["whatsapp"]] = "failed"
+    m.bater("whatsapp", em=T0 - timedelta(hours=1))
+    m.rodar_vigia()
+    assert m.restarts() == [] and len(m.enviados) == 1 and "whatsapp em failed" in m.enviados[0]
+
+
+def test_item3_failed_durante_o_reinicio_diario_do_whatsapp_fica_calado(m):
+    m.so("whatsapp")
+    m.estados[UNIDADE["whatsapp"]] = "failed"
+    m.estados[REINICIO] = "active"
+    m.rodar_vigia()
+    assert m.restarts() == [] and m.enviados == []

@@ -20,6 +20,7 @@ SCOPE = {"lojas": "besave-lojas-robo.scope", "whatsapp": "besave-whatsapp-robo.s
 UNIDADE = {"lojas": "besave-captura-lojas.service", "whatsapp": "besave-captura-whatsapp.service"}
 REINICIO = "besave-reinicio-whatsapp.service"
 PID = {"lojas": 200, "whatsapp": 100}
+LINHA_DEPOIS = "Ultimo ID_OFERTA usado neste run: 1"     # a finalizacao do robo, escrita pelo stop do restart
 
 
 def iso(dt):
@@ -36,6 +37,7 @@ class Mundo:
         self.estados = {UNIDADE["lojas"]: "active", UNIDADE["whatsapp"]: "active", REINICIO: "inactive"}
         self.inicio_scope = {}               # nome -> instante de ativacao do scope/unidade
         self.restart_rc = 0
+        self.reiniciados = set()             # scopes que ja passaram por restart: MemoryCurrent vazio
         self.cgroup = raiz / "cgroup"
         self.proc = raiz / "proc"
         for robo in ("lojas", "whatsapp"):
@@ -75,6 +77,7 @@ class Mundo:
             est = self.estados.get(args[1], "unknown")
             return (0 if est == "active" else 3), est + "\n"
         if args[0] == "restart":
+            self._depois_do_restart(args[1])
             return self.restart_rc, ""
         if args[0] == "show":
             nome = args[-1]
@@ -88,8 +91,19 @@ class Mundo:
                 assert "--timestamp=unix" in args
                 return 0, (f"@{int(dt.timestamp())}\n" if dt else "\n")
             if "MemoryCurrent" in args:
-                return 0, "1073741824\n"
+                return 0, ("" if nome in self.reiniciados else "1073741824\n")
         raise AssertionError(f"comando inesperado: {cmd}")
+
+    def _depois_do_restart(self, unidade):
+        """Depois do restart o mundo e outro (licao 11): scope sem memoria, so o robo novo no scope, log com a linha de
+        finalizacao. Uma mensagem montada depois do restart sai com n/d e a linha errada."""
+        robo = next(r for r, u in UNIDADE.items() if u == unidade)
+        self.reiniciados.add(SCOPE[robo])
+        self.scope_pids(robo, {PID[robo]})   # o robo novo; os chrome de antes sumiram
+        alvo = v.log_mais_recente(next(x for x in self.amb.robos if x.nome == robo))
+        if alvo is not None:
+            with open(alvo, "a", encoding="utf-8") as f:
+                f.write(LINHA_DEPOIS + chr(10))
 
     def restarts(self):
         return [c for c in self.cmds if c[2] == "restart"]

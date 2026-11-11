@@ -4,7 +4,7 @@ Vigia externo dos robos de captura (BSV-57). So stdlib; roda a cada 5 min por
 besave-vigia-robos.timer (unidade --user do `besave`).
 
 Para cada robo (lojas, whatsapp), lendo o batimento.json que o proprio robo grava so com progresso:
-  1. unidade parada de proposito (inactive) -> nada;
+  1. unidade parada de proposito (inactive) -> nada; `failed` -> avisa o operador, NUNCA reinicia;
   2. reinicio diario do WhatsApp em andamento -> nada (aquele script confere e avisa sozinho);
   3. `agora > prazo` ou pid do batimento fora do scope do robo -> PARADO;
   4. parado com QR pendente ou `ABORTADO:` no log mais recente -> avisa o operador, NAO reinicia;
@@ -340,21 +340,27 @@ def avisar(amb: Ambiente, texto: str) -> None:
         log(f"falha ao enviar ao Telegram ({type(e).__name__})")
 
 
-def montar_mensagem(amb: Ambiente, robo: Robo, motivo: str, acao: str, pids: set[int],
-                    titulo: str = "parado") -> str:
-    cauda = ""
-    alvo = log_mais_recente(robo)
-    if alvo is not None:
-        cauda = ultima_linha_util(ler_cauda(alvo))
-    mem = memoria_scope_mb(amb, robo.scope)
-    rss = rss_maior_chrome_mb(amb, pids)
+@dataclass
+class Foto:
+    """O que se ve do robo ANTES do restart: depois dele o scope, os pids e o log sao outros."""
+
+    cauda: str
+    mem_mb: int | None
+    rss_mb: int | None
+
+
+def tirar_foto(amb: Ambiente, robo: Robo, pids: set[int], texto_log: str) -> Foto:
+    return Foto(ultima_linha_util(texto_log), memoria_scope_mb(amb, robo.scope), rss_maior_chrome_mb(amb, pids))
+
+
+def montar_mensagem(robo: Robo, motivo: str, acao: str, foto: Foto, titulo: str = "parado") -> str:
     linhas = [
         f"Vigia dos robos: {robo.nome} {titulo}",
         f"Motivo: {motivo}",
         f"Acao: {acao}",
-        f"Ultima linha do log: {cauda or '(sem log)'}",
-        "Memoria do scope: " + (f"{mem} MB" if mem is not None else "n/d")
-        + " | maior chrome: " + (f"{rss} MB" if rss is not None else "n/d"),
+        f"Ultima linha do log: {foto.cauda or '(sem log)'}",
+        "Memoria do scope: " + (f"{foto.mem_mb} MB" if foto.mem_mb is not None else "n/d")
+        + " | maior chrome: " + (f"{foto.rss_mb} MB" if foto.rss_mb is not None else "n/d"),
     ]
     return redigir("\n".join(linhas))
 
@@ -437,10 +443,15 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
         return
 
     pids = pids_do_scope(amb, robo.scope)
+    if unidade == "failed":                        # o systemd ja desistiu: religar nao e papel do vigia
+        _avisar_unidade_failed(amb, robo, ocorrencias, pids, agora)
+        return
+    ocorrencias.pop("unidade", None)
     bat = ler_batimento(robo.batimento)
     status, motivo, desde = avaliar(amb, robo, bat, pids, agora)
     alvo_log = log_mais_recente(robo)
     texto_log = ler_cauda(alvo_log) if alvo_log is not None else ""
+    foto = tirar_foto(amb, robo, pids, texto_log)     # antes de qualquer restart
 
     laco = laco_de_partidas(amb, robo, agora) if robo.nome == "whatsapp" else 0
     operador = None
@@ -471,7 +482,7 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
                 acao += " (o restart falhou)"
         if tipo is not None:
             rotulo = {"novo": "parado", "mudou": "parado", "lembrete": "continua parado"}[tipo]
-            msg = montar_mensagem(amb, robo, operador or motivo, acao, pids, rotulo)
+            msg = montar_mensagem(robo, operador or motivo, acao, foto, rotulo)
             avisar(amb, msg)
         return
 
@@ -482,6 +493,18 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
             del ocorrencias["parado"]
             avisar(amb, f"Vigia dos robos: {robo.nome} voltou (parado por {minutos} min).")
         _vigiar_grupos(amb, robo, bat, ocorrencias, agora)
+
+
+def _avisar_unidade_failed(amb: Ambiente, robo: Robo, ocorrencias: dict, pids: set[int], agora: datetime) -> None:
+    """Unidade `failed`: 1 aviso de operador por ocorrencia, lembrete a cada 2 h, nunca restart."""
+    tipo = _abrir_ou_atualizar(ocorrencias, "unidade", "operador", agora, agora)
+    if tipo is None:
+        return
+    alvo_log = log_mais_recente(robo)
+    foto = tirar_foto(amb, robo, pids, ler_cauda(alvo_log) if alvo_log is not None else "")
+    rotulo = "continua em failed" if tipo == "lembrete" else "em failed"
+    avisar(amb, montar_mensagem(robo, "unidade failed: o systemd ja desistiu",
+                                "nenhuma (precisa de operador)", foto, rotulo))
 
 
 def _vigiar_grupos(amb: Ambiente, robo: Robo, bat: Batimento, ocorrencias: dict, agora: datetime) -> None:

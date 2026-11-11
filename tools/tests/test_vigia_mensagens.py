@@ -3,7 +3,7 @@ Telegram falso; nenhum segredo real."""
 from datetime import timedelta
 
 import pytest
-from vigia_falso import CHAT, PID, T0, TOKEN, Mundo, v
+from vigia_falso import CHAT, LINHA_DEPOIS, PID, T0, TOKEN, Mundo, v
 
 
 @pytest.fixture
@@ -157,3 +157,35 @@ def test_g5_excecao_com_token_nao_vaza_no_journal(m, monkeypatch, capsys):
     monkeypatch.setattr(v, "vigiar_robo", quebra)
     assert m.rodar_vigia() == 0
     assert TOKEN not in capsys.readouterr().out
+
+
+def test_item1_mensagem_traz_memoria_e_log_de_antes_do_restart_nos_dois_robos(tmp_path):
+    for robo in ("lojas", "whatsapp"):
+        m = Mundo(tmp_path / robo)
+        m.so(robo)
+        m.scope_pids(robo, {PID[robo], 300})
+        m.processo(300, "chrome", 2097152)                     # 2048 MB, so existe antes do restart
+        if robo == "lojas":
+            m.log_lojas("[10:00:00] linha 7 | loja=AMAZON | status=erro\n")
+        else:
+            m.log_whatsapp(T0 - min_(40), "[10:00:00] aguardando a lista de conversas\n")
+        m.bater(robo, em=T0 - min_(30))
+        m.rodar_vigia()
+        assert len(m.restarts()) == 1 and len(m.enviados) == 1
+        texto = m.enviados[0]
+        assert "Memoria do scope: 1024 MB | maior chrome: 2048 MB" in texto, robo
+        assert "status=erro" in texto or "aguardando a lista de conversas" in texto
+        assert LINHA_DEPOIS not in texto and "n/d" not in texto
+        # o mundo de depois do restart e outro: o mesmo calculo agora daria n/d e a linha da finalizacao
+        alvo = v.log_mais_recente(next(x for x in m.amb.robos if x.nome == robo))
+        assert v.memoria_scope_mb(m.amb, f"besave-{robo}-robo.scope") is None
+        assert v.ultima_linha_util(v.ler_cauda(alvo)) == LINHA_DEPOIS
+
+
+def test_item1_lembrete_sem_restart_tambem_usa_a_foto_do_momento(m):
+    m.log_lojas("ABORTADO: perfil travado\n")                  # operador: sem restart
+    _parar_lojas(m)
+    m.rodar_vigia()
+    m.andar(hours=2, minutes=1)
+    m.rodar_vigia()
+    assert len(m.enviados) == 2 and "Memoria do scope: 1024 MB" in m.enviados[1]
