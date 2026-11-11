@@ -390,3 +390,63 @@ ordem batida → espera (passam a checar indiretamente agora).
 
 Continua **bloqueando o merge**: a execução real do dono na inst1 (inclusive ver o batimento renovando durante
 um lote de Shopee pela API e durante a pausa).
+
+## Iteração 4 — teto do timeout e exceção inesperada (TMO-01, EXC-01)
+
+**Result**: PASS ✅ para TMO-01 e EXC-01 (escopo desta iteração, a pedido do dono: só o sensor de mutantes desses
+dois critérios; não é o Verifier inteiro).
+**Date**: 2026-11-11
+**Commit verificado**: `004c973` (`fix(tools): teto do timeout da API da Shopee e excecao inesperada retida`).
+**Verifier**: Verifier sub-agente independente (autor ≠ verificador). Não alterou código nem testes.
+
+Fecha as lacunas 1 e 2 da iteração 3 (timeout sem teto; exceção inesperada fora do `try`).
+
+### TMO-01 — `timeout_segundos` > 60 vira 60; < 1, não finito ou inválido vira 20; sempre com `[WARN]`
+
+- Constantes: `tools/capture-store-pages/core/shopee_api.py:20` (`TIMEOUT_PADRAO = 20`) e `:22`
+  (`TIMEOUT_MIN, TIMEOUT_MAX = 1, 60`).
+- `_timeout`: `core/shopee_api.py:52-64`. Inválido → `nan` (`:54-57`); `not math.isfinite(valor) or valor < TIMEOUT_MIN`
+  → `[WARN]` e 20 (`:58-60`); `valor > TIMEOUT_MAX` → `[WARN]` e 60 (`:61-63`).
+- Usado por `ler_config`: `core/shopee_api.py:73`.
+- Testes: `tools/tests/test_shopee_api.py:391-407` (`test_timeout_teto_60_e_invalido_vira_20_com_warn`, 12 casos com as
+  fronteiras 1 e 60, `0.5`, `0`, `-5`, `None`, `"abc"`, `"nan"`, `"inf"`, `"30"`; confere valor, presença do `[WARN]` e
+  ausência de credencial na saída; `test_timeout_ausente_e_o_padrao_sem_warn`). `test_fal01_*` usa o piso, 1 s
+  (`tools/tests/test_shopee_lote.py:267`).
+
+### EXC-01 — exceção inesperada no caminho da API: retida como `shopee_api_indisponivel`, log redigido, lote segue
+
+- `tools/capture-store-pages/main.py:637-645`: `_capturar_shopee_api` dentro de `try`; `except Exception` (`:640`) →
+  `campos = {}`, status `SHOPEE_API_INDISPONIVEL` (`:643`), `detalhe_api = shopee_api.redigir(f'{type(e).__name__}: {e}',
+  shopee_cfg)[:200]` (`:644`), `print` (`:645`). Conta para a pausa pelo mesmo caminho do passageiro (`main.py:731`).
+- `redigir`: `core/shopee_api.py:81-90` (troca `app_secret`/`app_id` por `REDACTED` em `:85`, depois assinatura, token e URL).
+- Testes: `tools/tests/test_shopee_api.py:410-418` (`test_redigir_tira_credencial_assinatura_token_e_url`);
+  `tools/tests/test_shopee_lote.py:475-485` (`test_exc_excecao_inesperada_retem_a_linha_e_o_lote_segue`: linha 1 retida em
+  `'0'`, sem `'9'`, ponteiro travado, linha 2 da Amazon gravada, saída sem `APP_ID`, `SECRET` e assinatura) e `:488-495`
+  (`test_exc_tres_excecoes_pausam_a_shopee_com_aviso_sem_segredo`: 3 exceções pausam a Shopee, um aviso, sem segredo).
+
+### Sensor de discriminação (worktree descartável `git worktree add <scratchpad>\mut-tmo-exc 004c973`, removido com `git worktree remove --force`)
+
+Comando por mutante: `cd tools && python -m pytest tests/test_shopee_api.py tests/test_shopee_lote.py -q`
+(linha de base: 102 passed). Um mutante por vez, arquivo restaurado byte a byte depois de cada um.
+
+| id | mutante | resultado | testes que pegam |
+| --- | --- | --- | --- |
+| E1 | sem o `try` (chamada direta de `_capturar_shopee_api`) | **morto** (2) | `test_exc_excecao_inesperada_retem…`, `test_exc_tres_excecoes_pausam…` |
+| E2 | no `except`, status `'item_divergente'` (vira `'9'`) em vez de `SHOPEE_API_INDISPONIVEL` | **morto** (2) | os mesmos dois |
+| E3 | no `except`, detalhe sem `redigir` (`f'{type(e).__name__}: {e}'`) | **morto** (2) | os mesmos dois |
+| E4 | no `except`, status `'ok'` e `detalhe_api = ''`, sem print (a falha não conta para a pausa) | **morto** (2) | os mesmos dois |
+| E5 | `redigir` sem a troca de `app_secret` (só `app_id`) | **morto** (3) | `test_redigir_tira_credencial…` e os dois `test_exc_*` |
+| T1 | sem o teto (`if valor > TIMEOUT_MAX` → `if False`) | **morto** (1) | `test_timeout_teto_60…[300-60-True]` |
+| T2 | sem o piso (`valor < TIMEOUT_MIN` removido) | **morto** (3) | `…[0.5-20-True]`, `…[0-20-True]`, `…[-5-20-True]` |
+| T3 | inválido/abaixo do piso devolve `TIMEOUT_MAX` (60) em vez de 20 | **morto** (7) | `…[abc]`, `…[0.5]`, `…[0]`, `…[-5]`, `…[None]`, `…[nan]`, `…[inf]` |
+| T4 | sem o `[WARN]` do teto | **morto** (1) | `…[300-60-True]` |
+| T5 | sem `math.isfinite` (`nan`/`inf` passam) | **morto** (4) | `…[abc]`, `…[None]`, `…[nan]`, `…[inf]` |
+
+10/10 mortos, nenhum sobrevivente. `git status --porcelain` do worktree real vazio antes e depois do sensor.
+
+### Lacunas
+
+Nenhuma nos dois critérios. Observação (não bloqueia): o corte `[:200]` do detalhe (`main.py:644`) não foi mutado
+(fora da lista pedida) e nenhum teste o fixa.
+
+Continua **bloqueando o merge**: a execução real do dono na inst1.
