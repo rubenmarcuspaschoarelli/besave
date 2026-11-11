@@ -6,7 +6,7 @@
 
 ## Validation
 
-**Result:** PASS (veredito final, ciclo 3 fechado em `bc8fc17`)
+**Result:** FAIL (ciclo 4, HEAD `abc9122`; os ciclos 1-3 terminaram aprovados, ver abaixo)
 
 Ciclo 3 fechado (HEAD `bc8fc17`): G7 corrigido; M4 e M2 morrem; G8 aceito pelo dono e M5 equivalente. Histórico do ciclo 3 abaixo (a primeira rodada, em `2b592e8`, tinha reprovado só por G7).
 
@@ -85,6 +85,35 @@ Teste novo: `test_batimento_whatsapp.py::test_resgate_pela_partida_real_bate_por
 - Acumulado do sensor: 120 mutantes distintos (109 até o ciclo 2, mais M1-M8 com variantes do ciclo 3), nenhum sobrevivente real que bloqueie; os que sobrevivem são equivalentes, de precisão de spec ou menores aceitos (o9, q1, q4, q9, q17, q20, x2, x5, x6, M5, M8).
 
 **Veredito final: PASS.** Continuam pendentes só o que o verificador não alcança: `systemd-analyze --user verify` e a execução real na inst1 (riscos listados no fim), que bloqueiam o merge por regra da spec.
+
+## Ciclo 4 (HEAD `abc9122`: foto antes do restart, `failed` só avisa, `parar_scope.sh`)
+
+Commits verificados: `a459c49`, `3f06326`, `abc9122` (`git diff bc8fc17..HEAD`, 12 arquivos).
+
+**Gates (rodados em série, sem carga paralela):** `python -m pytest -q` em `tools/` inteiro: **553 passed** (293 s); `ruff check vps/ tests/` limpo; `shellcheck vps/*.sh` (inclui `parar_scope.sh`) rc 0; `unittest` do `capture-chat-groups`: OK. `systemd-analyze --user verify` continua não executado (Windows).
+
+**Critérios novos, evidência:**
+
+| Requisito | Evidência (teste, código) | Resultado |
+| --- | --- | --- |
+| MSG-01 medido ANTES do restart | `test_vigia_mensagens.py::test_item1_mensagem_traz_memoria_e_log_de_antes_do_restart_nos_dois_robos` (memória 1024 MB, chrome 2048 MB, sem `n/d`, sem a linha de finalização; o mundo falso muda memória, pids e log no restart, `vigia_falso.py` `_depois_do_restart`); `test_item1_lembrete_sem_restart_tambem_usa_a_foto_do_momento`; código `vigia_robos.py` `tirar_foto` (antes do bloco de restart) e `montar_mensagem(robo, motivo, acao, foto, rotulo)` | PASS |
+| VIG-11 `failed` só avisa, sem restart, 1 aviso + lembrete 2 h | `test_vigia_robos.py::test_item3_failed_avisa_o_operador_sem_restart_mesmo_com_robo_parado`, `test_item3_failed_1_aviso_por_ocorrencia_e_lembrete_de_2h` (1 h 59 nada, 2 h 01 "continua em failed"), `test_item3_failed_do_whatsapp_tambem_nao_e_religado`, `test_item3_failed_durante_o_reinicio_diario_do_whatsapp_fica_calado`; só `active` religa `test_item3_active_com_robo_parado_reinicia`; `inactive` silêncio `test_item3_inactive_nada_mesmo_com_batimento_vencido`; código `_avisar_unidade_failed` | PASS |
+| ESC-03/ESC-04 parada limpa | `test_parar_scope.py` (sequência inteira comparada, lição 14): SIGINT só no `python`, espera por `is-active`, só então `stop` (`test_sigint_so_no_python_espera_sair_e_so_entao_para_o_scope`); python congelado espera o prazo inteiro (`..._congelado_...`); prazo padrão 20 s; scope inexistente só tenta o stop; nunca sinaliza node/chrome/tmux; `test_unidades.py::test_lojas_usa_o_lancador_com_scope` (`ExecStop` inteiro e `TimeoutStopSec == "60"`); código `parar_scope.sh` | PASS |
+
+**Sensor do ciclo 4 (scratch descartável em `HEAD`, removido; `git status --porcelain` do real igual ao baseline): 34 mutantes, 29 mortos, 5 sobreviveram** (um deles equivalente na prática).
+
+Mortos (29): foto depois do restart (f1), foto sem log, sem memória, sem RSS chrome (f2, f2b, f2c), log e memória lidos depois do restart (f3, f3b); `failed` reiniciando, sem aviso, avisando a cada rodada, sem lembrete, `failed` vencendo o reinício diário, `failed` tratado como `inactive`, `failed` caindo no fluxo normal (v1, v2, v3, v3b, v5, v6, v7); kill em todo processo, também no node, TERM no lugar de INT, sem espera, prazo 30, 10 e off-by-one, stop antes do kill, `exit 1`, `sleep 2`, nunca para o scope, sem guarda de cgroup (p1, p1c, p2, p3a, p3b, p3c, p4, p5, p6, p7, p8, p9); `ExecStop` voltando ao stop direto, `TimeoutStopSec` 45 e 49, `ExecStop` sem `-`, scope errado (u1-u5).
+
+| Sobrevivente | O que muda | Classificação |
+| --- | --- | --- |
+| v4 | remove `ocorrencias.pop("unidade", None)` (`vigia_robos.py`, logo depois do bloco `failed`) | **Lacuna real G9**: `failed` para `active` direto (um `start` do operador entre duas rodadas de 5 min) não fecha a ocorrência, e um novo `failed` fica calado até o lembrete de 2 h. O teste existente passa por `inactive`, que limpa tudo e esconde o defeito. Teste que falta: `failed` -> `active` com batimento saudável -> `failed` de novo = 2º aviso. |
+| f4 | aviso de `failed` sem foto (mensagem com `n/d` e sem linha do log) | Lacuna menor G10: os testes de `failed` não conferem memória nem log na mensagem |
+| p1b | `*python*` no lugar de `python*` no `case` de `parar_scope.sh` (também sinalizaria `ipython`, `xpython`) | Lacuna menor G11: falta um comm como `notpython` ou `ipython` que não pode receber SIGINT |
+| f5 | `TIMEOUT_SYSTEMCTL_S` 150 -> 60 | Lacuna menor G12: a constante não é testada (ver G13) |
+
+**G13 (defeito de produção, bloqueia o PASS do ciclo 4).** `vigia_robos.py` `TIMEOUT_SYSTEMCTL_S = 150` (um `restart` das lojas espera o stop, até ~60 s, mais o `ExecStartPre` de até 60 s), mas `tools/vps/systemd/besave-vigia-robos.service:11` tem `TimeoutStartSec=120` e o vigia só grava o estado no fim (`executar`, `salvar_estado`). Um restart lento, ou os dois robôs reiniciando na mesma rodada, passa de 120 s: o systemd mata o vigia antes de gravar `vigia_robos.json`. Efeito: o reinício feito não é contado (o teto de 2 reinícios por hora deixa de valer) e a ocorrência não é registrada (aviso repetido na rodada seguinte). Correção: `TimeoutStartSec` maior que `2 x TIMEOUT_SYSTEMCTL_S` mais folga (por exemplo 400), e/ou gravar o estado depois de cada robô; um teste em `test_unidades.py` que compare `TimeoutStartSec` com `TIMEOUT_SYSTEMCTL_S` (hoje o mutante f5 e esse desajuste passam despercebidos). Aqui o limite não foi exercido de fato (só leitura de código e das unidades), então o impacto real fica para a inst1.
+
+**Veredito do ciclo 4: FAIL** só por G13 (uma linha de unidade e um teste). Tudo o que o coordenador listou nos itens 1, 2 e 3 está coberto e os mutantes pedidos morrem, com a ressalva dos menores G9-G12. Corrigido G13, o veredito é PASS; G9 (mutante v4) recomendo fechar junto, é um teste.
 
 ## Tarefas
 

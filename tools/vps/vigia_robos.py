@@ -577,6 +577,7 @@ def executar(amb: Ambiente) -> int:
             vigiar_robo(amb, robo, estado, agora)
         except Exception as e:  # noqa: BLE001
             log(f"falha ao vigiar {robo.nome} ({type(e).__name__}: {e})")
+        salvar_estado(amb.estado_path, estado)     # o restart ja feito nao se perde se o vigia for morto depois
     try:
         rotacionar_logs(amb, estado, agora)
     except Exception as e:  # noqa: BLE001

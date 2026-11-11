@@ -7,5 +7,6 @@ Description=Besave - vigia externo dos robos de captura
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /srv/besave/repo/tools/vps/vigia_robos.py
-# systemctl, leitura de logs e envio ao Telegram: nada passa de alguns segundos
-TimeoutStartSec=120
+# Cada systemctl restart espera o stop do robo (ate ~50 s) e o ExecStartPre da unidade (ate 60 s): o vigia da
+# 150 s a cada um (TIMEOUT_SYSTEMCTL_S) e vigia 2 robos. Estourar este prazo mata o vigia antes de gravar o estado.
+TimeoutStartSec=420

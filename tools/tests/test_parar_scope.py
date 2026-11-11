@@ -99,3 +99,10 @@ def test_nunca_sinaliza_processo_que_nao_e_python(tmp_path):
     p.processos(p11="node", p12="chrome", p14="tmux: server")
     _, linhas = p.rodar("besave-lojas-robo")
     assert linhas == [SHOW, ATIVO, STOP]                       # nenhum kill
+
+
+def test_g11_so_comm_que_comeca_com_python_recebe_sigint(tmp_path):
+    p = Parada(tmp_path, vivo_por=0)
+    p.processos(p10="ipython", p11="mypython", p12="python3.12")
+    _, linhas = p.rodar("besave-lojas-robo")
+    assert linhas == [SHOW, "kill -INT 12", ATIVO, STOP]

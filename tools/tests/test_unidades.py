@@ -161,3 +161,13 @@ def test_vigia_e_oneshot_com_timer_de_5_minutos():  # BSV-57 UNI-01
     assert timer["Timer"]["OnUnitActiveSec"] == "5min"
     assert timer["Timer"]["OnBootSec"] == "5min"
     assert timer["Install"]["WantedBy"] == "timers.target"
+
+
+def test_vigia_systemd_nao_mata_o_vigia_no_meio_de_dois_restarts():  # G13 (verifier ciclo 4)
+    import vigia_robos
+
+    s = _ler(VPS / "systemd" / "besave-vigia-robos.service")["Service"]
+    # cada systemctl pode levar TIMEOUT_SYSTEMCTL_S; 2 robos, cada um com restart + alguns comandos de leitura
+    assert int(s["TimeoutStartSec"]) > 2 * vigia_robos.TIMEOUT_SYSTEMCTL_S + 60
+    # um restart das lojas espera o stop (20 s do python + 30 s do scope) e o ExecStartPre (60 s)
+    assert vigia_robos.TIMEOUT_SYSTEMCTL_S >= 20 + 30 + 60

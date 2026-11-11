@@ -584,3 +584,45 @@ def test_item3_failed_durante_o_reinicio_diario_do_whatsapp_fica_calado(m):
     m.estados[REINICIO] = "active"
     m.rodar_vigia()
     assert m.restarts() == [] and m.enviados == []
+
+
+def test_g13_estado_gravado_depois_de_cada_robo_mesmo_se_o_vigia_morrer_no_seguinte(m, monkeypatch):
+    import vigia_robos as v
+
+    m.bater("lojas", em=T0 - min_(30))
+    original = v.vigiar_robo
+
+    def segundo_morre(amb, robo, estado, agora):
+        if robo.nome == "whatsapp":
+            raise SystemExit("morto pelo systemd")
+        original(amb, robo, estado, agora)
+
+    monkeypatch.setattr(v, "vigiar_robo", segundo_morre)
+    with pytest.raises(SystemExit):
+        m.rodar_vigia()
+    assert len(m.estado()["robos"]["lojas"]["reinicios"]) == 1     # o teto de 2 por hora nao se perde
+
+
+def test_g9_failed_que_vira_active_direto_fecha_a_ocorrencia(m):
+    m.so("lojas")
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    assert len(m.enviados) == 1
+    m.andar(minutes=5)
+    m.estados[UNIDADE["lojas"]] = "active"                     # sem passar por inactive
+    m.bater("lojas", em=m.t - min_(1))
+    m.rodar_vigia()
+    assert "unidade" not in m.estado()["robos"]["lojas"]["ocorrencias"]
+    m.andar(minutes=5)
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    assert len(m.enviados) == 2                                # novo failed, novo aviso (nao espera o lembrete)
+
+
+def test_g10_aviso_de_failed_traz_memoria_e_ultima_linha_do_log(m):
+    m.so("lojas")
+    m.log_lojas("antes\n[10:00:00] linha 9 | status=erro\n")
+    m.estados[UNIDADE["lojas"]] = "failed"
+    m.rodar_vigia()
+    assert "[10:00:00] linha 9 | status=erro" in m.enviados[0]
+    assert "Memoria do scope: 1024 MB" in m.enviados[0]
