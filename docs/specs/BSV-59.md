@@ -66,7 +66,11 @@ item 2 das Saídas):
     importa);
   - item inexistente (`itemId: 1`) → `{"data":{"productOfferV2":{"nodes":[]}}}`, sem erro.
 
-**Falta (passo 3):** o limite de chamadas e a janela exata do `Timestamp`, na documentação.
+**Passo 3 fechado sem o número oficial (10/11):** o volume é baixo (1.728 URLs da Shopee em 30 dias ≈ 58/dia,
+2 chamadas por linha ≈ 120/dia), longe de qualquer limite plausível. Um cliente de terceiros da mesma API
+trata o código `10030` como limite de chamadas (não oficial). Por isso: `10030` → `api_limite`; qualquer outro
+código desconhecido → `api_indisponivel` (retida, nunca `'9'`), e o relógio da máquina segue o NTP (a janela
+do `Request Expired` não importa com o relógio certo).
 
 ## Saídas
 1. **Configuração** em `conf/config.json` (fora do git) e `conf/config.example.json` (valores fictícios, com
@@ -91,8 +95,8 @@ item 2 das Saídas):
      `utm`/afiliado de terceiro) → `(shortLink, None)` ou `(None, motivo)`.
    - **Motivos:** `api_indisponivel` (timeout, erro de rede, HTTP ≠ 200, JSON ilegível), `api_credencial`
      (`errors[].extensions.code` `10020`: `Invalid Signature` ou `Request Expired`; a mensagem vai no log
-     e no aviso, porque `Request Expired` é relógio, não credencial), `api_limite` (código de limite que o
-     passo 3 da pré-condição registrar), `fora_do_programa` (`nodes: []`: item sem oferta de afiliado ou
+     e no aviso, porque `Request Expired` é relógio, não credencial), `api_limite` (código `10030`, ver o
+     passo 3 da pré-condição), `fora_do_programa` (`nodes: []`: item sem oferta de afiliado ou
      inexistente; a API não distingue), `item_divergente` (nó de outro `itemId` ou mais de um nó). Qualquer
      outro código em `errors` → `api_indisponivel` com o código no log. **O HTTP é 200 também nos erros**:
      decidir pelo `errors`, nunca pelo status. O código do erro vai no log; o corpo da resposta não.
