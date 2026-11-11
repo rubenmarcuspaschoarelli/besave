@@ -348,3 +348,21 @@ def test_seg01_credencial_nunca_sai(amb, lojas, capsys, monkeypatch):
     tudo = "\n".join([capsys.readouterr().out, repr(saidas), repr(saidas2), repr(gravados), *amb.enviados])
     for segredo in [APP_ID, SECRET, *assinaturas]:
         assert segredo not in tudo
+
+
+# --- DOC-01 ---------------------------------------------------------------------------------------
+def test_doc01_readme_exemplo_e_sql():
+    from conftest import LOJAS
+    leia = (LOJAS / "README.md").read_text(encoding="utf-8")
+    secao = leia.split("## Shopee pela API de afiliados")[1]
+    for termo in ("api_indisponivel", "api_credencial", "api_limite", "fora_do_programa", "item_divergente",
+                  "url_nao_reconhecida", "habilitado", "conf/config.json", "O que se perdeu",
+                  "conferir `app_id`/`app_secret`", "Request Expired"):
+        assert termo in secao, termo
+    exemplo = json.loads((LOJAS / "conf" / "config.example.json").read_text(encoding="utf-8"))
+    bloco = exemplo["shopee_afiliado"]
+    assert bloco["habilitado"] is False and bloco["timeout_segundos"] == 20 and "_obs" in bloco
+    assert bloco["app_id"] == "<app_id>" and bloco["app_secret"] == "<app_secret>"
+    sql = (LOJAS / "sql" / "BSV-59_retidas_shopee.sql").read_text(encoding="utf-8")
+    assert ("UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '9', DS_CAPTURA = 'descartada_atraso_bsv'\n"
+            " WHERE ST_CAPTURA = '0' AND DS_URL_ORIGEM LIKE '%shopee%' AND DT_CAPTACAO < SYSDATE - 1;") in sql

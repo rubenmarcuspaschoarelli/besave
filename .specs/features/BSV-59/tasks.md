@@ -40,7 +40,7 @@ T3 → T4
 **Tests**: `tools/tests/test_shopee_lote.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T4: README e SQL das retidas
+### T4: README e SQL das retidas ✅
 **What**: seção Shopee no README; `sql/BSV-59_retidas_shopee.sql`.
 **Where**: `tools/capture-store-pages/README.md`, `tools/capture-store-pages/sql/BSV-59_retidas_shopee.sql`
 **Depends on**: T3
