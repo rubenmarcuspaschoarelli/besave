@@ -66,9 +66,10 @@ item 2 das Saídas):
     importa);
   - item inexistente (`itemId: 1`) → `{"data":{"productOfferV2":{"nodes":[]}}}`, sem erro.
 
-**Passo 3 fechado sem o número oficial (10/11):** o volume é baixo (1.728 URLs da Shopee em 30 dias ≈ 58/dia,
-2 chamadas por linha ≈ 120/dia), longe de qualquer limite plausível. Um cliente de terceiros da mesma API
-trata o código `10030` como limite de chamadas (não oficial). Por isso: `10030` → `api_limite`; qualquer outro
+**Passo 3 (10/11):** a documentação da Open API dá **8.000 chamadas por hora**; excedido, a API recusa até o
+próximo intervalo. O volume é ~120 chamadas/dia (1.728 URLs da Shopee em 30 dias ≈ 58/dia, 2 chamadas por
+linha). O código do erro de limite não está na documentação; um cliente de terceiros da mesma API usa `10030`
+(não oficial). Por isso: `10030` → `api_limite`; qualquer outro
 código desconhecido → `api_indisponivel` (retida, nunca `'9'`), e o relógio da máquina segue o NTP (a janela
 do `Request Expired` não importa com o relógio certo).
 
