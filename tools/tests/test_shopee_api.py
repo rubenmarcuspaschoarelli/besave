@@ -43,6 +43,7 @@ class Servidor:
         self.pedidos = []
         self.respostas = []
         self.atraso = 0
+        self.truncar = False      # corpo menor que o Content-Length (IncompleteRead no cliente)
         dono = self
 
         class H(BaseHTTPRequestHandler):
@@ -52,16 +53,23 @@ class Servidor:
                 time.sleep(dono.atraso)
                 status, resposta = dono.respostas.pop(0) if dono.respostas else (200, produto_ok(no()))
                 dados = resposta if isinstance(resposta, bytes) else json.dumps(resposta).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(dados)))
-                self.end_headers()
-                self.wfile.write(dados)
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    self.send_header("Content-Length", str(len(dados) + (50 if dono.truncar else 0)))
+                    self.end_headers()
+                    self.wfile.write(dados)
+                except OSError:
+                    pass          # cliente ja desistiu pelo timeout
 
             def log_message(self, *a):
                 pass
 
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        # Sem thread viva depois do teste: server_close espera o pedido atrasado terminar e nada
+        # escreve no stderr do teste seguinte.
+        self.httpd.daemon_threads = False
+        self.httpd.handle_error = lambda *a: None
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}/graphql"
         threading.Thread(target=self.httpd.serve_forever, daemon=True).start()
 
@@ -128,7 +136,8 @@ def test_pro01_um_no_do_item_vira_as_chaves_da_captura(cliente, srv):
     assert "matchId" not in query
 
 
-@pytest.mark.parametrize("price, preco", [("89.99", "89.99"), ("19.9", "19.90"), ("120", "120.00")])
+@pytest.mark.parametrize("price, preco", [("89.99", "89.99"), ("19.9", "19.90"), ("120", "120.00"),
+                                          ("12345678901234567.89", "12345678901234567.89")])
 def test_pro01_preco_em_decimal_duas_casas(cliente, srv, price, preco):
     srv.respostas.append((200, produto_ok(no(price=price))))
     dados, _ = cliente.produto(SHOP, ITEM)
@@ -217,6 +226,11 @@ def test_err01_errors_ganha_de_data_com_http_200(cliente, srv):
 @pytest.mark.parametrize("status", [500, 429, 403])
 def test_err01_http_diferente_de_200_indisponivel(cliente, srv, status):
     srv.respostas.append((status, produto_ok(no())))
+    assert cliente.produto(SHOP, ITEM) == (None, "api_indisponivel")
+
+
+def test_err01_resposta_cortada_indisponivel(cliente, srv):
+    srv.truncar = True
     assert cliente.produto(SHOP, ITEM) == (None, "api_indisponivel")
 
 
@@ -334,6 +348,12 @@ def test_res02_destino_fora_da_shopee_nao_e_pedido(api):
 @pytest.mark.parametrize("resposta", [OSError("timed out"), (503, None), (429, None)])
 def test_res_rede_ou_5xx_e_passageiro(api, resposta):
     abrir = Saltos({CURTO: resposta})
+    assert api.resolver(CURTO, abrir=abrir) == (None, "api_indisponivel")
+
+
+def test_res_protocolo_quebrado_e_passageiro(api):
+    import http.client
+    abrir = Saltos({CURTO: http.client.HTTPException("resposta quebrada")})
     assert api.resolver(CURTO, abrir=abrir) == (None, "api_indisponivel")
 
 

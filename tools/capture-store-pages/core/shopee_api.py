@@ -6,6 +6,7 @@ Credencial e assinatura nunca vao para log, excecao ou retorno.
 """
 
 import hashlib
+import http.client
 import json
 import re
 import time
@@ -127,7 +128,7 @@ class Cliente:
                 bruto = resp.read()
         except urllib.error.HTTPError as e:
             return self._falha(API_INDISPONIVEL, f'HTTP {e.code}')
-        except (urllib.error.URLError, OSError, ValueError) as e:
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as e:
             # So o tipo: a mensagem de rede nao carrega credencial, mas nao ha por que arriscar.
             return self._falha(API_INDISPONIVEL, type(e).__name__)
         if status != 200:
@@ -257,7 +258,7 @@ def resolver(url, abrir=None, timeout=TIMEOUT_PADRAO):
             break
         try:
             status, destino = abrir(atual, timeout)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, http.client.HTTPException) as e:
             print(f'shopee api: {API_INDISPONIVEL} (resolver: {type(e).__name__})')
             return None, API_INDISPONIVEL
         if status >= 500 or status == 429:

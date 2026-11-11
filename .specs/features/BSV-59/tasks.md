@@ -8,10 +8,14 @@ T1 → T2
 ### Phase 2: Lote e docs
 T3 → T4
 
+### Phase 3: Correções do Verifier (iteração 1)
+T5
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
+T4 → T5
 ```
 
 ## Task Breakdown
@@ -46,6 +50,14 @@ T3 → T4
 **Depends on**: T3
 **Reqs**: DOC-01
 **Tests**: `tools/tests/test_shopee_lote.py` (motivos e chaves documentados)
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
+### T5: Correções do Verifier ✅
+**What**: preço grande trava o `float` (M11); servidor falso sem thread viva nem escrita em socket fechado; `url_final` limpo asserido (M33); `http.client.HTTPException` vira `api_indisponivel`; imagens do teste em `tmp_path`.
+**Where**: `tools/tests/test_shopee_api.py`, `tools/tests/test_shopee_lote.py`, `tools/capture-store-pages/core/shopee_api.py`
+**Depends on**: T4
+**Reqs**: PRO-01, ERR-01, FAL-01
+**Tests**: `tools/tests/test_shopee_api.py`, `tools/tests/test_shopee_lote.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
 ## Test Coverage Matrix

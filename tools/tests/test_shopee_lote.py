@@ -5,6 +5,7 @@ falsos que registram qualquer chamada. Credenciais ficticias e distintas de tudo
 """
 import argparse
 import json
+import os
 from datetime import datetime, timedelta
 
 import pytest
@@ -110,7 +111,7 @@ class _Reler:
 
 
 @pytest.fixture
-def amb(lojas, monkeypatch):
+def amb(lojas, monkeypatch, tmp_path):
     api = ApiFalsa()
     rel = Relogio()
     enviados, navegou, gerador, baixadas = [], [], [], []
@@ -163,11 +164,11 @@ def amb(lojas, monkeypatch):
     def rodar(linhas, db=None):
         db = db or Db()
         rows = [{"ID_OFERTA": i, "url": u, "numero_da_captura": str(i), "DS_ORIGEM": "g"} for i, u in linhas]
-        saidas, _, _ = lojas._processar_lote(Pagina(), rows, db, True, "img", set(), pausa)
+        saidas, _, _ = lojas._processar_lote(Pagina(), rows, db, True, str(tmp_path), set(), pausa)
         return {o["ID_OFERTA"]: o for o in saidas}, db
 
     yield argparse.Namespace(api=api, rel=rel, cfg=cfg, enviados=enviados, navegou=navegou, gerador=gerador,
-                             baixadas=baixadas, pausa=pausa, rodar=rodar, shopee=shopee, redirects=redirects)
+                             baixadas=baixadas, pausa=pausa, img=str(tmp_path), rodar=rodar, shopee=shopee, redirects=redirects)
     api.fechar()
 
 
@@ -192,15 +193,11 @@ def test_pro01_linha_da_shopee_vira_ok_com_as_chaves_da_api(amb, lojas, capsys):
     assert gravado["taxa_comissao_afiliado"] == "13%"
     assert gravado["id_produto_afiliado"] == f"{SHOP}.{item(1)}"
     assert gravado["url_afiliado"] == LINK.format(item(1))
-    assert amb.baixadas == [("https://cf.shopee.com.br/file/REDACTED", f"img{_sep()}1{_sep()}img_1.jpg")]
-    assert gravado["pasta_imagens"] == f"img{_sep()}1"
+    assert amb.baixadas == [("https://cf.shopee.com.br/file/REDACTED", os.path.join(amb.img, "1", "img_1.jpg"))]
+    assert gravado["pasta_imagens"] == os.path.join(amb.img, "1")
+    assert gravado["url_final"] == f"https://shopee.com.br/product/{SHOP}/{item(1)}"
     assert "oracle=ok" in capsys.readouterr().out
     assert lojas.ponteiro == [1]
-
-
-def _sep():
-    import os
-    return os.sep
 
 
 @pytest.mark.parametrize("price, preco", [("89.99", "89.99"), ("19.9", "19.90")])
