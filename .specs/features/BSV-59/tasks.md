@@ -16,7 +16,7 @@ T3 → T4
 
 ## Task Breakdown
 
-### T1: Assinatura e cliente GraphQL
+### T1: Assinatura e cliente GraphQL ✅
 **What**: `core/shopee_api.py` com assinatura, `produto`, `link_afiliado` e classificação de erros (HTTP 200 com `errors`).
 **Where**: `tools/capture-store-pages/core/shopee_api.py`
 **Depends on**: none
@@ -32,7 +32,7 @@ T3 → T4
 **Tests**: `tools/tests/test_shopee_api.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T3: Integração no lote e pausa
+### T3: Integração no lote e pausa ✅
 **What**: `_processar_lote` usa a API na Shopee com `habilitado`; `shopee_api_indisponivel` em `STATUS_RETER`; motivo `shopee_api` na `PausaLojas`; bloco no `config.example.json`.
 **Where**: `tools/capture-store-pages/main.py`, `core/bloqueio.py`, `conf/config.example.json`
 **Depends on**: T2

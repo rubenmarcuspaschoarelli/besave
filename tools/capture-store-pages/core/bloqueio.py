@@ -22,6 +22,7 @@ PAGINA = 'pagina'        # captcha/login/verificacao na pagina da loja
 AFILIADO = 'afiliado'    # sessao do programa de afiliados
 REDIRECIONAMENTO = 'redirecionamento'  # redirect pelo proxy residencial (BSV-58); chave = dominio
 CLOUDFLARE = 'cloudflare'  # bloqueio do Cloudflare em dominio fora da lista (BSV-58); chave = host
+SHOPEE_API = 'shopee_api'  # API de afiliados da Shopee fora, credencial ou limite (BSV-59); chave = shopee
 
 
 def ler_pausa_minutos(cfg):
@@ -34,6 +35,13 @@ def ler_pausa_minutos(cfg):
     return minutos if minutos > 0 else PAUSA_MINUTOS_PADRAO
 
 
+def _dica_api(detalhe):
+    # Request Expired tambem vem com o codigo de credencial: e relogio da maquina (NTP).
+    if 'api_credencial' in (detalhe or ''):
+        return '; conferir app_id/app_secret em conf/config.json (Request Expired = relogio da maquina)'
+    return ''
+
+
 class _Estado:
     def __init__(self):
         self.seguidos = 0
@@ -42,6 +50,7 @@ class _Estado:
         self.desde = None        # inicio da ocorrencia
         self.alertado_em = None
         self.retidas = set()     # ids seguros em '0' nesta ocorrencia
+        self.detalhe = ''        # motivo da API (SHOPEE_API), sem credencial
 
 
 class PausaLojas:
@@ -68,11 +77,12 @@ class PausaLojas:
     def _rotulo(self, loja):
         return self.nome(loja) or loja
 
-    def registrar_bloqueio(self, loja, motivo, id_oferta=None, restantes=()):
+    def registrar_bloqueio(self, loja, motivo, id_oferta=None, restantes=(), detalhe=''):
         e = self._e(loja)
         self.reter(loja, id_oferta)
         e.seguidos += 1
         e.motivo = motivo
+        e.detalhe = detalhe
         agora = self.agora()
         if e.ate is not None:
             # Sonda falhou: nova pausa, mesma ocorrencia (sem aviso novo).
@@ -90,6 +100,12 @@ class PausaLojas:
                         f'{len(e.retidas)} linha(s) retida(s) (ST_CAPTURA=0; {SEGUIDOS} falhas seguidas '
                         f'do redirect pelo proxy). Conferir o tunel_residencial.ps1 no PC; o robo tenta '
                         f'de novo sozinho em {self.minutos:g} min.')
+            return
+        if motivo == SHOPEE_API:
+            self.avisar(f'Robo das lojas: {self._rotulo(loja)} em pausa: API de afiliados com falha '
+                        f'({detalhe}){_dica_api(detalhe)}. {len(e.retidas)} linha(s) retida(s) '
+                        f'(ST_CAPTURA=0; {SEGUIDOS} falhas seguidas). O robo tenta de novo sozinho em '
+                        f'{self.minutos:g} min.')
             return
         if motivo == CLOUDFLARE:
             self.avisar(f'Robo das lojas: {self._rotulo(loja)} bloqueado pelo Cloudflare; incluir em '
@@ -121,6 +137,11 @@ class PausaLojas:
                     self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
                                 f'(túnel residencial fora?, {len(e.retidas)} linha(s) retida(s)). '
                                 'Conferir o tunel_residencial.ps1 no PC.')
+                    continue
+                if e.motivo == SHOPEE_API:
+                    self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua em pausa ha {horas:.0f} h '
+                                f'(API de afiliados: {e.detalhe}{_dica_api(e.detalhe)}, '
+                                f'{len(e.retidas)} linha(s) retida(s)).')
                     continue
                 if e.motivo == CLOUDFLARE:
                     self.avisar(f'Robo das lojas: {self._rotulo(loja)} continua bloqueado pelo Cloudflare ha '

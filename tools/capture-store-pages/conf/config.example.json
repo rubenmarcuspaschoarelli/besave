@@ -40,6 +40,13 @@
   "link_afiliado": {
     "habilitado": true
   },
+  "shopee_afiliado": {
+    "habilitado": false,
+    "app_id": "<app_id>",
+    "app_secret": "<app_secret>",
+    "timeout_segundos": 20,
+    "_obs": "true = Shopee pela API de afiliados (produto e link sem navegador, BSV-59). false ou bloco ausente = navegador, como antes. Credencial so no conf/config.json do PC/inst1; o relogio da maquina precisa seguir o NTP (Request Expired)."
+  },
   "lojas_ativas": [
     "Amazon",
     "Mercado Livre",

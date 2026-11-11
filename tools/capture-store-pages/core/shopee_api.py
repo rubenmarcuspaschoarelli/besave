@@ -100,7 +100,7 @@ class Cliente:
 
     @classmethod
     def de_config(cls, config):
-        return cls(config.app_id, config.app_secret, config.timeout)
+        return cls(config.app_id, config.app_secret, config.timeout, endpoint=ENDPOINT)
 
     def __repr__(self):
         return f'shopee_api.Cliente(endpoint={self.endpoint!r})'
@@ -241,12 +241,13 @@ def extrair_ids(url):
     return None
 
 
-def resolver(url, abrir=abrir_sem_seguir, timeout=TIMEOUT_PADRAO):
+def resolver(url, abrir=None, timeout=TIMEOUT_PADRAO):
     """URL do grupo -> ((shopId, itemId), None) ou (None, motivo).
 
     Ate MAX_PEDIDOS pedidos sem seguir redirect, so a hosts da Shopee. Rede fora,
     5xx ou 429 -> API_INDISPONIVEL (passageiro); o resto -> URL_NAO_RECONHECIDA.
     """
+    abrir = abrir or abrir_sem_seguir
     atual = (url or '').strip()
     for pedido in range(MAX_PEDIDOS + 1):
         ids = extrair_ids(atual)

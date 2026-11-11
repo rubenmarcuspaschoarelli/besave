@@ -31,7 +31,7 @@ Vitrine da API, colunas novas (`productCatIds`, `shopName`, faixa de variantes),
 | `price` inválido | Vazio, não numérico, não finito ou ≤ 0 → `item_divergente` | Spec, critério Produto | y |
 | `taxa_comissao_afiliado` | `"0.13"` → `"13%"`, `"0.135"` → `"13,5%"` (percentual com vírgula, como a página mostra no ML/Amazon) | "mesmo formato que Amazon/ML" | n |
 | `avaliacao_nota`, `quantidade_vendida` | Texto da API sem conversão (`"4.6"`, `"1351"`); o `oracle_db` converte como hoje | Spec tabela | y |
-| `url_final` | URL do item resolvida (último `Location`), como o navegador gravaria; `url_besave` como hoje | DS_URL_FINAL é referência | n |
+| `url_final` | `https://shopee.com.br/product/<shop>/<item>` (URL limpa); `url_besave` calculada dela como hoje | Regra 3: nada do afiliado de terceiro gravado | n |
 | Imagem | `download_image(imageUrl, <img_root>/<captura>/img_1.jpg)`; falha da imagem não derruba a linha | Spec tabela; imagem é best-effort hoje | n |
 | `shortLink` ausente sem `errors` | `api_indisponivel` (retida) | Sem link a oferta não vai ao site | n |
 | Resolução: pedido | `HEAD` sem seguir redirect, só para hosts `shopee.com.br`/`*.shopee.com.br`; destino fora disso → `url_nao_reconhecida` | Medição com `curl -sI` | n |
@@ -68,18 +68,18 @@ Open questions: none
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CFG-01 | P1 | Execute | Pending |
-| ASS-01 | P1 | Execute | Pending |
+| CFG-01 | P1 | Execute | Done |
+| ASS-01 | P1 | Execute | Done |
 | RES-01 | P1 | Execute | Done |
 | RES-02 | P1 | Execute | Done |
-| PRO-01 | P1 | Execute | Pending |
-| PRO-02 | P1 | Execute | Pending |
-| LNK-01 | P1 | Execute | Pending |
-| NAV-01 | P1 | Execute | Pending |
-| ERR-01 | P1 | Execute | Pending |
-| FAL-01 | P1 | Execute | Pending |
-| PAU-01 | P1 | Execute | Pending |
-| SEG-01 | P1 | Execute | Pending |
+| PRO-01 | P1 | Execute | Done |
+| PRO-02 | P1 | Execute | Done |
+| LNK-01 | P1 | Execute | Done |
+| NAV-01 | P1 | Execute | Done |
+| ERR-01 | P1 | Execute | Done |
+| FAL-01 | P1 | Execute | Done |
+| PAU-01 | P1 | Execute | Done |
+| SEG-01 | P1 | Execute | Done |
 | DOC-01 | P1 | Execute | Pending |
 
 ## Success Criteria
