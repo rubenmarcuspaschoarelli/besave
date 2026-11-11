@@ -6,7 +6,7 @@
 
 ## Validation
 
-**Result:** FAIL (ciclo 4, HEAD `abc9122`; os ciclos 1-3 terminaram aprovados, ver abaixo)
+**Result:** PASS (ciclo 4 final, HEAD `27cd64e`)
 
 Ciclo 3 fechado (HEAD `bc8fc17`): G7 corrigido; M4 e M2 morrem; G8 aceito pelo dono e M5 equivalente. Histórico do ciclo 3 abaixo (a primeira rodada, em `2b592e8`, tinha reprovado só por G7).
 
@@ -114,6 +114,27 @@ Mortos (29): foto depois do restart (f1), foto sem log, sem memória, sem RSS ch
 **G13 (defeito de produção, bloqueia o PASS do ciclo 4).** `vigia_robos.py` `TIMEOUT_SYSTEMCTL_S = 150` (um `restart` das lojas espera o stop, até ~60 s, mais o `ExecStartPre` de até 60 s), mas `tools/vps/systemd/besave-vigia-robos.service:11` tem `TimeoutStartSec=120` e o vigia só grava o estado no fim (`executar`, `salvar_estado`). Um restart lento, ou os dois robôs reiniciando na mesma rodada, passa de 120 s: o systemd mata o vigia antes de gravar `vigia_robos.json`. Efeito: o reinício feito não é contado (o teto de 2 reinícios por hora deixa de valer) e a ocorrência não é registrada (aviso repetido na rodada seguinte). Correção: `TimeoutStartSec` maior que `2 x TIMEOUT_SYSTEMCTL_S` mais folga (por exemplo 400), e/ou gravar o estado depois de cada robô; um teste em `test_unidades.py` que compare `TimeoutStartSec` com `TIMEOUT_SYSTEMCTL_S` (hoje o mutante f5 e esse desajuste passam despercebidos). Aqui o limite não foi exercido de fato (só leitura de código e das unidades), então o impacto real fica para a inst1.
 
 **Veredito do ciclo 4: FAIL** só por G13 (uma linha de unidade e um teste). Tudo o que o coordenador listou nos itens 1, 2 e 3 está coberto e os mutantes pedidos morrem, com a ressalva dos menores G9-G12. Corrigido G13, o veredito é PASS; G9 (mutante v4) recomendo fechar junto, é um teste.
+
+### Ciclo 4 final (HEAD `27cd64e`: G13, G9, G10, G11, G12)
+
+Commit verificado: `27cd64e` (`git diff abc9122..HEAD -- tools`). O G13 foi corrigido no código: `besave-vigia-robos.service:12` `TimeoutStartSec=420` e `vigia_robos.py:580` `salvar_estado` a cada robô dentro de `executar` (além do final, `:585`).
+
+**Gates (série, sem carga paralela):** `python -m pytest -q` em `tools/` inteiro: **558 passed** (211 s); `ruff check vps/ tests/` limpo; `shellcheck vps/*.sh` rc 0; `unittest` do `capture-chat-groups` OK. `systemd-analyze` segue não executado.
+
+| Lacuna | Teste que fecha (file:line) | Mutante | Resultado |
+| --- | --- | --- | --- |
+| G13 estado gravado por robô | `test_vigia_robos.py:589` `test_g13_estado_gravado_depois_de_cada_robo_mesmo_se_o_vigia_morrer_no_seguinte` (o 2º robô morre com `SystemExit`; `reinicios` do 1º continua gravado) | n1 remove o `salvar_estado` do laço | morto |
+| G13 prazo da unidade | `test_unidades.py:166` `test_vigia_systemd_nao_mata_o_vigia_no_meio_de_dois_restarts` (`TimeoutStartSec > 2 x TIMEOUT_SYSTEMCTL_S + 60` e `TIMEOUT_SYSTEMCTL_S >= 110`) | n2 `TimeoutStartSec=120`; n3 `=360` | mortos |
+| G12 constante do timeout | mesmo teste (`TIMEOUT_SYSTEMCTL_S >= 110`) | f5 (150 para 60) e f5v (109), rodados contra `test_unidades.py` | mortos (o f5 só sobrevivia quando rodado contra os testes do vigia, a asserção mora no teste de unidades) |
+| G9 `failed` para `active` direto | `test_vigia_robos.py:606` `test_g9_failed_que_vira_active_direto_fecha_a_ocorrencia` | v4 | morto |
+| G10 foto no aviso de `failed` | `test_vigia_robos.py:622` `test_g10_aviso_de_failed_traz_memoria_e_ultima_linha_do_log` | f4 | morto |
+| G11 só comm que começa com `python` | `test_parar_scope.py:104` `test_g11_so_comm_que_comeca_com_python_recebe_sigint` (`ipython`, `mypython` sem kill; `python3.12` com kill) | p1b | morto |
+
+Sensor do ciclo 4 final: 10 mutantes (v4, f4, p1b, f5, f5u, f5v, n1, n2, n3, n4), 9 mortos e 1 sobrevivente. O `n4` (gravar o estado só depois do 1º robô) é **equivalente na prática**: o caso que importa (o 1º robô reiniciou e o vigia morre depois) é gravado igual, e se o vigia morre durante o `restart` do próprio robô o registro dele se perde em qualquer variante. Scratch descartável em `HEAD`, removido; `git status --porcelain` do real igual ao baseline.
+
+Acumulado do ciclo 4: 41 mutantes distintos. Sobreviventes que restam em todo o ticket são só os equivalentes, de precisão de spec ou menores aceitos (o9, q1, q4, q9, q17, q20, x2, x5, x6, M5, M8, n4).
+
+**Veredito final do ciclo 4: PASS.** Continuam pendentes só o que o verificador não alcança: `systemd-analyze --user verify`, o tempo real de um `restart` das lojas contra os 150 s e os 420 s, e a execução real na inst1.
 
 ## Tarefas
 
