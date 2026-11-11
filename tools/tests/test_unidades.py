@@ -164,6 +164,7 @@ def test_vigia_e_oneshot_com_timer_de_5_minutos():  # BSV-57 UNI-01
 
 
 def test_vigia_systemd_nao_mata_o_vigia_no_meio_de_dois_restarts():  # G13 (verifier ciclo 4)
+    import vigia_falso  # noqa: F401  (poe vps/ no sys.path)
     import vigia_robos
 
     s = _ler(VPS / "systemd" / "besave-vigia-robos.service")["Service"]
@@ -171,3 +172,33 @@ def test_vigia_systemd_nao_mata_o_vigia_no_meio_de_dois_restarts():  # G13 (veri
     assert int(s["TimeoutStartSec"]) > 2 * vigia_robos.TIMEOUT_SYSTEMCTL_S + 60
     # um restart das lojas espera o stop (20 s do python + 30 s do scope) e o ExecStartPre (60 s)
     assert vigia_robos.TIMEOUT_SYSTEMCTL_S >= 20 + 30 + 60
+
+
+LOJAS_SERVICE = {
+    "ExecStartPre": "/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'",
+    "ExecStart": "/srv/besave/repo/tools/vps/iniciar_lojas.sh --aguardar",
+    "ExecStop": "-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo",
+    "KillSignal": "SIGINT",
+    "SuccessExitStatus": "130",
+    "Restart": "on-failure",
+    "RestartSec": "30",
+    "TimeoutStopSec": "60",
+    "Type": "simple",
+    "WorkingDirectory": "/srv/besave/repo/tools/capture-store-pages",
+    "Environment": "BESAVE_DISPLAY=:1",
+}
+
+
+def test_lojas_unit_inteira_com_saida_130_como_sucesso():  # BSV-57 item 2 (reteste inst1): licao 14
+    servico = dict(_ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"])
+    assert servico == LOJAS_SERVICE
+
+
+def test_saida_130_da_parada_nao_deixa_a_unidade_failed_e_queda_real_sim():
+    """Modelo da regra do systemd: codigo em SuccessExitStatus = sucesso (unidade `inactive`, sem Restart);
+    outro codigo != 0 = falha (`failed`, e Restart=on-failure sobe de novo)."""
+    s = _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
+    ok = {0, *(int(x) for x in s["SuccessExitStatus"].split())}
+    assert 130 in ok                       # SIGINT (128 + 2) da parada: inactive
+    assert 1 not in ok and 137 not in ok   # queda real e SIGKILL seguem em failed -> on-failure
+    assert s["Restart"] == "on-failure"

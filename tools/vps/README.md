@@ -409,7 +409,10 @@ dentro do painel do tmux (sem teto de memória). O `ExecStop` da unidade roda
 `systemctl --user stop besave-lojas-robo.scope` (SIGINT a todos e, em 30 s, SIGKILL, que também mata um python
 congelado por `kill -STOP`). O `stop` direto do scope mandava SIGINT também ao node do Playwright: o driver
 morria antes, o `BrowserContext.close` estourava, o python saía com 1 e a unidade ficava `failed` (inst1, 11/11).
-`TimeoutStopSec=60` cobre os 20 s + 30 s. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
+`TimeoutStopSec=60` cobre os 20 s + 30 s. Se o `context.close()` passar dos 20 s, o 2º SIGINT do `stop` do
+scope estoura dentro do `close` e o python sai com **130**: a unidade tem `SuccessExitStatus=130` (só a parada
+manda SIGINT; queda real sai com outro código e segue em `Restart=on-failure`), então termina `inactive`. O robô
+registra `[monitor] contexto fechado em N s` no log: meça antes de mexer nos 20 s. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
 
 ```bash
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload

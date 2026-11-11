@@ -57,7 +57,7 @@ Open questions: none
 1. ESC-01: THE SYSTEM SHALL subir o robô das lojas por `systemd-run --user --scope --collect --unit=besave-lojas-robo -p KillSignal=SIGINT -p TimeoutStopSec=30 -- <python> -u main.py --monitorar --sem-perguntas` dentro do tmux.
 2. ESC-02: WHEN o scope está ativo na partida, THE SYSTEM SHALL recusar subir; com o scope inativo SHALL rodar `reset-failed` e `revert` antes do tmux.
 3. ESC-03: THE SYSTEM SHALL parar o scope no `ExecStop` da unidade das lojas por `parar_scope.sh`: `SIGINT` só ao python do scope, esperar até 20 s ele sair e então `systemctl --user stop` do scope (SIGINT a todos e, em 30 s, SIGKILL).
-4. ESC-04: WHEN o operador para a unidade das lojas e o python sai por `SIGINT`, THE SYSTEM SHALL deixar a unidade `inactive`, não `failed` (inst1, 11/11: o `stop` do scope mandava SIGINT ao node do Playwright, o `BrowserContext.close` estourava e o python saía com 1).
+4. ESC-04: WHEN o operador para a unidade das lojas e o python sai por `SIGINT`, THE SYSTEM SHALL deixar a unidade `inactive`, não `failed`, inclusive quando o `close()` do contexto passa dos 20 s e o 2º SIGINT do `stop` do scope faz o python sair com 130 (`SuccessExitStatus=130` na unidade; queda real sai com outro código e segue em `on-failure`); o robô loga `[monitor] contexto fechado em N s` (inst1, 11/11: o `stop` do scope mandava SIGINT ao node do Playwright, o `BrowserContext.close` estourava e o python saía com 1).
 
 ### P1: Vigia ⭐ MVP
 

@@ -221,3 +221,33 @@ def test_bat06_falha_de_escrita_so_loga(lojas, tmp_path, monkeypatch, capsys):
     assert alvo.read_text(encoding="utf-8") == '{"antigo":1}'
     assert sorted(p.name for p in tmp_path.iterdir()) == ["batimento.json"]
     assert "OSError" in capsys.readouterr().out
+
+
+def test_item2_contexto_fechado_loga_a_duracao_do_close(lojas, monkeypatch, capsys):
+    """BSV-57: o numero que decide o prazo do ExecStop (licao 28) vai ao log, tambem quando o close estoura."""
+    relogio = iter([100.0, 107.5])
+    monkeypatch.setattr(lojas, "time", _Tempo(0))
+    monkeypatch.setattr(lojas.time, "monotonic", lambda: next(relogio))
+
+    class Ctx:
+        fechou = False
+
+        def close(self):
+            Ctx.fechou = True
+
+    lojas._fechar_contexto(Ctx())
+    assert Ctx.fechou and "[monitor] contexto fechado em 7.5 s" in capsys.readouterr().out
+
+
+def test_item2_close_que_estoura_ainda_loga_a_duracao_e_propaga(lojas, monkeypatch, capsys):
+    relogio = iter([10.0, 31.0])
+    monkeypatch.setattr(lojas, "time", _Tempo(0))
+    monkeypatch.setattr(lojas.time, "monotonic", lambda: next(relogio))
+
+    class Ctx:
+        def close(self):
+            raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        lojas._fechar_contexto(Ctx())
+    assert "[monitor] contexto fechado em 21.0 s" in capsys.readouterr().out

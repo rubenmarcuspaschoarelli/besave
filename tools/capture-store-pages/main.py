@@ -1046,6 +1046,15 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
               f'{total_grav} gravada(s) (1) | {total_erro} com erro (9).')
 
 
+def _fechar_contexto(context):
+    """context.close() com a duracao no log (BSV-57): e o numero que decide o prazo do ExecStop (parar_scope.sh)."""
+    t0 = time.monotonic()
+    try:
+        context.close()
+    finally:
+        print(f'[monitor] contexto fechado em {time.monotonic() - t0:.1f} s', flush=True)
+
+
 def main():
     ap = argparse.ArgumentParser(
         description='Captura dados de produto das ofertas pendentes no Oracle.')
@@ -1193,7 +1202,7 @@ def main():
                 _resumo_oracle(len(out_rows), gravadas, com_erro)
                 _varrer_validade(db)
 
-        context.close()
+        _fechar_contexto(context)
 
     if db:
         db.desconectar()
