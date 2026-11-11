@@ -56,7 +56,8 @@ Open questions: none
 
 1. ESC-01: THE SYSTEM SHALL subir o robô das lojas por `systemd-run --user --scope --collect --unit=besave-lojas-robo -p KillSignal=SIGINT -p TimeoutStopSec=30 -- <python> -u main.py --monitorar --sem-perguntas` dentro do tmux.
 2. ESC-02: WHEN o scope está ativo na partida, THE SYSTEM SHALL recusar subir; com o scope inativo SHALL rodar `reset-failed` e `revert` antes do tmux.
-3. ESC-03: THE SYSTEM SHALL parar o scope no `ExecStop` da unidade das lojas.
+3. ESC-03: THE SYSTEM SHALL parar o scope no `ExecStop` da unidade das lojas por `parar_scope.sh`: `SIGINT` só ao python do scope, esperar até 20 s ele sair e então `systemctl --user stop` do scope (SIGINT a todos e, em 30 s, SIGKILL).
+4. ESC-04: WHEN o operador para a unidade das lojas e o python sai por `SIGINT`, THE SYSTEM SHALL deixar a unidade `inactive`, não `failed` (inst1, 11/11: o `stop` do scope mandava SIGINT ao node do Playwright, o `BrowserContext.close` estourava e o python saía com 1).
 
 ### P1: Vigia ⭐ MVP
 
@@ -69,11 +70,12 @@ Open questions: none
 7. VIG-07: THE SYSTEM SHALL fazer no máximo 2 reinícios por robô em 60 min; a 3ª parada SHALL virar aviso de operador.
 8. VIG-08: WHEN um batimento novo chega com ocorrência aberta, THE SYSTEM SHALL enviar uma mensagem "voltou" com a duração; sem ocorrência SHALL NOT enviar nada.
 9. VIG-09: IF a unidade está `inactive`, ou o reinício diário do WhatsApp está em andamento, THEN THE SYSTEM SHALL NOT agir.
+11. VIG-11: THE SYSTEM SHALL reiniciar só unidade `active` ou `activating`; IF a unidade está `failed`, THEN THE SYSTEM SHALL NOT reiniciar e SHALL avisar o operador ("unidade failed: o systemd já desistiu"), 1 aviso por ocorrência e lembrete a cada 2 h (inst1, 11/11: o vigia religou uma unidade parada pelo operador, que acabou em `failed`).
 10. VIG-10: THE SYSTEM SHALL agir só por `systemctl --user restart <unidade>` e ler os pids do `cgroup.procs` do scope, nunca por `kill` ou nome de processo.
 
 ### P1: Mensagens e estado
 
-1. MSG-01: WHEN não há token e chat, THE SYSTEM SHALL só logar; com eles SHALL enviar texto com robô, motivo, ação, última linha útil do log, memória do scope e RSS do maior `chrome`.
+1. MSG-01: WHEN não há token e chat, THE SYSTEM SHALL só logar; com eles SHALL enviar texto com robô, motivo, ação, última linha útil do log, memória do scope e RSS do maior `chrome`, todos medidos ANTES do restart (depois dele o scope, os pids e o log são outros: a mensagem saía com `n/d`).
 2. MSG-02: THE SYSTEM SHALL NOT incluir token nem URL `https://` em log, mensagem ou erro.
 3. MSG-03: THE SYSTEM SHALL manter 1 mensagem por ocorrência e lembrete a cada 2 h, com estado em `vigia_robos.json`.
 
@@ -102,6 +104,7 @@ Open questions: none
 | ESC-01 | Scope das lojas | Execute | Pending |
 | ESC-02 | Scope das lojas | Execute | Pending |
 | ESC-03 | Scope das lojas | Execute | Pending |
+| ESC-04 | Scope das lojas | Execute | Pending |
 | VIG-01 | Vigia | Execute | Pending |
 | VIG-02 | Vigia | Execute | Pending |
 | VIG-03 | Vigia | Execute | Pending |
@@ -112,6 +115,7 @@ Open questions: none
 | VIG-08 | Vigia | Execute | Pending |
 | VIG-09 | Vigia | Execute | Pending |
 | VIG-10 | Vigia | Execute | Pending |
+| VIG-11 | Vigia | Execute | Pending |
 | MSG-01 | Mensagens e estado | Execute | Pending |
 | MSG-02 | Mensagens e estado | Execute | Pending |
 | MSG-03 | Mensagens e estado | Execute | Pending |

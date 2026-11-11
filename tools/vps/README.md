@@ -376,7 +376,9 @@ em pausa renovam; exceção de navegador fechado não).
 
 **O que o vigia faz**, por robô, nesta ordem:
 
-1. unidade `inactive` (parada de propósito) → nada; reinício diário do WhatsApp em andamento → nada;
+1. unidade `inactive` (parada de propósito) → nada; reinício diário do WhatsApp em andamento → nada; unidade
+   `failed` (o systemd já desistiu) → **aviso de operador** ("unidade failed: o systemd já desistiu"), **sem
+   restart**, 1 aviso por ocorrência e lembrete a cada 2 h; só unidade `active`/`activating` é reiniciada;
 2. `agora > prazo`, ou o `pid` do batimento fora do scope do robô → **parado**. Processo novo sem batimento
    ainda, até 10 min depois do início do scope → nada. Os pids vêm do `cgroup.procs` do scope
    (`besave-whatsapp-robo.scope`, `besave-lojas-robo.scope`), não do `MainPID` da unidade, que é o tmux;
@@ -402,9 +404,12 @@ dias são apagadas. Só esses nomes, só nessas duas pastas. A contagem sai no j
 
 **Robô das lojas no próprio scope.** Como o WhatsApp, o `iniciar_lojas.sh` roda o python por
 `systemd-run --user --scope --collect --unit=besave-lojas-robo -p KillSignal=SIGINT -p TimeoutStopSec=30`
-dentro do painel do tmux (sem teto de memória). O `ExecStop` da unidade faz
-`systemctl --user stop besave-lojas-robo.scope`: SIGINT e, vencido o prazo, SIGKILL, que também mata um python
-congelado por `kill -STOP`. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
+dentro do painel do tmux (sem teto de memória). O `ExecStop` da unidade roda
+`parar_scope.sh besave-lojas-robo`: SIGINT **só ao python** do scope, espera até 20 s ele sair e então faz
+`systemctl --user stop besave-lojas-robo.scope` (SIGINT a todos e, em 30 s, SIGKILL, que também mata um python
+congelado por `kill -STOP`). O `stop` direto do scope mandava SIGINT também ao node do Playwright: o driver
+morria antes, o `BrowserContext.close` estourava, o python saía com 1 e a unidade ficava `failed` (inst1, 11/11).
+`TimeoutStopSec=60` cobre os 20 s + 30 s. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
 
 ```bash
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
@@ -414,7 +419,7 @@ journalctl --user -u besave-vigia-robos.service --since today          # o que o
 ```
 
 **Silenciar um robô:** `systemctl --user stop besave-captura-lojas` (ou `…-whatsapp`). Unidade `inactive` o vigia
-nunca religa e não avisa. Para voltar: `systemctl --user start …`.
+nunca religa e não avisa (se ela acabar em `failed`, o vigia só avisa, não religa). Para voltar: `systemctl --user start …`.
 **Desligar o vigia:** `systemctl --user disable --now besave-vigia-robos.timer`.
 Reiniciar o `besave-captura-lojas` com a unidade trocada: `daemon-reload` e `systemctl --user restart besave-captura-lojas`.
 
