@@ -6,6 +6,7 @@ falsos que registram qualquer chamada. Credenciais ficticias e distintas de tudo
 import argparse
 import json
 import os
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -394,6 +395,19 @@ def test_bat_api_linha_que_vira_9_pela_api_tambem_renova(amb, batidas):
     assert [b["fase"] for b in batidas] == ["linha"]
 
 
+class _Tempo:
+    """Proxy do `time` do robo com `monotonic` fixo; o resto delega ao `time` real."""
+
+    def __init__(self, monotonic):
+        self._mono = monotonic
+
+    def monotonic(self):
+        return self._mono
+
+    def __getattr__(self, nome):
+        return getattr(time, nome)
+
+
 def _monitorar_com_pausa(lojas, monkeypatch, amb, batidas, filas):
     """Roda o `_monitorar` real com a pausa da Shopee do `amb`; cada espera registra a ultima batida.
     Acabadas as `filas`, a leitura seguinte (depois da batida 'varredura') encerra o monitor."""
@@ -406,6 +420,9 @@ def _monitorar_com_pausa(lojas, monkeypatch, amb, batidas, filas):
         except StopIteration:
             raise KeyboardInterrupt from None
 
+    # monotonic fixo (> 1 h de uptime): a varredura de validade roda na 1a volta em qualquer maquina,
+    # inclusive no runner do CI recem-ligado (licao 25: nada de depender do relogio real).
+    monkeypatch.setattr(lojas, "time", _Tempo(10_000.0))
     monkeypatch.setattr(lojas, "_pausa_padrao", lambda: amb.pausa)
     monkeypatch.setattr(lojas, "_ler_pendentes_resiliente", ler)
     monkeypatch.setattr(lojas, "_esperar", lambda s: esperas.append((s, dict(batidas[-1]) if batidas else None)))
