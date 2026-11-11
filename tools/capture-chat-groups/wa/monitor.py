@@ -23,7 +23,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from . import alerta, browser, destravar, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
+from . import alerta, batimento as batimento_mod, browser, destravar, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
 
 SELETOR_MENSAGENS = '#main [data-testid="conversation-panel-messages"] div[data-id]'
 
@@ -1052,6 +1052,18 @@ def _relatar_bloqueio(page):
         print(f"[monitor]   modal {rotulo!r}: {d.get('texto', '')!r}")
 
 
+# Batimento do run em andamento (BSV-57). O resgate e o arranque levam minutos por grupo (medido: arranque de
+# 5-8,7 min, resgate de 2-3 min por grupo); cada grupo que abriu e concluiu renova o batimento, senao um arranque
+# lento passa de 10 min e o vigia reinicia em pleno arranque. Grupo que falhou NAO renova.
+_BAT = {"atual": None}
+
+
+def _bater_progresso(fase: str) -> None:
+    b = _BAT["atual"]
+    if b is not None:
+        b.bater(fase)
+
+
 def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict,
                       vistos: set, db, parado_s: float):
     """
@@ -1092,6 +1104,7 @@ def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict
             )
             vistos |= ja
             vistos.update(_ids_baloes(page))
+            _bater_progresso("resgate")   # este grupo abriu e concluiu: progresso (BSV-57)
         except oracle_db.ErroSemId:
             raise                         # banco fora: quem chama espera e o resgate segue pendente
         except Exception as e:  # noqa: BLE001
@@ -1107,7 +1120,7 @@ def _recuperar_lacuna(page, nomes_grupos, caminho_csv, numero: int, estado: dict
 SAIDA_SEM_BANCO = 4
 
 
-def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
+def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None, batimento=None) -> float:
     """
     Banco fora (BSV-56): avisa no Telegram e espera, tentando a cada
     db.espera_segundos. Nada e numerado nem gravado enquanto isso, e nenhum grupo
@@ -1127,6 +1140,9 @@ def _esperar_banco(db, vigia_banco, erro, dormir=None, agora=None) -> float:
     vigia_banco.falhou(motivo, inicio)
     vigia_banco.ids_na_queda = db.ids_entregues
     while True:
+        if batimento is not None:
+            # esperando o banco de proposito (e ja avisando sozinho): nao e robo parado (BSV-57)
+            batimento.bater("banco fora", dorme_s=db.espera_segundos)
         dormir(db.espera_segundos)
         if db.disponivel():
             print("[monitor] Banco responde; resgate pelo marcador de cada grupo (o 'voltou' sai depois dele).")
@@ -1189,6 +1205,9 @@ def captura_msg_whatsapp(
     conectado = db.conectar()
     print(f"[monitor] Oracle: {'conectado' if conectado else 'SEM CONEXAO (o 1o id tenta de novo)'}.")
     vigia_banco = alerta.VigiaBanco(estado)
+    batimento = batimento_mod.Batimento()
+    batimento.bater("partida")
+    _BAT["atual"] = batimento
 
     vistos: set = set()
     # Codigo de saida do run: 0 = encerramento normal (Ctrl+C / fim), != 0 avisa
@@ -1238,10 +1257,11 @@ def captura_msg_whatsapp(
                         ja = set(_ids_baloes(page))
                 except oracle_db.ErroSemId as e:
                     # O que faltou deste grupo sai no resgate, pelo marcador (que nao andou).
-                    _esperar_banco(db, vigia_banco, e)
+                    _esperar_banco(db, vigia_banco, e, batimento=batimento)
                     resgate_banco = True
                     ja = set()
                 _confirmar_volta(db, vigia_banco)
+                batimento.bater("arranque")
 
                 vistos |= ja
                 vistos.update(_ids_baloes(page))
@@ -1271,9 +1291,11 @@ def captura_msg_whatsapp(
                             page, nomes_grupos, caminho_csv, numero, estado, vistos, db, lacuna_s,
                         )
                         resgate_pendente = not feito
+                        if feito:
+                            batimento.bater("resgate")   # resgate concluido = progresso (BSV-57)
                     except oracle_db.ErroSemId as e:
                         # resgate segue pendente e roda de novo ANTES do rodizio: o marcador parou ali
-                        lacuna_s += _esperar_banco(db, vigia_banco, e)
+                        lacuna_s += _esperar_banco(db, vigia_banco, e, batimento=batimento)
                         fim_da_volta = datetime.now()
                         continue
                     _confirmar_volta(db, vigia_banco)
@@ -1281,27 +1303,34 @@ def captura_msg_whatsapp(
 
                 falhas_na_volta = 0
                 banco_fora = None
+                abriu_grupo = {}
                 for nome in nomes_grupos:
                     try:
                         browser.abrir_grupo(page, nome)
                         page.wait_for_timeout(1200)
                         numero, n = _ler_novas_do_grupo(page, nome, vistos, numero, caminho_csv, estado, db)
+                        abriu_grupo[nome] = True
                         if n:
                             print(f"[{nome}] {n} nova(s) processada(s) (ultimo id #{numero}).")
                         _confirmar_volta(db, vigia_banco)
                     except oracle_db.ErroSemId as e:
+                        abriu_grupo[nome] = True  # o grupo abriu; faltou o id
                         banco_fora = e            # os outros grupos nao andam sem id
                         break
                     except Exception as e:  # noqa: BLE001
                         falhas_na_volta += 1
+                        abriu_grupo[nome] = False
                         print(f"[monitor] Erro no grupo {nome!r}: {e}")
                         if _browser_morreu(page, e):
                             browser_morto = True
                             break
                     time.sleep(seg_grupo)
 
+                # Batimento so com progresso (BSV-57): volta com todos os grupos falhando nao renova.
+                batimento.volta(abriu_grupo)
+
                 if banco_fora is not None:
-                    lacuna_s = _esperar_banco(db, vigia_banco, banco_fora)
+                    lacuna_s = _esperar_banco(db, vigia_banco, banco_fora, batimento=batimento)
                     resgate_pendente = True       # rele pelo marcador o que ficou sem id
                     fim_da_volta = datetime.now()
                     continue
@@ -1349,6 +1378,10 @@ def captura_msg_whatsapp(
                 # Janela noturna: dorme entre as rodadas. A pausa conta como parada
                 # logo abaixo, e a lacuna (>= LACUNA_RECAPTURA_S) dispara o catch-up
                 # pelo marcador de cada grupo: nada do que chegou dormindo se perde.
+                # Prazo de sono: acordar + 10 min, para a madrugada nao parecer parada ao vigia.
+                agora_sono = datetime.now()
+                if janela_mod.dentro(janela, agora_sono):
+                    batimento.bater("dormindo", dorme_s=janela_mod.espera_s(janela, agora_sono, 0))
                 dormido = janela_mod.dormir_ate_proxima_rodada(janela)
                 if dormido:
                     print(f"[monitor] Janela noturna: rodada concluida; dormiu {dormido / 60:g} min.")
@@ -1381,6 +1414,7 @@ def captura_msg_whatsapp(
                 except Exception as e:  # noqa: BLE001
                     print(f"[monitor] Contexto ja estava fechado: {e}")
             print(f"[monitor] Ultimo ID_OFERTA usado neste run: {numero or '-'}")
+            _BAT["atual"] = None
     return saida
 
 

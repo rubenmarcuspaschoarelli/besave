@@ -434,3 +434,9 @@ def test_sh06_iniciar_mata_sessao_velha_antes_e_cria_pasta_do_log(amb):
     assert "-L sess kill-session -t sess" in linhas[0]
     assert "new-session" in linhas[1]
     assert log.parent.is_dir()
+
+
+def test_sh06_esperar_devolve_130_sem_trocar_o_codigo(amb):
+    # BSV-57: python morto por SIGINT sai 130; o SuccessExitStatus=130 da unidade depende de o codigo passar intacto
+    (amb.est / "besave-sess.rc").write_text("130\n")
+    assert amb.rodar("rodar_em_tmux.sh", "esperar", "sess").returncode == 130

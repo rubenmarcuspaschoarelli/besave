@@ -22,7 +22,7 @@ def _ler(caminho):
 def test_existem_as_duas_unidades():
     assert [u.name for u in UNIDADES] == [
         "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-reinicio-whatsapp.service",
-        "besave-vnc@.service",
+        "besave-vigia-robos.service", "besave-vnc@.service",
     ]
 
 
@@ -33,7 +33,7 @@ def test_reinicia_em_falha_e_roda_no_tmux_com_display(unidade):
     assert servico["Restart"] == "on-failure"
     assert f"BESAVE_DISPLAY=:{TELA[unidade.name]}" in servico["Environment"].split()
     exec_start = servico["ExecStart"]
-    assert re.search(r"/tools/vps/(rodar_em_tmux|iniciar_captura)\.sh\b", exec_start)
+    assert re.search(r"/tools/vps/(rodar_em_tmux|iniciar_captura|iniciar_lojas)\.sh\b", exec_start)
     assert cfg["Install"]["WantedBy"] == "default.target"
 
 
@@ -50,13 +50,16 @@ def test_whatsapp_usa_o_lancador_com_conferencias():
     assert (VPS / "iniciar_captura.sh").exists()
 
 
-def test_lojas_roda_o_main_em_modo_monitor():
+def test_lojas_usa_o_lancador_com_scope():  # BSV-57 ESC-01, ESC-03
     servico = _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
-    partes = servico["ExecStart"].split()
-    assert partes[1:3] == ["executar", "besave-lojas"]
+    assert servico["ExecStart"].endswith("/tools/vps/iniciar_lojas.sh --aguardar")
+    # BSV-57 item 2: o stop manda SIGINT so ao python (parar_scope.sh); `systemctl stop scope` direto deixava a
+    # unidade em `failed`. Comparado inteiro (licao 14); 20 s do python + 30 s do scope + folga cabem no timeout.
+    assert servico["ExecStop"] == "-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo"
+    assert servico["TimeoutStopSec"] == "60"
     # BSV-55: --sem-perguntas, senao o arranque para num input() que ninguem responde
-    assert partes[-4:] == ["-u", "main.py", "--monitorar", "--sem-perguntas"]
-    assert partes[-5].endswith("/capture-store-pages/.venv/bin/python")
+    texto = (VPS / "iniciar_lojas.sh").read_text(encoding="utf-8")
+    assert "main.py --monitorar --sem-perguntas" in texto
 
 
 @pytest.mark.parametrize("unidade", ROBOS, ids=lambda u: u.name)
@@ -147,3 +150,55 @@ def test_whatsapp_execstop_para_o_scope_do_robo():
     # '-' = scope ja ausente nao falha o stop; nada de encerrar_captura.sh (ele para a propria unidade)
     assert servico["ExecStop"] == "-/usr/bin/systemctl --user stop besave-whatsapp-robo.scope"
     assert int(servico["TimeoutStopSec"]) >= 40  # scope (30 s) + folga
+
+
+def test_vigia_e_oneshot_com_timer_de_5_minutos():  # BSV-57 UNI-01
+    servico = _ler(VPS / "systemd" / "besave-vigia-robos.service")["Service"]
+    assert servico["Type"] == "oneshot"
+    assert servico["ExecStart"] == "/usr/bin/python3 /srv/besave/repo/tools/vps/vigia_robos.py"
+    assert (VPS / "vigia_robos.py").exists()
+    timer = _ler(VPS / "systemd" / "besave-vigia-robos.timer")
+    assert timer["Timer"]["OnUnitActiveSec"] == "5min"
+    assert timer["Timer"]["OnBootSec"] == "5min"
+    assert timer["Install"]["WantedBy"] == "timers.target"
+
+
+def test_vigia_systemd_nao_mata_o_vigia_no_meio_de_dois_restarts():  # G13 (verifier ciclo 4)
+    import vigia_falso  # noqa: F401  (poe vps/ no sys.path)
+    import vigia_robos
+
+    s = _ler(VPS / "systemd" / "besave-vigia-robos.service")["Service"]
+    # cada systemctl pode levar TIMEOUT_SYSTEMCTL_S; 2 robos, cada um com restart + alguns comandos de leitura
+    assert int(s["TimeoutStartSec"]) > 2 * vigia_robos.TIMEOUT_SYSTEMCTL_S + 60
+    # um restart das lojas espera o stop (20 s do python + 30 s do scope) e o ExecStartPre (60 s)
+    assert vigia_robos.TIMEOUT_SYSTEMCTL_S >= 20 + 30 + 60
+
+
+LOJAS_SERVICE = {
+    "ExecStartPre": "/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'",
+    "ExecStart": "/srv/besave/repo/tools/vps/iniciar_lojas.sh --aguardar",
+    "ExecStop": "-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo",
+    "KillSignal": "SIGINT",
+    "SuccessExitStatus": "130",
+    "Restart": "on-failure",
+    "RestartSec": "30",
+    "TimeoutStopSec": "60",
+    "Type": "simple",
+    "WorkingDirectory": "/srv/besave/repo/tools/capture-store-pages",
+    "Environment": "BESAVE_DISPLAY=:1",
+}
+
+
+def test_lojas_unit_inteira_com_saida_130_como_sucesso():  # BSV-57 item 2 (reteste inst1): licao 14
+    servico = dict(_ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"])
+    assert servico == LOJAS_SERVICE
+
+
+def test_saida_130_da_parada_nao_deixa_a_unidade_failed_e_queda_real_sim():
+    """Modelo da regra do systemd: codigo em SuccessExitStatus = sucesso (unidade `inactive`, sem Restart);
+    outro codigo != 0 = falha (`failed`, e Restart=on-failure sobe de novo)."""
+    s = _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
+    ok = {0, *(int(x) for x in s["SuccessExitStatus"].split())}
+    assert 130 in ok                       # SIGINT (128 + 2) da parada: inactive
+    assert 1 not in ok and 137 not in ok   # queda real e SIGKILL seguem em failed -> on-failure
+    assert s["Restart"] == "on-failure"

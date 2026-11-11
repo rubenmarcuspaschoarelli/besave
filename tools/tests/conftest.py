@@ -13,6 +13,12 @@ for p in (LOJAS, CHAT):
         sys.path.insert(0, str(p))
 
 
+@pytest.fixture(autouse=True)
+def _batimento_em_tmp(tmp_path, monkeypatch):
+    """Nenhum teste grava o conf/batimento.json real dos robos (BSV-57)."""
+    monkeypatch.setenv("BESAVE_BATIMENTO", str(tmp_path / "batimento-do-teste.json"))
+
+
 class Loja:
     ready_selector = None
     post_load_wait = 0

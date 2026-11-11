@@ -45,7 +45,7 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod, bloqueio, redirecionamento)
+                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento)
 from core import processos
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -863,6 +863,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         tempos.setdefault(out['loja'], []).append(cron)
 
         out_rows.append(out)
+        batimento.bater_linha(out['status_captura'])  # BSV-57: linha concluida = progresso
         print(f'[{cron.inicio:%d/%m %H:%M:%S}] linha {captura:>4} | '
               f'loja={out["loja"] or "-":<13} | '
               f'status={out["status_captura"]}{status_db}{marca_afiliado}'
@@ -976,6 +977,12 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
         # Na janela noturna a pausa e a da janela (cortada no fim dela).
         return janela_mod.espera_s(janela, datetime.now(), normal_s)
 
+    def dormir():
+        # Prazo do batimento = hora de acordar + 10 min (BSV-57): dormir nao e ficar parado.
+        s = espera_s()
+        batimento.bater('dormindo', dorme_s=s)
+        _esperar(s)
+
     print(f'\n[monitor] ligado: varredura a cada {intervalo_min:g} min '
           f'(conf/config.json -> monitor.intervalo_minutos). Ctrl+C para sair.\n')
     if janela:
@@ -992,22 +999,24 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
             if novo != redir:
                 redir = novo
                 print(redirecionamento.descrever(redir))
+            batimento.bater('varredura')
             pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
+                batimento.bater('validade')  # a varredura de validade e trabalho e pode demorar (BSV-57)
                 _varrer_validade(db)
                 ult_validade = time.monotonic()
             rows = _ler_pendentes_resiliente(db, ultimo_id, args.limite, adiados)
             if rows is None:  # banco fora do ar: tenta na proxima varredura
                 print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
                 continue
             rows, retidas = _sem_lojas_em_pausa(rows, pausa, redir)
             if not rows:
                 print(f'[{datetime.now():%H:%M:%S}] fila vazia'
                       + (f' ({retidas} linha(s) de loja em pausa)' if retidas else '')
                       + f'; proxima leitura em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
                 continue
 
             ciclos += 1
@@ -1029,12 +1038,21 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                       f'(seguem ST_CAPTURA=0): {sorted(adiados)}')
             if janela_mod.dentro(janela, datetime.now()):  # na janela nao rele a fila na hora
                 print(f'[monitor] janela noturna: proxima rodada em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
     except KeyboardInterrupt:
         print('\n[monitor] interrompido (Ctrl+C).')
     finally:
         print(f'[monitor] {ciclos} varredura(s) com trabalho | '
               f'{total_grav} gravada(s) (1) | {total_erro} com erro (9).')
+
+
+def _fechar_contexto(context):
+    """context.close() com a duracao no log (BSV-57): e o numero que decide o prazo do ExecStop (parar_scope.sh)."""
+    t0 = time.monotonic()
+    try:
+        context.close()
+    finally:
+        print(f'[monitor] contexto fechado em {time.monotonic() - t0:.1f} s', flush=True)
 
 
 def main():
@@ -1184,7 +1202,7 @@ def main():
                 _resumo_oracle(len(out_rows), gravadas, com_erro)
                 _varrer_validade(db)
 
-        context.close()
+        _fechar_contexto(context)
 
     if db:
         db.desconectar()
