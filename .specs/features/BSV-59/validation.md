@@ -306,3 +306,87 @@ Fora das lacunas: a pré-condição e os 5 passos reais na inst1 continuam **blo
    centavo). Com valores de 2 casas o mutante é indistinguível.
 3. **Teste de lote usa `tmp_path` como `img_root`.** Pasta relativa cria lixo no checkout que o `git status` não
    mostra (é a lição 16, aplicada ao disco local).
+
+---
+
+## Iteração 3 — rebase sobre a BSV-57 (batimento)
+
+**Result**: PASS ✅ para BAT-01 e BAT-02 (escopo desta iteração: só esses dois critérios).
+**Date**: 2026-11-11
+**Diff range**: `origin/develop` (`338602b`, merge da BSV-57) `..a411981`; a branch descende de `origin/develop`
+(`git merge-base --is-ancestor` ok).
+**Verifier**: Verifier sub-agente independente (autor ≠ verificador). Não alterou código nem testes.
+
+### BAT-01 — cada linha da Shopee pela API renova o batimento
+
+| evidência | file:line |
+| --- | --- |
+| Ramo da API dentro do mesmo `for pos, row in enumerate(rows)` das outras lojas, sem `continue`/`return`/`break` entre ele e o fim do laço | `tools/capture-store-pages/main.py:566`, `:636-640` |
+| `bater_linha(out['status_captura'])` incondicional, logo depois de `out_rows.append(out)`, para toda linha (ok, `shopee_api_indisponivel` retida, `'9'`, `loja_pausada`) | `tools/capture-store-pages/main.py:912-913` |
+| `bater_linha` só deixa de bater em `erro:` de navegador fechado; o caminho da API nunca produz esse status (devolve `ok`, `SHOPEE_API_INDISPONIVEL` ou o motivo) | `tools/capture-store-pages/core/batimento.py` (`navegador_fechado`, `bater_linha`); `main.py:485-517` |
+| Teste: lote só de Shopee pela API (1 retida + 2 ok) → 3 batidas `linha`, prazo `13:10Z` = agora 13:00 + 10 min (regra da 57) | `tools/tests/test_shopee_lote.py:380-387` |
+| Teste: linha que vira `'9'` (`fora_do_programa`) pela API → 1 batida `linha` | `tools/tests/test_shopee_lote.py:390-394` |
+
+### BAT-02 — Shopee em pausa pela API: dorme sempre batendo, prazo = acordar + 10 min
+
+| evidência | file:line |
+| --- | --- |
+| `dormir()` bate `dormindo` com `dorme_s=s` **antes** de `_esperar(s)`; é o único chamador de `_esperar` | `main.py:1027-1031` (grep: `_esperar(` só em `:317` def e `:1031`) |
+| As três esperas do monitor passam por `dormir()`: banco fora, fila vazia (inclui fila só de lojas em pausa, com `retidas > 0`) e janela noturna | `main.py:1059-1060`, `:1061-1066`, `:1088-1090` |
+| Toda volta bate `varredura` antes de ler a fila; validade bate antes de varrer | `main.py:1049`, `:1053` |
+| Linha em pausa no meio do lote: ramo `pausa.em_pausa(loja)` → `loja_pausada`, sem rede, e cai no mesmo `bater_linha` | `main.py:632-635`, `:913` |
+| Fila só de Shopee em pausa: `_sem_lojas_em_pausa` retém sem chamar a API, a fila fica vazia e o monitor vai a `dormir()` | `main.py:991-1002`, `:1061-1066` |
+| Linha retida antes da pausa (1ª falha): o lote termina, o monitor relê na hora e bate `varredura`; nenhuma espera sem batida | `main.py:1079-1090` (sem `dormir()` fora da janela) |
+| Outras esperas no arquivo: `time.sleep(2)` e `wait_for_timeout` estão no gate interativo de Chrome/login (antes do monitor) e no caminho do navegador, não no da API | `main.py:109`, `:135`, `:209`, `:656` |
+| `bater` calcula `prazo = agora + dorme_s + 10 min` | `core/batimento.py` (`bater`, `PRAZO = timedelta(minutes=10)`) |
+| Teste: pausa da Shopee pela API (3 erros de credencial), fila só de Shopee → esperas de 180 s, cada uma precedida de `dormindo` com prazo `13:13Z` = 13:00 + 3 min de sono + 10 min; a API não é chamada | `tools/tests/test_shopee_lote.py:420-435` |
+| Teste: 1 falha passageira (retida, sem pausa) → fases `varredura, validade, linha, varredura, dormindo, varredura`; a única espera vem depois de `dormindo` | `tools/tests/test_shopee_lote.py:438-445` |
+
+**Tempo máximo de uma linha pela API x prazo de 10 min.** `resolver` faz no máximo `MAX_PEDIDOS = 3` HEADs
+(`core/shopee_api.py:203`, `:245-270`), depois `produto` e `link_afiliado` (1 POST cada, `:114-156`), todos com
+`timeout = timeout_segundos` (padrão 20 s, `:19`; exemplo `conf/config.example.json:47` = 20), e a imagem com
+`requests.get(..., timeout=30)` (`core/images.py:117`). Pior caso nominal: 3×20 + 2×20 + 30 = **130 s < 600 s**.
+Sem `sleep` nem nova tentativa dentro do cliente. Ver lacuna 1 para os limites dessa conta.
+
+**Valores asseridos vêm da spec**, não da implementação: 10 min (BSV-57, `PRAZO`), acordar + 10 min (13:00 + 3 min
+de `intervalo_min=3` + 10 = 13:13), fases `linha`/`dormindo`/`varredura`. As batidas são capturadas trocando só
+`gravar_atomico` e `agora_utc`; `bater`/`bater_linha` reais calculam o prazo.
+
+### Sensor de discriminação (worktree descartável em scratchpad, removido com `git worktree remove`)
+
+Comando por mutante: `cd tools && python -m pytest tests/test_shopee_lote.py tests/test_batimento_lojas.py -q`
+(baseline: 44 passed).
+
+| # | mutante | resultado | testes que pegaram |
+| --- | --- | --- | --- |
+| M1 | `bater_linha` só fora do caminho da API (`if not (loja == 'shopee' and shopee_cfg is not None)`) | **morto** (3 falhas) | `test_bat_api_cada_linha…`, `test_bat_api_linha_que_vira_9…`, `test_bat_retida_pela_api_antes_da_pausa…` |
+| M2 | sem `bater_linha` no lote | **morto** (6) | os 3 acima + `test_bat07_linha_ok_renova`, `…_de_loja_em_pausa_renova`, `…_com_erro_comum_renova` |
+| M3 | `dormir()` bate sem `dorme_s` (prazo = agora + 10) | **morto** (3) | `test_bat_pausa_api_shopee_dorme…`, `test_bat07_varredura_com_fila_vazia…`, `test_bat05_madrugada…` |
+| M4 | `dormir()` chama `_esperar` antes de `bater` | **morto** (2) | `test_bat_pausa_api_shopee_dorme…`, `test_bat_retida_pela_api_antes_da_pausa…` |
+| M5 | fila vazia bate `dormindo` só com `retidas == 0` | **morto** (2) | `test_bat_pausa_api_shopee_dorme…`, `test_bat07_fila_so_de_loja_em_pausa_renova` |
+
+5/5 mortos, nenhum sobrevivente. Observação: o M4 só é pego pelos testes novos da BSV-59; os da 57 não checam a
+ordem batida → espera (passam a checar indiretamente agora).
+
+### Gates (lição 21)
+
+| gate | resultado |
+| --- | --- |
+| `cd tools/capture-chat-groups && python -m unittest discover -s tests` | 15 tests OK |
+| `cd tools && python -m pytest -q` | **650 passed** (217,99 s), 1ª execução, sem intermitência |
+| `cd tools && python -m ruff check vps/ tests/` | All checks passed |
+| `git status --porcelain` do worktree real antes e depois do sensor e dos gates | vazio nos dois |
+
+### Lacunas (ranqueadas; nenhuma bloqueia BAT-01/BAT-02)
+
+1. **Baixa — `timeout_segundos` sem teto** (`core/shopee_api.py:55-59`). A conta de 130 s só vale com o padrão:
+   acima de ~114 s por chamada, 5 chamadas + imagem passam dos 10 min e o vigia pode reiniciar o robô no meio de
+   uma linha. Além disso o timeout do `urllib` é por operação de socket (não total) e não cobre DNS. Sugestão:
+   limitar `timeout_segundos` (p.ex. ≤ 60) em `ler_config`, com teste.
+2. **Baixa, fora de BAT — exceção inesperada no caminho da API não é capturada** (`main.py:636-640` está fora do
+   `try` do ramo do navegador). Não é espera sem batida (o processo cai e o vigia reinicia), mas um erro de
+   parsing não previsto derruba o lote inteiro em vez de virar `erro:` na linha. As exceções de rede e JSON já
+   são tratadas em `core/shopee_api.py:126-139` e `:260-262`.
+
+Continua **bloqueando o merge**: a execução real do dono na inst1 (inclusive ver o batimento renovando durante
+um lote de Shopee pela API e durante a pausa).
