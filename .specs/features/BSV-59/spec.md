@@ -29,9 +29,9 @@ Vitrine da API, colunas novas (`productCatIds`, `shopName`, faixa de variantes),
 | Ids na query | Inteiros embutidos no texto da query (`shopId: 1, itemId: 2`), sem `variables` | Forma provada pelo dono; ids validados como dígitos | n |
 | Comparação do `itemId` | `str(node.itemId) == str(item_id)` (aceita número ou texto no JSON) | Int64 pode vir como texto | n |
 | `price` inválido | Vazio, não numérico, não finito ou ≤ 0 → `item_divergente` | Spec, critério Produto | y |
-| `taxa_comissao_afiliado` | `"0.13"` → `"13%"`, `"0.135"` → `"13,5%"` (percentual com vírgula, como a página mostra no ML/Amazon) | "mesmo formato que Amazon/ML" | n |
+| `taxa_comissao_afiliado` | `"0.13"` → `"13%"`, `"0.135"` → `"13,5%"` (percentual com vírgula, como a página mostra no ML/Amazon) | "mesmo formato que Amazon/ML"; o ML grava "16%" no Oracle | y (dono, 11/11) |
 | `avaliacao_nota`, `quantidade_vendida` | Texto da API sem conversão (`"4.6"`, `"1351"`); o `oracle_db` converte como hoje | Spec tabela | y |
-| `url_final` | `https://shopee.com.br/product/<shop>/<item>` (URL limpa); `url_besave` calculada dela como hoje | Regra 3: nada do afiliado de terceiro gravado | n |
+| `url_final` | `https://shopee.com.br/product/<shop>/<item>` (URL limpa); `url_besave` calculada dela como hoje | Regra 3: nada do afiliado de terceiro gravado | y (dono, 11/11) |
 | Imagem | `download_image(imageUrl, <img_root>/<captura>/img_1.jpg)`; falha da imagem não derruba a linha | Spec tabela; imagem é best-effort hoje | n |
 | `shortLink` ausente sem `errors` | `api_indisponivel` (retida) | Sem link a oferta não vai ao site | n |
 | Resolução: pedido | `HEAD` sem seguir redirect, só para hosts `shopee.com.br`/`*.shopee.com.br`; destino fora disso → `url_nao_reconhecida` | Medição com `curl -sI` | n |
