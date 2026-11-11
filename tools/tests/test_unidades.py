@@ -53,8 +53,10 @@ def test_whatsapp_usa_o_lancador_com_conferencias():
 def test_lojas_usa_o_lancador_com_scope():  # BSV-57 ESC-01, ESC-03
     servico = _ler(VPS / "systemd" / "besave-captura-lojas.service")["Service"]
     assert servico["ExecStart"].endswith("/tools/vps/iniciar_lojas.sh --aguardar")
-    assert servico["ExecStop"] == "-/usr/bin/systemctl --user stop besave-lojas-robo.scope"
-    assert servico["TimeoutStopSec"] == "45"
+    # BSV-57 item 2: o stop manda SIGINT so ao python (parar_scope.sh); `systemctl stop scope` direto deixava a
+    # unidade em `failed`. Comparado inteiro (licao 14); 20 s do python + 30 s do scope + folga cabem no timeout.
+    assert servico["ExecStop"] == "-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo"
+    assert servico["TimeoutStopSec"] == "60"
     # BSV-55: --sem-perguntas, senao o arranque para num input() que ninguem responde
     texto = (VPS / "iniciar_lojas.sh").read_text(encoding="utf-8")
     assert "main.py --monitorar --sem-perguntas" in texto

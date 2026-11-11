@@ -18,15 +18,16 @@ Environment=BESAVE_DISPLAY=:1
 ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
 ExecStart=/srv/besave/repo/tools/vps/iniciar_lojas.sh --aguardar
 # O tmux do Ubuntu poe cada painel num scope proprio (app.slice/tmux-spawn-*.scope): o python e o Chromium NAO
-# ficam nesta unidade. O robo roda no scope besave-lojas-robo (systemd-run, ver iniciar_lojas.sh); o ExecStop
-# para esse scope (SIGINT e, vencido o prazo, SIGKILL, que mata ate processo congelado). O '-' deixa o stop
-# passar se o scope ja nao existe.
-ExecStop=-/usr/bin/systemctl --user stop besave-lojas-robo.scope
+# ficam nesta unidade. O robo roda no scope besave-lojas-robo (systemd-run, ver iniciar_lojas.sh). O ExecStop
+# manda SIGINT so ao python do scope, espera ele sair (20 s) e entao para o scope (SIGINT a todos e, em 30 s,
+# SIGKILL, que mata ate processo congelado). `systemctl stop scope` direto matava o node do Playwright antes do
+# python, o close estourava e a unidade acabava em `failed`. O '-' deixa o stop passar se o script falhar.
+ExecStop=-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=30
-# ExecStop espera o scope (ate 30 s) e depois o tmux sai
-TimeoutStopSec=45
+# ExecStop: prazo do python (20 s) + stop do scope (ate 30 s) + folga
+TimeoutStopSec=60
 
 [Install]
 WantedBy=default.target

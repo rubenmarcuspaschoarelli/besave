@@ -40,7 +40,7 @@ LEMBRETE = timedelta(hours=2)
 LACO_LOGS = 3
 LACO_JANELA = timedelta(minutes=30)
 TIMEOUT_ENVIO_S = 10
-TIMEOUT_SYSTEMCTL_S = 60
+TIMEOUT_SYSTEMCTL_S = 150      # um restart da unidade das lojas espera o stop (ate ~50 s) e o ExecStartPre
 CAUDA_BYTES = 65536
 LINHAS_ABORTADO = 20
 LINHA_MAX = 200
