@@ -69,14 +69,14 @@ Open questions: none
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
 | CFG-01 | P1 | Execute | Pending |
-| ASS-01 | P1 | Execute | Done |
-| RES-01 | P1 | Execute | Pending |
-| RES-02 | P1 | Execute | Pending |
-| PRO-01 | P1 | Execute | Done |
-| PRO-02 | P1 | Execute | Done |
-| LNK-01 | P1 | Execute | Done |
+| ASS-01 | P1 | Execute | Pending |
+| RES-01 | P1 | Execute | Done |
+| RES-02 | P1 | Execute | Done |
+| PRO-01 | P1 | Execute | Pending |
+| PRO-02 | P1 | Execute | Pending |
+| LNK-01 | P1 | Execute | Pending |
 | NAV-01 | P1 | Execute | Pending |
-| ERR-01 | P1 | Execute | Done |
+| ERR-01 | P1 | Execute | Pending |
 | FAL-01 | P1 | Execute | Pending |
 | PAU-01 | P1 | Execute | Pending |
 | SEG-01 | P1 | Execute | Pending |

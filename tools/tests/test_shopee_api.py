@@ -255,3 +255,113 @@ def test_seg01_nenhuma_saida_tem_credencial_nem_assinatura(api, srv, capsys):
     for segredo in [APP_ID, SECRET, *assinaturas]:
         assert segredo not in tudo
 
+
+# --- RES-01 / RES-02 ----------------------------------------------------------------------------
+OPAANLP = f"https://shopee.com.br/opaanlp/{SHOP}/{ITEM}?gads_t_sig=REDACTED&utm_source=an_REDACTED&utm_medium=affiliates"
+
+
+class Saltos:
+    """`abrir` falso: url -> (status, Location); guarda os pedidos."""
+
+    def __init__(self, mapa):
+        self.mapa = mapa
+        self.pedidos = []
+
+    def __call__(self, url, timeout):
+        self.pedidos.append(url)
+        resposta = self.mapa[url]
+        if isinstance(resposta, Exception):
+            raise resposta
+        return resposta
+
+
+def test_res01_link_curto_301_para_opaanlp(api):
+    abrir = Saltos({CURTO: (301, OPAANLP)})
+    assert api.resolver(CURTO, abrir=abrir) == ((SHOP, ITEM), None)
+    assert abrir.pedidos == [CURTO]
+
+
+@pytest.mark.parametrize("url", [
+    f"https://shopee.com.br/Batom-Matte-REDACTED-i.{SHOP}.{ITEM}",
+    f"https://shopee.com.br/Batom-Matte-REDACTED-i.{SHOP}.{ITEM}?sp_atk=REDACTED&utm_source=an_REDACTED",
+    f"https://shopee.com.br/universal-link/Batom-Matte-REDACTED-i.{SHOP}.{ITEM}?utm_source=an_REDACTED",
+    f"https://shopee.com.br/product/{SHOP}/{ITEM}",
+    f"https://www.shopee.com.br/product/{SHOP}/{ITEM}?utm_source=an_REDACTED",
+])
+def test_res01_formatos_da_loja_sem_pedido(api, url):
+    abrir = Saltos({})
+    assert api.resolver(url, abrir=abrir) == ((SHOP, ITEM), None)
+    assert abrir.pedidos == []
+
+
+def test_res01_dois_e_tres_saltos(api):
+    abrir = Saltos({CURTO: (302, "https://s.shopee.com.br/REDACTED3"),
+                    "https://s.shopee.com.br/REDACTED3": (301, f"https://shopee.com.br/universal-link/x-i.{SHOP}.{ITEM}")})
+    assert api.resolver(CURTO, abrir=abrir) == ((SHOP, ITEM), None)
+    tres = Saltos({CURTO: (301, "https://s.shopee.com.br/b"), "https://s.shopee.com.br/b": (301, "https://s.shopee.com.br/c"),
+                   "https://s.shopee.com.br/c": (301, OPAANLP)})
+    assert api.resolver(CURTO, abrir=tres) == ((SHOP, ITEM), None)
+    assert len(tres.pedidos) == 3
+
+
+def test_res02_quatro_saltos_nao_reconhecida(api):
+    abrir = Saltos({CURTO: (301, "https://s.shopee.com.br/b"), "https://s.shopee.com.br/b": (301, "https://s.shopee.com.br/c"),
+                    "https://s.shopee.com.br/c": (301, "https://s.shopee.com.br/d"),
+                    "https://s.shopee.com.br/d": (301, OPAANLP)})
+    assert api.resolver(CURTO, abrir=abrir) == (None, "url_nao_reconhecida")
+    assert len(abrir.pedidos) == 3
+
+
+def test_res02_pagina_sem_ids_nao_reconhecida(api):
+    abrir = Saltos({CURTO: (301, "https://shopee.com.br/m/campanha-REDACTED"),
+                    "https://shopee.com.br/m/campanha-REDACTED": (200, None)})
+    assert api.resolver(CURTO, abrir=abrir) == (None, "url_nao_reconhecida")
+
+
+@pytest.mark.parametrize("url", [f"https://shopee.com.br/x/{SHOP}/abc", f"https://shopee.com.br/{ITEM}",
+                                 f"https://exemplo.com.br/product/{SHOP}/{ITEM}"])
+def test_res02_formato_estranho_nao_reconhecida(api, url):
+    abrir = Saltos({url: (200, None)})
+    assert api.resolver(url, abrir=abrir) == (None, "url_nao_reconhecida")
+
+
+def test_res02_destino_fora_da_shopee_nao_e_pedido(api):
+    abrir = Saltos({CURTO: (301, "https://golpe.exemplo.com/1/2")})
+    assert api.resolver(CURTO, abrir=abrir) == (None, "url_nao_reconhecida")
+    assert abrir.pedidos == [CURTO]
+
+
+@pytest.mark.parametrize("resposta", [OSError("timed out"), (503, None), (429, None)])
+def test_res_rede_ou_5xx_e_passageiro(api, resposta):
+    abrir = Saltos({CURTO: resposta})
+    assert api.resolver(CURTO, abrir=abrir) == (None, "api_indisponivel")
+
+
+def test_res_404_nao_reconhecida(api):
+    assert api.resolver(CURTO, abrir=Saltos({CURTO: (404, None)})) == (None, "url_nao_reconhecida")
+
+
+def test_res01_pedido_real_nao_segue_redirect(api):
+    vistos = []
+
+    class H(BaseHTTPRequestHandler):
+        def _responder(self):
+            vistos.append((self.command, self.path))
+            self.send_response(301)
+            self.send_header("Location", "/destino-REDACTED")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+        do_HEAD = do_GET = _responder
+
+        def log_message(self, *a):
+            pass
+
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+    try:
+        url = f"http://127.0.0.1:{httpd.server_address[1]}/REDACTED1"
+        assert api.abrir_sem_seguir(url, 2) == (301, "/destino-REDACTED")
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+    assert vistos == [("HEAD", "/REDACTED1")]

@@ -16,7 +16,7 @@ T3 → T4
 
 ## Task Breakdown
 
-### T1: Assinatura e cliente GraphQL ✅
+### T1: Assinatura e cliente GraphQL
 **What**: `core/shopee_api.py` com assinatura, `produto`, `link_afiliado` e classificação de erros (HTTP 200 com `errors`).
 **Where**: `tools/capture-store-pages/core/shopee_api.py`
 **Depends on**: none
@@ -24,7 +24,7 @@ T3 → T4
 **Tests**: `tools/tests/test_shopee_api.py` (servidor HTTP local)
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T2: Resolução da URL
+### T2: Resolução da URL ✅
 **What**: `resolver(url)` sem seguir redirect, até 3 pedidos, extração de ids dos formatos da spec.
 **Where**: `tools/capture-store-pages/core/shopee_api.py`
 **Depends on**: T1

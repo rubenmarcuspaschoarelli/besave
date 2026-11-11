@@ -7,10 +7,12 @@ Credencial e assinatura nunca vao para log, excecao ou retorno.
 
 import hashlib
 import json
+import re
 import time
 import urllib.error
 import urllib.request
 from decimal import Decimal, InvalidOperation
+from urllib.parse import unquote, urljoin, urlsplit
 
 ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 TIMEOUT_PADRAO = 20
@@ -195,3 +197,73 @@ class Cliente:
             return self._falha(API_INDISPONIVEL, 'sem shortLink')
         return curto, None
 
+
+# --- Resolucao da URL do grupo -> (shopId, itemId) ------------------------------------------
+MAX_PEDIDOS = 3
+_RE_I = re.compile(r'-i\.(\d+)\.(\d+)(?:$|[/?#])')
+
+
+class _SemSeguir(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+_ABRIDOR = urllib.request.build_opener(_SemSeguir)
+
+
+def abrir_sem_seguir(url, timeout):
+    """HEAD sem seguir redirect -> (status, Location ou None). Erro de rede levanta OSError."""
+    pedido = urllib.request.Request(url, method='HEAD')
+    try:
+        with _ABRIDOR.open(pedido, timeout=timeout) as resp:
+            return resp.status, resp.headers.get('Location')
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers.get('Location') if e.headers else None
+
+
+def _host_shopee(host):
+    host = (host or '').lower()
+    return host == 'shopee.com.br' or host.endswith('.shopee.com.br')
+
+
+def extrair_ids(url):
+    """(shopId, itemId) de `/<x>/<shop>/<item>` ou `-i.<shop>.<item>` em shopee.com.br; senao None."""
+    partes = urlsplit(url or '')
+    if partes.hostname not in ('shopee.com.br', 'www.shopee.com.br'):
+        return None
+    caminho = unquote(partes.path)
+    m = _RE_I.search(caminho)
+    if m:
+        return int(m.group(1)), int(m.group(2))
+    segmentos = [s for s in caminho.split('/') if s]
+    if len(segmentos) >= 3 and segmentos[-1].isdigit() and segmentos[-2].isdigit():
+        return int(segmentos[-2]), int(segmentos[-1])
+    return None
+
+
+def resolver(url, abrir=abrir_sem_seguir, timeout=TIMEOUT_PADRAO):
+    """URL do grupo -> ((shopId, itemId), None) ou (None, motivo).
+
+    Ate MAX_PEDIDOS pedidos sem seguir redirect, so a hosts da Shopee. Rede fora,
+    5xx ou 429 -> API_INDISPONIVEL (passageiro); o resto -> URL_NAO_RECONHECIDA.
+    """
+    atual = (url or '').strip()
+    for pedido in range(MAX_PEDIDOS + 1):
+        ids = extrair_ids(atual)
+        if ids:
+            return ids, None
+        if pedido == MAX_PEDIDOS or not _host_shopee(urlsplit(atual).hostname):
+            break
+        try:
+            status, destino = abrir(atual, timeout)
+        except (OSError, ValueError) as e:
+            print(f'shopee api: {API_INDISPONIVEL} (resolver: {type(e).__name__})')
+            return None, API_INDISPONIVEL
+        if status >= 500 or status == 429:
+            print(f'shopee api: {API_INDISPONIVEL} (resolver: HTTP {status})')
+            return None, API_INDISPONIVEL
+        if not (300 <= status < 400 and destino):
+            break
+        atual = urljoin(atual, destino)
+    print(f'shopee api: {URL_NAO_RECONHECIDA}')
+    return None, URL_NAO_RECONHECIDA
