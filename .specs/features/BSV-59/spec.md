@@ -62,7 +62,9 @@ Open questions: none
 10. FAL-01: IF o motivo é `api_indisponivel`, `api_credencial` ou `api_limite`, THEN THE SYSTEM SHALL reter a linha (`shopee_api_indisponivel`, `oracle=retida(0)`), nada gravado, ponteiro travado.
 11. PAU-01: WHEN a Shopee soma 3 falhas seguidas da API, THE SYSTEM SHALL pausá-la com 1 aviso com o motivo (e "conferir app_id/app_secret" em `api_credencial`), seguir Amazon/ML, e WHEN volta SHALL avisar "voltou" e processar a retida.
 12. SEG-01: THE SYSTEM SHALL NOT escrever `app_id`, `app_secret` nem a assinatura em stdout, log, exceção, CSV ou Telegram.
-13. DOC-01: THE SYSTEM SHALL documentar no README (seção Shopee) o que a API traz e o que se perdeu, `habilitado`, onde fica a credencial e cada motivo; e o bloco em `config.example.json`; e o SQL das retidas antigas.
+13. BAT-01: WHEN uma linha da Shopee é processada pela API (ok, retida ou `'9'`), THE SYSTEM SHALL renovar o batimento da BSV-57 (`bater_linha`) como nas outras lojas.
+14. BAT-02: WHILE a Shopee está em pausa pela API e o monitor dorme, THE SYSTEM SHALL bater `dormindo` antes de cada espera, com prazo = hora de acordar + 10 min (BSV-57).
+15. DOC-01: THE SYSTEM SHALL documentar no README (seção Shopee) o que a API traz e o que se perdeu, `habilitado`, onde fica a credencial e cada motivo; e o bloco em `config.example.json`; e o SQL das retidas antigas.
 
 ## Requirement Traceability
 
@@ -80,6 +82,8 @@ Open questions: none
 | FAL-01 | P1 | Execute | Done |
 | PAU-01 | P1 | Execute | Done |
 | SEG-01 | P1 | Execute | Done |
+| BAT-01 | P1 | Execute | Done |
+| BAT-02 | P1 | Execute | Done |
 | DOC-01 | P1 | Execute | Done |
 
 ## Success Criteria

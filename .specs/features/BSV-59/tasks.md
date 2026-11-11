@@ -11,11 +11,15 @@ T3 → T4
 ### Phase 3: Correções do Verifier (iteração 1)
 T5
 
+### Phase 4: Rebase sobre a BSV-57 (batimento)
+T6
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
+T5 → T6
 ```
 
 ## Task Breakdown
@@ -60,6 +64,14 @@ T4 → T5
 **Tests**: `tools/tests/test_shopee_api.py`, `tools/tests/test_shopee_lote.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
+### T6: Batimento no caminho da API e na pausa ✅
+**What**: rebase sobre a BSV-57; a linha da Shopee pela API passa pelo mesmo `bater_linha` do lote; testes do batimento por linha da API e da espera com a Shopee pausada pela API.
+**Where**: `tools/capture-store-pages/main.py`, `tools/tests/test_shopee_lote.py`
+**Depends on**: T5
+**Reqs**: BAT-01, BAT-02
+**Tests**: `tools/tests/test_shopee_lote.py`
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -68,6 +80,7 @@ T4 → T5
 | RES-01, RES-02 | `tools/tests/test_shopee_api.py` | T2 |
 | CFG-01, NAV-01, FAL-01, PAU-01, SEG-01 | `tools/tests/test_shopee_lote.py` | T3 |
 | DOC-01 | `tools/tests/test_shopee_lote.py` | T4 |
+| BAT-01, BAT-02 | `tools/tests/test_shopee_lote.py` | T6 |
 
 ## Gate Check Commands
 

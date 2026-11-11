@@ -6,7 +6,7 @@ falsos que registram qualquer chamada. Credenciais ficticias e distintas de tudo
 import argparse
 import json
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from conftest import Loja
@@ -363,3 +363,83 @@ def test_doc01_readme_exemplo_e_sql():
     sql = (LOJAS / "sql" / "BSV-59_retidas_shopee.sql").read_text(encoding="utf-8")
     assert ("UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '9', DS_CAPTURA = 'descartada_atraso_bsv'\n"
             " WHERE ST_CAPTURA = '0' AND DS_URL_ORIGEM LIKE '%shopee%' AND DT_CAPTACAO < SYSDATE - 1;") in sql
+
+
+# --- BSV-57 x BSV-59: batimento no caminho da API e na pausa da Shopee ----------------------------
+T_BAT = datetime(2026, 11, 10, 13, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def batidas(lojas, monkeypatch):
+    registro = []
+    monkeypatch.setattr(lojas.batimento, "agora_utc", lambda: T_BAT)
+    monkeypatch.setattr(lojas.batimento, "gravar_atomico", lambda caminho, dados: registro.append(dict(dados)) or True)
+    return registro
+
+
+def test_bat_api_cada_linha_da_shopee_pela_api_renova_o_batimento(amb, batidas):
+    """Lote so de Shopee pela API (sem navegador): uma batida por linha, ok ou retida."""
+    amb.api.falhas.append((503, b"x"))   # a 1a linha fica retida (passageiro), a 2a e a 3a vao ok
+    saidas, _ = amb.rodar([(1, amb.shopee(1)), (2, amb.shopee(2)), (3, amb.shopee(3))])
+    assert [saidas[i]["status_captura"] for i in (1, 2, 3)] == ["shopee_api_indisponivel", "ok", "ok"]
+    assert amb.navegou == [] and len(amb.api.pedidos) == 5
+    assert [b["fase"] for b in batidas] == ["linha"] * 3
+    assert all(b["robo"] == "lojas" and b["prazo"] == "2026-11-10T13:10:00Z" for b in batidas)
+
+
+def test_bat_api_linha_que_vira_9_pela_api_tambem_renova(amb, batidas):
+    amb.api.produtos[item(1)] = produto_ok()
+    _, db = amb.rodar([(1, amb.shopee(1))])
+    assert db.erros == [(1, "fora_do_programa")]
+    assert [b["fase"] for b in batidas] == ["linha"]
+
+
+def _monitorar_com_pausa(lojas, monkeypatch, amb, batidas, filas):
+    """Roda o `_monitorar` real com a pausa da Shopee do `amb`; cada espera registra a ultima batida.
+    Acabadas as `filas`, a leitura seguinte (depois da batida 'varredura') encerra o monitor."""
+    esperas = []
+    respostas = iter(filas)
+
+    def ler(*a, **k):
+        try:
+            return next(respostas)
+        except StopIteration:
+            raise KeyboardInterrupt from None
+
+    monkeypatch.setattr(lojas, "_pausa_padrao", lambda: amb.pausa)
+    monkeypatch.setattr(lojas, "_ler_pendentes_resiliente", ler)
+    monkeypatch.setattr(lojas, "_esperar", lambda s: esperas.append((s, dict(batidas[-1]) if batidas else None)))
+    monkeypatch.setattr(lojas, "_varrer_validade", lambda db: None)
+    monkeypatch.setattr(lojas, "_recuperar_publicacoes", lambda *a: None)
+    monkeypatch.setattr(lojas, "_gravar_csv", lambda *a, **k: None)
+    monkeypatch.setattr(lojas, "_resumo_oracle", lambda *a, **k: None)
+    lojas._monitorar(None, Pagina(), Db(), argparse.Namespace(desde=None, limite=0), [], amb.img, 3, None)
+    return esperas
+
+
+def test_bat_pausa_api_shopee_dorme_sempre_batendo_com_prazo_de_acordar(lojas, monkeypatch, amb, batidas):
+    """Shopee pausada pela API e fila so de Shopee: o robo dorme, e toda espera vem depois de uma
+    batida 'dormindo' com prazo = acordar + 10 min (regra da BSV-57)."""
+    amb.api.falhas += [(200, ERRO_ASSINATURA)] * 3
+    amb.rodar([(1, amb.shopee(1)), (2, amb.shopee(2)), (3, amb.shopee(3))])
+    assert amb.pausa.em_pausa("shopee")
+    batidas.clear()
+    pedidos = len(amb.api.pedidos)
+    fila = [{"ID_OFERTA": i, "url": amb.shopee(i), "numero_da_captura": str(i), "DS_ORIGEM": "g"} for i in (1, 2)]
+    esperas = _monitorar_com_pausa(lojas, monkeypatch, amb, batidas, [fila, fila])
+    assert len(amb.api.pedidos) == pedidos                     # em pausa: a API nao e chamada
+    assert [s for s, _ in esperas] == [180, 180]
+    for s, ultima in esperas:
+        assert ultima is not None and ultima["fase"] == "dormindo"
+        assert ultima["prazo"] == "2026-11-10T13:13:00Z"       # 13:00 + 3 min de sono + 10 min
+    assert [b["fase"] for b in batidas] == ["varredura", "validade", "dormindo", "varredura", "dormindo", "varredura"]
+
+
+def test_bat_retida_pela_api_antes_da_pausa_nao_espera_sem_bater(lojas, monkeypatch, amb, batidas):
+    """1 falha da API (sem pausa ainda): a linha fica retida, o monitor rele na hora e bate na varredura."""
+    amb.api.falhas.append((503, b"x"))
+    fila = [{"ID_OFERTA": 1, "url": amb.shopee(1), "numero_da_captura": "1", "DS_ORIGEM": "g"}]
+    esperas = _monitorar_com_pausa(lojas, monkeypatch, amb, batidas, [fila, []])
+    fases = [b["fase"] for b in batidas]
+    assert fases == ["varredura", "validade", "linha", "varredura", "dormindo", "varredura"]
+    assert len(esperas) == 1 and esperas[0][1]["fase"] == "dormindo"
