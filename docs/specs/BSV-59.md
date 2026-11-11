@@ -53,6 +53,21 @@ medido em 10/11 (ou outro da fila):
 A saída vai para esta spec **redigida** (`app_id`, afiliado, assinatura → `REDACTED`). Se o passo 1 devolver
 lista ou nó de outro item, esta spec volta para o arquiteto.
 
+**Passos 1 e 2 provados em 10/11** (do PC, item do link medido acima, `urllib` + `hashlib`, assinatura como no
+item 2 das Saídas):
+- `productOfferV2(shopId, itemId)` → HTTP 200, **1 nó**, `itemId` e `shopId` iguais aos pedidos,
+  `hasNextPage: false`; `price "19.93"`, `priceMin "19.93"`, `priceMax "57.9"` (anúncio com variantes),
+  `ratingStar "4.6"`, `sales 1351`, `commissionRate "0.13"`, `imageUrl` e `offerLink` preenchidos.
+- `generateShortLink` com `https://shopee.com.br/product/<shopId>/<itemId>` → HTTP 200, `shortLink`
+  `https://s.shopee.com.br/…`, `longLink` com `utm_source=an_REDACTED` (o nosso) e `utm_medium=affiliates`.
+- **Erros vêm com HTTP 200**, no array `errors` do GraphQL:
+  - secret errado → `{"errors":[{"message":"error [10020]: Invalid Signature","extensions":{"code":10020,…}}]}`;
+  - `Timestamp` 15 min no passado → mesmo código `10020`, mensagem `Request Expired` (relógio da máquina
+    importa);
+  - item inexistente (`itemId: 1`) → `{"data":{"productOfferV2":{"nodes":[]}}}`, sem erro.
+
+**Falta (passo 3):** o limite de chamadas e a janela exata do `Timestamp`, na documentação.
+
 ## Saídas
 1. **Configuração** em `conf/config.json` (fora do git) e `conf/config.example.json` (valores fictícios, com
    `_obs`):
@@ -74,10 +89,13 @@ lista ou nó de outro item, esta spec volta para o arquiteto.
    - **`link_afiliado(shop_id, item_id)`** → `generateShortLink` com `originUrl`
      `https://shopee.com.br/product/<shopId>/<itemId>` (URL limpa: nunca a URL do grupo, que traz o
      `utm`/afiliado de terceiro) → `(shortLink, None)` ou `(None, motivo)`.
-   - **Motivos:** `api_indisponivel` (timeout, erro de rede, HTTP 5xx), `api_credencial` (erro de
-     autenticação/assinatura devolvido pela API), `api_limite` (limite de chamadas), `fora_do_programa`
-     (nenhum nó: item sem oferta de afiliado), `item_divergente` (nó de outro `itemId` ou mais de um nó). O
-     código do erro GraphQL vai no log; o corpo da resposta não.
+   - **Motivos:** `api_indisponivel` (timeout, erro de rede, HTTP ≠ 200, JSON ilegível), `api_credencial`
+     (`errors[].extensions.code` `10020`: `Invalid Signature` ou `Request Expired`; a mensagem vai no log
+     e no aviso, porque `Request Expired` é relógio, não credencial), `api_limite` (código de limite que o
+     passo 3 da pré-condição registrar), `fora_do_programa` (`nodes: []`: item sem oferta de afiliado ou
+     inexistente; a API não distingue), `item_divergente` (nó de outro `itemId` ou mais de um nó). Qualquer
+     outro código em `errors` → `api_indisponivel` com o código no log. **O HTTP é 200 também nos erros**:
+     decidir pelo `errors`, nunca pelo status. O código do erro vai no log; o corpo da resposta não.
 3. **Resolução da URL** (`core/shopee_api.py`, `resolver(url)`): link `s.shopee.com.br` → um pedido **sem
    seguir redirect**, lê o `Location`; até 3 saltos. Extrai `shopId`/`itemId` destes formatos (fixtures nos
    testes):
@@ -164,6 +182,9 @@ implementação.
   `_shopee`/`_aba_shopee` (navegador falso que falha se chamado).
 - **Desligado:** `habilitado: false` ou bloco ausente → fluxo do navegador chamado como hoje (o mutante que
   ignora o `habilitado` falha nos dois sentidos).
+- **Erros com HTTP 200:** resposta 200 com `errors` código `10020` (`Invalid Signature` e `Request Expired`,
+  textos reais da pré-condição) → `api_credencial`, mensagem no aviso; 200 com `nodes: []` →
+  `fora_do_programa`; 200 com outro código → `api_indisponivel` (o mutante que decide pelo status HTTP falha).
 - **Falhas:** timeout → `retida(0)`, nada em `OFERTA`, ponteiro travado; 3 seguidas → pausa `shopee` + 1
   aviso; volta → "voltou" e a retida processada; erro de assinatura → retida com "conferir app_id/app_secret"
   no aviso; Amazon/ML seguem `ok` durante a pausa da Shopee.
