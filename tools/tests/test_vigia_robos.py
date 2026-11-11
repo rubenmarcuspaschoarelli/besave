@@ -626,3 +626,15 @@ def test_g10_aviso_de_failed_traz_memoria_e_ultima_linha_do_log(m):
     m.rodar_vigia()
     assert "[10:00:00] linha 9 | status=erro" in m.enviados[0]
     assert "Memoria do scope: 1024 MB" in m.enviados[0]
+
+
+def test_item4_aviso_de_grupo_mostra_horario_de_brasilia_e_o_estado_segue_em_utc(m):
+    m.so("whatsapp")
+    desde = T0 - timedelta(hours=12, minutes=30)               # 02:30Z de 10/11 = 23:30 de 09/11 em Brasilia
+    m.bater("whatsapp", em=T0 - min_(1), grupos={"Promos X": desde})
+    m.rodar_vigia()
+    texto = m.enviados[0]
+    assert "desde 09/11 23:30 (Brasilia," in texto
+    assert "2026-11-10T02:30:00Z" not in texto and "Z " not in texto
+    oc = m.estado()["robos"]["whatsapp"]["ocorrencias"]["grupo:Promos X"]
+    assert oc["desde"] == "2026-11-10T02:30:00Z" and oc["avisado_em"] == "2026-11-10T15:00:00Z"

@@ -78,6 +78,7 @@ Open questions: none
 1. MSG-01: WHEN não há token e chat, THE SYSTEM SHALL só logar; com eles SHALL enviar texto com robô, motivo, ação, última linha útil do log, memória do scope e RSS do maior `chrome`, todos medidos ANTES do restart (depois dele o scope, os pids e o log são outros: a mensagem saía com `n/d`).
 2. MSG-02: THE SYSTEM SHALL NOT incluir token nem URL `https://` em log, mensagem ou erro.
 3. MSG-03: THE SYSTEM SHALL manter 1 mensagem por ocorrência e lembrete a cada 2 h, com estado em `vigia_robos.json`.
+4. MSG-04: THE SYSTEM SHALL mostrar ao operador horários em Brasília (offset fixo -03:00, ex.: `11/11 08:42`; CLAUDE.md regra 5) e manter o estado em `vigia_robos.json` em UTC (`Z`).
 
 ### P2: Rotação de logs
 
@@ -119,6 +120,7 @@ Open questions: none
 | MSG-01 | Mensagens e estado | Execute | Pending |
 | MSG-02 | Mensagens e estado | Execute | Pending |
 | MSG-03 | Mensagens e estado | Execute | Pending |
+| MSG-04 | Mensagens e estado | Execute | Pending |
 | ROT-01 | Rotação de logs | Execute | Pending |
 | ROT-02 | Rotação de logs | Execute | Pending |
 | ROT-03 | Rotação de logs | Execute | Pending |

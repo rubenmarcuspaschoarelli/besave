@@ -30,7 +30,7 @@ import sys
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 PARTIDA_TOLERANCIA = timedelta(minutes=10)
@@ -320,6 +320,14 @@ def salvar_estado(caminho: Path, estado: dict) -> None:
         log(f"falha ao gravar o estado do vigia ({type(e).__name__})")
 
 
+BRASILIA = timezone(timedelta(hours=-3))      # offset fixo (CLAUDE.md regra 5): o operador le Brasilia
+
+
+def _brasilia(dt: datetime) -> str:
+    """Horario para o operador, ex.: 11/11 08:42. O estado em JSON segue em UTC (`_iso`)."""
+    return dt.astimezone(BRASILIA).strftime("%d/%m %H:%M")
+
+
 def _iso(dt: datetime) -> str:
     return dt.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -515,7 +523,7 @@ def _vigiar_grupos(amb: Ambiente, robo: Robo, bat: Batimento, ocorrencias: dict,
         if tipo is not None:
             horas = int((agora - desde).total_seconds() // 3600)
             texto = (f"Vigia dos robos: grupo {nome!r} do WhatsApp falha em todas as voltas desde "
-                     f"{_iso(desde)} (~{horas} h); o nome mudou ou o numero saiu do grupo? "
+                     f"{_brasilia(desde)} (Brasilia, ~{horas} h); o nome mudou ou o numero saiu do grupo? "
                      "Acao: nenhuma (precisa de operador); o robo segue capturando os outros grupos.")
             if tipo == "lembrete":
                 texto = "Lembrete. " + texto
