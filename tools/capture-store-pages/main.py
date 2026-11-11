@@ -634,8 +634,15 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 out['status_captura'] = 'loja_pausada'
                 pausa.reter(loja, row.get('ID_OFERTA'))
             elif loja == 'shopee' and shopee_cfg is not None:
-                campos, out['status_captura'], detalhe_api = _capturar_shopee_api(
-                    shopee_cfg, url, captura, img_root)
+                try:
+                    campos, out['status_captura'], detalhe_api = _capturar_shopee_api(
+                        shopee_cfg, url, captura, img_root)
+                except Exception as e:  # noqa: BLE001
+                    # Inesperado nao queima a linha em '9': passageiro como api_indisponivel
+                    # (retida, conta para a pausa). Log so com tipo + mensagem redigidos.
+                    campos, out['status_captura'] = {}, SHOPEE_API_INDISPONIVEL
+                    detalhe_api = shopee_api.redigir(f'{type(e).__name__}: {e}', shopee_cfg)[:200]
+                    print(f'[captura {captura}] shopee api: excecao inesperada ({detalhe_api})')
                 out.update(campos)
                 cron.marcar('capt')
             else:

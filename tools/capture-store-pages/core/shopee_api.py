@@ -8,6 +8,7 @@ Credencial e assinatura nunca vao para log, excecao ou retorno.
 import hashlib
 import http.client
 import json
+import math
 import re
 import time
 import urllib.error
@@ -17,6 +18,8 @@ from urllib.parse import unquote, urljoin, urlsplit
 
 ENDPOINT = 'https://open-api.affiliate.shopee.com.br/graphql'
 TIMEOUT_PADRAO = 20
+# Teto por chamada: uma linha faz ate 3 HEADs + 2 POSTs e precisa caber nos 10 min do batimento (BSV-57).
+TIMEOUT_MIN, TIMEOUT_MAX = 1, 60
 
 # Motivos. Os tres primeiros sao passageiros (linha retida); os outros viram '9'.
 API_INDISPONIVEL = 'api_indisponivel'
@@ -46,17 +49,45 @@ class Config:
         return f'shopee_api.Config(timeout={self.timeout})'
 
 
+def _timeout(bruto):
+    """`timeout_segundos` -> segundos: acima do teto vira TIMEOUT_MAX; invalido ou < 1 vira o padrao."""
+    try:
+        valor = float(bruto)
+    except (TypeError, ValueError):
+        valor = math.nan
+    if not math.isfinite(valor) or valor < TIMEOUT_MIN:
+        print(f'[WARN] shopee_afiliado.timeout_segundos invalido ({str(bruto)[:20]!r}); usando {TIMEOUT_PADRAO} s.')
+        return TIMEOUT_PADRAO
+    if valor > TIMEOUT_MAX:
+        print(f'[WARN] shopee_afiliado.timeout_segundos={valor:g} acima do teto; usando {TIMEOUT_MAX} s.')
+        return TIMEOUT_MAX
+    return valor
+
+
 def ler_config(cfg):
     """Bloco `shopee_afiliado` com `habilitado: true` -> Config; ausente ou desligado -> None."""
     bloco = (cfg or {}).get('shopee_afiliado')
     if not isinstance(bloco, dict) or bloco.get('habilitado') is not True:
         return None
-    try:
-        timeout = float(bloco.get('timeout_segundos', TIMEOUT_PADRAO))
-    except (TypeError, ValueError):
-        timeout = TIMEOUT_PADRAO
     return Config(str(bloco.get('app_id') or ''), str(bloco.get('app_secret') or ''),
-                  timeout if timeout > 0 else TIMEOUT_PADRAO)
+                  _timeout(bloco.get('timeout_segundos', TIMEOUT_PADRAO)))
+
+
+_RE_ASSINATURA = re.compile(r'Signature=\S+|\b[0-9a-fA-F]{64}\b')
+_RE_TOKEN = re.compile(r'\b\d{6,}:[A-Za-z0-9_-]{20,}\b')
+_RE_URL = re.compile(r'https?://\S+', re.IGNORECASE)
+
+
+def redigir(texto, config=None):
+    """Tira credencial, assinatura, token e URL de um texto que vai a log ou aviso (regra 11)."""
+    texto = str(texto)
+    if config is not None:
+        for segredo in sorted({config.app_secret, config.app_id}, key=len, reverse=True):
+            if segredo:
+                texto = texto.replace(segredo, 'REDACTED')
+    texto = _RE_ASSINATURA.sub('REDACTED', texto)
+    texto = _RE_TOKEN.sub('REDACTED', texto)
+    return _RE_URL.sub('[url]', texto)
 
 
 def _preco(texto):

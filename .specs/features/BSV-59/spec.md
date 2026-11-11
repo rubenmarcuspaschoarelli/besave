@@ -64,7 +64,9 @@ Open questions: none
 12. SEG-01: THE SYSTEM SHALL NOT escrever `app_id`, `app_secret` nem a assinatura em stdout, log, exceção, CSV ou Telegram.
 13. BAT-01: WHEN uma linha da Shopee é processada pela API (ok, retida ou `'9'`), THE SYSTEM SHALL renovar o batimento da BSV-57 (`bater_linha`) como nas outras lojas.
 14. BAT-02: WHILE a Shopee está em pausa pela API e o monitor dorme, THE SYSTEM SHALL bater `dormindo` antes de cada espera, com prazo = hora de acordar + 10 min (BSV-57).
-15. DOC-01: THE SYSTEM SHALL documentar no README (seção Shopee) o que a API traz e o que se perdeu, `habilitado`, onde fica a credencial e cada motivo; e o bloco em `config.example.json`; e o SQL das retidas antigas.
+15. TMO-01: WHEN `timeout_segundos` passa de 60, THE SYSTEM SHALL usar 60 com `[WARN]`; IF é menor que 1 ou inválido, THEN SHALL usar 20 com `[WARN]` (dono, 11/11).
+16. EXC-01: IF o caminho da API lança exceção inesperada, THEN THE SYSTEM SHALL reter a linha como `shopee_api_indisponivel` (`'0'`, conta para a pausa), registrar só tipo e mensagem redigidos (sem `app_id`, `app_secret`, assinatura) e seguir o lote (dono, 11/11).
+17. DOC-01: THE SYSTEM SHALL documentar no README (seção Shopee) o que a API traz e o que se perdeu, `habilitado`, onde fica a credencial e cada motivo; e o bloco em `config.example.json`; e o SQL das retidas antigas.
 
 ## Requirement Traceability
 
@@ -84,6 +86,8 @@ Open questions: none
 | SEG-01 | P1 | Execute | Done |
 | BAT-01 | P1 | Execute | Done |
 | BAT-02 | P1 | Execute | Done |
+| TMO-01 | P1 | Execute | Done |
+| EXC-01 | P1 | Execute | Done |
 | DOC-01 | P1 | Execute | Done |
 
 ## Success Criteria

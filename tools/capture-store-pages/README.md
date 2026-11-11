@@ -116,6 +116,10 @@ gravados. O preço final continua vindo da mensagem do grupo (`core/precos.py`).
 **Ligar e desligar:** `habilitado: true` liga; `false` ou o bloco ausente volta ao navegador no próximo
 lote, sem reiniciar nada além do robô. O código do navegador da Shopee continua no lugar.
 
+**Timeout:** `timeout_segundos` vale por chamada (padrão 20). Acima de 60 vira 60, e abaixo de 1 ou
+inválido vira 20, sempre com `[WARN]` no log. Uma linha faz até 5 chamadas e precisa caber nos 10 min do
+batimento (BSV-57).
+
 **Credencial:** `app_id` e `app_secret` só no `conf/config.json` da máquina (fora do git; o
 `config.example.json` traz valores fictícios). Nunca aparecem em log, CSV, Telegram nem evidência; o log
 diz só `shopee api: ok item=<itemId>` ou o motivo. O relógio da máquina precisa seguir o NTP: a assinatura
@@ -125,7 +129,7 @@ leva o horário e a API recusa pedido velho (`Request Expired`).
 
 | motivo | o que é | linha |
 |---|---|---|
-| `api_indisponivel` | timeout, rede, HTTP ≠ 200, JSON ilegível ou código de erro desconhecido | retida (`shopee_api_indisponivel`, `'0'`) |
+| `api_indisponivel` | timeout, rede, HTTP ≠ 200, JSON ilegível, código de erro desconhecido ou exceção inesperada no caminho da API (log com tipo e mensagem redigidos) | retida (`shopee_api_indisponivel`, `'0'`) |
 | `api_credencial` | erro `10020`: `Invalid Signature` (conferir `app_id`/`app_secret`) ou `Request Expired` (relógio) | retida |
 | `api_limite` | erro `10030`: passou de 8.000 chamadas por hora | retida |
 | `fora_do_programa` | o produto não tem oferta de afiliado (ou não existe; a API não distingue) | `'9'` |

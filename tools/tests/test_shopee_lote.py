@@ -264,8 +264,8 @@ def test_res02_url_nao_reconhecida_vira_9(amb):
 
 # --- FAL-01 / ERR-01 ------------------------------------------------------------------------------
 def test_fal01_timeout_retida_nada_gravado_ponteiro_travado(amb, lojas, capsys):
-    amb.cfg["shopee_afiliado"]["timeout_segundos"] = 0.3
-    amb.api.atraso = 1
+    amb.cfg["shopee_afiliado"]["timeout_segundos"] = 1     # piso do timeout (TIMEOUT_MIN)
+    amb.api.atraso = 1.5
     saidas, db = amb.rodar([(1, amb.shopee(1))])
     amb.api.atraso = 0
     saidas2, _ = amb.rodar([(2, amz(2))], db=db)
@@ -460,3 +460,36 @@ def test_bat_retida_pela_api_antes_da_pausa_nao_espera_sem_bater(lojas, monkeypa
     fases = [b["fase"] for b in batidas]
     assert fases == ["varredura", "validade", "linha", "varredura", "dormindo", "varredura"]
     assert len(esperas) == 1 and esperas[0][1]["fase"] == "dormindo"
+
+
+# --- Excecao inesperada no caminho da API (dono, 11/11): passageira, nunca '9' --------------------
+def _produto_que_quebra(lojas, monkeypatch):
+    assinatura = lojas.shopee_api.assinar(APP_ID, 1, "{}", SECRET)
+
+    def quebra(self, shop_id, item_id):
+        raise RuntimeError(f"bug com {APP_ID} {SECRET} Signature={assinatura} {assinatura}")
+    monkeypatch.setattr(lojas.shopee_api.Cliente, "produto", quebra)
+    return assinatura
+
+
+def test_exc_excecao_inesperada_retem_a_linha_e_o_lote_segue(amb, lojas, monkeypatch, capsys):
+    assinatura = _produto_que_quebra(lojas, monkeypatch)
+    saidas, db = amb.rodar([(1, amb.shopee(1)), (2, amz(2))])
+    assert saidas[1]["status_captura"] == "shopee_api_indisponivel"
+    assert saidas[2]["status_captura"] == "ok" and 2 in db.ofertas            # o lote seguiu
+    assert db.erros == [] and 1 not in db.capturas and 1 not in db.ofertas    # nada de '9'
+    assert lojas.ponteiro == [] and db.trava_ponteiro == 1                    # retida em '0'
+    saida = capsys.readouterr().out
+    assert "oracle=retida(0)" in saida and "RuntimeError: bug com" in saida
+    for segredo in (APP_ID, SECRET, assinatura):
+        assert segredo not in saida
+
+
+def test_exc_tres_excecoes_pausam_a_shopee_com_aviso_sem_segredo(amb, lojas, monkeypatch):
+    assinatura = _produto_que_quebra(lojas, monkeypatch)
+    saidas, _ = amb.rodar([(1, amb.shopee(1)), (2, amb.shopee(2)), (3, amb.shopee(3)), (4, amb.shopee(4))])
+    assert [saidas[i]["status_captura"] for i in (1, 2, 3)] == ["shopee_api_indisponivel"] * 3
+    assert saidas[4]["status_captura"] == "loja_pausada" and amb.pausa.em_pausa("shopee")
+    assert len(amb.enviados) == 1 and "RuntimeError" in amb.enviados[0]
+    for segredo in (APP_ID, SECRET, assinatura):
+        assert segredo not in amb.enviados[0]

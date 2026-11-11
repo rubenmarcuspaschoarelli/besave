@@ -385,3 +385,34 @@ def test_res01_pedido_real_nao_segue_redirect(api):
         httpd.shutdown()
         httpd.server_close()
     assert vistos == [("HEAD", "/REDACTED1")]
+
+
+# --- Teto do timeout (dono, 11/11): cabe nos 10 min do batimento da BSV-57 ----------------------
+@pytest.mark.parametrize("bruto, esperado, avisa", [
+    (300, 60, True), ("abc", 20, True), (15, 15, False),
+    (60, 60, False), (1, 1, False), (0.5, 20, True), (0, 20, True), (-5, 20, True),
+    (None, 20, True), ("nan", 20, True), ("inf", 20, True), ("30", 30, False),
+])
+def test_timeout_teto_60_e_invalido_vira_20_com_warn(api, capsys, bruto, esperado, avisa):
+    cfg = api.ler_config({"shopee_afiliado": {"habilitado": True, "app_id": APP_ID, "app_secret": SECRET,
+                                              "timeout_segundos": bruto}})
+    assert cfg.timeout == esperado
+    saida = capsys.readouterr().out
+    assert ("[WARN]" in saida) is avisa
+    assert APP_ID not in saida and SECRET not in saida
+
+
+def test_timeout_ausente_e_o_padrao_sem_warn(api, capsys):
+    cfg = api.ler_config({"shopee_afiliado": {"habilitado": True, "app_id": APP_ID, "app_secret": SECRET}})
+    assert cfg.timeout == 20 and "[WARN]" not in capsys.readouterr().out
+
+
+def test_redigir_tira_credencial_assinatura_token_e_url(api):
+    cfg = api.Config(APP_ID, SECRET, 20)
+    assinatura = api.assinar(APP_ID, TS, "{}", SECRET)
+    texto = (f"falhou {APP_ID}/{SECRET} Signature={assinatura}, hex {assinatura} "
+             f"bot 123456789:{'A' * 30} em https://s.shopee.com.br/NOSSO1?x=1")
+    limpo = api.redigir(texto, cfg)
+    for segredo in (APP_ID, SECRET, assinatura, "A" * 30, "s.shopee.com.br"):
+        assert segredo not in limpo
+    assert limpo.startswith("falhou REDACTED/REDACTED") and "[url]" in limpo

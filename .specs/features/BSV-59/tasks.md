@@ -14,12 +14,16 @@ T5
 ### Phase 4: Rebase sobre a BSV-57 (batimento)
 T6
 
+### Phase 5: Lacunas do Verifier aceitas pelo dono
+T7
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
 T5 → T6
+T6 → T7
 ```
 
 ## Task Breakdown
@@ -72,6 +76,14 @@ T5 → T6
 **Tests**: `tools/tests/test_shopee_lote.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
+### T7: Teto do timeout e exceção inesperada na API ✅
+**What**: `timeout_segundos` com teto 60 e piso 1 (inválido → 20) com `[WARN]`; `_capturar_shopee_api` dentro de `try`, exceção = passageira, log redigido por `shopee_api.redigir`.
+**Where**: `tools/capture-store-pages/core/shopee_api.py`, `tools/capture-store-pages/main.py`, README, `config.example.json`
+**Depends on**: T6
+**Reqs**: TMO-01, EXC-01
+**Tests**: `tools/tests/test_shopee_api.py`, `tools/tests/test_shopee_lote.py`
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -81,6 +93,7 @@ T5 → T6
 | CFG-01, NAV-01, FAL-01, PAU-01, SEG-01 | `tools/tests/test_shopee_lote.py` | T3 |
 | DOC-01 | `tools/tests/test_shopee_lote.py` | T4 |
 | BAT-01, BAT-02 | `tools/tests/test_shopee_lote.py` | T6 |
+| TMO-01, EXC-01 | `tools/tests/test_shopee_api.py`, `tools/tests/test_shopee_lote.py` | T7 |
 
 ## Gate Check Commands
 
