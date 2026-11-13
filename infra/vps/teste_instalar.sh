@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Teste do instalar.sh (BSV-43, INS-01..05) com um `gh` falso: sem rede, sem GitHub.
+# Teste do instalar.sh (BSV-43, INS-01..05; BSV-61, INS-06..07) com um `gh` falso: sem rede, sem GitHub.
 # Uso: bash infra/vps/teste_instalar.sh
 set -uo pipefail
 
@@ -49,13 +49,18 @@ EOF
 foto() { (cd "$T/bin" && find . -mindepth 1 | sort && find . -type f -exec sha256sum {} + | sort); }
 
 rodar() {
-  PATH="$T/fake:$PATH" BESAVE_BIN="$T/bin" BESAVE_REPO="$REPO" \
+  PATH="$T/fake:$PATH" BESAVE_BIN="$T/bin" BESAVE_REPO="$REPO" BESAVE_UNIDADES="$T/unid" \
     bash "$SCRIPT" "$@" > "$T/out" 2> "$T/err"
   codigo=$?
 }
 
 intacto() {
   [ "$(foto)" = "$ANTES" ] || falhou "bin/ mudou: $(ls -la "$T/bin")"
+  sem_unidades
+}
+
+sem_unidades() {
+  [ ! -e "$T/unid" ] || falhou "instalou unidades: $(ls -A "$T/unid")"
 }
 
 instalado() {
@@ -80,6 +85,8 @@ esperado="run list -R $REPO --workflow worker-arm64.yml --branch main --event pu
 grep -qx "run download 4242 -R $REPO -n worker-linux-arm64-abcdef1 -D .*" "$T/gh.log" || falhou "download: $(cat "$T/gh.log")"
 instalado 4242
 [ ! -s "$T/err" ] || falhou "aviso indevido em push/main: $(cat "$T/err")"
+grep -qx "papel=ciclo" "$T/bin/VERSAO" || falhou "VERSAO sem papel=ciclo"
+sem_unidades
 
 # INS-01 (borda): nenhuma execução success em main → falha clara, nada baixado, bin/ intacto.
 caso="INS-01 sem execução"; preparar
@@ -149,6 +156,67 @@ intacto
 for args in "abc" "12a" "-1" "1 2"; do
   caso="INS-05 argumento '$args'"; preparar
   # shellcheck disable=SC2086 # separar "1 2" é o caso
+  rodar $args
+  [ "$codigo" = 2 ] || falhou "código $codigo"
+  [ ! -s "$T/gh.log" ] || falhou "chamou o gh: $(cat "$T/gh.log")"
+  intacto
+done
+
+# INS-07: --papel ciclo explícito = o padrão (3 binários, nenhuma unidade).
+caso="INS-07 --papel ciclo"; preparar
+rodar --papel ciclo 123
+[ "$codigo" = 0 ] || falhou "código $codigo: $(cat "$T/err")"
+grep -qx "run download 123 -R $REPO -n worker-linux-arm64-abcdef1 -D .*" "$T/gh.log" || falhou "download: $(cat "$T/gh.log")"
+instalado 123
+grep -qx "papel=ciclo" "$T/bin/VERSAO" || falhou "VERSAO sem papel=ciclo"
+sem_unidades
+
+# INS-06: --papel envio → só besave-envio e besave-worker; besave-ciclo intacto; só as 3 unidades.
+UNIDADES_ENVIO="besave-alerta@.service besave-envio.service besave-envio.timer"
+envio_instalado() {
+  local id=$1
+  for b in besave-envio besave-worker; do
+    cmp -s "$T/bin/$b" "$T/art/$b" || falhou "$b não é o do artefato"
+    [ -x "$T/bin/$b" ] || falhou "$b não é executável"
+  done
+  cmp -s "$T/bin/besave-ciclo" <(printf '#!/bin/sh\necho velho besave-ciclo\n') || falhou "besave-ciclo foi trocado"
+  [ "$(cd "$T/bin" && find . -mindepth 1 | LC_ALL=C sort | tr '\n' ' ')" = "./VERSAO ./besave-ciclo ./besave-envio ./besave-worker " ] \
+    || falhou "bin/: $(ls -A "$T/bin")"
+  grep -qx "execucao=$id" "$T/bin/VERSAO" || falhou "VERSAO sem execucao=$id"
+  grep -qx "commit=$SHA" "$T/bin/VERSAO" || falhou "VERSAO sem commit=$SHA"
+  grep -qx "papel=envio" "$T/bin/VERSAO" || falhou "VERSAO sem papel=envio"
+  [ "$(cd "$T/unid" 2>/dev/null && find . -mindepth 1 -printf '%P\n' | LC_ALL=C sort | tr '\n' ' ')" = "$UNIDADES_ENVIO " ] \
+    || falhou "unidades: $(ls -A "$T/unid" 2>/dev/null)"
+  for u in $UNIDADES_ENVIO; do
+    cmp -s "$T/unid/$u" "$AQUI/$u" || falhou "$u difere de infra/vps/$u"
+  done
+}
+
+caso="INS-06 --papel envio com ID"; preparar
+rodar --papel envio 123
+[ "$codigo" = 0 ] || falhou "código $codigo: $(cat "$T/err")"
+grep -q "run list" "$T/gh.log" && falhou "listou com ID dado"
+grep -qx "run download 123 -R $REPO -n worker-linux-arm64-abcdef1 -D .*" "$T/gh.log" || falhou "download: $(cat "$T/gh.log")"
+envio_instalado 123
+[ ! -s "$T/err" ] || falhou "aviso indevido: $(cat "$T/err")"
+
+caso="INS-06 --papel envio sem ID"; preparar
+rodar --papel envio
+[ "$codigo" = 0 ] || falhou "código $codigo: $(cat "$T/err")"
+[ "$(sed -n 1p "$T/gh.log")" = "$esperado" ] || falhou "run list: $(sed -n 1p "$T/gh.log")"
+envio_instalado 4242
+
+# INS-06: o papel envio confere o artefato inteiro (hash errado do besave-ciclo também barra).
+caso="INS-06 --papel envio hash errado"; preparar
+printf 'adulterado\n' >> "$T/art/besave-ciclo"
+rodar --papel envio 123
+[ "$codigo" != 0 ] || falhou "código 0"
+intacto
+
+# INS-07: papel desconhecido, --papel sem valor, ID inválido com papel, ordem trocada → 2 sem o gh.
+for args in "--papel" "--papel x" "--papel ENVIO" "--papel envio abc" "--papel envio 1 2" "123 --papel envio"; do
+  caso="INS-07 argumento '$args'"; preparar
+  # shellcheck disable=SC2086 # separar os argumentos é o caso
   rodar $args
   [ "$codigo" = 2 ] || falhou "código $codigo"
   [ ! -s "$T/gh.log" ] || falhou "chamou o gh: $(cat "$T/gh.log")"
