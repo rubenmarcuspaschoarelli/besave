@@ -46,7 +46,7 @@ from playwright.sync_api import sync_playwright
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
                   validade, janela as janela_mod, bloqueio, redirecionamento, batimento)
-from core import processos
+from core import images, processos, shopee_api
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
 from core.caminhos import DESTINO_DIR, IMG_DIR, em_log
@@ -69,7 +69,10 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 
 # Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
 # ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
-STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel'}
+# API de afiliados da Shopee fora, credencial ou limite (BSV-59): mesma regra.
+SHOPEE_API_INDISPONIVEL = 'shopee_api_indisponivel'
+STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel',
+                SHOPEE_API_INDISPONIVEL}
 
 
 def _url_bloqueada(url):
@@ -479,6 +482,41 @@ def _redirecionar(url, redir, pausa, row, rows_seguintes, captura):
     return url, 'redirecionamento_indisponivel'
 
 
+def _capturar_shopee_api(config, url, captura, img_root):
+    """Shopee pela API de afiliados, sem navegador (BSV-59).
+
+    Devolve (campos, status, detalhe): status 'ok', SHOPEE_API_INDISPONIVEL (passageiro, linha
+    retida) ou o motivo que vai para DS_CAPTURA ('9'). `detalhe` vai para o aviso; nunca credencial.
+    """
+    ids, motivo = shopee_api.resolver(url, timeout=config.timeout)
+    cliente = shopee_api.Cliente.de_config(config)
+    dados = curto = None
+    if ids:
+        dados, motivo = cliente.produto(*ids)
+    if dados:
+        curto, motivo = cliente.link_afiliado(*ids)
+    if motivo:
+        detalhe = f'{motivo}: {cliente.detalhe}' if cliente.detalhe else motivo
+        print(f'[captura {captura}] shopee api: {detalhe}')
+        status = SHOPEE_API_INDISPONIVEL if motivo in shopee_api.PASSAGEIROS else motivo
+        return {}, status, detalhe
+    shop_id, item_id = ids
+    campos = {k: v for k, v in dados.items() if k != 'imagem_url'}
+    campos['url_afiliado'] = curto
+    # URL limpa do item: nada da URL do grupo (utm/afiliado de terceiro).
+    campos['url_final'] = f'https://shopee.com.br/product/{shop_id}/{item_id}'
+    campos['url_besave'] = afiliados.gerar_url('shopee', campos['url_final']) or ''
+    folder = os.path.join(img_root, captura or 'sem_numero')
+    campos['pasta_imagens'] = folder
+    if dados.get('imagem_url'):
+        try:
+            os.makedirs(folder, exist_ok=True)
+            images.download_image(dados['imagem_url'], os.path.join(folder, 'img_1.jpg'))
+        except Exception as e:  # noqa: BLE001 - imagem e best-effort, como no navegador
+            print(f'[captura {captura}] shopee api: imagem: {type(e).__name__}')
+    return campos, 'ok', ''
+
+
 def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None, redir=None):
     """Captura cada linha do lote e devolve (out_rows, gravadas, com_erro).
 
@@ -492,6 +530,8 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         pausa = _pausa_padrao()
     if redir is None:
         redir = _redir_padrao()
+    # Lido a cada lote: desligar (habilitado: false) volta ao navegador sem reiniciar (BSV-59).
+    shopee_cfg = shopee_api.ler_config(estado._ler_config())
     out_rows = []
     gravadas = 0
     com_erro = 0
@@ -525,6 +565,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
 
     for pos, row in enumerate(rows):
         cron = _Cronometro()
+        detalhe_api = ''
         out = dict(row)
         url = (row.get('url') or '').strip()
         captura = (row.get('numero_da_captura') or '').strip()
@@ -592,6 +633,18 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 # Fica '0' sem navegar; as outras lojas seguem (BSV-55).
                 out['status_captura'] = 'loja_pausada'
                 pausa.reter(loja, row.get('ID_OFERTA'))
+            elif loja == 'shopee' and shopee_cfg is not None:
+                try:
+                    campos, out['status_captura'], detalhe_api = _capturar_shopee_api(
+                        shopee_cfg, url, captura, img_root)
+                except Exception as e:  # noqa: BLE001
+                    # Inesperado nao queima a linha em '9': passageiro como api_indisponivel
+                    # (retida, conta para a pausa). Log so com tipo + mensagem redigidos.
+                    campos, out['status_captura'] = {}, SHOPEE_API_INDISPONIVEL
+                    detalhe_api = shopee_api.redigir(f'{type(e).__name__}: {e}', shopee_cfg)[:200]
+                    print(f'[captura {captura}] shopee api: excecao inesperada ({detalhe_api})')
+                out.update(campos)
+                cron.marcar('capt')
             else:
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
@@ -675,8 +728,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
             restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
                          if registry.resolver_loja((r.get('url') or '').strip()) == loja]
             motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
+                      else bloqueio.SHOPEE_API if out['status_captura'] == SHOPEE_API_INDISPONIVEL
                       else bloqueio.PAGINA)
-            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes)
+            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes, detalhe=detalhe_api)
         elif loja and out['status_captura'] == 'ok':
             pausa.registrar_sucesso(loja)
 
