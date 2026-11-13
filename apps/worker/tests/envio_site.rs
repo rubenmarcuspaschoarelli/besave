@@ -17,7 +17,7 @@ use worker::envio::foto::{OrigemFoto, foto, foto_de};
 use worker::envio::modelo::Parametros;
 use worker::envio::rodada::{Contexto, rodar};
 use worker::envio::site::{
-    BaixarHttps, ErroBaixa, ErroBase, Imagens, LerDisco, MAX_BYTES, base, base_do_env, url,
+    BaixarHttps, ErroBaixa, ErroBase, Imagens, LerDisco, MAX_BYTES, TIMEOUT, base, base_do_env, url,
 };
 use worker::modelo::Area;
 
@@ -151,6 +151,8 @@ fn oferta_falhas_viram_placeholder() {
         Ok((404, webp(10, 10))),
         Ok((500, vec![])),
         Ok((301, webp(10, 10))),
+        Ok((204, webp(10, 10))),
+        Ok((206, webp(10, 10))),
         Err(ErroBaixa::Timeout(15)),
         Err(ErroBaixa::Conexao("recusada".into())),
         Err(ErroBaixa::Grande),
@@ -172,6 +174,7 @@ fn oferta_falhas_viram_placeholder() {
 #[test]
 fn limite_de_5_mb_inclusivo() {
     assert_eq!(MAX_BYTES, 5 * 1024 * 1024);
+    assert_eq!(TIMEOUT, std::time::Duration::from_secs(15));
     let disco = FakeDisco::new(vec![]);
     let http = FakeHttp::ok(webp_com(MAX_BYTES));
     let (_, origem) = foto_de(&com_url(OFERTAS, &http, &disco), 3, Area::Elas).unwrap();
@@ -234,6 +237,8 @@ fn aviso_falha_sem_foto() {
     let disco = FakeDisco::new(jpg());
     for r in [
         Ok((404, jpg())),
+        Ok((204, jpg())),
+        Ok((206, jpg())),
         Err(ErroBaixa::Timeout(15)),
         Ok((200, b"lixo".to_vec())),
         Ok((200, webp_com(MAX_BYTES + 1))),

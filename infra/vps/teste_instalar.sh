@@ -213,6 +213,15 @@ rodar --papel envio 123
 [ "$codigo" != 0 ] || falhou "código 0"
 intacto
 
+# INS-06: artefato sem besave-ciclo (fora de art/ e do SHA256SUMS; o resto confere) → recusa, mesmo
+# o papel envio não instalando o besave-ciclo.
+caso="INS-06 --papel envio artefato sem besave-ciclo"; preparar
+rm "$T/art/besave-ciclo"
+(cd "$T/art" && sha256sum besave-envio besave-worker > SHA256SUMS)
+rodar --papel envio 123
+[ "$codigo" != 0 ] || falhou "código 0"
+intacto
+
 # INS-07: papel desconhecido, --papel sem valor, ID inválido com papel, ordem trocada → 2 sem o gh.
 for args in "--papel" "--papel x" "--papel ENVIO" "--papel envio abc" "--papel envio 1 2" "123 --papel envio"; do
   caso="INS-07 argumento '$args'"; preparar
