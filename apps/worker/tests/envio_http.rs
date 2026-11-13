@@ -10,10 +10,11 @@ use comum::{AGORA, linha_canal, mapeamento};
 use worker::envio::binario::{Argumentos, argumentos, texto_simulacao};
 use worker::envio::canal::{ErroCanal, FakeCanal, RelogioFake};
 use worker::envio::fonte::FakeEnvio;
-use worker::envio::foto::foto;
+use worker::envio::foto::foto_de;
 use worker::envio::http::{ConfigCanal, interpretar, multipart, pedido_edicao, pedido_foto};
 use worker::envio::modelo::Parametros;
 use worker::envio::rodada::{Contexto, simular};
+use worker::envio::site::Imagens;
 
 const TOKEN: &str = "123456:segredo";
 
@@ -129,9 +130,9 @@ fn simulacao_so_le() {
         telegram: &tg,
         relogio: &r,
         m: &m,
-        dir_imagens: None,
-        dir_avisos: None,
-        foto,
+        imagens: Imagens::pasta(None),
+        avisos: Imagens::pasta(None),
+        foto: foto_de,
         canal: 1,
         pausa_ate: None,
     };

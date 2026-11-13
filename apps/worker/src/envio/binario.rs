@@ -11,10 +11,11 @@ use tracing::{error, info, warn};
 use crate::alerta::{Alertas, ConfigTelegram, TITULO_ENVIO, host_do_env};
 use crate::ciclo::{ErroCiclo, iniciar_log_em};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio, RelogioSistema};
-use crate::envio::foto::foto;
+use crate::envio::foto::foto_de;
 use crate::envio::http::{CanalTelegramHttp, ConfigCanal};
 use crate::envio::oracle::OracleEnvio;
 use crate::envio::rodada::{Contexto, EstadoEnvio, RelatorioEnvio, Simulacao, rodar, simular};
+use crate::envio::site::{BaixarHttps, Disco, Imagens, SemHttp, SiteHttps, base_do_env};
 use crate::execucao::{Codigo, Falha};
 use crate::logs::{HoraBrasilia, PREFIXO_ENVIO, arquivo_do_dia_de, limpar_antigos_de};
 use crate::mapeamento::Mapeamento;
@@ -314,6 +315,23 @@ impl CanalTelegram for SemTelegram {
     }
 }
 
+/// Loga de onde vêm as imagens: URL e pasta → INFO (vale a URL); nenhuma → WARN.
+fn origem_das_imagens(
+    (var_url, url): (&str, Option<&str>),
+    (var_dir, dir): (&str, Option<&Path>),
+    sem: &str,
+) {
+    match (url, dir) {
+        (Some(u), Some(d)) => info!(
+            url = u,
+            pasta = %d.display(),
+            "{var_url} e {var_dir} definidas: vale a URL, a pasta não é lida"
+        ),
+        (None, None) => warn!("{var_url} e {var_dir} ausentes: {sem}"),
+        _ => {}
+    }
+}
+
 /// Configuração (código 2 se faltar), Oracle e a execução; `None` no `--sim`.
 fn rodar_envio(
     sim: bool,
@@ -325,9 +343,33 @@ fn rodar_envio(
     let canal = canal_do_env().map_err(|e| Falha::config("config", &e))?;
     let dir_imagens = var_caminho("BESAVE_IMAGENS_DIR");
     let dir_avisos = var_caminho("BESAVE_AVISOS_DIR");
-    if dir_imagens.is_none() {
-        warn!("BESAVE_IMAGENS_DIR ausente: todas as fotos serão o placeholder da área");
-    }
+    let env = |k: &str| std::env::var(k).ok();
+    let url_imagens =
+        base_do_env("BESAVE_IMAGENS_URL", env).map_err(|e| Falha::config("config", &e))?;
+    let url_avisos =
+        base_do_env("BESAVE_AVISOS_URL", env).map_err(|e| Falha::config("config", &e))?;
+    origem_das_imagens(
+        ("BESAVE_IMAGENS_URL", url_imagens.as_deref()),
+        ("BESAVE_IMAGENS_DIR", dir_imagens.as_deref()),
+        "todas as fotos serão o placeholder da área",
+    );
+    origem_das_imagens(
+        ("BESAVE_AVISOS_URL", url_avisos.as_deref()),
+        ("BESAVE_AVISOS_DIR", dir_avisos.as_deref()),
+        "avisos vão sem foto",
+    );
+    // Só com URL: o cliente HTTPS do site. Se não iniciar, as fotos caem no placeholder (regra 3).
+    let site: Box<dyn BaixarHttps> = if url_imagens.is_some() || url_avisos.is_some() {
+        match SiteHttps::new() {
+            Ok(c) => Box::new(c),
+            Err(e) => {
+                warn!(erro = %e, "cliente HTTPS do site não iniciou; fotos pelo caminho de falha");
+                Box::new(SemHttp)
+            }
+        }
+    } else {
+        Box::new(SemHttp)
+    };
     let telegram = if sim {
         None
     } else {
@@ -344,9 +386,19 @@ fn rodar_envio(
             .map_or(&SemTelegram as &dyn CanalTelegram, |t| t),
         relogio,
         m: &m,
-        dir_imagens: dir_imagens.as_deref(),
-        dir_avisos: dir_avisos.as_deref(),
-        foto,
+        imagens: Imagens {
+            url: url_imagens.as_deref(),
+            dir: dir_imagens.as_deref(),
+            http: site.as_ref(),
+            disco: &Disco,
+        },
+        avisos: Imagens {
+            url: url_avisos.as_deref(),
+            dir: dir_avisos.as_deref(),
+            http: site.as_ref(),
+            disco: &Disco,
+        },
+        foto: foto_de,
         canal,
         pausa_ate: anterior.pausa_ate,
     };
