@@ -89,6 +89,8 @@ Copiar `conf/config.example.json` para `conf/config.json` e preencher
 `E:\Work\besave\server\s3`; dentro dela `ofertas/img/` e `produtos/img/`) --
 na VPS, apontar para o caminho de lá. Requer Oracle Instant Client 19c (`db.instant_client_dir`) e
 `pip install -r requirements.txt` + `playwright install chromium`.
+No Linux, `chmod 600 conf/config.json` (senha do banco e segredo de afiliado): o robô mantém o modo
+que encontrar ao gravar `controle` (BSV-60).
 
 ## Shopee pela API de afiliados (BSV-59)
 
