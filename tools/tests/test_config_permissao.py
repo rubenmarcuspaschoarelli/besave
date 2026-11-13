@@ -70,35 +70,42 @@ def test_mantem_640(tmp_path, umask_002):
     assert _ler(caminho)["controle"]["publicacao_pendente"] == [3, 7]
 
 
-@so_posix
-@pytest.mark.parametrize("original", [0o600, 0o640, 0o400])
-def test_tmp_nunca_mais_aberto_que_o_original(tmp_path, umask_002, modos_no_replace, monkeypatch, original):
-    caminho = _config(tmp_path, original)
-    criados = []
+@pytest.fixture
+def modos_na_abertura(monkeypatch):
+    """Modo do .tmp no instante em que o descritor e aberto (antes de qualquer byte escrito)."""
+    vistos = []
     abrir = os.open
 
-    def espiao_open(path, flags, mode=0o777, *a, **k):
+    def espiao(path, flags, mode=0o777, *a, **k):
         fd = abrir(path, flags, mode, *a, **k)
         if str(path).endswith(".tmp"):
-            criados.append(stat.S_IMODE(os.fstat(fd).st_mode))
+            vistos.append(stat.S_IMODE(os.fstat(fd).st_mode))
         return fd
 
-    monkeypatch.setattr(estado.os, "open", espiao_open)
-    estado.gravar_ultimo_id(5, caminho)
-    monkeypatch.undo()
-    assert criados == [0o600]                      # nasce restrito, nao com a umask
-    assert modos_no_replace == [original]          # e chega ao replace com o modo do original
-    assert all(m & ~original & 0o077 == 0 for m in criados + modos_no_replace)
+    monkeypatch.setattr(estado.os, "open", espiao)
+    return vistos
 
 
 @so_posix
-def test_tmp_velho_aberto_nao_vaza(tmp_path, umask_002, modos_no_replace):
+@pytest.mark.parametrize("original", [0o600, 0o640, 0o400])
+def test_tmp_nunca_mais_aberto_que_o_original(tmp_path, umask_002, modos_no_replace, modos_na_abertura,
+                                              original):
+    caminho = _config(tmp_path, original)
+    estado.gravar_ultimo_id(5, caminho)
+    assert modos_na_abertura == [0o600]            # nasce restrito, nao com a umask
+    assert modos_no_replace == [original]          # e chega ao replace com o modo do original
+    assert all(m & ~original & 0o077 == 0 for m in modos_na_abertura + modos_no_replace)
+
+
+@so_posix
+def test_tmp_velho_aberto_nao_vaza(tmp_path, umask_002, modos_no_replace, modos_na_abertura):
     caminho = _config(tmp_path, 0o600)
     velho = caminho + ".tmp"
     with open(velho, "w") as f:
-        f.write("sobra de execucao interrompida")
+        f.write("sobra de execucao interrompida " * 200)   # maior que o JSON novo
     os.chmod(velho, 0o666)
     estado.gravar_ultimo_id(9, caminho)
+    assert modos_na_abertura == [0o600]            # a senha nunca e escrita num .tmp 666 reaproveitado
     assert modos_no_replace == [0o600]
     assert _modo(caminho) == 0o600
     assert _ler(caminho)["controle"]["ultimo_id_processado"] == 9
