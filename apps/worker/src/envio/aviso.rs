@@ -8,6 +8,7 @@ use crate::avisos::modelo::formato_imagem;
 use crate::envio::fonte::AvisoCanal;
 use crate::envio::foto::quadrado_jpeg;
 use crate::envio::legenda::{caber, escapar};
+use crate::envio::site::{Imagens, baixar, url};
 use crate::pagina_html::URL_BASE;
 
 /// `https://besave.com.br/avisos/{id}/?utm_source=telegram`
@@ -53,21 +54,42 @@ pub fn legenda_aviso(a: &AvisoCanal) -> String {
 /// JPEG 800×800 de `{dir}/{nome}`; `None` (com WARN) se não há imagem, pasta, arquivo legível ou
 /// imagem decodificável: o aviso vai como `sendMessage`.
 pub fn foto_aviso(dir: Option<&Path>, id: i64, nome: Option<&str>) -> Option<Vec<u8>> {
+    foto_aviso_de(&Imagens::pasta(dir), id, nome)
+}
+
+/// JPEG 800×800 do aviso. Com URL: `GET {url}{id}.{webp|jpg}` (extensão de `DS_IMAGEM`; a pasta não
+/// é lida); sem URL, `{dir}/{nome}`. Sem imagem ou qualquer falha → `None` (com WARN).
+pub fn foto_aviso_de(img: &Imagens, id: i64, nome: Option<&str>) -> Option<Vec<u8>> {
     let nome = nome.map(str::trim).filter(|n| !n.is_empty())?;
-    let Some(dir) = dir else {
+    let bytes = if let Some(base) = img.url {
+        let Some(formato) = formato_imagem(nome) else {
+            warn!(
+                id,
+                imagem = nome,
+                "imagem do aviso fora de .webp/.jpg; aviso vai sem foto"
+            );
+            return None;
+        };
+        baixar(
+            img.http,
+            &url(base, &format!("{id}.{}", formato.extensao())),
+        )
+        .map_err(|e| e.to_string())
+    } else if let Some(dir) = img.dir {
+        img.disco.ler(&dir.join(nome)).map_err(|e| e.to_string())
+    } else {
         warn!(
             id,
             imagem = nome,
-            "BESAVE_AVISOS_DIR ausente; aviso vai sem foto"
+            "BESAVE_AVISOS_URL e BESAVE_AVISOS_DIR ausentes; aviso vai sem foto"
         );
         return None;
     };
-    let img = std::fs::read(dir.join(nome))
-        .map_err(|e| e.to_string())
+    let jpeg = bytes
         .and_then(|b| image::load_from_memory(&b).map_err(|e| e.to_string()))
-        .and_then(|img| quadrado_jpeg(&img).map_err(|e| e.to_string()));
-    match img {
-        Ok(jpeg) => Some(jpeg),
+        .and_then(|i| quadrado_jpeg(&i).map_err(|e| e.to_string()));
+    match jpeg {
+        Ok(j) => Some(j),
         Err(e) => {
             warn!(id, imagem = nome, erro = %e, "imagem do aviso indisponível; aviso vai sem foto");
             None

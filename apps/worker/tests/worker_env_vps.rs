@@ -51,6 +51,14 @@ const OPCIONAIS: &[(&str, &str)] = &[
     ("BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS", "padrão 24 h"),
     ("BESAVE_CANAL_URL", "padrão https://t.me/besaveofertas"),
     (
+        "BESAVE_IMAGENS_URL",
+        "inst1 lê a pasta; a URL é da inst2, no envio.env.example (BSV-61)",
+    ),
+    (
+        "BESAVE_AVISOS_URL",
+        "inst1 lê a pasta; a URL é da inst2, no envio.env.example (BSV-61)",
+    ),
+    (
         "BESAVE_ENVIO_CANAL",
         "padrão ID_CANAL 1 (@besaveofertas, sql/bsv-40.sql)",
     ),

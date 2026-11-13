@@ -8,6 +8,7 @@ use image::imageops::{self, FilterType};
 use image::{DynamicImage, ImageEncoder, Rgba, RgbaImage};
 use tracing::warn;
 
+use crate::envio::site::{Imagens, baixar, url};
 use crate::imagens::{ErroImagem, origem, placeholder};
 use crate::modelo::Area;
 
@@ -18,26 +19,48 @@ const QUALIDADE: u8 = 85;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum OrigemFoto {
     Oferta(PathBuf),
+    /// URL do site (BSV-61).
+    Site(String),
     Placeholder(Area),
 }
 
 /// JPEG 800×800 da oferta: `{dir}/{id}/{id}.webp` do robô (o mesmo arquivo de
 /// `img/ofertas/{id}.webp`); sem pasta, ausente ou ilegível → placeholder da área.
 pub fn foto(dir: Option<&Path>, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
-    if let Some(dir) = dir {
+    foto_de(&Imagens::pasta(dir), id, area)
+}
+
+/// JPEG 800×800 da oferta. Com URL: `GET {url}{id}.webp` (a pasta não é lida); sem URL, a pasta;
+/// qualquer falha → placeholder da área (BSV-61).
+pub fn foto_de(img: &Imagens, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
+    if let Some(base) = img.url {
+        let u = url(base, &format!("{id}.webp"));
+        let lida = baixar(img.http, &u)
+            .map_err(|e| e.to_string())
+            .and_then(|b| {
+                image::load_from_memory(&b).map_err(|e| format!("corpo não é imagem: {e}"))
+            });
+        match lida {
+            Ok(i) => return Ok((quadrado_jpeg(&i)?, OrigemFoto::Site(u))),
+            Err(motivo) => warn!(
+                id,
+                motivo, "imagem da oferta no site indisponível; placeholder"
+            ),
+        }
+    } else if let Some(dir) = img.dir {
         let (_, grande) = origem(dir, id);
-        match std::fs::read(&grande) {
+        match img.disco.ler(&grande) {
             Ok(bytes) => match image::load_from_memory(&bytes) {
-                Ok(img) => return Ok((quadrado_jpeg(&img)?, OrigemFoto::Oferta(grande))),
+                Ok(i) => return Ok((quadrado_jpeg(&i)?, OrigemFoto::Oferta(grande))),
                 Err(e) => warn!(id, erro = %e, "imagem da oferta ilegível; placeholder"),
             },
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => warn!(id, erro = %e, "lendo imagem da oferta; placeholder"),
         }
     }
-    let img = image::load_from_memory(placeholder(area))
+    let i = image::load_from_memory(placeholder(area))
         .map_err(|e| ErroImagem::Decode(e.to_string()))?;
-    Ok((quadrado_jpeg(&img)?, OrigemFoto::Placeholder(area)))
+    Ok((quadrado_jpeg(&i)?, OrigemFoto::Placeholder(area)))
 }
 
 /// Escala para caber em 800×800 (para cima ou para baixo, proporção preservada), centraliza sobre

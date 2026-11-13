@@ -12,3 +12,4 @@ pub mod modelo;
 pub mod oracle;
 pub mod rodada;
 pub mod selecao;
+pub mod site;
