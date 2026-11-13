@@ -43,7 +43,9 @@ Decisões do dono (13/11):
       imagem.** Se nem o placeholder baixar, a tentativa conta como falha antes do clique (linha volta a
       `P`), e o post não sai sem foto;
    2. abre o canal pelo nome (`CANAL_ENVIO.DS_CHAT_ID`), anexa a foto, cola a legenda (área de
-      transferência ou digitação, o que o WhatsApp Web aceitar sem perder a marcação) e envia;
+      transferência ou digitação, o que o WhatsApp Web aceitar sem perder a marcação) e envia. A legenda tem
+      quebras e **linhas em branco** (layout da BSV-62): na digitação, `Enter` envia, então quebra de linha é
+      `Shift+Enter`. O texto colado tem de chegar idêntico a `DS_LEGENDA`, com as linhas em branco;
    3. confirma que um balão novo com o começo da legenda apareceu no canal, em até `timeout_post_segundos`
       (padrão 60).
 5. **Estados, sem reenvio às cegas:**
@@ -100,6 +102,8 @@ O agente captura os seletores reais pelo VNC e documenta de onde vieram.
 - **Estados:** confirmado → `E`; falha antes do clique → `P` e falha contada; sem confirmação depois do
   clique → `D` e aviso. Na volta seguinte, `D` não é tentada (o fake da página conta 0 envios para aquele
   id). O mutante que reenvia `D` falha.
+- **Legenda:** o fake da página recebe o texto idêntico a `DS_LEGENDA`, com as linhas em branco, num envio
+  só. O mutante que digita `\n` como `Enter` (vira várias mensagens) falha.
 - **Pausa:** 3 falhas → pausa + 1 aviso; dentro da pausa, 0 tentativas; volta → "voltou".
 - **Desligar:** `habilitado: false` → 0 tentativas na volta seguinte, sem reiniciar.
 - **Foto:** saída 800×800 JPEG de fundo branco, proporção preservada; `404` da oferta → placeholder da área da linha; `404` também no
@@ -109,7 +113,8 @@ O agente captura os seletores reais pelo VNC e documenta de onde vieram.
 - **Gates:** `cd tools && python -m pytest -q`; ruff do CI de `tools/`; `shellcheck tools/vps/*.sh`.
 - **Real (dono, bloqueia o merge), na inst2 com a branch:**
   1. QR lido; um dia com `QT_MAX_DIA 40`: posts no canal iguais à legenda da fila (negrito, riscado, cupom
-     em monoespaçado, link `utm_source=whatsapp`), foto quadrada sem virar figurinha, nenhum post repetido;
+     em monoespaçado, link `utm_source=whatsapp`, linha em branco depois do título e antes da frase de
+     aviso), foto quadrada sem virar figurinha, nenhum post repetido;
   2. derrubar a rede da inst2 durante um envio (lição 29): a linha fica `D`, chega o aviso e nada é reenviado;
   3. `habilitado: false` → para na volta seguinte;
   4. `free -m` e RSS do Chromium após 24 h;

@@ -40,7 +40,8 @@ usá-los: a oferta só é candidata com `OFERTA.DT_PUBLICACAO_SITE` preenchida (
 5. **Roteiro** em `docs/infra/` (seção nova "Inst2 · envio"): Instant Client ARM64 e wallet (como a Fase 4 da
    inst1), binário do commit de `main` (AD-060), `.env` em `600`, e a virada da Saída 6.
 6. **Virada (dono):**
-   1. `systemctl --user disable --now besave-envio.timer` na **inst1**;
+   1. `sudo systemctl disable --now besave-envio.timer` na **inst1** (unidades de sistema com
+      `User=besave`, não `--user`);
    2. só então `enable --now` na **inst2**;
    3. remover o timer da inst1 no instalador do papel padrão.
 
