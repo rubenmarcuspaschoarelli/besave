@@ -12,6 +12,7 @@ use crate::alerta::{Alertas, ConfigTelegram, TITULO_ENVIO, host_do_env};
 use crate::ciclo::{ErroCiclo, iniciar_log_em};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio, RelogioSistema};
 use crate::envio::foto::foto_de;
+use crate::envio::frases::Frases;
 use crate::envio::http::{CanalTelegramHttp, ConfigCanal};
 use crate::envio::oracle::OracleEnvio;
 use crate::envio::rodada::{Contexto, EstadoEnvio, RelatorioEnvio, Simulacao, rodar, simular};
@@ -341,6 +342,9 @@ fn rodar_envio(
     let m = Mapeamento::carregar_ou_embutido(var_caminho("BESAVE_MAPEAMENTO").as_deref())
         .map_err(|e| Falha::config("config", &e))?;
     let canal = canal_do_env().map_err(|e| Falha::config("config", &e))?;
+    // Arquivo inválido avisa e usa as embutidas; erro só se as embutidas forem inválidas.
+    let frases = Frases::carregar_ou_embutidas(var_caminho("BESAVE_FRASES_CANAL").as_deref())
+        .map_err(|e| Falha::config("config", &e))?;
     let dir_imagens = var_caminho("BESAVE_IMAGENS_DIR");
     let dir_avisos = var_caminho("BESAVE_AVISOS_DIR");
     let env = |k: &str| std::env::var(k).ok();
@@ -399,6 +403,7 @@ fn rodar_envio(
             disco: &Disco,
         },
         foto: foto_de,
+        frases: &frases,
         canal,
         pausa_ate: anterior.pausa_ate,
     };

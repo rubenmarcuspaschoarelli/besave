@@ -11,6 +11,7 @@ use crate::envio::aviso::{devido, foto_aviso_de, legenda_aviso};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio};
 use crate::envio::fonte::FonteEnvio;
 use crate::envio::foto::OrigemFoto;
+use crate::envio::frases::Frases;
 use crate::envio::janela::{esperado, inicio_do_dia, lote_devido, silencioso};
 use crate::envio::legenda::{legenda, legenda_encerrada};
 use crate::envio::modelo::para_canal;
@@ -98,6 +99,8 @@ pub struct Contexto<'a> {
     /// `BESAVE_AVISOS_URL` (vence) ou `BESAVE_AVISOS_DIR`; nenhuma → avisos vão sem foto.
     pub avisos: Imagens<'a>,
     pub foto: Fotografo,
+    /// Frase de aviso do fim do post (BSV-62): embutidas ou `BESAVE_FRASES_CANAL`.
+    pub frases: &'a Frases,
     pub canal: i64,
     /// Fim da espera de um 429 anterior (segundos Unix).
     pub pausa_ate: Option<i64>,
@@ -182,7 +185,7 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
     let candidatas =
         selecionar(fonte, ctx.m, &p, ctx.canal, agora, rel.devido as usize).map_err(ler)?;
     for c in candidatas {
-        let texto = legenda(&c.oferta, c.caiu, &p);
+        let texto = legenda(&c.oferta, c.caiu, &p, ctx.frases);
         let (jpeg, origem) = (ctx.foto)(&ctx.imagens, c.oferta.id, c.area)
             .map_err(|e| Falha::execucao("foto", &e))?;
         // Regra 7: a linha existe antes do envio; sem ela, nada vai ao Telegram.
@@ -440,7 +443,7 @@ pub fn simular(ctx: &Contexto) -> Result<Simulacao, Falha> {
             .map_err(|e| Falha::execucao("foto", &e))?;
         sim.previas.push(Previa {
             id: c.oferta.id,
-            legenda: legenda(&c.oferta, c.caiu, &p),
+            legenda: legenda(&c.oferta, c.caiu, &p, ctx.frases),
             jpeg,
             origem,
         });

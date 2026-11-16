@@ -11,6 +11,7 @@ use worker::envio::binario::{Argumentos, argumentos, texto_simulacao};
 use worker::envio::canal::{ErroCanal, FakeCanal, RelogioFake};
 use worker::envio::fonte::FakeEnvio;
 use worker::envio::foto::foto_de;
+use worker::envio::frases::Frases;
 use worker::envio::http::{ConfigCanal, interpretar, multipart, pedido_edicao, pedido_foto};
 use worker::envio::modelo::Parametros;
 use worker::envio::rodada::{Contexto, simular};
@@ -133,6 +134,7 @@ fn simulacao_so_le() {
         imagens: Imagens::pasta(None),
         avisos: Imagens::pasta(None),
         foto: foto_de,
+        frases: &Frases::embutidas().unwrap(),
         canal: 1,
         pausa_ate: None,
     };

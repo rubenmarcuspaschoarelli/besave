@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use worker::envio::canal::{CanalTelegram, Chamada, ErroCanal, FakeCanal, RelogioFake};
 use worker::envio::fonte::{FakeEnvio, RegistroEnvio};
 use worker::envio::foto::{OrigemFoto, foto_de};
+use worker::envio::frases::Frases;
 use worker::envio::modelo::{Canal, LinhaCanal, Parametros};
 use worker::envio::rodada::{Contexto, EstadoEnvio, Parada, RelatorioEnvio, rodar};
 use worker::envio::site::Imagens;
@@ -53,6 +54,7 @@ fn rodar_em(
         imagens: Imagens::pasta(None),
         avisos: Imagens::pasta(None),
         foto: foto_rapida,
+        frases: &Frases::embutidas().unwrap(),
         canal: 1,
         pausa_ate,
     })
@@ -185,6 +187,7 @@ fn post_com_foto_real() {
         imagens: Imagens::pasta(None),
         avisos: Imagens::pasta(None),
         foto: foto_de,
+        frases: &Frases::embutidas().unwrap(),
         canal: 1,
         pausa_ate: None,
     })
@@ -261,6 +264,7 @@ fn linha_gravada_antes_do_envio() {
         imagens: Imagens::pasta(None),
         avisos: Imagens::pasta(None),
         foto: foto_rapida,
+        frases: &Frases::embutidas().unwrap(),
         canal: 1,
         pausa_ate: None,
     })

@@ -1,6 +1,7 @@
-//! Legenda do post (BSV-40 regra 6), `parse_mode=HTML`, ≤ 1024 caracteres.
+//! Legenda do post (BSV-40 regra 6, layout da BSV-62), `parse_mode=HTML`, ≤ 1024 caracteres.
 
 use crate::conversao::truncar;
+use crate::envio::frases::Frases;
 use crate::envio::modelo::{OfertaCanal, Parametros};
 use crate::modelo::Loja;
 
@@ -125,57 +126,78 @@ fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros, n_cupons: usize) -> (Vec<L
     (v, link)
 }
 
+/// Cabe no limite do Telegram (`MAX_LEGENDA` em UTF-16).
+fn cabe_telegram(s: &str) -> bool {
+    tamanho(s) <= MAX_LEGENDA
+}
+
 /// Corta o título (fronteira de palavra + `…`) no maior tamanho com que `montar(título)` cabe em
 /// `MAX_LEGENDA` (busca binária: o escape faz o HTML crescer mais que o título).
 pub(crate) fn caber(titulo: &str, montar: impl Fn(&str) -> String) -> String {
+    caber_em(titulo, cabe_telegram, montar)
+}
+
+/// `caber` com a regra de tamanho do canal.
+fn caber_em(titulo: &str, cabe: fn(&str) -> bool, montar: impl Fn(&str) -> String) -> String {
     let inteira = montar(titulo);
     let total = titulo.chars().count();
-    if tamanho(&inteira) <= MAX_LEGENDA || total <= MIN_TITULO {
+    if cabe(&inteira) || total <= MIN_TITULO {
         return inteira;
     }
-    let (mut cabe, mut nao_cabe) = (MIN_TITULO, total);
-    while nao_cabe - cabe > 1 {
-        let meio = cabe + (nao_cabe - cabe) / 2;
-        if tamanho(&montar(&truncar(titulo, meio))) <= MAX_LEGENDA {
-            cabe = meio;
+    let (mut cabe_ate, mut nao_cabe) = (MIN_TITULO, total);
+    while nao_cabe - cabe_ate > 1 {
+        let meio = cabe_ate + (nao_cabe - cabe_ate) / 2;
+        if cabe(&montar(&truncar(titulo, meio))) {
+            cabe_ate = meio;
         } else {
             nao_cabe = meio;
         }
     }
-    montar(&truncar(titulo, cabe))
+    montar(&truncar(titulo, cabe_ate))
 }
 
-/// Monta a legenda com todos os cupons; se passar de 1024, tira códigos do fim (fica 1) antes de
-/// cortar o título.
-fn ajustar(o: &OfertaCanal, montar: impl Fn(usize, &str) -> String) -> String {
+/// Monta a legenda com todos os cupons; se não couber, tira códigos do fim (fica 1) antes de
+/// cortar o título. A frase e as linhas em branco estão em `montar`: nunca são cortadas.
+fn ajustar(
+    o: &OfertaCanal,
+    titulo: &str,
+    cabe: fn(&str) -> bool,
+    montar: impl Fn(usize, &str) -> String,
+) -> String {
     for n in (1..=o.cupons.len()).rev() {
-        let inteira = montar(n, &o.titulo);
-        if tamanho(&inteira) <= MAX_LEGENDA {
+        let inteira = montar(n, titulo);
+        if cabe(&inteira) {
             return inteira;
         }
     }
     let n = o.cupons.len().min(1);
-    caber(&o.titulo, |t| montar(n, t))
+    caber_em(titulo, cabe, |t| montar(n, t))
 }
 
-/// Legenda do post.
-pub fn legenda(o: &OfertaCanal, caiu: bool, p: &Parametros) -> String {
-    ajustar(o, |n, titulo| {
+/// Legenda do post (BSV-62): título, linha em branco, corpo, link, linha em branco e
+/// `{ícone} <i>{frase}</i>`.
+pub fn legenda(o: &OfertaCanal, caiu: bool, p: &Parametros, frases: &Frases) -> String {
+    let (icone, frase) = frases.escolher(o.id);
+    let aviso = format!("{icone} <i>{}</i>", escapar(frase));
+    ajustar(o, &o.titulo, cabe_telegram, |n, titulo| {
         let (linhas, link) = corpo(o, caiu, p, n);
-        std::iter::once(format!("<b>{}</b>", escapar(titulo)))
-            .chain(linhas.iter().map(|l| l.html.clone()))
-            .chain(std::iter::once(link))
+        [format!("<b>{}</b>", escapar(titulo)), String::new()]
+            .into_iter()
+            .chain(linhas.into_iter().map(|l| l.html))
+            .chain([link, String::new(), aviso.clone()])
             .collect::<Vec<_>>()
             .join("\n")
     })
 }
 
-/// Legenda de oferta expirada: aviso no topo e o texto original riscado, sem link nem "Caiu mais".
+/// Legenda de oferta expirada: aviso no topo e o texto original riscado (título, linha em branco,
+/// corpo), sem link, sem "Caiu mais" e sem frase.
 pub fn legenda_encerrada(o: &OfertaCanal, p: &Parametros) -> String {
-    ajustar(o, |n, titulo| {
+    ajustar(o, &o.titulo, cabe_telegram, |n, titulo| {
         let (linhas, _) = corpo(o, false, p, n);
-        let texto = std::iter::once(titulo.to_owned())
-            .chain(linhas.iter().map(|l| l.texto.clone()))
+        let texto = [titulo.to_owned(), String::new()]
+            .into_iter()
+            .chain(linhas.into_iter().map(|l| l.texto))
             .collect::<Vec<_>>()
             .join("\n");
         format!("⛔ <b>Oferta encerrada</b>\n<s>{}</s>", escapar(&texto))

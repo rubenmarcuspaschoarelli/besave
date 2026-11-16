@@ -37,7 +37,7 @@ T5 → T6
 **Tests**: `apps/worker/tests/envio_frases.rs`, `apps/worker/tests/envio_frases_log.rs`
 **Gate**: `cargo test --test envio_frases --test envio_frases_log`
 
-### T3: Layout novo do Telegram
+### T3: Layout novo do Telegram ✅
 **What**: `legenda(o, caiu, p, frases)` com as duas linhas em branco e a frase; `BESAVE_FRASES_CANAL` lida no início da execução; `legenda_encerrada` com a linha em branco; `ajustar`/`caber` recebem a regra de tamanho; `Contexto.frases`; testes de layout da BSV-40/50 atualizados.
 **Where**: `apps/worker/src/envio/legenda.rs`, `apps/worker/src/envio/aviso.rs`, `apps/worker/src/envio/rodada.rs`, `apps/worker/src/envio/binario.rs`, `apps/worker/tests/envio_legenda.rs`, testes que montam `Contexto`
 **Depends on**: T2
