@@ -11,12 +11,16 @@ T3 → T4
 ### Phase 3: Espelho e documentação
 T5 → T6
 
+### Phase 4: Correções do Verifier (ciclo 1)
+T7
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
 T5 → T6
+T6 → T7
 ```
 
 ## Task Breakdown
@@ -68,6 +72,14 @@ T5 → T6
 **Reqs**: CON-01, DOC-01
 **Tests**: `apps/worker/tests/envio_modelo.rs` (versão 1.7.0)
 **Gate**: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` e `cd packages/contract && npm ci && npm run validate`
+
+### T7: Lacunas do Verifier (ciclo 1) ✅
+**What**: valores fixos da escolha por hash (mutantes F3 sal igual e F8 little-endian); falha injetada no `confirmar` do fake e teste de fila vazia (R01, espelho antes do `confirmar`); `caiu` na legenda da fila (R13).
+**Where**: `apps/worker/src/envio/fonte.rs` (só o fake), `apps/worker/tests/envio_frases.rs`, `apps/worker/tests/envio_legenda.rs`, `apps/worker/tests/envio_legenda_whatsapp.rs`, `apps/worker/tests/envio_espelho.rs`
+**Depends on**: T6
+**Reqs**: FRA-01, ESP-01
+**Tests**: `apps/worker/tests/envio_frases.rs`, `apps/worker/tests/envio_espelho.rs`
+**Gate**: `cargo test --test envio_frases --test envio_legenda --test envio_legenda_whatsapp --test envio_espelho`
 
 ## Test Coverage Matrix
 

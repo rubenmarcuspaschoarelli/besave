@@ -150,7 +150,9 @@ fn tres_cupons() {
 #[test]
 fn exemplo_do_dono_51217_igual_ao_telegram() {
     let emb = Frases::embutidas().unwrap();
-    let (icone, frase) = emb.escolher(51217);
+    // Valores fixos, calculados fora do código (ver envio_frases.rs).
+    let (icone, frase) = ("🏃‍♂️", "Garanta agora, antes que o preço mude!");
+    assert_eq!(emb.escolher(51217), (icone, frase));
     let o = OfertaCanal {
         id: 51217,
         loja: Loja::MercadoLivre,

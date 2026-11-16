@@ -73,6 +73,23 @@ fn escolha_deterministica() {
     }
 }
 
+/// FRA-01: valores fixos, calculados fora do código (SHA-256 de `"{id}:frase"` / `"{id}:icone"`,
+/// 8 primeiros bytes big-endian, `mod 12` / `mod 11`, com o `hashlib` do Python).
+#[test]
+fn escolha_com_valores_fixos() {
+    let f = embutidas();
+    let casos = [
+        (51217, CORREDOR, "Garanta agora, antes que o preço mude!"),
+        (5412, CORREDOR, "Não deixe para depois, pode acabar!"),
+        (1, "🏃", "Clique e garanta o seu antes que o preço mude!"),
+        (2, "☝️", "Garanta agora, antes que o preço mude!"),
+        (3, CORREDOR, "Não fique de fora, a promoção já está no fim!"),
+    ];
+    for (id, icone, frase) in casos {
+        assert_eq!(f.escolher(id), (icone, frase), "id {id}");
+    }
+}
+
 /// Posição de `x` na lista.
 fn pos(lista: &[String], x: &str) -> usize {
     lista.iter().position(|s| s == x).unwrap()

@@ -150,6 +150,54 @@ fn falha_do_telegram_nao_enfileira() {
     assert!(f.fila_whatsapp().is_empty());
 }
 
+/// ESP-01: a linha só entra depois do `confirmar`. Confirmação falhou → execução falha e a fila
+/// fica vazia.
+#[test]
+fn sem_confirmacao_nao_enfileira() {
+    let f = fonte(1);
+    f.falhar_confirmacao(true);
+    let r = RelogioFake::em(DIA0);
+    let tg = FakeCanal::new(&r);
+    let falha = rodar_em(&f, &tg, &r, hora(10, 0), Some(2)).unwrap_err();
+    assert_eq!(falha.fase, "confirmacao_oracle");
+    assert!(f.fila_whatsapp().is_empty(), "{:?}", f.fila_whatsapp());
+}
+
+/// ESP-01: o "caiu" do post do Telegram vai também na legenda da fila.
+#[test]
+fn caiu_vai_para_a_fila() {
+    let f = fonte(1);
+    // Mesmo produto (id_produto 1) enviado há 1 h a R$ 200,00: hoje R$ 100,00 é queda de 50%.
+    f.registrar(RegistroEnvio {
+        id_envio: 10,
+        canal: 1,
+        id_oferta: 99,
+        id_produto: Some(1),
+        preco_por: 20000,
+        message_id: Some(500),
+        dt_envio: DIA0 - 3600,
+        dt_edicao: None,
+    });
+    let r = RelogioFake::em(DIA0);
+    let tg = FakeCanal::new(&r);
+    let rel = rodar_em(&f, &tg, &r, hora(10, 0), Some(2)).unwrap();
+    assert_eq!(rel.enviados, 1);
+    let fila = f.fila_whatsapp();
+    assert_eq!(fila.len(), 1, "{fila:?}");
+    let o = para_canal(&oferta(1), &mapeamento()).unwrap();
+    assert_eq!(
+        fila[0].legenda,
+        legenda_whatsapp(&o, true, &Parametros::default(), &frases())
+    );
+    assert!(
+        fila[0].legenda.contains("\n📉 *Caiu mais o preço!!!*\n"),
+        "{}",
+        fila[0].legenda
+    );
+    let posts = tg.chamadas();
+    assert!(posts[0].legenda.contains("📉 <b>Caiu mais o preço!!!</b>"));
+}
+
 /// ESP-02: sem a variável → nenhuma linha (comportamento de antes).
 #[test]
 fn sem_variavel_nao_enfileira() {

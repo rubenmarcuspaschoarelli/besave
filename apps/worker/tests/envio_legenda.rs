@@ -270,11 +270,12 @@ fn varios_cupons_na_mesma_linha() {
 }
 
 /// LAY-01: o exemplo do dono, oferta 51217 (Mercado Livre, R$ 104,00 → R$ 50,00, -52%, cupom
-/// `MANTECORP15`), com a frase e o ícone que o hash escolhe para o id. O título é ilustrativo.
+/// `MANTECORP15`), com a frase e o ícone que o hash escolhe para o id (valores fixos, calculados
+/// fora do código: ver `envio_frases.rs`). O título é ilustrativo.
 #[test]
 fn exemplo_do_dono_51217() {
     let emb = Frases::embutidas().unwrap();
-    let (icone, frase) = emb.escolher(51217);
+    let (icone, frase) = ("🏃‍♂️", "Garanta agora, antes que o preço mude!");
     let o = OfertaCanal {
         id: 51217,
         loja: Loja::MercadoLivre,

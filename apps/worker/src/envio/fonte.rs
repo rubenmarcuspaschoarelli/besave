@@ -135,6 +135,7 @@ pub struct FakeEnvio {
     falhar_avisos: Cell<bool>,
     fila_whatsapp: RefCell<Vec<FilaWhatsapp>>,
     falhar_fila: Cell<bool>,
+    falhar_confirmacao: Cell<bool>,
 }
 
 impl FakeEnvio {
@@ -213,6 +214,11 @@ impl FakeEnvio {
     /// Linhas de `ENVIO_WHATSAPP`.
     pub fn fila_whatsapp(&self) -> Vec<FilaWhatsapp> {
         self.fila_whatsapp.borrow().clone()
+    }
+
+    /// `confirmar` passa a falhar (falha injetada).
+    pub fn falhar_confirmacao(&self, sim: bool) {
+        self.falhar_confirmacao.set(sim);
     }
 
     /// `enfileirar_whatsapp` passa a falhar (falha injetada).
@@ -323,6 +329,9 @@ impl FonteEnvio for FakeEnvio {
     }
 
     fn confirmar(&self, id_envio: i64, message_id: i64) -> Result<()> {
+        if self.falhar_confirmacao.get() {
+            return Err(Self::falha("falha injetada na confirmação"));
+        }
         self.alterar(id_envio, |r| r.message_id = Some(message_id))
     }
 
