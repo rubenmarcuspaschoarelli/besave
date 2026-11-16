@@ -2,7 +2,129 @@
 
 ## Validation: BSV-63 - PASS
 
-**Result**: PASS (ciclo 2, faixa `3d61c84..0eaf0a6`). No ciclo 1 (`3d61c84..1f0711d`) o veredito foi reprovado
+**Result**: PASS
+
+Ciclo 3 (seletores reais), faixa `062acc5..1ec1a1b`. Todos os itens do pedido do dono conferidos com evidência;
+**19 de 24 mutantes mortos** (5 sobreviventes, nenhum que leve a envio errado nem a E sem confirmação: 2 equivalentes
+no ambiente de teste e 3 lacunas de cobertura, §C3.5). Execução real na inst2 continua bloqueando o merge (§C3.7).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-16.
+- **Faixa:** `062acc5..1ec1a1b` — `20411f5` feat (seletores reais, fixture real redigida, simulador, `FalhaPasso`,
+  `chave_oferta`), `75de7ac` README "Seletores", `1ec1a1b` spec. `git merge-base --is-ancestor origin/develop HEAD` = 0.
+- **Fonte:** pedido do dono deste ciclo (itens 1–5 abaixo); `docs/specs/BSV-63.md`; T8–T9 de `tasks.md`.
+- **Árvore real:** `git status --porcelain` no início e no fim = `?? docs/canal_real.html` (mais este arquivo,
+  editado). Mutantes numa cópia `git archive HEAD tools` no scratchpad da sessão, fora do repo, removida no fim;
+  `docs/canal_real.html` não foi copiado para o scratch.
+
+### C3.1 Dado pessoal
+
+- `git log --all --oneline -- docs/canal_real.html` → **vazio** (nunca entrou em commit); segue `??`.
+- Grep do dono sobre a fixture:
+  `grep -nE '[0-9]{10,}|pps\.whatsapp|cdn\.whatsapp|blob:|data-pre-plain-text="\[' tools/tests/fixtures/whatsapp_canal_real.html`
+  → **0 linhas**. O mesmo grep é teste: `tools/tests/test_pub_canal_web.py:101-109`.
+- Nós de texto da fixture lidos um a um: só nome do canal, "Você:", horários, textos dos posts de teste ("teste",
+  "222", "TESTE X"…), rótulos de UI e `REDACTED`. Nenhum nome de pessoa. `<title>REDACTED</title>`,
+  `data-pre-plain-text="REDACTED"`, `data-id="REDACTED"`, ids `conv-msg-FAKE1..9`.
+
+### C3.2 Checagem ancorada no pedido do dono
+
+Caminhos relativos a `tools/`; `cw` = `publish-whatsapp-channel/pub/canal_web.py`, `pb` = `.../pub/publicador.py`,
+`T` = `tests/test_pub_canal_web.py`, `TP` = `tests/test_pub_publicador.py`.
+
+| item | o que foi pedido | evidência | ok |
+|---|---|---|---|
+| 1 | fixture = recorte (Canais, célula, `#main`), sem lista de conversas, sem script/style/link, sem classes `x…` | `tests/fixtures/whatsapp_canal_real.html` (30 linhas, 32 KB; cabeçalho em comentário :2-10); `T:101-109` (sem `<script/<style/<link`, sem `class="x…"`, sem "(N) WhatsApp", ids só `FAKEn`) | sim |
+| 1 | recorte fiel | conferido contra `docs/canal_real.html` (Chromium local, JS desligado, rede bloqueada): os testids `newsletter-tab-drawer`, `newsletter-tab-newsletter-cell`, `conversation-info-header-chat-title`, `conversation-compose-box-input`, 9 `conv-msg-`, 5 `msg-meta` (todos `" Enviada "`), 3 `image-caption`, `Anexar`, `input accept=image/*`, `Canais` aparecem nas mesmas quantidades no real e na fixture | sim |
+| 1 | prévia de mídia acrescentada à mão com comentário | `whatsapp_canal_real.html:24-29` ("Transcrito do mapeamento do dono (16/11/2026)"), só `data-testid`/`contenteditable`/`role` e `role`/`aria-label` do Enviar; `T:108` exige o comentário | sim |
+| 1 | sintética apagada, testes só com a real | `whatsapp_canal.html` removido em `20411f5`; `T:29` `FIXTURE = whatsapp_canal_real.html`; `T:109` falha se a sintética voltar | sim |
+| 1 | desvio `<button>` dentro de `<button>` → externo vira `div role=button` | **aceitável.** Provado: no `canal_real.html` cru o `<footer>` vem depois de `id="main"` sem `</main>` entre eles e com 10 `<button>`/10 `</button>`, mas parseado pelo Chromium `#main footer` = 0 (o parser fecha o botão externo e expulsa o footer). Na página viva o DOM é montado por JS e o aninhamento existe; a tabela do dono usa `#main footer`. A troca só muda a tag de um ancestral sem seletor nosso (`div[role=button] button` = 2 na fixture) | sim |
+| 2 | nome do canal de `CANAL_ENVIO.DS_CHAT_ID` (ID_CANAL 2), não no config | `pub/fila.py:21` `SELECT DS_CHAT_ID FROM CANAL_ENVIO WHERE ID_CANAL = :1`; `pb:147` `nome_canal(cfg.id_canal)`; `pb:151-153` sem nome → P; `conf/config.example.json` sem nome de canal (só `id_canal`, `pub/config.py:29`) | sim |
+| 3 | só data-testid/aria-label/role/title (+ `#side`/`#pane-side`); sem `x…`, XPath, `_r_`, `data-icon` | `cw:18-33`; `T:91-98` varre todos os `SEL_*` (sem `data-icon`, `_r_`, `//`, nenhuma classe) | sim |
+| 3 | tabela linha a linha | logado `cw:18`; aba `cw:21`; busca `cw:22` (`[data-testid="newsletter-tab-drawer"] input[type="text"]`, primeiro visível via `_visivel` `cw:139-149`); célula `cw:23`; título `cw:24`+`cw:154-157` (`==` normalizado); caixa `cw:25`; anexar `cw:26`; input `cw:27`; legenda `cw:29`; enviar `cw:30`; balão `cw:31`; legenda do balão `cw:32`; status `cw:33-34`, `cw:113-114`. Igual ao README `publish-whatsapp-channel/README.md:104-118` (data 16/11/2026, :100). `T:176-189` conta cada seletor na fixture real (1 cada; 9 balões; 3 legendas; status todos confirmados; 1 input de arquivo). Contra o `canal_real.html` parseado: todos 1 (exceto os do footer, pelo desvio acima, e os da prévia, que não estavam gravados) | sim |
+| 4a | canal aberto + caixa → pula; senão Canais → busca → célula → cabeçalho; divergiu = falha | `cw:182-183` pula; `cw:184-197` navega; `cw:198-202` cabeçalho igual ou `ErroPagina` (`FalhaPasso`); `T:193-197` (`__cliquesCanais == 0`), `T:200-205`, `T:208-213` | sim |
+| 4b | `set_input_files` no oculto; senão Anexar + 5 s; senão `expect_file_chooser` em volta de "Fotos e vídeos" | `cw:211-227`; `T:253-257`, `T:260-263`, `T:266-273` | sim |
+| 4c | cola (fallback Shift+Enter), confere cru com cru (quebras, espaços NBSP, NFC), divergiu: limpa e tenta 1 vez; de novo: Escape, falha, sem D | `cw:97-105`, `cw:234-255`; `T:56-75`, `T:216-223`; sem D: `pb:165-172` antes de `pb:179`; `TP:401-406` | sim (nova tentativa sem teste, §C3.5) |
+| 4d | grava D → clica Enviar | `pb:179` antes de `pb:189`; `TP:124`, `TP:141` | sim |
+| 4e | confirmação positiva ≤ 60 s: prévia fechada, balão novo, legenda com `besave.io/{id}` (com fronteira), msg-meta ∈ {enviada, entregue, lida}; senão fica D; só então E | `cw:265-289`; `pb:39-41` `chave_oferta`; `pb:190` passa a chave, não a legenda; `pb:196-198` D; `pb:201` E; `T:78-88`, `T:226-250`; `TP:394-397` | sim |
+| 5 | testes de página sobre a fixture real, sem WhatsApp real | `T:122-148` (`set_content` da fixture + `whatsapp_simulador.js` via `add_script_tag`); cabeçalho divergente `T:208`; legenda divergente `T:216` (+ `TP:401` sem D); balão sem chave `T:226`; msg-meta desconhecido/ausente `T:231-234`; "Enviada" → confirmado `T:192-197` e → E `TP:383-391`; balão antigo com a mesma chave `T:237-240`; input ausente → Anexar `T:253-257`. Nenhuma URL do WhatsApp é aberta (só `set_content`) | sim |
+| 5 | README "Seletores" com a tabela e a data | `publish-whatsapp-channel/README.md:98-126` | sim |
+
+Observação de forma (não bloqueia): `tasks.md` repete as linhas de dependência `T8 → T9` na fase 5.
+
+### C3.3 Gates
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows, venv com Playwright/Chromium) | **795 passed, 7 skipped** em 3 min 52 s (os 7 são os POSIX antigos) |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed |
+| `shellcheck vps/*.sh` | sem saída, código 0 |
+| WSL Ubuntu (Playwright, Chromium): `pytest -rs tests/test_pub_canal_web.py tests/test_pub_publicador.py` | **76 passed, 0 skipped** em 42,8 s |
+
+### C3.4 Sensor de discriminação (ciclo 3)
+
+Cópia `git archive HEAD tools` no scratchpad; Windows, Chromium do venv; lotes de 8/8/8; cada mutante roda só o
+arquivo de teste relevante com `-x`; o arquivo é restaurado depois de cada um (conferido com
+`diff -rq --strip-trailing-cr` contra a árvore real: idênticos).
+
+| id | mutação | resultado | morto por |
+|---|---|---|---|
+| M-a | status aceito = qualquer aria-label | morto | `T::test_status_do_balao[Pendente-False]` |
+| M-b1 | publicador passa a legenda inteira a `confirmar` | morto | `TP::test_est01_confirmacao_pede_o_link_curto_da_oferta` |
+| M-b2 | balão confere a legenda inteira (igualdade) em vez da chave | morto | `T::test_dom_enviada_vira_confirmado_num_envio_so[colar]` |
+| M-c1 | não filtra os balões de antes do clique | morto | `T::test_dom_balao_antigo_com_a_mesma_chave_nao_confirma_o_novo` |
+| M-c2 | contagem de balões tirada depois do clique | morto | `T::test_dom_enviada_vira_confirmado_num_envio_so[colar]` |
+| M-d | pula a checagem do cabeçalho | morto | `T::test_dom_cabecalho_divergente_nao_envia` |
+| M-e | primeiro input de arquivo da página (fora do footer) | morto | `T::test_dom_input_de_arquivo_fora_do_footer_nao_e_usado` |
+| M-f | não exige a prévia fechada | morto | `T::test_dom_previa_aberta_nao_confirma` |
+| M-g | `in` em vez de `==` no título | morto | `T::test_dom_cabecalho_divergente_nao_envia` |
+| M-h | chave sem fronteira (54120 casa 5412) | morto | `T::test_chave_besave_io_com_fronteira` |
+| M-i | sem Escape na legenda divergente | morto | `T::test_dom_legenda_divergente_na_previa_fecha_e_nao_envia` |
+| M-j | sem escrever a legenda | morto | `TP::test_esc01_tres_p_posta_a_mais_recente` |
+| M-j2 | legenda escrita depois de gravar D (D antes da legenda) | morto | `TP::test_est02_falha_antes_do_clique_volta_a_p_e_conta[escrever_legenda]` |
+| M-k | sem `expect_file_chooser` em volta de "Fotos e vídeos" | morto | `T::test_dom_sem_input_nenhum_usa_fotos_e_videos_com_expect_file_chooser` |
+| M-l | não pula a navegação com o canal aberto | morto | `T::test_dom_enviada_vira_confirmado_num_envio_so[colar]` |
+| M-m | `FalhaPasso` cai no `except Exception` (recarrega) | morto | `TP::test_est02_falha_prevista_da_pagina_e_p_sem_recarregar[abrir_canal]` |
+| M-o | status sem `strip` | morto | `T::test_status_do_balao[ Enviada -True]` |
+| M-r | ignora o msg-meta | morto | `T::test_dom_status_desconhecido_ou_ausente_nao_confirma[ Pendente ]` |
+| M-n | legenda divergente sem a nova tentativa (1 modo só) | **sobreviveu** | lacuna L1 |
+| M-s | célula sem `[aria-label="Canal {nome}"]` (qualquer célula) | **sobreviveu** | lacuna L2 |
+| M-t | sem a checagem da caixa depois de abrir o canal | **sobreviveu** | lacuna L3 |
+| M-q | sem a espera de 5 s pelo input depois de Anexar | sobreviveu — **equivalente no ambiente**: o simulador cria o input no mesmo clique; só o WhatsApp real tem a demora | — |
+| M-u | Enviar afrouxado para `[role=button][aria-label^="Enviar"]` | sobreviveu — **equivalente na fixture**: só há um "Enviar…" no recorte; o seletor exato é conferido por leitura (`cw:30`) e pelo teste de seletores `T:176-184` | — |
+
+**Mortos: 19 de 24** (19 de 22 não equivalentes).
+
+### C3.5 Lacunas (ranqueadas)
+
+1. **L1 — nova tentativa da legenda sem teste (M-n).** O pedido diz "divergiu: limpa, tenta 1 vez". O cenário
+   `rejeitaTexto` recusa colar **e** digitar, então tirar a segunda tentativa não muda nada no teste. Efeito do
+   defeito seria conservador (falha antes, sem D, sem envio errado). Sugestão: cenário do simulador que recusa só
+   o `paste` e um teste que espera sucesso pelo modo digitar.
+2. **L2 — célula escolhida pelo `aria-label` sem teste discriminante (M-s).** A fixture tem uma célula só. A
+   checagem do cabeçalho (`cw:198-202`, M-d/M-g mortos) segura o envio no canal errado, então é defesa em
+   profundidade. Sugestão: injetar uma segunda célula "Canal {nome} 2" antes da certa.
+3. **L3 — "canal aberto sem caixa" sem teste (M-t).** Fora da lista explícita do dono; sem caixa a prévia não
+   abriria e o passo seguinte falha antes do D.
+
+### C3.6 Itens conferidos por leitura
+
+- `FalhaPasso` não recarrega e não conta como exceção inesperada (`pb:34-36`, `pb:170-172`); `ErroPagina` herda
+  dela (`cw:67-68`); `_morto` deixa `FalhaPasso` passar (`cw:77-78`).
+- QR fora do mapeamento de 16/11 (`cw:19-20`), declarado no README `:121-122`.
+
+### C3.7 Pendências do dono (bloqueiam o merge)
+
+1. **Teste real na inst2** com o binário/código desta branch: um post de oferta no canal (ID_CANAL 2), conferindo
+   E com o balão "Enviada", e um caso de D (cortar a rede depois do clique).
+2. **QR não capturado:** os seletores `SEL_QR` (`cw:20`) e o aria-label do relógio de pendente são palpites; conferir
+   no primeiro QR/sessão deslogada e no primeiro post pendente.
+3. `docs/canal_real.html` continua fora do git; decidir apagá-lo ou guardá-lo fora do worktree (o Verifier não mexeu).
+
+---
+
+## Histórico: ciclo 2
+
+Resultado do ciclo 2: aprovado (faixa `3d61c84..0eaf0a6`). No ciclo 1 (`3d61c84..1f0711d`) o veredito foi reprovado
 com 4 de 54 mutantes não equivalentes vivos (M21, M47, M54, M55). O commit `0eaf0a6` (só testes:
 `tests/test_pub_publicador.py`, `tests/test_pub_canal_web.py`, `tests/pub_falso.py`) fechou as lacunas 1–4 e os
 quatro agora morrem: **54 de 54 mortos** (mais 2 equivalentes, 56 no total). Conferido que nenhum código de
