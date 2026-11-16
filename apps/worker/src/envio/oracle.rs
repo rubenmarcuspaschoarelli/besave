@@ -1,4 +1,4 @@
-//! `FonteEnvio` sobre Oracle XE 11.2 (`sql/bsv-40.sql`). Colunas DATE em hora local
+//! `FonteEnvio` sobre Oracle XE 11.2 (`sql/bsv-40.sql`, `sql/bsv-62.sql`). Colunas DATE em hora local
 //! (`BESAVE_ORACLE_TZ`): o worker converte com o mesmo offset do ciclo. Toda escrita faz commit.
 
 use std::collections::{HashMap, HashSet};
@@ -6,7 +6,7 @@ use std::collections::{HashMap, HashSet};
 use oracle::Connection;
 use oracle::sql_type::ToSql;
 
-use crate::envio::fonte::{AvisoCanal, Expirada, FonteEnvio, UltimoEnvio};
+use crate::envio::fonte::{AvisoCanal, Expirada, FilaWhatsapp, FonteEnvio, UltimoEnvio};
 use crate::envio::modelo::{Canal, LinhaCanal, OfertaCanal, Parametros};
 use crate::fonte::Result;
 use crate::oracle::{ConfigOracle, blocos_in, conectar, linha_aviso, linha_oferta};
@@ -86,6 +86,10 @@ const SQL_RESERVAR_AVISO: &str = "INSERT INTO ENVIO_AVISO (ID_ENVIO_AVISO, ID_AV
 const SQL_CONFIRMAR_AVISO: &str =
     "UPDATE ENVIO_AVISO SET NR_MESSAGE_ID = :1 WHERE ID_ENVIO_AVISO = :2";
 const SQL_CANCELAR_AVISO: &str = "DELETE FROM ENVIO_AVISO WHERE ID_ENVIO_AVISO = :1";
+/// BSV-62: linha `P` da fila do WhatsApp; o id vem da sequence no próprio INSERT.
+pub const SQL_ENFILEIRAR_WHATSAPP: &str = "INSERT INTO ENVIO_WHATSAPP      (ID_ENVIO_WA, ID_CANAL, ID_OFERTA, ID_ENVIO_TELEGRAM, DS_LEGENDA, DS_AREA_SLUG, ST_ENVIO, DT_FILA)      VALUES (SQ_ENVIO_WHATSAPP.NEXTVAL, :1, :2, :3, :4, :5, 'P', DATE '1970-01-01' + :6 / 86400)";
+/// ORA-00001: restrição única violada (a oferta já está na fila).
+const ORA_UNICA: i32 = 1;
 
 pub struct OracleEnvio {
     conn: Connection,
@@ -309,5 +313,27 @@ impl FonteEnvio for OracleEnvio {
     fn cancelar_aviso(&self, id_envio: i64) -> Result<()> {
         self.conn.execute(SQL_CANCELAR_AVISO, &[&id_envio])?;
         Ok(self.conn.commit()?)
+    }
+
+    fn enfileirar_whatsapp(&self, l: &FilaWhatsapp) -> Result<bool> {
+        let r = self.conn.execute(
+            SQL_ENFILEIRAR_WHATSAPP,
+            &[
+                &l.canal,
+                &l.id_oferta,
+                &l.id_envio_telegram,
+                &l.legenda,
+                &l.area_slug,
+                &self.local(l.dt_fila),
+            ],
+        );
+        match r {
+            Ok(_) => {
+                self.conn.commit()?;
+                Ok(true)
+            }
+            Err(e) if e.db_error().is_some_and(|d| d.code() == ORA_UNICA) => Ok(false),
+            Err(e) => Err(e.into()),
+        }
     }
 }

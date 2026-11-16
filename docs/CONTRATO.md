@@ -4,8 +4,8 @@ Fonte da verdade para todo dado que sai do Oracle e chega ao site, ao app e aos 
 Os arquivos JSON Schema em `packages/contract/schema/` são a forma executável deste documento;
 se divergirem, o JSON Schema vence e este arquivo é corrigido.
 
-Versão do contrato: **1.6.0** (SemVer; mudança incompatível = major).
-Histórico: 1.6.0 — `DS_CUPOM` com vários códigos separados por `|`: `c` do card = primeiro válido, `OfertaPagina.cupons` e `OfertaCanal.cupons` (BSV-50, AD-102). 1.5.0 — `OfertaCard.dp` (data de publicação no site), orçamento do card média ≤ 230 B (AD-074), §10.6 respondida (BSV-36). 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
+Versão do contrato: **1.7.0** (SemVer; mudança incompatível = major).
+Histórico: 1.7.0 — §11: layout novo da legenda (linhas em branco e frase de aviso), legenda do WhatsApp, `frases_canal.json` e fila `ENVIO_WHATSAPP` (BSV-62). 1.6.0 — `DS_CUPOM` com vários códigos separados por `|`: `c` do card = primeiro válido, `OfertaPagina.cupons` e `OfertaCanal.cupons` (BSV-50, AD-102). 1.5.0 — `OfertaCard.dp` (data de publicação no site), orçamento do card média ≤ 230 B (AD-074), §10.6 respondida (BSV-36). 1.4.0 — §11 `OfertaCanal` (envio ao canal do Telegram, BSV-40); `OFERTA.DT_PUBLICACAO_SITE`. 1.3.3 — orçamento do card: média ≤ 200 B, sem teto, gate no chunk (AD-064); pergunta sobre ordenação da home. 1.3.2 — `-small` publicada: lado maior ≤ 320 px e ≤ 25 KB (AD-059); pergunta sobre `DT_ULT_ATUALIZACAO` fechada (AD-058). 1.3.1 — imagem da lista é `{id}-small.webp` (hífen, igual ao robô). 1.3.0 — área `OUTROS`, slug de URL por área, sinônimos INFANTIL (Bebes/Menina/Menino). 1.2.0 — URL da oferta é `/oferta/{id}/`, slug removido do card, da página e do Oracle; expurgo sem apagar do banco. 1.1.0 — `ST_ATIVO` do Oracle, campo `x` no card, expurgo em 7 dias, `DT_ULT_ATUALIZACAO` opcional.
 
 ---
 
@@ -280,3 +280,65 @@ que tem página no ar).
 `OFERTA.DT_PUBLICACAO_SITE` (DATE, hora local): gravada pelo `besave-ciclo` depois do manifest com o
 instante do ciclo (o mesmo `dp` do card, §3), só quando nula ou fora da faixa válida. O envio só considera ofertas com ela preenchida. Critérios de envio
 (janela, cota, desconto mínimo, repetição) vivem em `PARAMETROS_ENVIO` (`apps/worker/sql/bsv-40.sql`).
+
+### 11.1 Layout da legenda (Telegram, `parse_mode=HTML`, BSV-62)
+
+```
+<b>{título}</b>
+                                   ← linha em branco
+{destaque}
+🔥 <b>-{pct}%</b>  <s>R$ {de}</s>  <b>R$ {por}</b>  🔁 <i>(Recorrência)</i>
+📉 <b>Caiu mais o preço!!!</b>
+🎟️ Cupom: <code>{cupom}</code>      (Cupons: <code>A</code> · <code>B</code> · <code>C</code>)
+Promoção {Loja}: <a href="https://besave.io/{id}?utm_source=telegram">besave.io/{id}</a>
+                                   ← linha em branco
+{ícone} <i>{frase}</i>
+```
+
+- Linhas opcionais vazias somem (destaque, selo `-pct%` abaixo de `PC_DESCONTO_DESTAQUE`, preço "de",
+  recorrência, "caiu", cupom); as duas linhas em branco ficam sempre. Texto variável escapado (`& < > "`).
+- Limite 1024 em UTF-16: saem cupons do fim (fica 1), depois o título é cortado (fronteira de palavra +
+  `…`). A frase e as linhas em branco nunca são cortadas.
+- "Oferta encerrada" (edição): `⛔ <b>Oferta encerrada</b>` e, riscado, o título, uma linha em branco e o
+  corpo; sem link, sem "caiu" e sem frase. A legenda do aviso (BSV-41) não muda.
+
+### 11.2 Frases de aviso (`apps/worker/frases_canal.json`)
+
+`{"icones": [...], "frases": [...]}`, embutido no binário; `BESAVE_FRASES_CANAL=<caminho>` troca sem
+recompilar (arquivo ausente, ilegível, fora do formato ou com lista vazia → WARN e o embutido; frase vazia
+ou com mais de 120 caracteres → descartada com WARN). Cada ícone é um item da lista, mesmo com vários
+pontos de código (`🏃‍♂️`). Escolha por oferta, determinística: com `h(id, sal)` = os 8 primeiros bytes
+(big-endian) do SHA-256 de `"{id}:{sal}"`, `frase = frases[h(id, "frase") mod n]` e
+`ícone = icones[h(id, "icone") mod m]`. A mesma oferta tem a mesma frase nos dois canais. O texto das
+frases é do dono; ficam de fora frases que afirmam estoque, exclusividade ou "última chance".
+
+### 11.3 Legenda do WhatsApp
+
+Mesmas linhas, mesma ordem, mesmas regras de linha opcional, mesma frase do §11.1, na marcação do WhatsApp:
+
+```
+*{título}*
+
+{destaque}
+🔥 *-{pct}%*  ~R$ {de}~  *R$ {por}*  🔁 _(Recorrência)_
+📉 *Caiu mais o preço!!!*
+🎟️ Cupom: `{cupom}`          (Cupons: `A` · `B` · `C`)
+Promoção {Loja}: https://besave.io/{id}?utm_source=whatsapp
+
+{ícone} _{frase}_
+```
+
+- Título, destaque e frase perdem `*`, `_`, `~` e `` ` `` (o WhatsApp não tem escape); espaços
+  repetidos viram um. O cupom vai inteiro na crase (código não é formatado; a regex do §4.3 já exclui
+  `*`, `~` e a crase): `BE_SAVE` fica `` `BE_SAVE` ``.
+- Limite: 1024 caracteres **e** 4000 bytes UTF-8, com o mesmo corte do §11.1.
+
+### 11.4 Fila `ENVIO_WHATSAPP` (`apps/worker/sql/bsv-62.sql`)
+
+Com `BESAVE_ENVIO_ESPELHO_WHATSAPP=<ID_CANAL>`, cada post de **oferta** confirmado no Telegram
+(`NR_MESSAGE_ID` gravado) vira uma linha `ST_ENVIO = 'P'` com a legenda do §11.3 (`DS_LEGENDA`),
+`ID_ENVIO_TELEGRAM` e `DS_AREA_SLUG` (slug de URL da área, §2.3, para o placeholder). Único
+`(ID_CANAL, ID_OFERTA)`: duplicata é ignorada. Falha ao inserir → WARN; o Telegram não espera nem é
+desfeito. Avisos e "Oferta encerrada" não entram. O publicador (BSV-63) marca `E` enviado, `D` duvidoso
+ou `X` descartado e aplica o teto e a janela de `PARAMETROS_ENVIO` do canal 2; a seleção é a do canal 1.
+Sem número, sessão ou link de convite na fila.

@@ -14,6 +14,7 @@ use worker::envio::aviso::foto_aviso_de;
 use worker::envio::canal::{FakeCanal, RelogioFake};
 use worker::envio::fonte::{FakeEnvio, LigacaoAviso};
 use worker::envio::foto::{OrigemFoto, foto, foto_de};
+use worker::envio::frases::Frases;
 use worker::envio::modelo::Parametros;
 use worker::envio::rodada::{Contexto, rodar};
 use worker::envio::site::{
@@ -404,6 +405,8 @@ fn execucao_com_urls() {
             disco: &disco,
         },
         foto: foto_de,
+        frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     })
