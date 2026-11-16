@@ -173,3 +173,52 @@ Dois dias estáveis → desligar o PC da operação (o XE local pode ser desinst
 - O vigia na AWS (BSV-15) continua avisando se o site parar.
 - **Backup do banco** (o Always Free não faz restauração): export diário por Data Pump, cópia no bucket da
   OCI **e** no S3 — fica no plano da inst2.
+
+---
+
+## Inst2 · envio (BSV-61)
+
+A inst2 é a máquina de **mensageria**: o `besave-envio` (Telegram) sai da inst1 e passa para ela; a BSV-63
+põe ali o publicador do WhatsApp. A inst2 não tem o espelho de imagens dos robôs: o envio busca a foto da
+oferta (`img/ofertas/{id}.webp`) e a do aviso (`img/avisos/{id}.{webp,jpg}`) **no site**, já publicadas
+antes de a oferta ou o aviso poderem ir ao canal. Sem ciclo, sem robôs, sem `BESAVE_IMAGENS_DIR`.
+
+1. **Base:** como a Fase 2 (fuso de Brasília, `adduser besave`), mas só
+   `sudo mkdir -p /srv/besave/{bin,logs,estado,oracle,unidades} && sudo chown -R besave:besave /srv/besave`.
+   Sem swap extra, sem tela, sem Python dos robôs.
+2. **Oracle:** Instant Client Basic ARM64 e wallet exatamente como a Fase 4 (`libaio1t64` + link,
+   `ldconfig`, só os 4 arquivos da wallet em `/srv/besave/oracle/wallet/`, `chmod 600`, `sqlnet.ora`
+   com `DIRECTORY="/srv/besave/oracle/wallet"`). Na ACL do banco (Fase 0.6) o IP de saída da inst2 já entra.
+3. **Binário** do commit de `main` (AD-060), como o usuário `besave` com `gh auth login` feito:
+   ```bash
+   bash /caminho/do/repo/infra/vps/instalar.sh --papel envio        # última execução ok de main
+   bash /caminho/do/repo/infra/vps/instalar.sh --papel envio <ID>   # teste real da PR, antes do merge
+   cat /srv/besave/bin/VERSAO                                      # papel=envio, commit
+   ```
+   Instala só `besave-envio` e `besave-worker` (o alerta `besave-alerta@` usa `--alerta-encerrado`) e copia
+   `besave-envio.service`, `besave-envio.timer` e `besave-alerta@.service` para `/srv/besave/unidades/`.
+4. **`.env`:** preencher `infra/vps/envio.env.example` (segredos só na máquina, nunca no repositório) e
+   `sudo install -o besave -g besave -m 600 envio.env.example /srv/besave/worker.env`.
+   Conferir que as bases respondem: `curl -sI https://besave.com.br/img/ofertas/<id>.webp` → `200`.
+5. **Unidades** (sem ligar o timer):
+   ```bash
+   sudo install -m 644 /srv/besave/unidades/* /etc/systemd/system/ && sudo systemctl daemon-reload
+   systemd-analyze verify /etc/systemd/system/besave-envio.{service,timer}
+   ```
+6. **Prévia:** `sudo -u besave /srv/besave/bin/besave-envio --sim --env-file /srv/besave/worker.env`
+   mostra as ofertas com `foto: Site("https://…/img/ofertas/{id}.webp")` e o aviso devido com
+   `sendPhoto`. Placeholder em todas = base errada ou site fora; ver o WARN com `id` e o status no log.
+
+**Virada (nunca as duas máquinas com o timer ligado: o canal receberia em dobro):**
+1. Na **inst1**: `sudo systemctl disable --now besave-envio.timer` e `systemctl is-active besave-envio.timer`
+   → `inactive`.
+2. Só então, na **inst2**: `free -m` (antes), `sudo systemctl enable --now besave-envio.timer`,
+   `systemctl list-timers 'besave-*'`.
+3. Depois de um dia normal de envio (lotes, cota, silêncio fora de 9–21 h, "Oferta encerrada"): `free -m`
+   na inst2; tirar `besave-envio` do papel padrão do `instalar.sh` (ticket do dono) e apagar
+   `/etc/systemd/system/besave-envio.{service,timer}` da inst1 (`daemon-reload`).
+
+Volta: `disable --now` na inst2 e `enable --now` na inst1 (a inst1 continua com o binário e a pasta de
+imagens até o passo 3).
+
+As unidades são de sistema (`User=besave`, `/etc/systemd/system`), por isso `sudo systemctl`, não `--user`.

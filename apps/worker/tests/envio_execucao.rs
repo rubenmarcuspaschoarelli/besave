@@ -5,13 +5,13 @@ mod comum;
 
 use comum::{linha_canal, mapeamento};
 use std::cell::RefCell;
-use std::path::Path;
 
 use worker::envio::canal::{CanalTelegram, Chamada, ErroCanal, FakeCanal, RelogioFake};
 use worker::envio::fonte::{FakeEnvio, RegistroEnvio};
-use worker::envio::foto::{OrigemFoto, foto};
+use worker::envio::foto::{OrigemFoto, foto_de};
 use worker::envio::modelo::{Canal, LinhaCanal, Parametros};
 use worker::envio::rodada::{Contexto, EstadoEnvio, Parada, RelatorioEnvio, rodar};
+use worker::envio::site::Imagens;
 use worker::execucao::{Codigo, Falha};
 use worker::imagens::ErroImagem;
 use worker::logs::FUSO_BRASILIA;
@@ -50,8 +50,8 @@ fn rodar_em(
         telegram: tg,
         relogio: r,
         m: &m,
-        dir_imagens: None,
-        dir_avisos: None,
+        imagens: Imagens::pasta(None),
+        avisos: Imagens::pasta(None),
         foto: foto_rapida,
         canal: 1,
         pausa_ate,
@@ -59,7 +59,7 @@ fn rodar_em(
 }
 
 /// Foto falsa (a real, 800×800, é coberta em `envio_foto.rs` e em `post_com_foto_real`).
-fn foto_rapida(_: Option<&Path>, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
+fn foto_rapida(_: &Imagens, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
     Ok((vec![0xFF, 0xD8, id as u8], OrigemFoto::Placeholder(area)))
 }
 
@@ -182,9 +182,9 @@ fn post_com_foto_real() {
         telegram: &tg,
         relogio: &r,
         m: &m,
-        dir_imagens: None,
-        dir_avisos: None,
-        foto,
+        imagens: Imagens::pasta(None),
+        avisos: Imagens::pasta(None),
+        foto: foto_de,
         canal: 1,
         pausa_ate: None,
     })
@@ -258,8 +258,8 @@ fn linha_gravada_antes_do_envio() {
         telegram: &espiao,
         relogio: &r,
         m: &m,
-        dir_imagens: None,
-        dir_avisos: None,
+        imagens: Imagens::pasta(None),
+        avisos: Imagens::pasta(None),
         foto: foto_rapida,
         canal: 1,
         pausa_ate: None,

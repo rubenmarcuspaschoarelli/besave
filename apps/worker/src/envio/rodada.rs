@@ -7,7 +7,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::envio::aviso::{devido, foto_aviso, legenda_aviso};
+use crate::envio::aviso::{devido, foto_aviso_de, legenda_aviso};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio};
 use crate::envio::fonte::FonteEnvio;
 use crate::envio::foto::OrigemFoto;
@@ -15,6 +15,7 @@ use crate::envio::janela::{esperado, inicio_do_dia, lote_devido, silencioso};
 use crate::envio::legenda::{legenda, legenda_encerrada};
 use crate::envio::modelo::para_canal;
 use crate::envio::selecao::selecionar;
+use crate::envio::site::Imagens;
 use crate::execucao::Falha;
 use crate::fonte::ErroFonte;
 use crate::imagens::ErroImagem;
@@ -84,18 +85,18 @@ impl RelatorioEnvio {
     }
 }
 
-/// Monta a foto do post: `envio::foto::foto` em produção.
-pub type Fotografo = fn(Option<&Path>, i64, Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem>;
+/// Monta a foto do post: `envio::foto::foto_de` em produção.
+pub type Fotografo = fn(&Imagens, i64, Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem>;
 
 pub struct Contexto<'a> {
     pub fonte: &'a dyn FonteEnvio,
     pub telegram: &'a dyn CanalTelegram,
     pub relogio: &'a dyn Relogio,
     pub m: &'a Mapeamento,
-    /// `BESAVE_IMAGENS_DIR`; `None` → placeholder.
-    pub dir_imagens: Option<&'a Path>,
-    /// `BESAVE_AVISOS_DIR`; `None` → avisos vão sem foto.
-    pub dir_avisos: Option<&'a Path>,
+    /// `BESAVE_IMAGENS_URL` (vence) ou `BESAVE_IMAGENS_DIR`; nenhuma → placeholder.
+    pub imagens: Imagens<'a>,
+    /// `BESAVE_AVISOS_URL` (vence) ou `BESAVE_AVISOS_DIR`; nenhuma → avisos vão sem foto.
+    pub avisos: Imagens<'a>,
     pub foto: Fotografo,
     pub canal: i64,
     /// Fim da espera de um 429 anterior (segundos Unix).
@@ -182,7 +183,7 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
         selecionar(fonte, ctx.m, &p, ctx.canal, agora, rel.devido as usize).map_err(ler)?;
     for c in candidatas {
         let texto = legenda(&c.oferta, c.caiu, &p);
-        let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
+        let (jpeg, origem) = (ctx.foto)(&ctx.imagens, c.oferta.id, c.area)
             .map_err(|e| Falha::execucao("foto", &e))?;
         // Regra 7: a linha existe antes do envio; sem ela, nada vai ao Telegram.
         let id_envio = fonte
@@ -276,7 +277,7 @@ fn enviar_aviso(
     let a = devido(&avisos, ctx.relogio.agora())?;
     let id = a.aviso.id;
     let texto = legenda_aviso(a);
-    let foto = foto_aviso(ctx.dir_avisos, id, a.aviso.imagem.as_deref());
+    let foto = foto_aviso_de(&ctx.avisos, id, a.aviso.imagem.as_deref());
     // Regra 4: a linha existe antes do envio; sem ela, nada vai ao Telegram.
     let id_envio = match fonte.reservar_aviso(id, ctx.canal, ctx.relogio.agora()) {
         Ok(i) => i,
@@ -431,11 +432,11 @@ pub fn simular(ctx: &Contexto) -> Result<Simulacao, Falha> {
     sim.aviso = devido(&avisos, agora).map(|a| PreviaAviso {
         id: a.aviso.id,
         legenda: legenda_aviso(a),
-        jpeg: foto_aviso(ctx.dir_avisos, a.aviso.id, a.aviso.imagem.as_deref()),
+        jpeg: foto_aviso_de(&ctx.avisos, a.aviso.id, a.aviso.imagem.as_deref()),
     });
     let n = sim.devido.max(p.qt_por_execucao) as usize;
     for c in selecionar(fonte, ctx.m, &p, ctx.canal, agora, n).map_err(ler)? {
-        let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
+        let (jpeg, origem) = (ctx.foto)(&ctx.imagens, c.oferta.id, c.area)
             .map_err(|e| Falha::execucao("foto", &e))?;
         sim.previas.push(Previa {
             id: c.oferta.id,
