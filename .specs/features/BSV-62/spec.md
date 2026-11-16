@@ -91,12 +91,12 @@ Como dono, quero o layout novo com frase de aviso nos dois canais e cada oferta 
 | FRA-05 | P1 | T2 | Done |
 | LAY-01 | P1 | T3 | Done |
 | LAY-02 | P1 | T3 | Done |
-| LIM-01 | P1 | T3/T4 | Pending |
+| LIM-01 | P1 | T3/T4 | Done |
 | ENC-01 | P1 | T3 | Done |
 | ISO-01 | P1 | T3 | Done |
-| WA-01 | P1 | T4 | Pending |
-| WA-02 | P1 | T4 | Pending |
-| LIM-02 | P1 | T4 | Pending |
+| WA-01 | P1 | T4 | Done |
+| WA-02 | P1 | T4 | Done |
+| LIM-02 | P1 | T4 | Done |
 | ESP-01 | P1 | T5 | Pending |
 | ESP-02 | P1 | T5 | Pending |
 | ESP-03 | P1 | T5 | Pending |

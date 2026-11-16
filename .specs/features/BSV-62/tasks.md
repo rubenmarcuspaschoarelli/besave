@@ -45,7 +45,7 @@ T5 → T6
 **Tests**: `apps/worker/tests/envio_legenda.rs`, `apps/worker/tests/envio_aviso.rs`
 **Gate**: `cargo test --test envio_legenda --test envio_aviso --test envio_execucao --test envio_http --test envio_site`
 
-### T4: Legenda do WhatsApp
+### T4: Legenda do WhatsApp ✅
 **What**: `legenda_whatsapp(o, caiu, p, frases)` na marcação do WhatsApp, limpeza de `* _ ~ \``, `utm_source=whatsapp`, limite 1024 caracteres e 4000 bytes.
 **Where**: `apps/worker/src/envio/legenda.rs`, `apps/worker/tests/envio_legenda_whatsapp.rs`
 **Depends on**: T3
