@@ -39,18 +39,18 @@ oficial de canal, um programa independente da captura posta pelo WhatsApp Web, c
 | Escolha | a `P` restante de maior `DT_FILA` (empate: maior `ID_ENVIO_WA`) | "a mais recente" | n |
 | Falha | falha antes do clique e `D` contam para as 3 seguidas; post confirmado zera | `D` repetido indica rede/sessão ruim | n |
 | Pausa | 60 min; 1 aviso por ocorrência e lembrete a cada 6 h; ao fim da pausa o contador zera; "voltou" no primeiro `E` depois da ocorrência | spec item 7 | n |
-| Confirmação | balão novo cujo texto normalizado contém o começo da 1ª linha da legenda (sem `*_~\``) **e** sem relógio de pendente (`msg-time`) | Com a rede caída o WhatsApp mostra o balão local com relógio: só o balão daria `E` falso (teste real 2) | n |
+| Confirmação | positiva (dono, 16/11): prévia fechada **e** balão novo (fora dos de antes do clique) com `besave.io/{ID_OFERTA}` na legenda (sem casar `…/{id}0`) **e** `msg-meta` com aria-label enviada/entregue/lida; qualquer outro estado = não confirmado | O balão mostra o texto renderizado (sem `*`); rede caída não dá status de enviada (teste real 2) | y |
 | Legenda | modo `colar` (evento `paste` com `text/plain`) e conferência do texto do editor; diferente → limpa e `digitar` (linhas com `insert_text`, quebra com `Shift+Enter`); diferente de novo → falha antes do clique | spec 4.2: o texto tem de chegar idêntico | n |
 | Sessão deslogada | QR na tela → aviso "ler o QR pelo VNC" (1 por ocorrência, lembrete 6 h), sem tentar; o log tem as marcas do robô da captura (`Aguardando o WhatsApp Web carregar` / `Sessao autenticada`) para o `pede_qr` do vigia | spec 7; vigia BSV-57 | n |
 | Batimento | depois de toda volta concluída (com ou sem post, em pausa, fora da janela, em QR, desligado); `prazo = agora + sono + 10 min` | spec 9, formato BSV-57 | n |
 | Credencial do aviso | `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` do ambiente; senão do arquivo `BESAVE_WORKER_ENV` (padrão `/srv/besave/worker.env`) | igual ao vigia | n |
 | Permissão do config | o publicador não grava o config; na partida, modo com bits de grupo/outros → WARN; README instala com `install -m 600` | spec 8 (BSV-60) | n |
-| Seletores e fixture | fixture **sintética**, montada com as âncoras estáveis conhecidas (`#pane-side`, `data-icon`, `aria-label`, `span[title]`); captura real e `--gravar-dom` (DOM redigido) ficam com o dono na inst2 | o agente não tem acesso ao VNC da inst2 nem ao número; a spec pede seletor real — bloqueia o merge | n |
+| Seletores e fixture | tabela do mapeamento do dono no WhatsApp Web real (16/11/2026); fixture = recorte redigido de `docs/canal_real.html` (não versionado) + prévia transcrita; comportamento por `tests/fixtures/whatsapp_simulador.js` | pedido do dono (17/11); QR e relógio de pendente não capturados | y |
 | Tela | `besave-vnc@1` e `DISPLAY=:1` na inst2 (só um robô lá) | inst2 não roda a captura | n |
 | Memória | scope com `MemoryHigh=1500M`, `MemoryMax=2000M`, `MemorySwapMax=0`, provisórios | o dono fecha com o `free -m` de 24 h (teste real 4) | n |
 | Pillow no CI | entra em `tools/requirements-dev.txt` (já é dependência dos dois robôs) | os testes da foto precisam rodar no CI; não é dependência nova do projeto | n |
 
-**Open questions:** seletores reais (dono, teste real).
+**Open questions:** none (QR a conferir no primeiro login da inst2, teste real).
 
 ---
 
