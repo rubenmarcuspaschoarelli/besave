@@ -31,6 +31,16 @@ class BrowserMorto(RuntimeError):
     """O navegador ou a pagina fecharam: o processo sai com codigo != 0 e o systemd reinicia."""
 
 
+class FalhaPasso(RuntimeError):
+    """Passo da pagina que nao deu, previsto (cabecalho divergente, sem anexo, legenda diferente): falha antes do
+    clique, sem recarregar a pagina. Excecao fora disso e inesperada e recarrega uma vez."""
+
+
+def chave_oferta(id_oferta: int) -> str:
+    """O que o balao confirmado tem de mostrar: o link curto da oferta (o texto renderizado perde os `*`)."""
+    return f"besave.io/{int(id_oferta)}"
+
+
 @dataclass
 class Ocorrencia:
     desde: datetime
@@ -157,6 +167,9 @@ class Publicador:
             self.pagina.escrever_legenda(linha.legenda, cfg.modo_legenda)
         except BrowserMorto:
             raise
+        except FalhaPasso as e:
+            self.log(f"[post] {rotulo}: falha antes do clique ({str(e)[:200]})")
+            return FALHA_ANTES
         except Exception as e:  # noqa: BLE001
             self.log(f"[post] {rotulo}: falha antes do clique ({type(e).__name__}: {str(e)[:200]})")
             self._recarregar()
@@ -174,7 +187,7 @@ class Publicador:
         confirmado = False
         try:
             self.pagina.enviar()
-            confirmado = self.pagina.confirmar(linha.legenda, cfg.timeout_post_segundos)
+            confirmado = self.pagina.confirmar(chave_oferta(linha.id_oferta), cfg.timeout_post_segundos)
         except BrowserMorto:
             self._avisar_duvidoso(linha, "o navegador caiu depois do clique")
             raise

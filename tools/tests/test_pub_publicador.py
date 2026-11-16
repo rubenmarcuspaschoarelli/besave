@@ -386,3 +386,21 @@ def test_limpeza_depois_de_toda_tentativa_com_clique(m, confirma):  # M55
     m.pagina.confirma = confirma
     m.volta()
     assert m.pagina.chamadas[-2:] == ["confirmar", "limpar"]
+
+
+# --- seletores reais (16/11): chave de confirmacao e falha prevista ----------------------------------
+
+
+def test_est01_confirmacao_pede_o_link_curto_da_oferta(m):
+    i = m.fila.add(m.local())
+    m.volta()
+    assert m.pagina.chaves == [f"besave.io/{m.fila.linhas[i]['oferta']}"]
+
+
+@pytest.mark.parametrize("passo", ["abrir_canal", "anexar", "escrever_legenda"])
+def test_est02_falha_prevista_da_pagina_e_p_sem_recarregar(m, passo):
+    i = m.fila.add(m.local())
+    m.pagina.falha_prevista = passo
+    m.volta()
+    assert m.fila.st(i) == ("P", None) and m.pagina.envios == [] and m.pagina.recargas == 0
+    assert m.pub.falhas_seguidas == 1 and m.pagina.chamadas[-1] == "limpar"

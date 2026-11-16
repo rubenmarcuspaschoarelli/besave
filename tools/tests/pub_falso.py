@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pub import config, regras
 from pub.fila import ErroBanco
-from pub.publicador import BrowserMorto, Publicador
+from pub.publicador import BrowserMorto, FalhaPasso, Publicador
 
 T0 = datetime(2026, 11, 16, 13, 0, tzinfo=UTC)          # 10:00 em Brasilia
 
@@ -76,6 +76,8 @@ class PaginaFalsa:
         self.legenda = None
         self.recargas = 0
         self.morto_em = None
+        self.chaves = []            # chave de confirmacao pedida a cada post
+        self.falha_prevista = None  # passo que levanta FalhaPasso (falha esperada da pagina)
 
     def _passo(self, nome):
         self.chamadas.append(nome)
@@ -83,6 +85,8 @@ class PaginaFalsa:
             raise BrowserMorto("Target page, context or browser has been closed")
         if self.falhar == nome:
             raise RuntimeError(f"falha falsa em {nome}")
+        if self.falha_prevista == nome:
+            raise FalhaPasso(f"falha prevista em {nome}")
 
     def sessao(self):
         self._passo("sessao")
@@ -105,8 +109,9 @@ class PaginaFalsa:
         self._passo("enviar")
         self.envios.append((self.canal, self.foto, self.legenda))
 
-    def confirmar(self, legenda, timeout_s):
+    def confirmar(self, chave, timeout_s):
         self._passo("confirmar")
+        self.chaves.append(chave)
         return self.confirma
 
     def limpar(self):

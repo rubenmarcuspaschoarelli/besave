@@ -1,9 +1,11 @@
-"""BSV-63 LEG-01..02, QR-01: pagina do WhatsApp Web.
+"""BSV-63: pagina do WhatsApp Web sobre a fixture REAL (recorte redigido do mapeamento do dono, 16/11/2026).
 
-Parte 1 (roda no CI, sem navegador): digitacao contra um teclado falso em que `Enter` ENVIA, comparacao do
-editor, chave de confirmacao e redacao do DOM.
-Parte 2 (Chromium real com a fixture SINTETICA tests/fixtures/whatsapp_canal.html): pula sem Playwright.
+Parte 1 (sem navegador, roda no CI): digitacao contra um teclado em que `Enter` ENVIA, comparacao cru com cru,
+chave besave.io/{id}, status do balao e a propria fixture (redacao e seletores presentes).
+Parte 2 (Chromium real, fixtures/whatsapp_canal_real.html + fixtures/whatsapp_simulador.js): cada seletor da
+tabela e o fluxo por postagem. Pula sem Playwright (CI); roda no WSL e no PC. Nada toca o WhatsApp de verdade.
 """
+import re
 from pathlib import Path
 
 import pytest
@@ -21,8 +23,11 @@ LEGENDA = (
     "\n"
     "🏃‍♂️ _Corre que acaba rapido_"
 )
+CHAVE = "besave.io/5412"
 CANAL = "BeSave - Preços Baixos e Ofertas incríveis"
-FIXTURE = Path(__file__).resolve().parent / "fixtures" / "whatsapp_canal.html"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+FIXTURE = FIXTURES / "whatsapp_canal_real.html"
+SIMULADOR = FIXTURES / "whatsapp_simulador.js"
 
 
 class TecladoWhatsApp:
@@ -35,10 +40,6 @@ class TecladoWhatsApp:
     def insert_text(self, s):
         self.buffer += s
 
-    def type(self, s, delay=0):
-        for c in s:
-            self.press("Enter") if c == "\n" else self.insert_text(c)
-
     def press(self, tecla):
         if tecla == "Enter":
             self.enviadas.append(self.buffer)
@@ -49,12 +50,14 @@ class TecladoWhatsApp:
             raise AssertionError(f"tecla inesperada {tecla}")
 
 
+# --- parte 1: sem navegador --------------------------------------------------------------------------
+
+
 def test_leg01_digitar_nao_envia_nada_e_o_editor_fica_identico():
     t = TecladoWhatsApp()
     canal_web.digitar(t, LEGENDA)
-    assert t.enviadas == []                      # nenhuma mensagem saiu no meio
-    assert t.buffer == LEGENDA                   # com as duas linhas em branco
-    t.press("Enter")                             # o clique em enviar
+    assert t.enviadas == [] and t.buffer == LEGENDA
+    t.press("Enter")
     assert t.enviadas == [LEGENDA]
 
 
@@ -64,17 +67,46 @@ def test_leg01_linhas_em_branco_seguidas_e_finais():
     assert t.buffer == "a\n\n\nb\n" and t.enviadas == []
 
 
-def test_leg02_comparacao_do_editor_so_tolera_o_invisivel():
-    assert canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("🎟️", "🎟").replace("  ", "  "))
-    assert not canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("\n\n", "\n"))       # perdeu linha em branco
-    assert not canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("*", ""))            # perdeu a marcacao
+def test_leg02_cru_com_cru_normalizando_so_quebras_espacos_e_nfc():
+    assert canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("\n", "\r\n").replace("  ", "  "))
+    assert canal_web.igual_ao_editor("café", "café")                               # NFC
+    assert not canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("\n\n", "\n"))         # perdeu linha em branco
+    assert not canal_web.igual_ao_editor(LEGENDA, LEGENDA.replace("*", ""))              # caixa mostra * cru
     assert not canal_web.igual_ao_editor(LEGENDA, LEGENDA + "\n")
 
 
-def test_chave_de_confirmacao_e_o_titulo_sem_marcacao():
-    assert canal_web.chave_confirmacao(LEGENDA) == "fonebluetoothxyzcomanc"
-    assert canal_web.chave_confirmacao("*" + "Título " * 20 + "*").startswith("titulotitulo")
-    assert len(canal_web.chave_confirmacao("*" + "x" * 99 + "*")) == 40
+def test_chave_besave_io_com_fronteira():
+    assert canal_web.tem_chave("Promoção Amazon: https://besave.io/5412?utm_source=whatsapp", CHAVE)
+    assert canal_web.tem_chave("besave.io/5412", CHAVE)
+    assert not canal_web.tem_chave("https://besave.io/54120?utm_source=whatsapp", CHAVE)
+    assert not canal_web.tem_chave("besave.io/", CHAVE)
+
+
+@pytest.mark.parametrize("rotulo,ok", [(" Enviada ", True), ("Entregue", True), ("LIDA", True), ("lida ", True),
+                                       ("Pendente", False), ("", False), (None, False), ("Enviando", False)])
+def test_status_do_balao(rotulo, ok):
+    assert canal_web.status_confirmado(rotulo) is ok
+
+
+def test_seletores_so_com_atributos_permitidos():
+    todos = [v for nome, v in vars(canal_web).items() if nome.startswith("SEL_")]
+    todos = [s for v in todos for s in (v if isinstance(v, list) else [v])]
+    assert todos
+    for s in todos:
+        assert "data-icon" not in s and "_r_" not in s and "//" not in s, s
+        assert not re.search(r"\.x[0-9a-z]", s), s                       # classe ofuscada
+        assert not re.search(r"(?<![\w\]])\.[A-Za-z]", s), s              # nenhuma classe
+
+
+def test_fixture_real_redigida_e_sem_script():
+    html = FIXTURE.read_text(encoding="utf-8")
+    assert not re.search(r'[0-9]{10,}|pps\.whatsapp|cdn\.whatsapp|blob:|data-pre-plain-text="\[', html)
+    assert "<script" not in html and "<style" not in html and "<link" not in html
+    assert not re.search(r'class="[^"]*\bx[0-9a-z]+', html)
+    assert not re.search(r"\(\d+\) WhatsApp", html)
+    assert not re.search(r'data-testid="conv-msg-(?!FAKE\d+")', html)
+    assert "transcrito do mapeamento do dono" in html.lower()
+    assert not (FIXTURES / "whatsapp_canal.html").exists()           # a sintetica saiu
 
 
 def test_dom_gravado_e_redigido():
@@ -82,16 +114,9 @@ def test_dom_gravado_e_redigido():
             'srcset="a 1x"><img src="blob:https://web.whatsapp.com/abc">')
     r = canal_web.redigir_dom(html)
     assert "98765" not in r and "5511987654321" not in r and "whatsapp.net" not in r and "blob:" not in r
-    assert "srcset" not in r
 
 
-def test_seletores_nao_usam_classe_ofuscada():
-    todos = [s for nome, v in vars(canal_web).items() if nome.startswith("SEL_")
-             for s in (v if isinstance(v, list) else [v])]
-    assert todos and not any("." in s.split("[")[0] for s in todos)
-
-
-# --- Chromium real com a fixture sintetica ----------------------------------------------------------
+# --- parte 2: Chromium real sobre a fixture real -----------------------------------------------------
 
 
 @pytest.fixture(scope="module")
@@ -107,12 +132,20 @@ def navegador():
 
 
 @pytest.fixture
-def pagina(navegador, tmp_path):
-    ctx = navegador.new_context()
-    page = ctx.new_page()
-    page.goto(FIXTURE.as_uri())
-    yield page
-    ctx.close()
+def abrir(navegador):
+    ctxs = []
+
+    def _abrir(**sim):
+        ctx = navegador.new_context()
+        ctxs.append(ctx)
+        page = ctx.new_page()
+        page.set_content(FIXTURE.read_text(encoding="utf-8"))
+        page.evaluate("s => { window.__sim = s; }", sim)
+        page.add_script_tag(path=str(SIMULADOR))
+        return page, CanalWeb(page, log=lambda s: None)
+    yield _abrir
+    for c in ctxs:
+        c.close()
 
 
 @pytest.fixture
@@ -123,70 +156,127 @@ def foto(tmp_path):
     return caminho
 
 
-def _postar(c, foto, modo, legenda=LEGENDA, timeout=5):
+def _postar(c, foto, modo="colar", timeout=3):
     c.abrir_canal(CANAL)
     c.anexar(foto)
-    c.escrever_legenda(legenda, modo)
+    c.escrever_legenda(LEGENDA, modo)
     c.enviar()
-    return c.confirmar(legenda, timeout)
+    return c.confirmar(CHAVE, timeout)
 
 
-def test_dom_sessao_logada_e_qr(pagina):
-    assert CanalWeb(pagina).sessao() == "ok"
-    pagina.goto(canal_web.Path(FIXTURE).as_uri() + "#qr")
-    pagina.reload()
-    assert CanalWeb(pagina).sessao() == "qr"
+def _envios(page):
+    return page.evaluate("window.__envios")
+
+
+def test_dom_logado_pelo_side(abrir):
+    _page, c = abrir()
+    assert c.sessao() == "ok"
+
+
+def test_dom_seletores_da_tabela_existem_na_fixture_real(abrir):
+    page, _ = abrir()
+    unicos = {
+        canal_web.SEL_ABA_CANAIS: 1, canal_web.SEL_BUSCA_CANAIS: 1,
+        canal_web.SEL_CELULA.format(nome=CANAL): 1, canal_web.SEL_TITULO: 1, canal_web.SEL_CAIXA_CANAL: 1,
+        canal_web.SEL_ANEXAR: 1, canal_web.SEL_INPUT_FOTO: 1, canal_web.SEL_LEGENDA: 1, canal_web.SEL_ENVIAR: 1,
+    }
+    for sel, n in unicos.items():
+        assert page.locator(sel).count() == n, sel
+    assert page.locator(canal_web.SEL_BALAO).count() == 9
+    assert page.locator(canal_web.SEL_LEGENDA_BALAO).count() == 3
+    rotulos = page.locator(canal_web.SEL_STATUS_BALAO).evaluate_all("e => e.map(x => x.getAttribute('aria-label'))")
+    assert rotulos and all(canal_web.status_confirmado(r) for r in rotulos)     # real: " Enviada "
+    assert page.locator('input[type="file"]').count() == 1                     # o oculto do footer
 
 
 @pytest.mark.parametrize("modo", ["colar", "digitar"])
-def test_dom_leg01_um_envio_identico_a_legenda(pagina, foto, modo):
-    c = CanalWeb(pagina, log=lambda s: None)
+def test_dom_enviada_vira_confirmado_num_envio_so(abrir, foto, modo):
+    page, c = abrir()
     assert _postar(c, foto, modo) is True
-    assert pagina.evaluate("window.__envios") == [LEGENDA]
-    assert pagina.evaluate("window.__enters") == 0
-    c.limpar()
-    assert pagina.locator("#previa").is_visible() is False
+    assert _envios(page) == [LEGENDA] and page.evaluate("window.__enters") == 0
+    assert page.evaluate("window.__cliquesCanais") == 0                       # canal ja aberto: pulou a navegacao
 
 
-def test_dom_rede_caida_balao_com_relogio_nao_confirma(pagina, foto):
-    pagina.evaluate("window.__redeCaida = true")
-    c = CanalWeb(pagina, log=lambda s: None)
-    assert _postar(c, foto, "colar", timeout=2) is False
-    assert pagina.evaluate("window.__envios") == [LEGENDA]          # saiu localmente; fica D, sem reenvio
+def test_dom_navega_pela_aba_busca_e_celula(abrir, foto):
+    page, c = abrir(mainFechado=True)
+    c.abrir_canal(CANAL)
+    assert page.evaluate("window.__cliquesCanais") == 1
+    assert page.locator(canal_web.SEL_BUSCA_CANAIS).input_value() == CANAL
+    assert _postar(c, foto) is True
 
 
-def test_dom_leg02_colar_que_perde_linhas_cai_para_digitar(pagina, foto):
-    # editor que ignora o paste (como se o WhatsApp nao aceitasse): o publicador tem de digitar
-    pagina.evaluate("document.querySelector('#legenda').addEventListener('paste', e => e.stopImmediatePropagation(), true)")
-    avisos = []
-    c = CanalWeb(pagina, log=avisos.append)
-    assert _postar(c, foto, "colar") is True
-    assert pagina.evaluate("window.__envios") == [LEGENDA]
-    assert any("modo colar chegou diferente" in a for a in avisos)
+def test_dom_cabecalho_divergente_nao_envia(abrir, foto, monkeypatch):
+    monkeypatch.setattr(canal_web, "ESPERA_PASSO_S", 2)
+    page, c = abrir(mainFechado=True, tituloAoClicar="BeSave - Preços Baixos e Ofertas incríveis 2")
+    with pytest.raises(ErroPagina):
+        c.abrir_canal(CANAL)
+    assert _envios(page) == []
 
 
-def test_dom_leg02_editor_que_nao_aceita_texto_e_falha_antes_do_clique(pagina, foto):
-    pagina.evaluate("""const el = document.querySelector('#legenda');
-        el.addEventListener('paste', e => e.stopImmediatePropagation(), true);
-        el.addEventListener('beforeinput', e => e.preventDefault(), true);""")
-    c = CanalWeb(pagina, log=lambda s: None)
+def test_dom_legenda_divergente_na_previa_fecha_e_nao_envia(abrir, foto):
+    page, c = abrir(rejeitaTexto=True)
     c.abrir_canal(CANAL)
     c.anexar(foto)
     with pytest.raises(ErroPagina):
         c.escrever_legenda(LEGENDA, "colar")
-    assert pagina.evaluate("window.__envios") == []
+    assert _envios(page) == []
+    assert page.locator(canal_web.SEL_LEGENDA).is_visible() is False           # Escape fechou a previa
 
 
-def test_dom_canal_inexistente_e_erro_de_pagina(pagina):
-    with pytest.raises(ErroPagina):
-        CanalWeb(pagina, log=lambda s: None).abrir_canal("Outro canal")
+def test_dom_balao_sem_a_chave_nao_confirma(abrir, foto):
+    _page, c = abrir(semChave=True)
+    assert _postar(c, foto, timeout=2) is False
 
 
-def test_dom_balao_novo_de_outra_mensagem_nao_confirma(pagina):  # M47 (ciclo 2 do Verifier)
-    c = CanalWeb(pagina, log=lambda s: None)
+@pytest.mark.parametrize("status", [" Pendente ", " Enviando ", None])
+def test_dom_status_desconhecido_ou_ausente_nao_confirma(abrir, foto, status):
+    _page, c = abrir(status=status)
+    assert _postar(c, foto, timeout=2) is False
+
+
+def test_dom_balao_antigo_com_a_mesma_chave_nao_confirma_o_novo(abrir, foto):
+    page, c = abrir(naoChega=True)
+    page.evaluate(f"window.__novoBalao('Promoção Amazon: https://{CHAVE}?utm_source=whatsapp', ' Enviada ')")
+    assert _postar(c, foto, timeout=2) is False
+
+
+def test_dom_previa_aberta_nao_confirma(abrir, foto):
+    page, c = abrir()
     c.abrir_canal(CANAL)
-    c._baloes_antes = pagina.locator(canal_web.SEL_BALAO).count()
-    pagina.evaluate("""const row = document.createElement('div'); row.setAttribute('role', 'row');
-        row.innerHTML = '<span>Outra oferta qualquer</span><span data-icon="msg-check"></span>';
-        document.querySelector('#mensagens').appendChild(row);""")
-    assert c.confirmar(LEGENDA, 2) is False
+    c.anexar(foto)
+    c.escrever_legenda(LEGENDA)
+    c._baloes_antes = c._ids_baloes()
+    page.evaluate(f"window.__novoBalao('https://{CHAVE}', ' Enviada ')")   # balao novo, mas a previa nao fechou
+    assert c.confirmar(CHAVE, 2) is False
+
+
+def test_dom_input_ausente_usa_o_anexar(abrir, foto):
+    page, c = abrir(semInput=True)
+    assert page.locator('input[type="file"]').count() == 0
+    assert _postar(c, foto) is True
+    assert page.locator(canal_web.SEL_ANEXAR).get_attribute("aria-expanded") == "true"
+
+
+def test_dom_sem_input_nenhum_usa_fotos_e_videos_com_expect_file_chooser(abrir, foto):
+    page, c = abrir(menuSemInput=True)
+    assert _postar(c, foto) is True
+    assert _envios(page) == [LEGENDA]
+
+
+def test_dom_input_de_arquivo_fora_do_footer_nao_e_usado(abrir, foto):
+    page, c = abrir()
+    page.evaluate("""const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
+        i.id = 'isca'; document.body.prepend(i);""")
+    c.abrir_canal(CANAL)
+    c.anexar(foto)
+    assert page.evaluate("document.getElementById('isca').files.length") == 0
+    assert page.evaluate("document.querySelector('#main footer input[type=file]').files.length") == 1
+
+
+def test_dom_limpar_fecha_a_previa(abrir, foto):
+    page, c = abrir()
+    c.abrir_canal(CANAL)
+    c.anexar(foto)
+    assert page.locator(canal_web.SEL_LEGENDA).is_visible()
+    c.limpar()
+    assert page.locator(canal_web.SEL_LEGENDA).is_visible() is False

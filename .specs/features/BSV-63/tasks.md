@@ -14,6 +14,9 @@ T6
 ### Phase 4: Correções do Verifier (ciclo 1)
 T7
 
+### Phase 5: Seletores reais (mapeamento do dono, 16/11)
+T8 → T9
+
 ```
 T1 → T2
 T2 → T3
@@ -21,6 +24,8 @@ T3 → T4
 T4 → T5
 T5 → T6
 T6 → T7
+T7 → T8
+T8 → T9
 ```
 
 ## Task Breakdown
@@ -81,6 +86,22 @@ T6 → T7
 **Tests**: `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_publicador.py tests/test_pub_canal_web.py`
 
+### T8: Seletores reais e fixture real ✅
+**What**: `canal_web.py` com a tabela de seletores do dono (data-testid/aria-label/role/title), fluxo por postagem (pula a navegação com o canal aberto; Canais → busca → célula pelo aria-label → cabeçalho igual; input oculto do footer → Anexar → "Fotos e vídeos" com `expect_file_chooser`; legenda cru com cru, 1 nova tentativa, Escape; confirmação positiva: prévia fechada, balão novo, `besave.io/{id}` na legenda, msg-meta enviada/entregue/lida); `FalhaPasso` (falha prevista, sem recarregar); fixture real recortada e redigida de `docs/canal_real.html` (não versionado) + prévia transcrita; simulador de teste; a sintética sai.
+**Where**: `tools/publish-whatsapp-channel/pub/canal_web.py`, `tools/publish-whatsapp-channel/pub/publicador.py`, `tools/tests/fixtures/whatsapp_canal_real.html`, `tools/tests/fixtures/whatsapp_simulador.js`, `tools/tests/test_pub_canal_web.py`, `tools/tests/pub_falso.py`, `tools/tests/test_pub_publicador.py`
+**Depends on**: T7
+**Reqs**: LEG-01, LEG-02, EST-01, EST-02, EST-03, QR-01
+**Tests**: `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py tests/test_pub_publicador.py` (no WSL com Playwright: 0 skipped)
+
+### T9: README com os seletores reais
+**What**: seção "Seletores" com a tabela e a data do mapeamento; fluxo de confirmação atualizado.
+**Where**: `tools/publish-whatsapp-channel/README.md`
+**Depends on**: T8
+**Reqs**: LEG-01
+**Tests**: revisão do README
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_isolamento.py`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -91,6 +112,7 @@ T6 → T7
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| LEG-01..02, EST-01..03 (seletores reais, fixture real) | `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py` | T8 |
 | RIT-03, FOT-02, LEG-01, EST-01 (lacunas M21, M47, M54, M55) | `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py` | T7 |
 
 ## Gate Check Commands
