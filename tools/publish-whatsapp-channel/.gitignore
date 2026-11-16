@@ -1,0 +1,18 @@
+# --- ambiente Python ---
+.venv/
+__pycache__/
+*.pyc
+
+# --- perfil do navegador: equivale a credencial (quem tem a pasta entra na conta do numero) ---
+.chrome_perfil/
+
+# --- estado vivo e config com a senha do Oracle (versionado: conf/config.example.json) ---
+conf/config.json
+conf/config.json.bak*
+conf/batimento.json*
+
+# --- saida: logs, fotos montadas e DOM gravado (o DOM pode ter nome/numero ate ser redigido) ---
+log/
+tmp/
+dom/
+*.log
