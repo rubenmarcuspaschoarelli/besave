@@ -29,16 +29,16 @@ T5 → T6
 **Tests**: `apps/worker/tests/envio_whatsapp_sql.rs` (DDL lido como texto: colunas, únicos, índice, sem FK de oferta, sem segredo)
 **Gate**: `cargo test --test envio_whatsapp_sql`
 
-### T2: Frases de aviso
-**What**: `apps/worker/frases_canal.json` (as 12 frases e 11 ícones da spec), `envio/frases.rs` (`Frases::embutidas`, `carregar_ou_embutidas`, `escolher` por SHA-256), leitura de `BESAVE_FRASES_CANAL` no binário.
-**Where**: `apps/worker/frases_canal.json`, `apps/worker/src/envio/frases.rs`, `apps/worker/src/envio/mod.rs`, `apps/worker/src/envio/binario.rs`
+### T2: Frases de aviso ✅
+**What**: `apps/worker/frases_canal.json` (as 12 frases e 11 ícones da spec), `envio/frases.rs` (`Frases::embutidas`, `carregar_ou_embutidas`, `escolher` por SHA-256). A leitura de `BESAVE_FRASES_CANAL` no binário entra na T3, com `Contexto.frases`.
+**Where**: `apps/worker/frases_canal.json`, `apps/worker/src/envio/frases.rs`, `apps/worker/src/envio/mod.rs`
 **Depends on**: T1
 **Reqs**: FRA-01, FRA-02, FRA-03, FRA-04, FRA-05
 **Tests**: `apps/worker/tests/envio_frases.rs`, `apps/worker/tests/envio_frases_log.rs`
 **Gate**: `cargo test --test envio_frases --test envio_frases_log`
 
 ### T3: Layout novo do Telegram
-**What**: `legenda(o, caiu, p, frases)` com as duas linhas em branco e a frase; `legenda_encerrada` com a linha em branco; `ajustar`/`caber` recebem a regra de tamanho; `Contexto.frases`; testes de layout da BSV-40/50 atualizados.
+**What**: `legenda(o, caiu, p, frases)` com as duas linhas em branco e a frase; `BESAVE_FRASES_CANAL` lida no início da execução; `legenda_encerrada` com a linha em branco; `ajustar`/`caber` recebem a regra de tamanho; `Contexto.frases`; testes de layout da BSV-40/50 atualizados.
 **Where**: `apps/worker/src/envio/legenda.rs`, `apps/worker/src/envio/aviso.rs`, `apps/worker/src/envio/rodada.rs`, `apps/worker/src/envio/binario.rs`, `apps/worker/tests/envio_legenda.rs`, testes que montam `Contexto`
 **Depends on**: T2
 **Reqs**: LAY-01, LAY-02, LIM-01, ENC-01, ISO-01

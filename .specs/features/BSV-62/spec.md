@@ -84,11 +84,11 @@ Como dono, quero o layout novo com frase de aviso nos dois canais e cada oferta 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
 | SQL-01 | P1 | T1 | Done |
-| FRA-01 | P1 | T2 | Pending |
-| FRA-02 | P1 | T2 | Pending |
-| FRA-03 | P1 | T2 | Pending |
+| FRA-01 | P1 | T2 | Done |
+| FRA-02 | P1 | T2 | Done |
+| FRA-03 | P1 | T2 | Done |
 | FRA-04 | P1 | T2 | Pending |
-| FRA-05 | P1 | T2 | Pending |
+| FRA-05 | P1 | T2 | Done |
 | LAY-01 | P1 | T3 | Pending |
 | LAY-02 | P1 | T3 | Pending |
 | LIM-01 | P1 | T3/T4 | Pending |
