@@ -16,9 +16,15 @@ A volta acontece a cada `intervalo_minutos` (padrão 15, ±30% aleatório). Em o
 4. lê `PARAMETROS_ENVIO` do canal (`id_canal`, padrão 2): fora da janela, no teto (`QT_MAX_DIA`, contando `E`
    e `D` do dia) ou adiantado no ritmo (`esperado` da BSV-40 com `L = 1`) → nada;
 5. pega a `P` mais recente; baixa `https://besave.com.br/img/ofertas/{id}.webp` (sem ela, o placeholder da
-   área), faz o quadrado 800×800 JPEG de fundo branco, abre o canal, anexa a foto e escreve a legenda;
-6. grava `D 'enviando'`, clica em enviar e espera o balão novo **confirmado** (sem o relógio de pendente)
-   por `timeout_post_segundos` (padrão 60): confirmou → `E`; senão a linha fica `D` e chega um aviso.
+   área) e faz o quadrado 800×800 JPEG de fundo branco;
+6. abre o canal (nome = `CANAL_ENVIO.DS_CHAT_ID` do `id_canal`; se o cabeçalho já é o do canal, não navega;
+   senão Canais → busca → célula → confere o cabeçalho; divergiu = falha, nada enviado), põe a foto no input
+   oculto do footer e cola a legenda na prévia, conferindo cru com cru (`*…*` e `_…_` aparecem crus na caixa);
+   divergiu duas vezes → fecha a prévia, falha, sem `D`;
+7. grava `D 'enviando'`, clica em "Enviar 1 item selecionado" e espera, por `timeout_post_segundos` (padrão 60),
+   a confirmação **positiva**: a prévia fechou, apareceu um balão **novo** cuja legenda tem `besave.io/{ID_OFERTA}`
+   e cujo status (`msg-meta`) é Enviada, Entregue ou Lida → `E`. Qualquer outra coisa → a linha fica `D` e chega
+   um aviso.
 
 Um post por volta. **Linha `D` nunca é reenviada pelo programa**: postar duas vezes é pior que deixar de
 postar uma.
@@ -30,7 +36,8 @@ postar uma.
 | clicou e não confirmou (rede caiu, navegador caiu) | `D` | sim | "linha N ficou D: conferir no canal" |
 | 3 falhas seguidas | — | — | pausa de 60 min (1 aviso; lembrete a cada 6 h) |
 
-Navegador morto → sai com código 1 e o `systemd` reinicia. Exceção na página → recarrega uma vez.
+Navegador morto → sai com código 1 e o `systemd` reinicia. Exceção inesperada na página → recarrega uma vez
+(as falhas previstas — cabeçalho, anexo, legenda — só fecham a prévia com `Escape`).
 
 ## Instalar na inst2 (uma vez, como `besave`)
 
@@ -90,18 +97,33 @@ Um `D` conta no teto do dia (`DT_ENVIO` = hora do clique) até ser resolvido.
 
 ## Seletores
 
-`pub/canal_web.py` usa só âncoras estáveis (`#pane-side`, `#main header`, `data-icon`, `aria-label`,
-`span[title]`), nunca as classes ofuscadas. As do painel e da busca são as mesmas do robô da captura
-(em uso desde 07/2026). **As do canal (aba Canais, anexar, legenda, enviar, relógio de pendente) ainda não
-foram conferidas no WhatsApp Web do número de publicação**: os testes usam uma fixture **sintética**
-(`tools/tests/fixtures/whatsapp_canal.html`). No teste real:
+Mapeados pelo dono no WhatsApp Web real em **16/11/2026** (canal aberto depois de 2 posts de teste). Só
+`data-testid`, `aria-label`, `role` e `title`; nunca classes `x…`, XPath ou ids dinâmicos `_r_…_`. Os ícones são
+`<svg><title>NOME</title>`, não `data-icon`. Recorte redigido em `tools/tests/fixtures/whatsapp_canal_real.html`.
+
+| passo | seletor |
+|---|---|
+| logado | `#side` ou `#pane-side` |
+| aba Canais | `button[aria-label="Canais"]` |
+| busca | o primeiro input de texto visível do painel aberto pela aba: `[data-testid="newsletter-tab-drawer"] input[type="text"]` (id dinâmico, `aria-label` vazio) |
+| célula do canal | `[data-testid="newsletter-tab-newsletter-cell"][aria-label="Canal {nome}"]` (o realce da busca quebra o título em spans: usa o `aria-label`, não o texto) |
+| canal aberto | `[data-testid="conversation-info-header-chat-title"]` com texto normalizado igual ao nome |
+| caixa do canal | `[data-testid="conversation-compose-box-input"][contenteditable="true"]` |
+| anexar | `#main footer button[aria-label="Anexar"]` |
+| input de foto | `#main footer input[type="file"][accept="image/*"]` (oculto) → `set_input_files`; sem ele, Anexar e espera 5 s; sem ele ainda, o item "Fotos e vídeos" dentro de `expect_file_chooser` (o diálogo do sistema nunca abre solto) |
+| legenda da prévia | `[data-testid="media-caption-input-container"][contenteditable="true"][role="textbox"]` |
+| enviar da prévia | `div[role="button"][aria-label="Enviar 1 item selecionado"]` |
+| balão | `[data-testid^="conv-msg-"]` |
+| legenda do balão | `[data-testid~="image-caption"]` (o valor é `image-caption selectable-text`) |
+| status do balão | `[data-testid="msg-meta"] [aria-label]` (real: `" Enviada "`, ícone `wds-ic-delivered`); aceitos, sem caixa e sem espaços: enviada, entregue, lida |
+
+A prévia de mídia não estava no arquivo gravado: o bloco dela na fixture foi transcrito do mapeamento do dono.
+O QR (`canvas[aria-label*="QR"]`/`"Scan"`/`"Escaneie"`) e o relógio de pendente não foram capturados: confirmar
+no primeiro QR. Para gravar o DOM de novo (seletores mudaram), com o canal aberto:
 
 ```bash
-.venv/bin/python main.py --gravar-dom     # com o canal aberto na tela; grava dom/whatsapp_<hora>.html redigido
+.venv/bin/python main.py --gravar-dom     # grava dom/whatsapp_<hora>.html redigido; revisar nomes antes de usar
 ```
-
-Conferir cada seletor contra o arquivo, trocar a fixture pela gravada (revisar a redação: nomes de contatos
-não são reconhecidos automaticamente) e ajustar a lista em `canal_web.py` se preciso.
 
 ## Config (`conf/config.json`, modo 600)
 
@@ -121,5 +143,8 @@ não são reconhecidos automaticamente) e ajustar a lista em `canal_web.py` se p
 cd tools && python -m pytest -q tests/test_pub_*.py tests/test_vigia_publicador.py
 ```
 
-Os testes do Chromium (`test_pub_canal_web.py`, parte 2) pulam sem Playwright (o CI só instala
-`requirements-dev.txt`); rodam no ambiente com `requirements.txt` e `playwright install chromium`.
+Os testes do Chromium (`test_pub_canal_web.py`, parte 2) rodam sobre a fixture real com
+`tests/fixtures/whatsapp_simulador.js` (comportamento simulado: enviar, status, anexo); nenhum toca o WhatsApp.
+Pulam sem Playwright (o CI só instala `requirements-dev.txt`); rodam no PC e no WSL com `requirements.txt` e
+`playwright install chromium` (no WSL sem sudo: `apt-get download libnss3 libnspr4 libasound2t64`, `dpkg -x`
+numa pasta e `LD_LIBRARY_PATH` apontando para ela).

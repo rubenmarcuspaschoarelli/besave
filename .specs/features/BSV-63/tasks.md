@@ -94,7 +94,7 @@ T8 → T9
 **Tests**: `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py tests/test_pub_publicador.py` (no WSL com Playwright: 0 skipped)
 
-### T9: README com os seletores reais
+### T9: README com os seletores reais ✅
 **What**: seção "Seletores" com a tabela e a data do mapeamento; fluxo de confirmação atualizado.
 **Where**: `tools/publish-whatsapp-channel/README.md`
 **Depends on**: T8
