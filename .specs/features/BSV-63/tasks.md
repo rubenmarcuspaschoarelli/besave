@@ -53,7 +53,7 @@ T5 → T6
 **Tests**: `tools/tests/test_pub_publicador.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_publicador.py`
 
-### T5: Página do WhatsApp Web e main
+### T5: Página do WhatsApp Web e main ✅
 **What**: `pub/canal_web.py` (seletores com origem documentada, abrir canal, anexar, colar/digitar a legenda com conferência, enviar, confirmar sem relógio, limpar, QR, `--gravar-dom` redigido), fixture HTML sintética, `main.py`.
 **Where**: `tools/publish-whatsapp-channel/pub/canal_web.py`, `tools/publish-whatsapp-channel/main.py`, `tools/tests/fixtures/whatsapp_canal.html`, `tools/tests/test_pub_canal_web.py`
 **Depends on**: T4
