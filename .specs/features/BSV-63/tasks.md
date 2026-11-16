@@ -45,7 +45,7 @@ T5 → T6
 **Tests**: `tools/tests/test_pub_fila.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_fila.py`
 
-### T4: Laço do publicador
+### T4: Laço do publicador ✅
 **What**: `pub/publicador.py`: volta (config, descarte, ritmo, escolha, foto, página, estados P→D→E), pausa e avisos, QR, exceção → recarrega uma vez, browser morto → código ≠ 0.
 **Where**: `tools/publish-whatsapp-channel/pub/publicador.py`, `tools/tests/pub_falso.py`, `tools/tests/test_pub_publicador.py`
 **Depends on**: T3
