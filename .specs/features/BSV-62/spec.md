@@ -97,11 +97,11 @@ Como dono, quero o layout novo com frase de aviso nos dois canais e cada oferta 
 | WA-01 | P1 | T4 | Done |
 | WA-02 | P1 | T4 | Done |
 | LIM-02 | P1 | T4 | Done |
-| ESP-01 | P1 | T5 | Pending |
-| ESP-02 | P1 | T5 | Pending |
-| ESP-03 | P1 | T5 | Pending |
-| ESP-04 | P1 | T5 | Pending |
-| ESP-05 | P1 | T5 | Pending |
+| ESP-01 | P1 | T5 | Done |
+| ESP-02 | P1 | T5 | Done |
+| ESP-03 | P1 | T5 | Done |
+| ESP-04 | P1 | T5 | Done |
+| ESP-05 | P1 | T5 | Done |
 | CON-01 | P1 | T6 | Pending |
 | DOC-01 | P1 | T6 | Pending |
 

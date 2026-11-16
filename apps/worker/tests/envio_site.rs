@@ -406,6 +406,7 @@ fn execucao_com_urls() {
         },
         foto: foto_de,
         frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     })

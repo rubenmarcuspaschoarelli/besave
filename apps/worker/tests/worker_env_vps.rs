@@ -62,6 +62,14 @@ const OPCIONAIS: &[(&str, &str)] = &[
         "BESAVE_ENVIO_CANAL",
         "padrão ID_CANAL 1 (@besaveofertas, sql/bsv-40.sql)",
     ),
+    (
+        "BESAVE_ENVIO_ESPELHO_WHATSAPP",
+        "ausente = sem fila do WhatsApp; ligada só na inst2 pelo dono (BSV-62)",
+    ),
+    (
+        "BESAVE_FRASES_CANAL",
+        "ausente = frases_canal.json embutido no binário (BSV-62)",
+    ),
 ];
 
 /// Do modelo, mas lidas por bibliotecas (não aparecem em `src/`).

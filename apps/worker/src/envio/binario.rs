@@ -105,6 +105,22 @@ fn canal_do_env() -> Result<i64, ErroBinario> {
     }
 }
 
+/// `BESAVE_ENVIO_ESPELHO_WHATSAPP` (BSV-62): ausente ou vazia → sem espelho; inválida → WARN e sem
+/// espelho (o WhatsApp nunca impede o Telegram).
+pub fn espelho_do_env(valor: Option<&str>) -> Option<i64> {
+    let v = valor.map(str::trim).filter(|v| !v.is_empty())?;
+    match v.parse() {
+        Ok(canal) => Some(canal),
+        Err(_) => {
+            warn!(
+                valor = v,
+                "BESAVE_ENVIO_ESPELHO_WHATSAPP inválida (use o ID_CANAL, inteiro); espelho desligado"
+            );
+            None
+        }
+    }
+}
+
 fn var_caminho(k: &str) -> Option<PathBuf> {
     std::env::var_os(k)
         .filter(|v| !v.is_empty())
@@ -184,6 +200,9 @@ pub fn texto_simulacao(sim: &Simulacao, fotos: &[PathBuf]) -> String {
             "\n--- oferta {} (foto: {:?} → {foto})\n{}",
             p.id, p.origem, p.legenda
         );
+        if let Some(wa) = &p.legenda_whatsapp {
+            let _ = writeln!(t, "\n--- oferta {} na fila do WhatsApp\n{wa}", p.id);
+        }
     }
     t
 }
@@ -345,6 +364,11 @@ fn rodar_envio(
     // Arquivo inválido avisa e usa as embutidas; erro só se as embutidas forem inválidas.
     let frases = Frases::carregar_ou_embutidas(var_caminho("BESAVE_FRASES_CANAL").as_deref())
         .map_err(|e| Falha::config("config", &e))?;
+    let espelho_whatsapp = espelho_do_env(
+        std::env::var("BESAVE_ENVIO_ESPELHO_WHATSAPP")
+            .ok()
+            .as_deref(),
+    );
     let dir_imagens = var_caminho("BESAVE_IMAGENS_DIR");
     let dir_avisos = var_caminho("BESAVE_AVISOS_DIR");
     let env = |k: &str| std::env::var(k).ok();
@@ -404,6 +428,7 @@ fn rodar_envio(
         },
         foto: foto_de,
         frases: &frases,
+        espelho_whatsapp,
         canal,
         pausa_ate: anterior.pausa_ate,
     };

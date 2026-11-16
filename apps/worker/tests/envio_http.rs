@@ -135,6 +135,7 @@ fn simulacao_so_le() {
         avisos: Imagens::pasta(None),
         foto: foto_de,
         frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     };

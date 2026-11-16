@@ -55,6 +55,7 @@ fn rodar_em(
         avisos: Imagens::pasta(None),
         foto: foto_rapida,
         frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate,
     })
@@ -188,6 +189,7 @@ fn post_com_foto_real() {
         avisos: Imagens::pasta(None),
         foto: foto_de,
         frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     })
@@ -265,6 +267,7 @@ fn linha_gravada_antes_do_envio() {
         avisos: Imagens::pasta(None),
         foto: foto_rapida,
         frases: &Frases::embutidas().unwrap(),
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     })

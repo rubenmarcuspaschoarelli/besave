@@ -53,9 +53,9 @@ T5 → T6
 **Tests**: `apps/worker/tests/envio_legenda_whatsapp.rs`
 **Gate**: `cargo test --test envio_legenda_whatsapp --test envio_legenda`
 
-### T5: Espelho na fila do WhatsApp
+### T5: Espelho na fila do WhatsApp ✅
 **What**: `FonteEnvio::enfileirar_whatsapp` (fake e Oracle; ORA-00001 = duplicata), `Contexto.espelho_whatsapp`, linha `P` depois do `confirmar`, WARN na falha, contadores no relatório, `BESAVE_ENVIO_ESPELHO_WHATSAPP` no binário, prévia do WhatsApp no `--sim`.
-**Where**: `apps/worker/src/envio/fonte.rs`, `apps/worker/src/envio/oracle.rs`, `apps/worker/src/envio/rodada.rs`, `apps/worker/src/envio/binario.rs`, testes
+**Where**: `apps/worker/src/envio/fonte.rs`, `apps/worker/src/envio/oracle.rs`, `apps/worker/src/envio/rodada.rs`, `apps/worker/src/envio/binario.rs`, testes; `tests/worker_env_vps.rs` ganha as duas variáveis opcionais em `OPCIONAIS`
 **Depends on**: T4
 **Reqs**: ESP-01, ESP-02, ESP-03, ESP-04, ESP-05
 **Tests**: `apps/worker/tests/envio_espelho.rs`, `apps/worker/tests/envio_espelho_log.rs`

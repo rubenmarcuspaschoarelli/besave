@@ -87,6 +87,7 @@ fn contexto<'a>(
         avisos: Imagens::pasta(dir_avisos),
         foto: foto_rapida,
         frases: &FRASES,
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     }

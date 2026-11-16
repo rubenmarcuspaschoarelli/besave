@@ -1,4 +1,5 @@
-//! Fronteira do envio com o Oracle (`CANAL_ENVIO`, `PARAMETROS_ENVIO`, `ENVIO_TELEGRAM`, OFERTA).
+//! Fronteira do envio com o Oracle (`CANAL_ENVIO`, `PARAMETROS_ENVIO`, `ENVIO_TELEGRAM`,
+//! `ENVIO_WHATSAPP`, OFERTA).
 //! Datas em segundos Unix UTC; preços em centavos.
 
 use std::cell::{Cell, RefCell};
@@ -34,6 +35,20 @@ pub struct AvisoCanal {
     pub ultimo_envio: Option<i64>,
 }
 
+/// Linha nova da fila do WhatsApp (`ENVIO_WHATSAPP`, `sql/bsv-62.sql`), sempre `ST_ENVIO = 'P'`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FilaWhatsapp {
+    pub canal: i64,
+    pub id_oferta: i64,
+    pub id_envio_telegram: i64,
+    /// Legenda pronta, na marcação do WhatsApp (≤ 4000 bytes).
+    pub legenda: String,
+    /// Slug de URL da área (CONTRATO §2.3): placeholder do publicador.
+    pub area_slug: String,
+    /// `DT_FILA`, segundos Unix UTC.
+    pub dt_fila: i64,
+}
+
 pub trait FonteEnvio {
     fn canal(&self, id: i64) -> Result<Option<Canal>>;
     /// `None`: canal sem linha em `PARAMETROS_ENVIO`.
@@ -67,6 +82,9 @@ pub trait FonteEnvio {
     fn confirmar_aviso(&self, id_envio: i64, message_id: i64) -> Result<()>;
     /// Apaga a linha de um envio de aviso que falhou.
     fn cancelar_aviso(&self, id_envio: i64) -> Result<()>;
+    /// Linha `P` em `ENVIO_WHATSAPP`, com commit. `Ok(false)`: a oferta já está na fila do canal
+    /// (único `ID_CANAL` + `ID_OFERTA`).
+    fn enfileirar_whatsapp(&self, l: &FilaWhatsapp) -> Result<bool>;
 }
 
 /// Uma linha de `AVISO_CANAL` no fake.
@@ -115,6 +133,8 @@ pub struct FakeEnvio {
     envios_aviso: RefCell<Vec<RegistroAviso>>,
     seq_aviso: Cell<i64>,
     falhar_avisos: Cell<bool>,
+    fila_whatsapp: RefCell<Vec<FilaWhatsapp>>,
+    falhar_fila: Cell<bool>,
 }
 
 impl FakeEnvio {
@@ -188,6 +208,16 @@ impl FakeEnvio {
     /// `avisos_canal` passa a falhar (falha injetada).
     pub fn falhar_avisos(&self, sim: bool) {
         self.falhar_avisos.set(sim);
+    }
+
+    /// Linhas de `ENVIO_WHATSAPP`.
+    pub fn fila_whatsapp(&self) -> Vec<FilaWhatsapp> {
+        self.fila_whatsapp.borrow().clone()
+    }
+
+    /// `enfileirar_whatsapp` passa a falhar (falha injetada).
+    pub fn falhar_fila(&self, sim: bool) {
+        self.falhar_fila.set(sim);
     }
 
     fn falha(motivo: &str) -> ErroFonte {
@@ -379,5 +409,21 @@ impl FonteEnvio for FakeEnvio {
             .borrow_mut()
             .retain(|r| r.id_envio != id_envio);
         Ok(())
+    }
+
+    fn enfileirar_whatsapp(&self, l: &FilaWhatsapp) -> Result<bool> {
+        if self.falhar_fila.get() {
+            return Err(Self::falha("falha injetada em ENVIO_WHATSAPP"));
+        }
+        let mut fila = self.fila_whatsapp.borrow_mut();
+        // UK_ENVIO_WHATSAPP (ID_CANAL, ID_OFERTA).
+        if fila
+            .iter()
+            .any(|x| x.canal == l.canal && x.id_oferta == l.id_oferta)
+        {
+            return Ok(false);
+        }
+        fila.push(l.clone());
+        Ok(true)
     }
 }
