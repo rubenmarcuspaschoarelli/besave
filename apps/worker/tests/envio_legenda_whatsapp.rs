@@ -185,7 +185,8 @@ fn exemplo_do_dono_51217_igual_ao_telegram() {
     );
 }
 
-/// WA-02: marcadores removidos do título, destaque, cupom e frase; espaços repetidos viram um.
+/// WA-02: marcadores removidos do título, destaque e frase; espaços repetidos viram um. O cupom vai
+/// inteiro na crase: `BE_SAVE` continua `BE_SAVE` (decisão do dono, 16/11).
 #[test]
 fn marcadores_removidos() {
     let o = OfertaCanal {
@@ -202,7 +203,7 @@ fn marcadores_removidos() {
              \n\
              Só hoje e amanhã\n\
              🔥 *-45%*  ~R$ 299,90~  *R$ 164,90*\n\
-             🎟️ Cupom: `BESAVE`\n\
+             🎟️ Cupom: `BE_SAVE`\n\
              {LINK}\n\
              \n\
              🚨 _Corra, é agora!_"

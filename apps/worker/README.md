@@ -634,7 +634,7 @@ Oracle; o publicador (BSV-63) posta.
 2. Ligue com `BESAVE_ENVIO_ESPELHO_WHATSAPP=2` no `.env` do envio (na inst2, `/srv/besave/worker.env`).
 
 A cada post de **oferta** confirmado no Telegram, entra uma linha `ST_ENVIO = 'P'` com a legenda do
-WhatsApp (`*negrito*`, `~riscado~`, `_itálico_`, sem `*`, `_`, `~` e `` ` `` no texto variável, link com
+WhatsApp (`*negrito*`, `~riscado~`, `_itálico_`, sem `*`, `_`, `~` e `` ` `` no título, destaque e frase, cupom inteiro na crase, link com
 `utm_source=whatsapp`, ≤ 1024 caracteres e 4000 bytes), o `ID_ENVIO_TELEGRAM` e o slug da área
 (`DS_AREA_SLUG`, ex.: `meu-lar`). Avisos e "Oferta encerrada" não entram. A oferta já na fila é ignorada.
 Falha ao inserir vira `WARN` e `espelho_falhas=` no relatório: o post do Telegram fica como está.

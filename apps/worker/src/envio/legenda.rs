@@ -150,7 +150,9 @@ fn corpo(o: &OfertaCanal, caiu: bool, p: &Parametros, n_cupons: usize) -> (Vec<L
             .collect();
         let wa: Vec<String> = codigos
             .iter()
-            .map(|c| format!("`{}`", limpar_whatsapp(c)))
+            // Código vai inteiro na crase (não é formatado no WhatsApp); a regex do §4.3 já
+            // exclui `*`, `~` e a crase, e o `_` faz parte do cupom.
+            .map(|c| format!("`{c}`"))
             .collect();
         v.push(linha(
             format!("🎟️ {rotulo}: {}", html.join(" · ")),

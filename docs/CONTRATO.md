@@ -328,8 +328,9 @@ Promoção {Loja}: https://besave.io/{id}?utm_source=whatsapp
 {ícone} _{frase}_
 ```
 
-- Título, destaque, cupons e frase perdem `*`, `_`, `~` e `` ` `` (o WhatsApp não tem escape); espaços
-  repetidos viram um.
+- Título, destaque e frase perdem `*`, `_`, `~` e `` ` `` (o WhatsApp não tem escape); espaços
+  repetidos viram um. O cupom vai inteiro na crase (código não é formatado; a regex do §4.3 já exclui
+  `*`, `~` e a crase): `BE_SAVE` fica `` `BE_SAVE` ``.
 - Limite: 1024 caracteres **e** 4000 bytes UTF-8, com o mesmo corte do §11.1.
 
 ### 11.4 Fila `ENVIO_WHATSAPP` (`apps/worker/sql/bsv-62.sql`)

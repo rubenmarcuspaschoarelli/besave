@@ -14,6 +14,9 @@ T5 → T6
 ### Phase 4: Correções do Verifier (ciclo 1)
 T7
 
+### Phase 5: Respostas do dono (16/11)
+T8
+
 ```
 T1 → T2
 T2 → T3
@@ -21,6 +24,7 @@ T3 → T4
 T4 → T5
 T5 → T6
 T6 → T7
+T7 → T8
 ```
 
 ## Task Breakdown
@@ -80,6 +84,14 @@ T6 → T7
 **Reqs**: FRA-01, ESP-01
 **Tests**: `apps/worker/tests/envio_frases.rs`, `apps/worker/tests/envio_espelho.rs`
 **Gate**: `cargo test --test envio_frases --test envio_legenda --test envio_legenda_whatsapp --test envio_espelho`
+
+### T8: Cupom inteiro no WhatsApp e variáveis no modelo da inst2 ✅
+**What**: o cupom vai inteiro na crase (`BE_SAVE` fica); `infra/vps/envio.env.example` com `BESAVE_ENVIO_ESPELHO_WHATSAPP=2` e `BESAVE_FRASES_CANAL=<caminho>` comentadas, uma linha de explicação cada; CONTRATO §11.3 e README.
+**Where**: `apps/worker/src/envio/legenda.rs`, `apps/worker/tests/envio_legenda_whatsapp.rs`, `apps/worker/tests/worker_env_vps.rs`, `infra/vps/envio.env.example`, `docs/CONTRATO.md`, `apps/worker/README.md`
+**Depends on**: T7
+**Reqs**: WA-02, ENV-62
+**Tests**: `apps/worker/tests/envio_legenda_whatsapp.rs`, `apps/worker/tests/worker_env_vps.rs`
+**Gate**: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test` e `cd packages/contract && npm run validate`
 
 ## Test Coverage Matrix
 

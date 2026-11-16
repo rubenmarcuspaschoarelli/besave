@@ -326,3 +326,31 @@ fn modelo_do_envio_na_inst2() {
         "no modelo mas ninguém lê: {ninguem_le:?}"
     );
 }
+
+/// BSV-62: o modelo da inst2 traz as duas variáveis do WhatsApp comentadas (opcionais), cada uma
+/// com uma linha de explicação logo acima.
+#[test]
+fn modelo_do_envio_traz_o_whatsapp_comentado() {
+    let texto = fs::read_to_string(raiz().join("../../infra/vps/envio.env.example")).unwrap();
+    let linhas: Vec<&str> = texto.lines().collect();
+    for alvo in [
+        "# BESAVE_ENVIO_ESPELHO_WHATSAPP=2",
+        "# BESAVE_FRASES_CANAL=<caminho>",
+    ] {
+        let i = linhas
+            .iter()
+            .position(|l| *l == alvo)
+            .unwrap_or_else(|| panic!("envio.env.example sem {alvo}"));
+        assert!(
+            i > 0 && linhas[i - 1].starts_with("# ") && linhas[i - 1].contains("BSV-62"),
+            "sem explicação acima de {alvo}"
+        );
+    }
+    // Comentadas: não entram como chave ativa.
+    let chaves: BTreeSet<String> = chaves_e_valores("envio.env.example")
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert!(!chaves.contains("BESAVE_ENVIO_ESPELHO_WHATSAPP"));
+    assert!(!chaves.contains("BESAVE_FRASES_CANAL"));
+}
