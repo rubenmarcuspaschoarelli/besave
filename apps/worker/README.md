@@ -598,9 +598,49 @@ para alertas) mais:
 | `BESAVE_ENVIO_CANAL` | não | `ID_CANAL`; padrão `1` |
 | `BESAVE_IMAGENS_DIR` | não | fotos do robô (`{dir}/{id}/{id}.webp`); ausente → placeholder da área |
 | `BESAVE_ENVIO_LOCK` | não | trava; padrão `%LOCALAPPDATA%\besave\envio.lock` (independente da do ciclo) |
+| `BESAVE_FRASES_CANAL` | não | arquivo de frases de aviso (BSV-62); ausente → `frases_canal.json` embutido |
+| `BESAVE_ENVIO_ESPELHO_WHATSAPP` | não | `ID_CANAL` da fila do WhatsApp (BSV-62, ex.: `2`); ausente → sem fila |
 
 A foto é a imagem grande da oferta centralizada num quadrado 800×800 branco, em JPEG, enviada por
 upload (nada vai para o S3). O link é `https://besave.io/{id}?utm_source=telegram`.
+
+Legenda (BSV-62, CONTRATO §11.1): título, linha em branco, corpo (destaque, preço, "caiu", cupom),
+link, linha em branco e a frase de aviso `{ícone} <i>{frase}</i>`. Se passar de 1024, saem cupons do fim
+e depois o título é cortado; a frase nunca.
+
+### Frases de aviso (`BESAVE_FRASES_CANAL`, BSV-62)
+
+`frases_canal.json` (nesta pasta) vai embutido no binário: `{"icones": [...], "frases": [...]}`. Cada
+oferta usa uma frase e um ícone escolhidos pelo hash do id (a mesma no Telegram e no WhatsApp).
+
+Trocar ou incluir uma frase **sem recompilar**:
+
+1. Copie `frases_canal.json` para fora do repositório (ex.: `/srv/besave/frases_canal.json` ou
+   `C:\besave\frases_canal.json`) e edite. Cada ícone é um item da lista (`"🏃‍♂️"` inteiro, entre aspas).
+2. Aponte `BESAVE_FRASES_CANAL=<caminho>` no `.env` do envio.
+3. A próxima execução já usa o arquivo. Frase vazia ou com mais de 120 caracteres sai com `WARN`; arquivo
+   ausente, ilegível, fora do formato ou com lista vazia → `WARN` no início e as frases embutidas.
+
+Frases que afirmam estoque, exclusividade ou "última chance" ficam de fora (decisão do dono, 13/11).
+
+### Fila do WhatsApp (`BESAVE_ENVIO_ESPELHO_WHATSAPP`, BSV-62)
+
+Não há API para postar em canal do WhatsApp: o `besave-envio` monta a legenda e a põe numa fila no
+Oracle; o publicador (BSV-63) posta.
+
+1. Rode `sql/bsv-62.sql` (checagem 0 primeiro: o charset precisa ser `AL32UTF8`). Ele cria o canal 2
+   (`DS_CHAT_ID` = nome do canal no WhatsApp Web), `PARAMETROS_ENVIO` 2 (`QT_MAX_DIA` 40, 8 h–22 h; o
+   publicador aplica) e `ENVIO_WHATSAPP` + `SQ_ENVIO_WHATSAPP`. `GRANT`s comentados no fim, para outro usuário.
+2. Ligue com `BESAVE_ENVIO_ESPELHO_WHATSAPP=2` no `.env` do envio (na inst2, `/srv/besave/worker.env`).
+
+A cada post de **oferta** confirmado no Telegram, entra uma linha `ST_ENVIO = 'P'` com a legenda do
+WhatsApp (`*negrito*`, `~riscado~`, `_itálico_`, sem `*`, `_`, `~` e `` ` `` no texto variável, link com
+`utm_source=whatsapp`, ≤ 1024 caracteres e 4000 bytes), o `ID_ENVIO_TELEGRAM` e o slug da área
+(`DS_AREA_SLUG`, ex.: `meu-lar`). Avisos e "Oferta encerrada" não entram. A oferta já na fila é ignorada.
+Falha ao inserir vira `WARN` e `espelho_falhas=` no relatório: o post do Telegram fica como está.
+
+Pausar o espelho: tire a variável do `.env` (a execução seguinte não enfileira). As linhas `P` que
+ficaram continuam na fila para o publicador. O `--sim` com a variável mostra também a legenda do WhatsApp.
 
 ### 4. Conferir antes com `--sim`
 
@@ -632,7 +672,7 @@ Log diário próprio: `%LOCALAPPDATA%\besave\logs\besave-envio.AAAA-MM-DD.log` (
 execução ok deixa:
 
 ```
-… INFO worker::envio::binario: relatorio canal=1 enviados_hoje=42 devido=2 enviados=2 editadas=1 edicoes_descartadas=0 aviso=- aviso_falhou=0 retry_after=- parada=- tempo_ms=3120
+… INFO worker::envio::binario: relatorio canal=1 enviados_hoje=42 devido=2 enviados=2 editadas=1 edicoes_descartadas=0 aviso=- aviso_falhou=0 espelhados=2 espelho_falhas=0 retry_after=- parada=- tempo_ms=3120
 ```
 
 | código | quando |

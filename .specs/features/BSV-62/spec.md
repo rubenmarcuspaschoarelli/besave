@@ -102,8 +102,8 @@ Como dono, quero o layout novo com frase de aviso nos dois canais e cada oferta 
 | ESP-03 | P1 | T5 | Done |
 | ESP-04 | P1 | T5 | Done |
 | ESP-05 | P1 | T5 | Done |
-| CON-01 | P1 | T6 | Pending |
-| DOC-01 | P1 | T6 | Pending |
+| CON-01 | P1 | T6 | Done |
+| DOC-01 | P1 | T6 | Done |
 
 ## Success Criteria
 

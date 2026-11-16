@@ -61,7 +61,7 @@ T5 → T6
 **Tests**: `apps/worker/tests/envio_espelho.rs`, `apps/worker/tests/envio_espelho_log.rs`
 **Gate**: `cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test`
 
-### T6: CONTRATO 1.7.0 e README
+### T6: CONTRATO 1.7.0 e README ✅
 **What**: CONTRATO §11 (layout, "Legenda do WhatsApp", frases, fila), versão 1.7.0 no cabeçalho, `package.json` e `package-lock.json`; teste de versão do contrato; README do worker.
 **Where**: `docs/CONTRATO.md`, `packages/contract/package.json`, `packages/contract/package-lock.json`, `apps/worker/tests/envio_modelo.rs`, `apps/worker/README.md`
 **Depends on**: T5
