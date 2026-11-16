@@ -29,7 +29,7 @@ T5 → T6
 **Tests**: `tools/tests/test_pub_regras.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_regras.py`
 
-### T2: Foto
+### T2: Foto ✅
 **What**: `pub/foto.py`: baixar com timeout, quadrado 800×800 JPEG branco, placeholder da área, `None` se nada baixar.
 **Where**: `tools/publish-whatsapp-channel/pub/foto.py`, `tools/tests/test_pub_foto.py`, `tools/requirements-dev.txt`
 **Depends on**: T1
