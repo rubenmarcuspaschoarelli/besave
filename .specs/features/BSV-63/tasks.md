@@ -61,7 +61,7 @@ T5 → T6
 **Tests**: `tools/tests/test_pub_canal_web.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py`
 
-### T6: Vigia, unidades e README
+### T6: Vigia, unidades e README ✅
 **What**: `vigia_robos.py` com o robô `publicador` e `BESAVE_VIGIA_ROBOS`; `iniciar_publicador.sh`; `besave-publicador-whatsapp.service`; drop-in da inst2; README do programa e de `tools/vps`.
 **Where**: `tools/vps/`, `tools/publish-whatsapp-channel/README.md`, `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py`
 **Depends on**: T5

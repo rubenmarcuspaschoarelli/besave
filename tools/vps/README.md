@@ -7,6 +7,12 @@ Windows nada muda: `iniciar_captura.ps1` e `encerrar_captura.ps1` continuam vale
 |---|---|---|---|
 | `capture-chat-groups` (WhatsApp) | `besave-captura-whatsapp` | `besave-whatsapp` | `capture-chat-groups/log/run_captura_DD_MM_HHMMSS.log` (um por partida) |
 | `capture-store-pages` (lojas) | `besave-captura-lojas` | `besave-lojas` | `capture-store-pages/destino/log/main_monitorar.log` |
+| `publish-whatsapp-channel` (publicador, **só na inst2**, BSV-63) | `besave-publicador-whatsapp` | `besave-publicador` | `publish-whatsapp-channel/log/run_publicador_DD_MM_HHMMSS.log` |
+
+O publicador tem instalação própria (outra máquina, outro número): `tools/publish-whatsapp-channel/README.md`.
+O vigia escolhe os robôs da máquina por `BESAVE_VIGIA_ROBOS` (padrão `lojas,whatsapp`; na inst2, o drop-in
+`systemd/inst2/besave-vigia-robos.service.d/robos.conf` põe `publicador`). Na inst1 o `cp systemd/*.service`
+abaixo também copia `besave-publicador-whatsapp.service`: não habilitar lá.
 
 Cada robô tem a **própria tela VNC** (Xfce): lojas em `:1` (porta `5901`), WhatsApp em `:2` (porta `5902`),
 as duas só em `localhost`. Telas separadas evitam que a interação numa janela roube o foco da outra e que as
