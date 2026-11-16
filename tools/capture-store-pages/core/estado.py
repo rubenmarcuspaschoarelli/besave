@@ -13,6 +13,7 @@ do dict lido) e e best-effort: falha ao salvar so imprime aviso.
 
 import json
 import os
+import stat
 import sys
 
 CONFIG_PATH = os.path.join('conf', 'config.json')
@@ -158,12 +159,25 @@ def _gravar_controle(chave, valor, caminho=CONFIG_PATH):
     # Grava num .tmp e so entao troca (os.replace e atomico): se o disco encher
     # no meio da gravacao, o config.json original fica intacto em vez de vazio
     # (incidente 2026-10-09: disco E: cheio zerou o arquivo).
+    # O .tmp nasce em 600 e recebe o modo do original antes do replace: com
+    # open() ele nascia com a umask (002 -> 664) e expunha a senha (BSV-60).
     tmp = caminho + '.tmp'
     try:
-        with open(tmp, 'w', encoding='utf-8') as f:
+        modo = stat.S_IMODE(os.stat(caminho).st_mode) & 0o777
+    except OSError:
+        modo = 0o600
+    try:
+        try:
+            os.remove(tmp)  # .tmp velho manteria o modo antigo com O_CREAT
+        except FileNotFoundError:
+            pass
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with open(fd, 'w', encoding='utf-8') as f:
             json.dump(cfg, f, ensure_ascii=False, indent=2)
             f.flush()
             os.fsync(f.fileno())
+        if os.name != 'nt':  # no Windows o chmod so mexe em somente-leitura
+            os.chmod(tmp, modo)
         os.replace(tmp, caminho)
     except Exception as e:  # noqa: BLE001
         print(f'[estado] Nao consegui gravar {caminho}: {e}')

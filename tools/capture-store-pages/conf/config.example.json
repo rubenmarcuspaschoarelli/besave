@@ -1,4 +1,5 @@
 {
+  "_permissao": "No Linux: chmod 600 conf/config.json (senha do banco e segredo de afiliado). O robo mantem o modo que encontrar ao gravar o controle (BSV-60).",
   "navegador": {
     "canal": "chrome",
     "user_agent": "",
