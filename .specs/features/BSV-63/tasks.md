@@ -37,7 +37,7 @@ T5 → T6
 **Tests**: `tools/tests/test_pub_foto.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_foto.py`
 
-### T3: Fila Oracle, avisos e batimento
+### T3: Fila Oracle, avisos e batimento ✅
 **What**: `pub/fila.py` (SQL de parâmetros, contagem do dia, pendentes com `ST_ATIVO`, marcar; reconexão e `call_timeout`), `pub/avisos.py` (Telegram com redação, credencial do ambiente ou `worker.env`), `pub/batimento.py`.
 **Where**: `tools/publish-whatsapp-channel/pub/`, `tools/tests/test_pub_fila.py`
 **Depends on**: T2
