@@ -356,3 +356,33 @@ def test_config_ilegivel_no_meio_mantem_o_anterior(m):
 
 def test_t0_e_10h_em_brasilia():
     assert regras.local(T0) == datetime(2026, 11, 16, 10, 0) and T0 - timedelta(hours=0) == T0
+
+
+# --- ciclo 2 do Verifier (lacunas 1, 3 e 4) ----------------------------------------------------------
+
+
+def test_rit03_d_gravado_pelo_proprio_laco_conta_no_teto(m):  # M21
+    m.fila.params = regras.Parametros(1, 0, 24)
+    i = m.fila.add(m.local())
+    m.pagina.confirma = False
+    m.volta()
+    assert m.fila.st(i) == ("D", "enviando")
+    j = m.fila.add(m.local(minutes=15))
+    m.pagina.confirma = True
+    m.andar(minutes=15)
+    m.volta()
+    assert m.fila.st(j) == ("P", None) and len(m.pagina.envios) == 1   # o D ocupa o teto do dia (1)
+
+
+def test_fot02_laco_pede_o_placeholder_da_area_da_linha(m):  # M54
+    i = m.fila.add(m.local(), slug="meu-lar")
+    m.volta()
+    assert m.fotos_pedidas == [(m.fila.linhas[i]["oferta"], "meu-lar")]
+
+
+@pytest.mark.parametrize("confirma", [True, False], ids=["E", "D"])
+def test_limpeza_depois_de_toda_tentativa_com_clique(m, confirma):  # M55
+    m.fila.add(m.local())
+    m.pagina.confirma = confirma
+    m.volta()
+    assert m.pagina.chamadas[-2:] == ["confirmar", "limpar"]

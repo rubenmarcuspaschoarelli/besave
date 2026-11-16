@@ -180,3 +180,13 @@ def test_dom_leg02_editor_que_nao_aceita_texto_e_falha_antes_do_clique(pagina, f
 def test_dom_canal_inexistente_e_erro_de_pagina(pagina):
     with pytest.raises(ErroPagina):
         CanalWeb(pagina, log=lambda s: None).abrir_canal("Outro canal")
+
+
+def test_dom_balao_novo_de_outra_mensagem_nao_confirma(pagina):  # M47 (ciclo 2 do Verifier)
+    c = CanalWeb(pagina, log=lambda s: None)
+    c.abrir_canal(CANAL)
+    c._baloes_antes = pagina.locator(canal_web.SEL_BALAO).count()
+    pagina.evaluate("""const row = document.createElement('div'); row.setAttribute('role', 'row');
+        row.innerHTML = '<span>Outra oferta qualquer</span><span data-icon="msg-check"></span>';
+        document.querySelector('#mensagens').appendChild(row);""")
+    assert c.confirmar(LEGENDA, 2) is False

@@ -11,12 +11,16 @@ T4 → T5
 ### Phase 3: VPS
 T6
 
+### Phase 4: Correções do Verifier (ciclo 1)
+T7
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
 T5 → T6
+T6 → T7
 ```
 
 ## Task Breakdown
@@ -69,6 +73,14 @@ T5 → T6
 **Tests**: `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py`
 **Gate**: `cd tools && python -m pytest -q && ruff check vps/ tests/ publish-whatsapp-channel/ && shellcheck vps/*.sh`
 
+### T7: Lacunas do Verifier (ciclo 1) ✅
+**What**: testes que matam M21 (`D` do próprio laço conta no teto), M47 (balão de outra mensagem não confirma), M54 (placeholder da área da linha), M55 (limpeza depois de `E` e de `D`). Só testes.
+**Where**: `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py`, `tools/tests/pub_falso.py`
+**Depends on**: T6
+**Reqs**: RIT-03, FOT-02, LEG-01, EST-01
+**Tests**: `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py`
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_publicador.py tests/test_pub_canal_web.py`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -79,6 +91,7 @@ T5 → T6
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| RIT-03, FOT-02, LEG-01, EST-01 (lacunas M21, M47, M54, M55) | `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py` | T7 |
 
 ## Gate Check Commands
 

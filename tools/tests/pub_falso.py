@@ -128,6 +128,7 @@ class Mundo:
         self.batidas = []
         self.cfg = dict(cfg or {})
         self.sem_foto = set()       # ids de oferta sem foto nem placeholder
+        self.fotos_pedidas = []     # (id_oferta, slug da area) pedidos pelo laco
         self.tmp = Path(tmp_path)
         self.pub = Publicador(
             fila=self.fila, pagina=self.pagina, avisar=self.avisos.append, relogio=lambda: self.t,
@@ -135,6 +136,7 @@ class Mundo:
             batimento=self, aleatorio=lambda: 0.5, pasta_tmp=self.tmp, log=self.logs.append)
 
     def _foto(self, id_oferta, slug, destino):
+        self.fotos_pedidas.append((id_oferta, slug))
         if id_oferta in self.sem_foto:
             return None
         destino.parent.mkdir(parents=True, exist_ok=True)
