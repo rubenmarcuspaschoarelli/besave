@@ -2,16 +2,18 @@
 
 ## Validation: BSV-62 - PASS
 
-**Result**: PASS (ciclo 2, faixa `d30a624..6b2d90d`). No ciclo 1 (`d30a624..466b592`) o veredito foi
+**Result**: PASS (ciclo 3, faixa `d30a624..6c433f7`). No ciclo 1 (`d30a624..466b592`) o veredito foi
 FAIL com 4 de 42 mutantes sobreviventes (F3, F8, R01, R13); o commit `6b2d90d` (só testes + falha
-injetada no `confirmar` do `FakeEnvio`) fechou as lacunas 1–3 e os quatro agora morrem. Lacunas 4–6
-classificadas como não bloqueantes (ver "Ciclo 2" no fim). Continua bloqueando o merge a execução real
-do dono (§6).
+injetada no `confirmar` do `FakeEnvio`) fechou as lacunas 1–3 e os quatro agora morrem (ciclo 2). O
+ciclo 3 confere o delta `9b79f36..6c433f7` (decisões do dono de 16/11): lacuna 4 resolvida (cupom
+inteiro na crase), `envio.env.example` com as duas variáveis comentadas; 6 mutantes novos, todos mortos.
+Lacunas 5–6 seguem não bloqueantes. Continua bloqueando o merge a execução real do dono (§6).
 
 - **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador.
 - **Diff:** ciclo 1 `d30a624..466b592`, 6 commits: `dce7ab7` SQL, `b57187d` frases, `6785adc` layout
   Telegram, `bdc4bf2` legenda WhatsApp, `824bb2c` espelho, `466b592` contrato/README; ciclo 2
-  `d30a624..6b2d90d` (+ `6b2d90d` testes).
+  `d30a624..6b2d90d` (+ `6b2d90d` testes); ciclo 3 delta `9b79f36..6c433f7` (+ `6c433f7` decisões do
+  dono).
 - **Referência:** `docs/specs/BSV-62.md` (spec do dono); `.specs/features/BSV-62/spec.md` (EARS do autor).
 - **Data:** 2026-11-16.
 - **Tarefas:** T1–T6 marcadas ✅ em `.specs/features/BSV-62/tasks.md:24-64`.
@@ -202,6 +204,7 @@ canal público em `sql/bsv-62.sql:20` e a lista de proibidos do próprio teste
 4. **Spec do autor vs. dono, cupom com `_` no WhatsApp**: `BE_SAVE` vira `BESAVE`
    (`apps/worker/tests/envio_legenda_whatsapp.rs:192`, `:203`), o código copiado do WhatsApp fica
    diferente do real. Segue a letra da Saída 5; o autor marcou para o dono decidir no PR. Não é defeito.
+   **Resolvida no ciclo 3 pela decisão do dono (16/11): o cupom vai inteiro na crase.**
 5. **ORA-00001 → `Ok(false)` só pelo fake** (`apps/worker/src/envio/oracle.rs:335`): o fake reimplementa a
    unicidade; o ramo real fica para o teste real (§6 item 3). Baixa.
 6. **`docs/MANIFEST.md:49` e `packages/contract/fixtures/manifest-ok.json:2` seguem com `"contrato":
@@ -284,7 +287,7 @@ nenhuma regressão). `git status --porcelain` igual à linha de base depois de c
 
 | Lacuna | Classificação | Motivo |
 |---|---|---|
-| 4 — cupom com `_` perde o `_` no WhatsApp (`BE_SAVE` → `BESAVE`) | **aceita, não bloqueante** | É o que a Saída 5 manda ("`*`, `_`, `~` e `` ` `` são removidos" do texto variável, que inclui o cupom); mudar seria contrariar a spec. Decisão de produto do dono, que precisa constar no PR. |
+| 4 — cupom com `_` perde o `_` no WhatsApp (`BE_SAVE` → `BESAVE`) | **aceita, não bloqueante** | É o que a Saída 5 manda ("`*`, `_`, `~` e `` ` `` são removidos" do texto variável, que inclui o cupom); mudar seria contrariar a spec. Decisão de produto do dono, que precisa constar no PR. **Ciclo 3: resolvida** — o dono decidiu manter o `_` (cupom inteiro na crase). |
 | 5 — ORA-00001 → `Ok(false)` só testado no fake (`apps/worker/src/envio/oracle.rs:335`) | **aceita, não bloqueante para o código; coberta pelo teste real** | Não há Oracle no ambiente de teste. A lógica de "duplicata ignorada" em `rodada.rs:359` está testada e o ramo real fica no passo 3 da execução real (§6), que já bloqueia o merge. |
 | 6 — `docs/MANIFEST.md:49` e `packages/contract/fixtures/manifest-ok.json:2` em `1.6.0` | **aceita, não bloqueante** | Fora da pasta da spec (Saída 6 só pede CONTRATO §11 e `package.json`); a fixture não é lida pelo worker e o site compara só o major (`apps/site/src/lib/dados/sincronizador.ts:132`). Trocar a fixture exigiria mexer em `apps/site/src/lib/dados/tipos.test.ts:35`, também fora do escopo. Fica como sugestão de ticket do dono. |
 
@@ -294,6 +297,79 @@ PASS. Continua bloqueando o merge a execução real do dono (§6): SQL, `--sim` 
 `SELECT` redigido, troca de frase sem recompilar, e o job `worker-arm64` verde na PR.
 
 ### Saída do `validate_state.py` (ciclo 2)
+
+```
+$ python .claude/skills/tlc-spec-driven/scripts/validate_state.py BSV-62 --root .
+validate_state: 0 error(s) across [BSV-62]
+exit=0
+```
+
+---
+
+## Ciclo 3 (delta do dono, `9b79f36..6c433f7`)
+
+Commit `6c433f7` `fix(worker): cupom inteiro na legenda do WhatsApp e variáveis no modelo da inst2
+(BSV-62)`. Decisões do dono (16/11): (1) cupom com `_` mantém o `_`, inteiro na crase; a remoção de
+`*`, `_`, `~`, `` ` `` vale só para título, destaque e frase; (5) `infra/vps/envio.env.example` com
+`BESAVE_ENVIO_ESPELHO_WHATSAPP=2` e `BESAVE_FRASES_CANAL=<caminho>` comentadas, uma linha de explicação cada.
+
+### Checagem ancorada nas decisões
+
+| Decisão | Código / doc | Teste (`file:line` + asserção) | Resultado |
+|---|---|---|---|
+| Cupom inteiro na crase (`BE_SAVE` → `` `BE_SAVE` ``), legenda comparada inteira | `apps/worker/src/envio/legenda.rs:155` `.map(\|c\| format!("`{c}`"))` (comentário em `:153-154`) | `apps/worker/tests/envio_legenda_whatsapp.rs:195` (`cupons: vec!["BE_SAVE"]`), `:199-211` `assert_eq!` da legenda inteira com `` 🎟️ Cupom: `BE_SAVE` `` (`:206`) | ✅ PASS |
+| Remoção de `* _ ~ `` ` `` continua no título, destaque e frase | `apps/worker/src/envio/legenda.rs:75-84` (`limpar_whatsapp`), usada em `:109`, `:242`, `:243` | `apps/worker/tests/envio_legenda_whatsapp.rs:199-211` (título `*Kit Pro Max x y*`, destaque `Só hoje e amanhã`, frase `🚨 _Corra, é agora!_`) | ✅ PASS |
+| CONTRATO §11.3 | `docs/CONTRATO.md:331-333` (título, destaque e frase perdem os marcadores; cupom inteiro na crase, `BE_SAVE` fica `` `BE_SAVE` ``) | leitura | ✅ PASS |
+| README | `apps/worker/README.md:637` ("no título, destaque e frase, cupom inteiro na crase") | leitura | ✅ PASS |
+| spec.md do autor | `.specs/features/BSV-62/spec.md:42-43` (decisões marcadas `y`), `:69` WA-02, `:70` ENV-62, `:108` rastreio | leitura | ✅ PASS |
+| `envio.env.example` com as 2 variáveis comentadas, 1 linha de explicação cada | `infra/vps/envio.env.example:30-33` | `apps/worker/tests/worker_env_vps.rs:333-356`: cada alvo existe como linha exata (`# BESAVE_ENVIO_ESPELHO_WHATSAPP=2`, `# BESAVE_FRASES_CANAL=<caminho>`), a linha de cima começa com `# ` e cita `BSV-62` (`:345`), e nenhuma é chave ativa (`:354-355`) | ✅ PASS |
+
+**Isolamento:** a única asserção alterada no delta é `` `BESAVE` `` → `` `BE_SAVE` `` em
+`marcadores_removidos` (`apps/worker/tests/envio_legenda_whatsapp.rs:206`), pela decisão do dono; o resto do
+delta de testes é um teste novo (`modelo_do_envio_traz_o_whatsapp_comentado`) e o comentário do teste.
+Nenhum teste apagado, ignorado ou afrouxado.
+
+**Segurança (regra 11):** as 5 linhas novas de `infra/vps/envio.env.example` (`:29-33`) só trazem nomes
+de variável, `2` e `<caminho>`; nenhum token, IP, URL, host interno ou caminho de usuário (varredura do
+`git diff 9b79f36..6c433f7`: 0 ocorrências).
+
+### Mutantes (mesmo isolamento: backup em `_mutantes/`, mutação, `cargo test --test …`, restauração)
+
+| # | Mutante | Onde | Resultado | Teste que matou |
+|---|---|---|---|---|
+| C1 | cupom volta a passar por `limpar_whatsapp` (`format!("`{}`", limpar_whatsapp(c))`) | `legenda.rs:155` | morto | `marcadores_removidos` |
+| C2 | tira o `_` da remoção do título/destaque/frase | `legenda.rs:78` | morto | `marcadores_removidos` |
+| C3 | descomenta `BESAVE_ENVIO_ESPELHO_WHATSAPP=2` | `envio.env.example:31` | morto | `modelo_do_envio_traz_o_whatsapp_comentado` |
+| C3b | descomenta `BESAVE_FRASES_CANAL=<caminho>` | `envio.env.example:33` | morto | `modelo_do_envio_traz_o_whatsapp_comentado` |
+| C4 | apaga a explicação acima de `BESAVE_FRASES_CANAL` | `envio.env.example:32` | morto | `modelo_do_envio_traz_o_whatsapp_comentado` |
+| C4b | apaga a explicação acima de `BESAVE_ENVIO_ESPELHO_WHATSAPP` | `envio.env.example:30` | morto | `modelo_do_envio_traz_o_whatsapp_comentado` |
+
+Comandos: C1–C2 com `--test envio_legenda_whatsapp`; C3–C4b com `--test worker_env_vps`.
+**Total acumulado: 48 mutantes, 48 mortos, 0 sobreviventes.** `git status --porcelain` igual à linha de
+base depois do lote; `_mutantes/` apagada.
+
+### Gates (ciclo 3)
+
+| Gate | Resultado |
+|---|---|
+| `cargo fmt --check` | exit 0 |
+| `cargo clippy --all-targets -- -D warnings` | exit 0, sem aviso |
+| `cargo test --test envio_legenda_whatsapp --test envio_legenda --test worker_env_vps --test envio_espelho` | 10 + 14 + 4 + 11 = **39 passaram, 0 falharam** |
+| suíte completa e `npm run validate` | rodados pelo autor no `6c433f7` (622 testes, `contrato OK`); não repetidos aqui — o delta não toca `packages/contract` |
+
+### Lacunas (estado no ciclo 3)
+
+| Lacuna | Estado |
+|---|---|
+| 4 — cupom com `_` | **resolvida** pela decisão do dono (16/11), com teste e mutante C1 morto |
+| 5 — ORA-00001 só no fake | aceita, não bloqueante; coberta pelo teste real do dono (§6) |
+| 6 — `1.6.0` em `docs/MANIFEST.md:49` e na fixture | aceita, não bloqueante; fora do escopo |
+
+### Veredito (ciclo 3)
+
+PASS. Continua bloqueando o merge a execução real do dono (§6) e o job `worker-arm64` verde na PR.
+
+### Saída do `validate_state.py` (ciclo 3)
 
 ```
 $ python .claude/skills/tlc-spec-driven/scripts/validate_state.py BSV-62 --root .
