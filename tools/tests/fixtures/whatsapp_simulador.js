@@ -9,6 +9,7 @@
 //   semInput      sem o input do footer; o clique em Anexar o cria
 //   menuSemInput  sem input nenhum; Anexar mostra o item "Fotos e vídeos", que abre o seletor de arquivo
 //   rejeitaTexto  a legenda da previa ignora colar e digitar
+//   rejeitaColar  a legenda da previa ignora so o colar (digitar funciona)
 (() => {
   const opc = Object.assign({ status: ' Enviada ' }, window.__sim || {});
   window.__envios = [];
@@ -67,7 +68,7 @@
   };
   legenda.addEventListener('paste', (e) => {
     e.preventDefault();
-    if (opc.rejeitaTexto) return;
+    if (opc.rejeitaTexto || opc.rejeitaColar) return;
     legenda.innerHTML = '';
     e.clipboardData.getData('text/plain').split('\n').forEach(l => {
       const p = document.createElement('p');

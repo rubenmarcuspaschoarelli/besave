@@ -280,3 +280,36 @@ def test_dom_limpar_fecha_a_previa(abrir, foto):
     assert page.locator(canal_web.SEL_LEGENDA).is_visible()
     c.limpar()
     assert page.locator(canal_web.SEL_LEGENDA).is_visible() is False
+
+
+# --- lacunas do Verifier (ciclo 3) -------------------------------------------------------------------
+
+
+def test_dom_colar_rejeitado_tenta_de_novo_digitando_e_envia(abrir, foto):  # M-n
+    page, c = abrir(rejeitaColar=True)
+    assert _postar(c, foto) is True
+    assert _envios(page) == [LEGENDA] and page.evaluate("window.__enters") == 0
+
+
+def test_dom_celula_escolhida_pelo_aria_label_do_canal(abrir, foto):  # M-s
+    page, c = abrir(mainFechado=True)
+    page.evaluate("""() => {
+        const real = document.querySelector('[data-testid="newsletter-tab-newsletter-cell"]');
+        const isca = real.cloneNode(true);
+        isca.setAttribute('aria-label', 'Canal Outro canal qualquer');
+        isca.addEventListener('click', () => {
+            document.querySelector('#main').style.display = '';
+            document.querySelector('[data-testid="conversation-info-header-chat-title"]').textContent = 'Outro canal qualquer';
+        });
+        real.parentElement.insertBefore(isca, real);
+    }""")
+    assert page.locator('[data-testid="newsletter-tab-newsletter-cell"]').count() == 2
+    assert _postar(c, foto) is True
+
+
+def test_dom_canal_aberto_sem_caixa_de_mensagem_nao_envia(abrir, foto):  # M-t
+    page, c = abrir()
+    page.evaluate("document.querySelector('[data-testid=\"conversation-compose-box-input\"]').remove()")
+    with pytest.raises(ErroPagina):
+        c.abrir_canal(CANAL)
+    assert _envios(page) == []
