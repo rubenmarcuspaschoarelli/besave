@@ -19,8 +19,10 @@ A volta acontece a cada `intervalo_minutos` (padrão 15, ±30% aleatório). Em o
    área) e faz o quadrado 800×800 JPEG de fundo branco;
 6. abre o canal (nome = `CANAL_ENVIO.DS_CHAT_ID` do `id_canal`; se o cabeçalho já é o do canal, não navega;
    senão Canais → busca → célula → confere o cabeçalho; divergiu = falha, nada enviado), põe a foto no input
-   oculto do footer e cola a legenda na prévia, conferindo cru com cru (`*…*` e `_…_` aparecem crus na caixa);
-   divergiu duas vezes → fecha a prévia, falha, sem `D`;
+   oculto do footer e espera a prévia até 30 s (`ESPERA_PREVIA_S`; na inst2 ela já passou de 15 s). Não abriu
+   pelo input → `Escape` e, uma única vez, Anexar → "Fotos e vídeos"; não abriu de novo → falha, sem `D`. Depois
+   cola a legenda na prévia, conferindo cru com cru (`*…*` e `_…_` aparecem crus na caixa); divergiu duas vezes →
+   fecha a prévia, falha, sem `D`;
 7. grava `D 'enviando'`, clica em "Enviar 1 item selecionado" e espera, por `timeout_post_segundos` (padrão 60),
    a confirmação **positiva**: a prévia fechou, apareceu um balão **novo** cuja legenda tem `besave.io/{ID_OFERTA}`
    e cujo status (`msg-meta`) é Enviada, Entregue ou Lida → `E`. Qualquer outra coisa → a linha fica `D` e chega
@@ -73,7 +75,11 @@ outro caminho em `BESAVE_WORKER_ENV`). Senha do Oracle: `BESAVE_ORACLE_PASS` ven
 4. O log diz `Sessao autenticada`; o publicador segue sozinho. Se a sessão cair, chega o aviso "ler o QR pelo
    VNC" e nada é postado até lá (o vigia também avisa, sem reiniciar).
 
-Log: `log/run_publicador_DD_MM_HHMMSS.log` (um por partida). Tela do processo: `tmux -L besave-publicador attach`
+Log: `log/run_publicador_DD_MM_HHMMSS.log` (um por partida). Cada anexo loga
+`[anexo] caminho=input|menu previa_s=<segundos>` (ou `previa=nao`). Prévia que não abriu pelos dois caminhos
+deixa `log/falha_<DDMM_HHMMSS>.png` (print da tela) e `.html` (DOM com o mesmo recorte redigido do
+`--gravar-dom`); ficam os 20 arquivos mais recentes. `log/` é fora do git; o print pode mostrar a lista de
+conversas: não anexar em PR sem redigir (regra 11). Tela do processo: `tmux -L besave-publicador attach`
 (sair sem parar: `Ctrl+b` `d`).
 
 ## Pausar, parar e religar

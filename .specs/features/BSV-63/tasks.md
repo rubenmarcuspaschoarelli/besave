@@ -124,7 +124,7 @@ T11 → T12
 **Tests**: `tools/tests/test_pub_canal_web.py` (`-k anexo`)
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py` (WSL: 0 skipped)
 
-### T12: README do anexo e das evidências
+### T12: README do anexo e das evidências ✅
 **What**: fluxo do anexo (30 s, segundo caminho, log) e `log/falha_*` no README.
 **Where**: `tools/publish-whatsapp-channel/README.md`
 **Depends on**: T11
