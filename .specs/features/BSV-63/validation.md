@@ -4,6 +4,101 @@
 
 **Result**: PASS
 
+Ciclo 4 (prévia da foto lenta ou que não abre — achado do teste real na inst2, 17/11), faixa `6b5f96b..18fdca0`.
+Os 4 itens do pedido do dono e os 5 testes pedidos conferidos com evidência; **16 de 18 mutantes mortos**
+(1 equivalente, 1 lacuna de cobertura sem efeito no envio: evidência gravada também no sucesso, §C4.3).
+Execução real na inst2 com este código continua bloqueando o merge (§C4.6).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-17.
+- **Faixa:** `6b5f96b..18fdca0` — `2f1d2c1` test (lacunas M-n, M-s, M-t do ciclo 3), `5000ff1` fix (anexo: 30 s,
+  segundo caminho, log, evidência), `18fdca0` README. `git merge-base --is-ancestor origin/develop HEAD` = 0.
+- **Árvore real:** `git status --porcelain` no início e no fim = `?? docs/canal_real.html` (mais este arquivo,
+  editado). `docs/canal_real.html` não foi lido, copiado nem citado neste ciclo. Mutantes numa cópia
+  `git archive HEAD tools` no scratchpad da sessão, fora do repo, removida no fim; nenhum `git stash`.
+
+### C4.1 Checagem ancorada no pedido do dono
+
+`cw` = `tools/publish-whatsapp-channel/pub/canal_web.py`, `pb` = `.../pub/publicador.py`,
+`T` = `tools/tests/test_pub_canal_web.py`, `sim` = `tools/tests/fixtures/whatsapp_simulador.js`.
+
+| item | pedido | evidência | ok |
+|---|---|---|---|
+| seletor | legenda `[data-testid="media-caption-input-container"][contenteditable="true"][role="textbox"]` sem mudança | `cw:30` igual; `git diff 6b5f96b..HEAD -- cw` não toca `SEL_LEGENDA =` (0 linhas) | sim |
+| 1 | espera da prévia 15 → 30 s, constante própria | `cw:40` `ESPERA_PREVIA_S = 30`; usada em `cw:266` (`ESPERA_PASSO_S` não é mais usada na prévia); `T:326-335` (prévia em 20 s passa, `previa_s` em [20, 30)), `T:338` | sim |
+| 2 | input sem prévia → Escape → uma vez Anexar → "Fotos e vídeos" em `expect_file_chooser` → espera de novo → só então falha | `cw:212-227` (Escape `cw:222`, `_por_menu` uma vez, `_esperar_previa` de novo); `_por_menu` `cw:248-261` com `expect_file_chooser` `cw:259`; `T:342-352` (input 1, menu 1, Escape antes do menu via `sim` `__escapesAntesDoMenu`) | sim |
+| 2 | falha sem D, linha volta a P | `cw:70` `ErroPagina(FalhaPasso)`; `_morto` repassa `FalhaPasso` (`cw:80`); `pb:170-172` `except FalhaPasso` → `FALHA_ANTES` ("P") antes do `marcar(... "D" ...)` de `pb:179`; `T:355-376` com o `Publicador` real (`pub_falso.Mundo`): `st == ("P", None)`, `falhas_seguidas == 1`, nada enviado, sem aviso | sim |
+| 3 | log `[anexo] caminho=input\|menu previa_s=<x.x>` / `previa=nao` | `cw:268`, `cw:270` (e `cw:256` com sufixo explicativo quando o menu nem mostra o item); `T:333` e `T:350` com `re.fullmatch`, `T:349`, `T:371` | sim |
+| 4 | `log/falha_<DDMM_HHMMSS>.png` + `.html` redigido, 20 mais recentes | `cw:273-291` (nome `cw:279`, screenshot `cw:284`, `redigir_dom` `cw:285`; colisão no mesmo segundo ganha `_2`); `rodar_evidencias` `cw:369-377`; `main.py:90` `pasta_log=RAIZ / "log"`; `T:372-376` (PNG pela assinatura, DOM da página, sem `\d{10,}`, com `REDACTED`), `T:379-389` (21º apaga o mais antigo, `run_publicador_*.log` intocado), `T:392-405` (rotação chamada pela evidência) | sim |
+| 4 | `log/` fora do git | `tools/publish-whatsapp-channel/.gitignore:15` `log/`; `git check-ignore` confirma `log/falha_x.png` | sim |
+| testes | simulador + fixture real | `T` parte 2 roda sobre `whatsapp_canal_real.html` + `sim` (cenários novos `atrasoPrevia`, `inputNaoAbre`, `menu`, `menuNaoAbre`, `sim:12-16`) | sim |
+| ciclo 3 | lacunas M-n, M-s, M-t | `T:288` (colar rejeitado → digita e envia), `T:294` (célula pelo aria-label com isca antes), `T:310` (sem caixa → `ErroPagina`, nada enviado) | sim |
+
+Leitura (sem mutante): a falha da evidência só vai ao log, salvo navegador fechado, que sobe e vira `BrowserMorto`
+(`cw:286-290` + `_morto`); "20 mais recentes" conta **arquivos** (`.png` e `.html` separados = 10 falhas) — leitura
+literal do pedido ("o 21º arquivo apaga o mais antigo"); o dono confirma se queria 20 falhas.
+
+### C4.2 Gates (lição 21)
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows) | **803 passed, 7 skipped** com o teste de 20 s à parte + o de 20 s rodado 3 vezes sem carga (22,1 / 22,1 / 21,9 s, passou nas 3) = 804 passed; os 7 skipped são os POSIX antigos |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed! |
+| `shellcheck vps/*.sh` | sem saída (ok) |
+| WSL (`test_pub_canal_web`, `test_pub_publicador`, `test_pub_fila`, `test_pub_foto`, `test_pub_isolamento`, `test_pub_regras`, `test_vigia_publicador`, `test_config_permissao`; `--basetemp=/tmp/...`, apagado no fim) | **141 passed, 0 skipped** (inclui o de 20 s e os 7 de permissão) |
+
+### C4.3 Sensor de discriminação (lotes de 7, 7, 2, 2; só os testes relevantes; os de tempo por último, sem carga)
+
+Seleção: `T -k "anexo and not em_20s"`; M1/M13 com `-k em_20s`; M11b com `T` + `test_pub_publicador.py`.
+
+| id | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M1 | `ESPERA_PREVIA_S = 15` | morto | `T:326` (prévia em 20 s) |
+| M13 | prévia volta a usar `ESPERA_PASSO_S` (15) | morto | `T:326` |
+| M2 | sem segundo caminho (só Escape) | morto | `T:342` |
+| M3 | segundo caminho repetido (2 vezes) | morto | `T:355` (`menu: 1`) |
+| M4 | sem Escape antes do menu | morto | `T:342` (`__escapesAntesDoMenu`) |
+| M5 | sem evidência na falha | morto | `T:355` |
+| M12 | evidência sem o `.png` (sem screenshot) | morto | `T:355` |
+| M6 | sem rotação | morto | `T:392` |
+| M7a | `MAX_EVIDENCIAS = 21` | morto | `T:392` |
+| M7b | rotação mantém `manter + 1` | morto | `T:379` |
+| M8a | log sem `caminho=` | morto | `T:342` |
+| M8b | `previa_s` com 0 casas | morto | `T:342` |
+| M8c | sem o log `previa=nao` | morto | `T:342` |
+| M9a | `.html` sem `redigir_dom` | morto | `T:355` |
+| M11a | `ErroPagina(RuntimeError)` (deixa de ser `FalhaPasso`) | morto | `T:355` |
+| M11b | `pb`: `except FalhaPasso` sem `return FALHA_ANTES` (segue para D) | morto | `T:355` |
+| M9b | sem `_RE_NUMERO_LONGO` | **sobreviveu — equivalente**: `_RE_TELEFONE` (`\+?\d[\d\s().-]{7,}\d`) já casa qualquer sequência de 10+ dígitos, aplicado logo depois; o resultado continua sem `\d{10,}` | — |
+| M10 | `_evidencia()` também quando a prévia abre | **sobreviveu — lacuna**: os testes de sucesso (`T:326`, `T:342`) usam `pasta_log=None`, então a evidência é no-op neles. Pela leitura o código está certo (`cw:219`/`cw:224` retornam antes de `cw:226`) | — |
+
+**16 de 18 mortos** (17 de 17 não equivalentes, menos a lacuna M10).
+
+### C4.4 Lacunas (ranqueadas)
+
+1. **M10** — nenhum teste prova que o sucesso não grava evidência. Efeito se regredir: um print + DOM por post
+   (custo de tempo na inst2 e a lista de conversas no disco), sem efeito em envio/estado. Correção: em `T:342`
+   (ou `T:326`) passar `pasta=tmp_path / "log"` e exigir `list(pasta.glob("falha_*")) == []` (em `T:342` isso
+   também cobre "primeiro caminho falhou mas o segundo abriu → sem evidência").
+2. O html redigido mantém nomes de conversa (só números e URLs saem): o README avisa (regra 11); o dono não anexa
+   `log/falha_*` em PR sem revisar.
+3. Interpretação "20 arquivos" (= 10 falhas), §C4.1.
+
+### C4.5 Mudanças fora do pedido
+
+Só testes e simulador (T10), `main.py:90` (passa `pasta_log`), README (T12) e `tasks.md`. Nada fora de `tools/` e `.specs/`.
+
+### C4.6 Pendências do dono (bloqueiam o merge)
+
+- Teste real na inst2 com `18fdca0`: voltas com prévia lenta devem logar `[anexo] caminho=input previa_s=<15..30>`;
+  se cair no menu, `caminho=menu`; falha dupla deixa `log/falha_*.png/.html` e a linha em P. Conferir o tempo real
+  da prévia contra 30 s.
+- Revisar um `log/falha_*.html` real antes de qualquer uso fora da máquina (regra 11).
+- Demais pendências do ciclo 3 (§C3.7) seguem valendo.
+
+---
+
+## Histórico: ciclo 3 (resultado do ciclo: PASS)
+
 Ciclo 3 (seletores reais), faixa `062acc5..1ec1a1b`. Todos os itens do pedido do dono conferidos com evidência;
 **19 de 24 mutantes mortos** (5 sobreviventes, nenhum que leve a envio errado nem a E sem confirmação: 2 equivalentes
 no ambiente de teste e 3 lacunas de cobertura, §C3.5). Execução real na inst2 continua bloqueando o merge (§C3.7).
