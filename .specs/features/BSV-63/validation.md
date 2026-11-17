@@ -4,6 +4,185 @@
 
 **Result**: PASS
 
+Reteste do ciclo 5, faixa `3fccc36..42aadeb`. `42aadeb` (`test(tools)`) só mexe em testes, simulador e `tasks.md`:
+`git diff a5b172d..42aadeb -- tools/publish-whatsapp-channel` = **vazio** (0 linhas), então a checagem do código de
+produção da 1ª rodada (§C5.1) continua valendo. As 5 lacunas da 1ª rodada (M9, M12, M13, M14, M17) e a asserção vazia da
+linha 392 foram fechadas; o pedido novo do dono (Enviar que não passa fica D) está coberto. **24 de 24 mutantes mortos**
+(14 da 1ª rodada + 10 do reteste). Execução real na inst2 continua bloqueando o merge (§C5.6).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-17.
+- **Árvore real:** no início do reteste `git status --porcelain` = ` M .specs/features/BSV-63/validation.md` (este
+  arquivo, da 1ª rodada) e `?? docs/canal_real.html`; as modificações alheias vistas na 1ª rodada são as de `42aadeb`.
+  Mutantes, gates e WSL numa cópia `git archive 42aadeb tools` no scratchpad (conferida igual ao commit, ignorando CR),
+  removida no fim. `docs/canal_real.html` intocado; nenhum `git stash`; único arquivo editado: este.
+
+### C5R.1 Pedido novo do dono: clique no Enviar que não passa fica D
+
+`T` = `tools/tests/test_pub_canal_web.py`, `TP` = `tools/tests/test_pub_publicador.py`, `pb` = `.../pub/publicador.py`,
+`cw` = `.../pub/canal_web.py` (linhas de `42aadeb`).
+
+| pedido | evidência | ok |
+|---|---|---|
+| Enviar com timeout de 5 s ou interceptado → a linha (já D) fica D, sai o aviso de D, não volta a P | código: `cw:358` (`_clicar` → `ErroPagina`, que é `FalhaPasso`) e `pb:188-198` (qualquer exceção depois do D só loga; sem confirmação → `_avisar_duvidoso` e `DUVIDOSO`). `TP:409-419` (`FalhaPasso` no Enviar → `("D", "enviando")`, 1 aviso com a linha e "conferir no canal", 15 min depois continua D e `enviar` chamado 1 vez = sem reenvio); `T:519-533` (`CanalWeb` real + publicador real, camada `enviarCoberto` sobre o botão: D, aviso, nada enviado, log com "Enviar da previa nao passou" + `intercepts pointer events`, < 30 s) | sim |
+| "nenhum caso grava D" vale só antes do clique | inalterado: `pb:166-176` (anexo/legenda → `FALHA_ANTES` sem D); testes do anexo com o publicador real seguem `("P", None)` | sim |
+
+### C5R.2 Mutantes do reteste (só `T` + `TP`, sem o de 20 s; M19 também isolado em cada teste)
+
+| id | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M19 | `pb`: `except FalhaPasso` no bloco do clique → marca D→P e `return FALHA_ANTES` | morto | `TP:409` e, isolado, `T:519`. **Com só o antigo `TP:160` (`test_est03_erro_no_clique_tambem_fica_d`) sobrevive** (1 passed) — confirma a necessidade dos testes novos |
+| M20 | Enviar com `botao.click()` (30 s padrão) em vez de `_clicar` | morto | `T:519` (< 30 s) |
+| M9 | recarrega ANTES da evidência | morto | `T:441` (`ordem == ["evidencia", "recarga"]`, `T:452`) |
+| M12 | até 6 Escapes | morto | `T:549` (`__escapes == 3` com `dialogoTeimoso`) |
+| M12b | só 2 Escapes | morto | `T:549` |
+| M13 | sem `_depois_da_falha` | morto | `T:538` (camada aberta pelo Anexar some depois da falha) |
+| M14 | exceção inesperada vira `ErroPagina` | morto | `T:473` (`type(erro.value) is RuntimeError`, `T:484`) |
+| M17 | `ESPERA_MENU_S = 0` | morto | `T:558` (item em 2 s passa) — morre pelo comportamento, não só pela constante |
+| M17b | item sem a espera (falha na 1ª sonda) | morto | `T:558` |
+| L392 | asserção vazia removida | conferido | `git diff a5b172d..42aadeb` remove a linha `assert m.pagina.recargas == 0 if hasattr(...) else True` |
+
+Os 14 mutantes mortos da 1ª rodada não foram reaplicados: `42aadeb` só acrescenta asserções e cenários (nenhum teste
+removido ou afrouxado além da linha vazia), então eles continuam mortos. **Total do ciclo: 24 de 24.**
+
+### C5R.3 Gates (lição 21) — cópia de `42aadeb`, sem carga minha em paralelo
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows) | **816 passed, 7 skipped** (os 7 POSIX antigos), 309 s |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed! |
+| `shellcheck vps/*.sh` | sem saída (ok) |
+| WSL (mesmos 8 arquivos da 1ª rodada, `--basetemp=/tmp/...`, apagado no fim) | **153 passed, 0 skipped** |
+| tempo, por último, 3 repetições isoladas | ≤ 6 s: 5,48 / 5,53 / 5,50 s (folga ~0,5 s, sensível a carga); Enviar interceptado (< 30 s): 6,47 / 6,43 / 6,36 s; item em 2 s: 3,24 / 3,22 / 3,15 s; prévia de 20 s: 20,87 / 20,85 / 20,82 s; passou nas 3 |
+
+### C5R.4 Lacunas restantes (nenhuma bloqueia)
+
+1. O teste de ≤ 6 s tem folga de ~0,5 s (inclui `abrir_canal`): pode falhar com a máquina carregada (lições 15/17).
+2. Leituras da 1ª rodada sem mutante (§C5.1 a–c): `expect_file_chooser` que não dispara é falha inesperada (P,
+   recarrega); `_depois_da_falha` pode mascarar a exceção original; o menu do Anexar não é `role=dialog`, quem fecha
+   é o `limpar()`.
+3. Risco residual do desvio `SEL_DIALOGO` (modal dentro do nó do aviso) só se confere no teste real.
+
+---
+
+## Histórico: ciclo 5, 1ª rodada (resultado: reprovado; corrigido no reteste acima)
+
+Ciclo 5 (2º achado do teste real, 17/11: anexo pelo menu, clique curto, camadas, evidência em toda falha, janela),
+faixa `3fccc36..a5b172d`. **O código de produção atende aos itens 1–5 por leitura e pelos testes** (nenhuma falha
+do anexo grava D; o input oculto saiu). **Reprova pelos testes**: 5 de 19 mutantes sobrevivem, e 2 deles estão na
+lista mínima do dono (recarregar ANTES da evidência; mais de 3 Escapes); outros 2 tocam pedidos explícitos (Escape
+depois da falha; exceção inesperada re-lançada como está). A correção é **só de teste** (§C5.4); nenhum mutante
+sobrevivente é equivalente. Execução real na inst2 continua bloqueando o merge (§C5.6).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-17.
+- **Faixa:** `3fccc36..a5b172d` — `573fa10` fix (menu, `_clicar` 5 s, camadas, `FooterPerdido`, evidência em toda
+  falha, `motivo_playwright`, janela), `a5b172d` README. `cddeb1a`/`3fccc36` são do ciclo 4.
+  `git merge-base --is-ancestor origin/develop HEAD` = 0.
+- **Árvore real:** no início `git status --porcelain` = `?? docs/canal_real.html`. **Durante a verificação** apareceram
+  modificações não commitadas que não são minhas (`tools/tests/fixtures/whatsapp_simulador.js`,
+  `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`: cenário `enviarCoberto` e testes de
+  "Enviar interceptado fica D") — provavelmente o autor em paralelo. Não as toquei e **não fazem parte deste veredito**:
+  mutantes, gates e WSL abaixo rodaram numa cópia `git archive HEAD tools` (conferida igual ao HEAD, ignorando CR).
+  `docs/canal_real.html` não foi lido, copiado nem citado. Nenhum `git stash`. Único arquivo editado: este.
+
+### C5.1 Checagem ancorada no pedido do dono
+
+`cw` = `tools/publish-whatsapp-channel/pub/canal_web.py`, `mn` = `.../main.py`, `pb` = `.../pub/publicador.py`,
+`R` = `.../README.md`, `T` = `tools/tests/test_pub_canal_web.py` (linhas do HEAD).
+
+| item | pedido | evidência | ok |
+|---|---|---|---|
+| 1 | caminho = Anexar → "Fotos e vídeos" em `expect_file_chooser` → `set_files`; input oculto não é usado | `cw:236-241`; `SEL_INPUT_FOTO`, `_por_input`, `_input_disponivel`, `set_input_files` saíram (grep em `publish-whatsapp-channel/` = 0); `T:362-371` (input presente no DOM, `__arquivosPorCaminho == {input: 0, menu: 1}`, 1 clique no Anexar, log `caminho=menu previa_s=x.x`, sem evidência no sucesso); `T:190` `not hasattr(canal_web, "SEL_INPUT_FOTO")` | sim |
+| 1 | item ausente em 5 s → falha prevista | `cw:41` `ESPERA_MENU_S = 5`, `cw:266-275` (`ErroPagina`, que é `FalhaPasso`); `T:385-394` com o `Publicador` real: `("P", None)`, `falhas_seguidas == 1`, nada enviado, log, 2 arquivos de evidência. O prazo de 5 s não é testado (o simulador mostra o item na hora — mutante M17) | sim (lacuna M17) |
+| 2 | antes de anexar: Escape até sumir `[role="dialog"]` e a prévia (máx. 3) e caixa do canal visível | `cw:236` → `_garantir_footer` `cw:285-289` → `_fechar_camadas` `cw:277-283` (`range(3)`, sai quando não há `SEL_DIALOGO` nem `SEL_LEGENDA` visível); `T:422-429` (camada `role=dialog` fechada por Escape antes do anexo e post sai) | sim (lacuna M12: teto de 3 sem teste) |
+| 2 | depois de qualquer falha do anexo: o mesmo, e footer que não volta → falha prevista + recarrega | `cw:254-257` (`FooterPerdido` → `_recarregar_pagina`; senão `_depois_da_falha` `cw:291-296`, que recarrega se o footer não volta); `cw:298-304` (`page.reload`; navegador fechado vira `BrowserMorto`); `T:442-450` (sem caixa: `ErroPagina`, 1 recarga, evidência, Anexar nunca clicado). O Escape **depois** da falha não é testado (mutante M13); `pb` também roda `limpar()` no `finally` (`pb:160-161`) | sim (lacuna M13) |
+| 2 | desvio: `SEL_DIALOGO` exclui o aviso fixo do canal | `cw:28-30`; `T:432-439` (fixture real: 1 `role=dialog`, 0 em `SEL_DIALOGO`, post sem nenhum Escape, sem evidência); `T:429` o aviso continua lá. **Aceito**: aplicar o item 2 ao pé da letra apertaria Escape em toda volta, e o autor documenta que Escape sem modal fecha a conversa; a exclusão é estreita (`:has(conversation-subheader)`), a prévia é conferida à parte por `SEL_LEGENDA`. Mutante M6 morto. Risco residual: se um modal real vier dentro do mesmo nó do aviso, ele não leva Escape — o dono confirma no teste real | sim (desvio aceito) |
+| 3 | clique com 5 s; erro de clique = falha prevista com a causa | `cw:42` `CLIQUE_MS = 5_000`; `cw:218-225` (`click(timeout=CLIQUE_MS)`, `ErroPagina` com `motivo_playwright`; navegador fechado repassa); usado em Canais/busca/célula (`cw:199,203,209`), Anexar (`cw:237`), item (`cw:240`), legenda (`cw:337`), Enviar (`cw:358`); `T:397-411` (camada que intercepta: `ErroPagina` em ≤ 6 s, `intercepts pointer events` no erro e no log, 2 arquivos, nenhum arquivo enviado); `T:414-419` com o `Publicador`: P sem D | sim |
+| 3 | `_clicar` no Enviar (depois do D) não volta a P | lido: `pb:188-198` — qualquer exceção depois do D fica D com aviso; nada regride a P | sim |
+| 4 | evidência (png + html redigido) em TODA falha do anexo, inclusive inesperada | `cw:247-258`: toda exceção que não é navegador fechado → log `[anexo] falha: <resumo>` + `_evidencia()` (`cw:253`) **antes** de recarregar (`cw:254-255`) e re-lança como está (`cw:258`); `T:453-467` (prévia não abre: P, png pela assinatura, html redigido), `T:385`, `T:397`, `T:442`, `T:470-482` (exceção inesperada: 2 arquivos, `RuntimeError` + mensagem no log). "Antes de recarregar" e "re-lançada como está" não são provados (M9, M14) | sim (lacunas M9, M14) |
+| 4 | motivo = última linha do call log com o porquê | `cw:402-417` (`motivo_playwright`: última linha que casa `intercepts pointer events\|outside of the viewport\|…`; senão a última linha útil; sem call log, a 1ª linha); `cw:420-423` `_resumo`; `T:485-499`, `T:409` | sim |
+| 4 | nenhuma falha do anexo grava D | `ErroPagina`/`FooterPerdido` são `FalhaPasso` (`cw:73-78`) → `pb:170-172` `FALHA_ANTES`; inesperada → `pb:173-176` recarrega uma vez e `FALHA_ANTES`; o `marcar(... "D" ...)` (`pb:179`) só vem depois do `anexar` sem exceção. `T:385`, `T:414`, `T:453` com o publicador real: `("P", None)` | sim |
+| 5 | janela `--window-size=1600,880 --window-position=0,0` (ou do ambiente) e `no_viewport` | `mn:32-48` (`BESAVE_JANELA=LxA`, mínimo 400, inválido → 1600×880), `mn:54` `launch_persistent_context(..., **opcoes_navegador())` (o `viewport` 1280×900 saiu); `T:502-511` | sim |
+| 5 | documentar no README | `R:73-76` (janela, `no_viewport`, `BESAVE_JANELA`), `R:21-29` (fluxo do anexo), `R:88-91` (log e evidência), `R:129-130` (tabela de seletores) | sim |
+
+Leituras sem mutante: (a) `expect_file_chooser` que não dispara depois do clique no item (`cw:239`) sai como
+`TimeoutError` do Playwright, isto é, falha **inesperada**: evidência, re-lança, o publicador recarrega e a linha fica P —
+seguro, mas não é "falha prevista"; (b) `_depois_da_falha` pode lançar outra exceção do Playwright e mascarar a
+original (o publicador ainda trata como inesperada → P); (c) o menu do Anexar aberto (`aria-expanded`) não é
+`role=dialog`: `_fechar_camadas` não o fecha, mas `limpar()` (`cw:387-395`) fecha no `finally` de cada post;
+(d) `T:392` `assert m.pagina.recargas == 0 if hasattr(...) else True` é vazio na prática (não prova nada).
+
+### C5.2 Gates (lição 21) — cópia do HEAD, sem carga minha em paralelo
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows) | **811 passed, 7 skipped** (os 7 POSIX antigos), 298 s |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed! |
+| `shellcheck vps/*.sh` | sem saída (ok) |
+| WSL (`test_pub_canal_web`, `test_pub_publicador`, `test_pub_fila`, `test_pub_foto`, `test_pub_isolamento`, `test_pub_regras`, `test_vigia_publicador`, `test_config_permissao`; `--basetemp=/tmp/...`, apagado no fim) | **148 passed, 0 skipped** |
+| tempo, por último, 5 repetições isoladas (`-k "6s or 20s"`) | ≤ 6 s: 5,48 / 5,47 / 5,50 / 5,47 / 5,46 s (inclui `abrir_canal`; folga ~0,5 s — sensível a carga, lições 15/17); prévia de 20 s: 20,64 / 20,76 / 20,89 / 20,76 / 20,79 s; passou nas 5 |
+
+### C5.3 Sensor de discriminação (lotes de 6, 7, 6; só os testes relevantes; sobreviventes reconfirmados com `T` inteiro + `test_pub_publicador.py`)
+
+Seleção: `T -k "anexo and not 20s or motivo or janela"` com `-x`; sobreviventes de novo com `T` + `test_pub_publicador.py`
+(91 testes, menos o de 20 s).
+
+| id | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M1 | input oculto primeiro (prévia por ele, menu só se não abrir) | morto | `T:362` (`input: 0`) |
+| M2 | `alvo.click()` sem timeout curto | morto | `T:397` (≤ 6 s) |
+| M3 | sem evidência na exceção inesperada | morto | `T:470` |
+| M4 | sem evidência na falha prevista | morto | `T:385` |
+| M5 | sem `_garantir_footer` antes do anexo | morto | `T:422` |
+| M5b | `_fechar_camadas` não faz nada | morto | `T:422` |
+| M6 | `SEL_DIALOGO = '[role="dialog"]'` (sem a exclusão) | morto | `T:397` (e `T:432`) |
+| M7 | motivo = 1ª linha da mensagem | morto | `T:397` |
+| M8 | `FooterPerdido` sem recarregar | morto | `T:442` |
+| **M9** | **recarrega ANTES da evidência** | **sobreviveu — lacuna** | `T:442` troca `_recarregar_pagina` por um lambda que só conta; ordem não verificada. Efeito real: a evidência mostraria a página recarregada, não a falha |
+| M10 | item ausente sem falhar (devolve o locator vazio) | morto | `T:385` (texto do log) |
+| M11 | `viewport` 1280×900 em vez de `no_viewport` | morto | `T:502` |
+| **M12** | **até 6 Escapes em vez de 3** | **sobreviveu — lacuna** | nenhum cenário tem camada `role=dialog` que o Escape não fecha. Efeito real: Escapes a mais fecham a conversa |
+| **M13** | **sem `_depois_da_falha`** (sem Escape nem recarga depois de falha comum) | **sobreviveu — lacuna** | nenhum teste abre camada/prévia ou perde o footer **depois** da falha. Atenuado pelo `limpar()` do publicador e pelo `_garantir_footer` da próxima volta, mas o item 2 pede o Escape e a recarga depois da falha |
+| **M14** | exceção inesperada vira `ErroPagina` (não re-lança como está) | **sobreviveu — lacuna** | `T:470` usa `pytest.raises(RuntimeError)`, e `ErroPagina` é `FalhaPasso(RuntimeError)`. Efeito real: o publicador deixa de recarregar a página na falha inesperada (`pb:173-176` vira `pb:170-172`) |
+| M15 | `_fechar_camadas` olha só a prévia (ignora `SEL_DIALOGO`) | morto | `T:422` |
+| M16 | `_garantir_footer` não confere a caixa do canal | morto | `T:442` |
+| **M17** | `ESPERA_MENU_S = 0` | **sobreviveu — lacuna** (não equivalente) | o simulador cria o item no mesmo clique; no WhatsApp real o item aparece depois. Efeito real: falha prevista em toda volta em que o menu demora |
+| M18 | `_clicar` sem o motivo na mensagem | morto | `T:397` |
+
+**14 de 19 mortos.** Da lista mínima do dono (12: M1, M2, M3, M4, M5, M6, M7, M8, M9, M10, M11, M12) morrem 10;
+**M9 e M12 sobrevivem**. Nenhum sobrevivente é equivalente.
+
+### C5.4 Lacunas (ranqueadas) — correção só de teste
+
+1. **M14** — `T:470`: trocar `pytest.raises(RuntimeError)` por uma exceção que não seja ancestral de `ErroPagina`
+   (ex.: `class Quebra(Exception)`) e conferir `type(erro.value) is Quebra`; idealmente também no publicador real:
+   inesperada → recarrega uma vez (`T`/`test_pub_publicador`).
+2. **M9** — `T:442`: o lambda de recarga registra se `falha_*.png`/`.html` já existem naquele instante (ou uma lista
+   de ordem com `_evidencia` embrulhado) e exige evidência antes da recarga.
+3. **M13** — cenário em que a falha deixa camada/prévia aberta ou some com a caixa (ex.: `menuNaoAbre` + camada
+   `role=dialog` que aparece no clique do item, ou `semCaixa` ligado só depois do Anexar) e exigir Escape e/ou
+   recarga **depois** da falha, chamando `CanalWeb.anexar` direto (sem o `limpar()` do publicador).
+4. **M12** — cenário `camadaDialogo` que o Escape não fecha: exigir `__escapes == 3` (não mais), `FooterPerdido` não,
+   mas falha prevista / recarga conforme o desenho, e conversa não fechada.
+5. **M17** — opção do simulador com atraso do item (ex.: 2 s) que precisa passar, e item ausente medindo ~5 s.
+6. `T:392` — remover ou tornar real o `assert ... if hasattr(...) else True`.
+
+### C5.5 Mudanças fora do pedido
+
+`_clicar` com 5 s também em Canais/busca/célula/legenda/Enviar (declarado; coerente com o item 3; no Enviar, depois do
+D, continua D — `pb:188-198`); `screenshot(timeout=10_000)` na evidência (`cw:317`). Nada fora de `tools/` e `.specs/`.
+
+### C5.6 Pendências do dono (bloqueiam o merge)
+
+- Teste real na inst2 com o commit que fechar este ciclo: log `[anexo] caminho=menu previa_s=<x>`; em falha,
+  `[anexo] falha: <motivo>` com a linha do porquê e `log/falha_*.png/.html` gravados; conferir que a janela 1600×880
+  cabe na tela `:1` (footer inteiro visível no VNC) e que o aviso fixo do canal não leva Escape (conversa não fecha).
+- Revisar um `log/falha_*.html` real antes de qualquer uso fora da máquina (regra 11).
+- Demais pendências dos ciclos 3 e 4 (§C3.7, §C4.6) seguem valendo.
+
+---
+
+## Histórico: ciclo 4 (resultado do ciclo: PASS)
+
 Ciclo 4 (prévia da foto lenta ou que não abre — achado do teste real na inst2, 17/11), faixa `6b5f96b..18fdca0`.
 Os 4 itens do pedido do dono e os 5 testes pedidos conferidos com evidência; **16 de 18 mutantes mortos**
 (1 equivalente, 1 lacuna de cobertura sem efeito no envio: evidência gravada também no sucesso, §C4.3).
