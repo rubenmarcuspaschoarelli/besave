@@ -154,7 +154,7 @@ T14 → T15
 **Tests**: `tools/tests/test_pub_canal_web.py` (`-k anexo`, `motivo`, `janela`)
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py` (WSL: 0 skipped)
 
-### T15: README do anexo pelo menu e da janela
+### T15: README do anexo pelo menu e da janela ✅
 **What**: fluxo do anexo, camadas, clique curto, evidência e tamanho da janela no README.
 **Where**: `tools/publish-whatsapp-channel/README.md`
 **Depends on**: T14

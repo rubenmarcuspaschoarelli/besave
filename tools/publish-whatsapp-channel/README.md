@@ -18,11 +18,15 @@ A volta acontece a cada `intervalo_minutos` (padrão 15, ±30% aleatório). Em o
 5. pega a `P` mais recente; baixa `https://besave.com.br/img/ofertas/{id}.webp` (sem ela, o placeholder da
    área) e faz o quadrado 800×800 JPEG de fundo branco;
 6. abre o canal (nome = `CANAL_ENVIO.DS_CHAT_ID` do `id_canal`; se o cabeçalho já é o do canal, não navega;
-   senão Canais → busca → célula → confere o cabeçalho; divergiu = falha, nada enviado), põe a foto no input
-   oculto do footer e espera a prévia até 30 s (`ESPERA_PREVIA_S`; na inst2 ela já passou de 15 s). Não abriu
-   pelo input → `Escape` e, uma única vez, Anexar → "Fotos e vídeos"; não abriu de novo → falha, sem `D`. Depois
-   cola a legenda na prévia, conferindo cru com cru (`*…*` e `_…_` aparecem crus na caixa); divergiu duas vezes →
-   fecha a prévia, falha, sem `D`;
+   senão Canais → busca → célula → confere o cabeçalho; divergiu = falha, nada enviado). Anexa a foto pelo
+   caminho do usuário: fecha camadas abertas com `Escape` (no máximo 3; o aviso fixo do canal, também
+   `role="dialog"`, não conta) e confere a caixa do canal; clica Anexar → item "Fotos e vídeos" (até 5 s) dentro de
+   `expect_file_chooser` → arquivo; espera a prévia até 30 s (`ESPERA_PREVIA_S`). O input oculto do footer
+   (junto do microfone) **não** é usado: no teste real de 17/11 ele não abria a prévia com legenda. Cada clique tem
+   5 s (`CLIQUE_MS`); clique que não passa é falha prevista com o motivo do Playwright (ex.: `intercepts pointer
+   events`). Qualquer falha do anexo → evidência, `Escape` e, se a caixa do canal não voltar, recarrega a página;
+   a linha continua `P`, sem `D`. Depois cola a legenda na prévia, conferindo cru com cru (`*…*` e `_…_` aparecem
+   crus na caixa); divergiu duas vezes → fecha a prévia, falha, sem `D`;
 7. grava `D 'enviando'`, clica em "Enviar 1 item selecionado" e espera, por `timeout_post_segundos` (padrão 60),
    a confirmação **positiva**: a prévia fechou, apareceu um balão **novo** cuja legenda tem `besave.io/{ID_OFERTA}`
    e cujo status (`msg-meta`) é Enviada, Entregue ou Lida → `E`. Qualquer outra coisa → a linha fica `D` e chega
@@ -66,6 +70,11 @@ O drop-in `robos.conf` põe `BESAVE_VIGIA_ROBOS=publicador`: na inst2 o vigia ol
 Avisos: `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` do ambiente ou do `/srv/besave/worker.env` (o mesmo do vigia;
 outro caminho em `BESAVE_WORKER_ENV`). Senha do Oracle: `BESAVE_ORACLE_PASS` vence a do JSON.
 
+**Janela:** o Chromium abre com `--window-size=1600,880 --window-position=0,0` e sem viewport fixo
+(`no_viewport`): a página usa a janela real, que cabe na tela `:1` (17/11: com viewport 1280×900 a janela passava
+da tela do VNC e o footer ficava cortado). Outra tela: `BESAVE_JANELA=LxA` no `Environment=` da unidade
+(ex.: `BESAVE_JANELA=1366x700`); valor inválido volta a 1600×880.
+
 ## Primeiro login (QR)
 
 1. Túnel para a tela: `ssh -L 5901:localhost:5901 besave@<inst2>` e cliente VNC em `localhost:5901`.
@@ -76,9 +85,10 @@ outro caminho em `BESAVE_WORKER_ENV`). Senha do Oracle: `BESAVE_ORACLE_PASS` ven
    VNC" e nada é postado até lá (o vigia também avisa, sem reiniciar).
 
 Log: `log/run_publicador_DD_MM_HHMMSS.log` (um por partida). Cada anexo loga
-`[anexo] caminho=input|menu previa_s=<segundos>` (ou `previa=nao`). Prévia que não abriu pelos dois caminhos
-deixa `log/falha_<DDMM_HHMMSS>.png` (print da tela) e `.html` (DOM com o mesmo recorte redigido do
-`--gravar-dom`); ficam os 20 arquivos mais recentes. `log/` é fora do git; o print pode mostrar a lista de
+`[anexo] caminho=menu previa_s=<segundos>` (ou `previa=nao`); falha loga `[anexo] falha: <motivo>`. **Toda**
+falha do anexo (item ausente, clique interceptado, prévia que não abre, exceção inesperada) deixa
+`log/falha_<DDMM_HHMMSS>.png` (print da tela) e `.html` (DOM com o mesmo recorte redigido do `--gravar-dom`);
+ficam os 20 arquivos mais recentes. `log/` é fora do git; o print pode mostrar a lista de
 conversas: não anexar em PR sem redigir (regra 11). Tela do processo: `tmux -L besave-publicador attach`
 (sair sem parar: `Ctrl+b` `d`).
 
@@ -116,7 +126,8 @@ Mapeados pelo dono no WhatsApp Web real em **16/11/2026** (canal aberto depois d
 | canal aberto | `[data-testid="conversation-info-header-chat-title"]` com texto normalizado igual ao nome |
 | caixa do canal | `[data-testid="conversation-compose-box-input"][contenteditable="true"]` |
 | anexar | `#main footer button[aria-label="Anexar"]` |
-| input de foto | `#main footer input[type="file"][accept="image/*"]` (oculto) → `set_input_files`; sem ele, Anexar e espera 5 s; sem ele ainda, o item "Fotos e vídeos" dentro de `expect_file_chooser` (o diálogo do sistema nunca abre solto) |
+| foto | Anexar → item com o texto "Fotos e vídeos" (até 5 s) dentro de `expect_file_chooser` → `set_files`; o diálogo do sistema nunca abre solto. O `input[type="file"]` oculto do footer existe, mas não é usado (17/11) |
+| camada aberta | `[role="dialog"]` menos o aviso fixo do canal (`:has([data-testid="conversation-subheader"])`), fechada com `Escape` |
 | legenda da prévia | `[data-testid="media-caption-input-container"][contenteditable="true"][role="textbox"]` |
 | enviar da prévia | `div[role="button"][aria-label="Enviar 1 item selecionado"]` |
 | balão | `[data-testid^="conv-msg-"]` |
