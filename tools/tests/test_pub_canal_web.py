@@ -339,12 +339,13 @@ def test_anexo_espera_da_previa_e_30s():
     assert canal_web.ESPERA_PREVIA_S == 30
 
 
-def test_anexo_input_sem_previa_cai_para_o_menu_uma_vez(abrir, foto, monkeypatch):
+def test_anexo_input_sem_previa_cai_para_o_menu_uma_vez(abrir, foto, monkeypatch, tmp_path):
     monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 2)
     page, _ = abrir(inputNaoAbre=True, menu=True)
     logs = []
-    c = _canal(page, logs)
+    c = _canal(page, logs, tmp_path / "log")
     assert _postar(c, foto) is True
+    assert not list((tmp_path / "log").glob("falha_*"))                # previa abriu: sem evidencia
     anexo = [x for x in logs if x.startswith("[anexo] ")]
     assert anexo[0] == "[anexo] caminho=input previa=nao"
     assert re.fullmatch(r"\[anexo\] caminho=menu previa_s=\d+\.\d", anexo[1]) and len(anexo) == 2
@@ -403,3 +404,10 @@ def test_anexo_evidencia_roda_a_rotacao(abrir, tmp_path):
     assert len(nomes) == 20
     assert "falha_1711_113500.png" in nomes and "falha_1711_113500.html" in nomes
     assert "falha_0101_000000.png" not in nomes and "falha_0101_000001.png" not in nomes
+
+
+def test_anexo_sucesso_direto_nao_grava_evidencia(abrir, foto, tmp_path):
+    page, _ = abrir()
+    c = _canal(page, [], tmp_path / "log")
+    assert _postar(c, foto) is True
+    assert not list((tmp_path / "log").glob("falha_*"))

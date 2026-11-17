@@ -18,7 +18,7 @@ T7
 T8 → T9 → T10
 
 ### Phase 6: Achado do teste real (17/11): prévia da foto
-T11 → T12
+T11 → T12 → T13
 
 ```
 T1 → T2
@@ -32,6 +32,7 @@ T8 → T9
 T9 → T10
 T10 → T11
 T11 → T12
+T12 → T13
 ```
 
 ## Task Breakdown
@@ -131,6 +132,14 @@ T11 → T12
 **Reqs**: EST-02
 **Tests**: revisão do README
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_isolamento.py`
+
+### T13: Lacuna do Verifier (ciclo 4) ✅
+**What**: teste de que a prévia que abre (pelo input ou pelo menu) não grava evidência em `log/`. Só testes.
+**Where**: `tools/tests/test_pub_canal_web.py`
+**Depends on**: T12
+**Reqs**: EST-02
+**Tests**: `tools/tests/test_pub_canal_web.py`
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py -k anexo`
 
 ## Test Coverage Matrix
 
