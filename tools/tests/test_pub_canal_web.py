@@ -389,7 +389,6 @@ def test_anexo_item_do_menu_ausente_falha_prevista_sem_d_com_evidencia(abrir, fo
     i = m.fila.add(m.local())
     m.volta()
     assert m.fila.st(i) == ("P", None) and m.pub.falhas_seguidas == 1 and _envios(page) == []
-    assert m.pagina.recargas == 0 if hasattr(m.pagina, "recargas") else True
     assert any("Fotos e vídeos nao apareceu" in x for x in m.logs)
     assert _evidencias(pasta) == ["falha_1711_130900.html", "falha_1711_130900.png"]
 
@@ -443,10 +442,14 @@ def test_anexo_footer_que_nao_volta_falha_prevista_e_recarrega(abrir, foto, tmp_
     page, _ = abrir(semCaixa=True)
     recargas = []
     c = _canal(page, [], tmp_path / "log")
-    monkeypatch.setattr(c, "_recarregar_pagina", lambda: recargas.append(1))
+    ordem = []
+    evidencia = c._evidencia
+    monkeypatch.setattr(c, "_evidencia", lambda: (ordem.append("evidencia"), evidencia()))
+    monkeypatch.setattr(c, "_recarregar_pagina", lambda: (ordem.append("recarga"), recargas.append(1)))
     with pytest.raises(ErroPagina):
         c.anexar(foto)
     assert recargas == [1] and len(_evidencias(tmp_path / "log")) == 2
+    assert ordem == ["evidencia", "recarga"]                          # o print e da falha, nao da pagina nova
     assert page.evaluate("window.__cliquesAnexar || 0") == 0          # nao tentou anexar sem o footer
 
 
@@ -476,8 +479,10 @@ def test_anexo_excecao_inesperada_tambem_grava_evidencia(abrir, foto, tmp_path, 
     def quebra():
         raise RuntimeError("erro inesperado de teste")
     monkeypatch.setattr(c, "_item_fotos", quebra)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError) as erro:
         c.anexar(foto)
+    assert type(erro.value) is RuntimeError                           # re-lancada como esta: o publicador recarrega
+    assert not isinstance(erro.value, ErroPagina)
     assert len(_evidencias(tmp_path / "log")) == 2
     assert any("RuntimeError" in x and "erro inesperado de teste" in x for x in logs)
 
@@ -509,3 +514,49 @@ def test_janela_cabe_na_tela_e_usa_no_viewport():
                                         "args": ["--window-size=1600,880", "--window-position=0,0"]}
     assert mod.opcoes_navegador({"BESAVE_JANELA": "1366x700"})["args"][0] == "--window-size=1366,700"
     assert mod.opcoes_navegador({"BESAVE_JANELA": "lixo"})["args"][0] == "--window-size=1600,880"
+
+
+def test_enviar_interceptado_no_publicador_fica_d_com_aviso(abrir, foto, tmp_path):
+    """Clique em "Enviar 1 item selecionado" que nao passa (camada por cima, timeout de 5 s): a linha ja e D e fica D;
+    o aviso de D sai; nada volta a P."""
+    import time
+    page, _ = abrir(enviarCoberto=True)
+    m = _publicador_real(page, tmp_path, tmp_path / "log")
+    i = m.fila.add(m.local())
+    inicio = time.monotonic()
+    m.volta()
+    assert m.fila.st(i) == ("D", "enviando")
+    assert len(m.avisos) == 1 and f"linha {i}" in m.avisos[0] and "conferir no canal" in m.avisos[0]
+    assert _envios(page) == []                                        # o clique nao passou
+    assert any("Enviar da previa nao passou" in x and "intercepts pointer events" in x for x in m.logs)
+    assert time.monotonic() - inicio < 30                             # 5 s do clique, nao 30 + 60 de espera
+
+
+# --- lacunas do Verifier (ciclo 5) -------------------------------------------------------------------
+
+
+def test_anexo_depois_da_falha_escape_fecha_a_camada_aberta(abrir, foto, tmp_path):  # M13
+    page, _ = abrir(semItemMenu=True, dialogoNoAnexar=True)
+    c = _canal(page, [], tmp_path / "log")
+    c.abrir_canal(CANAL)
+    with pytest.raises(ErroPagina):
+        c.anexar(foto)
+    assert page.evaluate("window.__cliquesAnexar") == 1
+    assert page.locator(canal_web.SEL_DIALOGO).count() == 0                # fechada pelo Escape depois da falha
+    assert page.evaluate("window.__escapes") >= 1
+
+
+def test_anexo_no_maximo_3_escapes_numa_camada_que_nao_fecha(abrir, foto, tmp_path):  # M12
+    page, _ = abrir(dialogoTeimoso=True)
+    c = _canal(page, [], tmp_path / "log")
+    c.abrir_canal(CANAL)
+    c.anexar(foto)                                                          # a camada nao cobre o Anexar
+    assert page.evaluate("window.__escapes") == 3
+    assert page.locator(canal_web.SEL_DIALOGO).count() == 1
+
+
+def test_anexo_item_do_menu_que_aparece_em_2s_passa(abrir, foto, tmp_path):  # M17: o prazo do item e 5 s
+    page, _ = abrir(atrasoMenu=2_000)
+    c = _canal(page, [], tmp_path / "log")
+    assert _postar(c, foto) is True
+    assert canal_web.ESPERA_MENU_S == 5

@@ -21,7 +21,7 @@ T8 → T9 → T10
 T11 → T12 → T13
 
 ### Phase 7: 2º achado do teste real (17/11, 3fccc36): anexo pelo menu
-T14 → T15
+T14 → T15 → T16
 
 ```
 T1 → T2
@@ -38,6 +38,7 @@ T11 → T12
 T12 → T13
 T13 → T14
 T14 → T15
+T15 → T16
 ```
 
 ## Task Breakdown
@@ -162,6 +163,14 @@ T14 → T15
 **Tests**: revisão do README
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_isolamento.py`
 
+### T16: Enviar interceptado fica D; lacunas do Verifier (ciclo 5) ✅
+**What**: só testes. Clique em "Enviar 1 item selecionado" que não passa (camada, 5 s) e `FalhaPasso` no Enviar → linha fica `D` com aviso, nunca volta a `P` (`D` só antes do clique é proibido). Lacunas M9 (evidência antes da recarga), M12 (no máximo 3 Escapes), M13 (Escape depois da falha), M14 (exceção inesperada re-lançada como está), M17 (item do menu com 5 s). Simulador: `enviarCoberto`, `atrasoMenu`, `dialogoNoAnexar`, `dialogoTeimoso`.
+**Where**: `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`, `tools/tests/fixtures/whatsapp_simulador.js`
+**Depends on**: T15
+**Reqs**: EST-03, EST-02
+**Tests**: `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py tests/test_pub_publicador.py` (WSL: 0 skipped)
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -172,6 +181,7 @@ T14 → T15
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| EST-03, EST-02 (Enviar interceptado fica D; M9, M12, M13, M14, M17) | `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py` | T16 |
 | EST-02, FOT-03, LIM-01 (anexo pelo menu, clique curto, camadas, evidência, janela) | `tools/tests/test_pub_canal_web.py` | T14 |
 | EST-02, FOT-03 (prévia lenta, 2º caminho, evidência) | `tools/tests/test_pub_canal_web.py` | T11 |
 | LEG-02, EST-02 (lacunas M-n, M-s, M-t) | `tools/tests/test_pub_canal_web.py` | T10 |

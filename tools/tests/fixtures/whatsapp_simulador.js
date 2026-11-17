@@ -16,6 +16,10 @@
 //   camadaFixa    uma camada transparente cobre a pagina e intercepta cliques; Escape NAO a fecha
 //   camadaDialogo uma camada [role="dialog"] cobre a pagina; Escape a fecha
 //   semCaixa      a caixa do canal some (footer do canal nao volta)
+//   atrasoMenu    ms ate o item "Fotos e vídeos" aparecer depois do clique no Anexar
+//   dialogoNoAnexar  o clique no Anexar tambem abre uma camada [role="dialog"] (Escape fecha)
+//   dialogoTeimoso   uma camada [role="dialog"] pequena, num canto, que Escape NAO fecha
+//   enviarCoberto quando a previa abre, uma camada cobre so o "Enviar 1 item selecionado" (clique interceptado)
 (() => {
   const opc = Object.assign({ status: ' Enviada ' }, window.__sim || {});
   window.__envios = [];
@@ -42,20 +46,39 @@
   const footer = $('#main footer');
   const anexar = footer.querySelector('button[aria-label="Anexar"]');
   window.__arquivosPorCaminho = { input: 0, menu: 0 };
+  const cobrirEnviar = () => {
+    // camada que acompanha o botao (a legenda colada empurra o botao para baixo; o Playwright rola ate ele)
+    if (document.querySelector('[data-sim="cobre-enviar"]')) return;
+    const botao = $('div[role="button"][aria-label="Enviar 1 item selecionado"]');
+    const c = document.createElement('div');
+    c.setAttribute('data-sim', 'cobre-enviar');
+    document.body.appendChild(c);
+    const seguir = () => {
+      const r = botao.getBoundingClientRect();
+      c.style.cssText = `position:absolute;left:${r.left + scrollX - 2}px;top:${r.top + scrollY - 2}px;`
+        + `width:${r.width + 4}px;height:${r.height + 4}px;z-index:9999;background:rgba(0,0,0,0.01)`;
+      requestAnimationFrame(seguir);
+    };
+    seguir();
+  };
   const abrirPrevia = (inp, caminho, naoAbre) => inp.addEventListener('change', () => {
     if (!inp.files.length) return;
     window.__arquivosPorCaminho[caminho]++;
     if (naoAbre) return;
-    setTimeout(() => { mostrar(previa, true); legenda.innerHTML = ''; }, opc.atrasoPrevia || 0);
+    setTimeout(() => { mostrar(previa, true); legenda.innerHTML = ''; if (opc.enviarCoberto) cobrirEnviar(); },
+               opc.atrasoPrevia || 0);
   });
   // input oculto do footer: o publicador NAO deve usa-lo; se usar, a previa abre (o mutante passaria sem a contagem)
   abrirPrevia(footer.querySelector('input[type="file"]'), 'input', false);
   anexar.addEventListener('click', () => {
     anexar.setAttribute('aria-expanded', 'true');
     window.__cliquesAnexar = (window.__cliquesAnexar || 0) + 1;
+    if (opc.dialogoNoAnexar && !document.querySelector('[data-sim="camada-dialogo"]')) camada(true);
     if (opc.semItemMenu || document.querySelector('[data-sim="menu-fotos"]')) return;
     const item = document.createElement('div');
     item.setAttribute('role', 'button'); item.setAttribute('data-sim', 'menu-fotos'); item.textContent = 'Fotos e vídeos';
+    item.style.display = 'none';
+    setTimeout(() => { item.style.display = ''; }, opc.atrasoMenu || 0);
     document.body.appendChild(item);
     item.addEventListener('click', () => {
       const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
@@ -71,6 +94,12 @@
     document.body.appendChild(c);
   };
   if (opc.camadaFixa) camada(false);
+  if (opc.dialogoTeimoso) {
+    const d = document.createElement('div');
+    d.setAttribute('role', 'dialog'); d.setAttribute('data-sim', 'dialogo-teimoso'); d.textContent = 'teimoso';
+    d.style.cssText = 'position:fixed;right:0;top:0;width:60px;height:20px;z-index:9999';
+    document.body.appendChild(d);
+  }
   if (opc.camadaDialogo) camada(true);
   if (opc.semCaixa) $('[data-testid="conversation-compose-box-input"]').remove();
 

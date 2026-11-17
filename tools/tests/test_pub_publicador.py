@@ -404,3 +404,16 @@ def test_est02_falha_prevista_da_pagina_e_p_sem_recarregar(m, passo):
     m.volta()
     assert m.fila.st(i) == ("P", None) and m.pagina.envios == [] and m.pagina.recargas == 0
     assert m.pub.falhas_seguidas == 1 and m.pagina.chamadas[-1] == "limpar"
+
+
+def test_est03_falha_prevista_no_clique_de_enviar_fica_d_nao_volta_a_p(m):
+    """FalhaPasso so e "falha antes do clique" ate o D: no Enviar (depois do D) a linha fica D e o aviso sai."""
+    i = m.fila.add(m.local())
+    m.pagina.falha_prevista = "enviar"
+    m.volta()
+    assert m.fila.st(i) == ("D", "enviando")
+    assert len(m.avisos) == 1 and f"linha {i}" in m.avisos[0] and "conferir no canal" in m.avisos[0]
+    m.pagina.falha_prevista = None
+    m.andar(minutes=15)
+    m.volta()
+    assert m.fila.st(i) == ("D", "enviando") and m.pagina.chamadas.count("enviar") == 1   # nao reenvia
