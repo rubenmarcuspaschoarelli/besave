@@ -10,6 +10,7 @@ ilegivel na partida, 130 parado por SIGINT (SuccessExitStatus da unidade).
 """
 
 import argparse
+import os
 import random
 import sys
 import time
@@ -28,9 +29,29 @@ def log(texto: str) -> None:
     print(f"[{datetime.now():%d/%m %H:%M:%S}] {texto}", flush=True)
 
 
+JANELA_PADRAO = (1600, 880)
+
+
+def tamanho_janela(env=None) -> tuple[int, int]:
+    """BESAVE_JANELA=LxA (ex.: 1600x880), o tamanho util da tela :1; invalido ou ausente -> 1600x880."""
+    valor = ((os.environ if env is None else env).get("BESAVE_JANELA") or "").strip().lower()
+    partes = valor.split("x")
+    if len(partes) == 2 and all(x.isdigit() and int(x) >= 400 for x in partes):
+        return int(partes[0]), int(partes[1])
+    return JANELA_PADRAO
+
+
+def opcoes_navegador(env=None) -> dict:
+    """A janela cabe na tela do VNC (17/11: o footer ficava cortado embaixo) e a pagina usa a janela real
+    (no_viewport), sem viewport fixo maior que a tela."""
+    largura, altura = tamanho_janela(env)
+    return {"headless": False, "no_viewport": True,
+            "args": [f"--window-size={largura},{altura}", "--window-position=0,0"]}
+
+
 def abrir_navegador(p):
     """Contexto persistente (QR lido uma vez, pelo VNC). Perfil proprio: nunca o da captura."""
-    ctx = p.chromium.launch_persistent_context(str(PERFIL), headless=False, viewport={"width": 1280, "height": 900})
+    ctx = p.chromium.launch_persistent_context(str(PERFIL), **opcoes_navegador())
     page = ctx.pages[0] if ctx.pages else ctx.new_page()
     page.goto(canal_web.WHATSAPP_URL, wait_until="domcontentloaded")
     return ctx, page

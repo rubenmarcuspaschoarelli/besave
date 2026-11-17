@@ -6,14 +6,16 @@
 //   naoChega      o clique nao produz balao novo
 //   mainFechado   #main oculto ate clicar na celula do canal
 //   tituloAoClicar  titulo do cabecalho depois de clicar na celula (cabecalho divergente)
-//   semInput      sem o input do footer; o clique em Anexar o cria
-//   menuSemInput  sem input nenhum; Anexar mostra o item "Fotos e vídeos", que abre o seletor de arquivo
 //   rejeitaTexto  a legenda da previa ignora colar e digitar
 //   rejeitaColar  a legenda da previa ignora so o colar (digitar funciona)
 //   atrasoPrevia  ms ate a previa abrir depois do arquivo escolhido (inst2 lenta)
-//   inputNaoAbre  o input do footer recebe o arquivo e a previa nao abre
-//   menu          Anexar mostra o item "Fotos e vídeos" mesmo com o input do footer
-//   menuNaoAbre   o arquivo escolhido pelo menu tambem nao abre a previa
+//   Anexar sempre mostra o item "Fotos e vídeos" (que abre o seletor de arquivo), como no WhatsApp real. O input
+//   oculto do footer (junto do microfone) continua no DOM e, se receber arquivo, so conta em __arquivosPorCaminho.input.
+//   semItemMenu   Anexar nao mostra o item "Fotos e vídeos"
+//   menuNaoAbre   o arquivo escolhido pelo menu nao abre a previa
+//   camadaFixa    uma camada transparente cobre a pagina e intercepta cliques; Escape NAO a fecha
+//   camadaDialogo uma camada [role="dialog"] cobre a pagina; Escape a fecha
+//   semCaixa      a caixa do canal some (footer do canal nao volta)
 (() => {
   const opc = Object.assign({ status: ' Enviada ' }, window.__sim || {});
   window.__envios = [];
@@ -46,25 +48,31 @@
     if (naoAbre) return;
     setTimeout(() => { mostrar(previa, true); legenda.innerHTML = ''; }, opc.atrasoPrevia || 0);
   });
-  let entrada = footer.querySelector('input[type="file"]');
-  if (opc.semInput || opc.menuSemInput) entrada.remove(); else abrirPrevia(entrada, 'input', opc.inputNaoAbre);
+  // input oculto do footer: o publicador NAO deve usa-lo; se usar, a previa abre (o mutante passaria sem a contagem)
+  abrirPrevia(footer.querySelector('input[type="file"]'), 'input', false);
   anexar.addEventListener('click', () => {
     anexar.setAttribute('aria-expanded', 'true');
-    if (opc.semInput && !footer.querySelector('input[type="file"]')) {
-      entrada = document.createElement('input');
-      entrada.type = 'file'; entrada.accept = 'image/*'; entrada.style.display = 'none';
-      footer.appendChild(entrada); abrirPrevia(entrada, 'input', opc.inputNaoAbre);
-    }
-    if ((opc.menuSemInput || opc.menu) && !document.querySelector('[data-sim="menu-fotos"]')) {
-      const item = document.createElement('div');
-      item.setAttribute('role', 'button'); item.setAttribute('data-sim', 'menu-fotos'); item.textContent = 'Fotos e vídeos';
-      document.body.appendChild(item);
-      item.addEventListener('click', () => {
-        const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
-        abrirPrevia(i, 'menu', opc.menuNaoAbre); i.click();
-      });
-    }
+    window.__cliquesAnexar = (window.__cliquesAnexar || 0) + 1;
+    if (opc.semItemMenu || document.querySelector('[data-sim="menu-fotos"]')) return;
+    const item = document.createElement('div');
+    item.setAttribute('role', 'button'); item.setAttribute('data-sim', 'menu-fotos'); item.textContent = 'Fotos e vídeos';
+    document.body.appendChild(item);
+    item.addEventListener('click', () => {
+      const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
+      abrirPrevia(i, 'menu', opc.menuNaoAbre); i.click();
+    });
   });
+  const camada = (dialogo) => {
+    const c = document.createElement('div');
+    c.setAttribute('data-sim', dialogo ? 'camada-dialogo' : 'camada-fixa');
+    if (dialogo) c.setAttribute('role', 'dialog');
+    c.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.01)';
+    c.textContent = dialogo ? 'camada' : '';
+    document.body.appendChild(c);
+  };
+  if (opc.camadaFixa) camada(false);
+  if (opc.camadaDialogo) camada(true);
+  if (opc.semCaixa) $('[data-testid="conversation-compose-box-input"]').remove();
 
   // --- legenda da previa (como o Lexical: colar vira um <p> por linha; Enter envia; Shift+Enter quebra)
   const textoEditor = (el) => {
@@ -95,6 +103,7 @@
       window.__escapesAntesDoMenu = window.__arquivosPorCaminho.menu === 0 ? window.__escapes : window.__escapesAntesDoMenu;
       mostrar(previa, false); anexar.setAttribute('aria-expanded', 'false');
       const m = document.querySelector('[data-sim="menu-fotos"]'); if (m) m.remove();
+      const d = document.querySelector('[data-sim="camada-dialogo"]'); if (d) d.remove();
     }
   });
 

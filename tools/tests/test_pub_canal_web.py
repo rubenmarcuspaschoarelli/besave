@@ -178,7 +178,7 @@ def test_dom_seletores_da_tabela_existem_na_fixture_real(abrir):
     unicos = {
         canal_web.SEL_ABA_CANAIS: 1, canal_web.SEL_BUSCA_CANAIS: 1,
         canal_web.SEL_CELULA.format(nome=CANAL): 1, canal_web.SEL_TITULO: 1, canal_web.SEL_CAIXA_CANAL: 1,
-        canal_web.SEL_ANEXAR: 1, canal_web.SEL_INPUT_FOTO: 1, canal_web.SEL_LEGENDA: 1, canal_web.SEL_ENVIAR: 1,
+        canal_web.SEL_ANEXAR: 1, canal_web.SEL_LEGENDA: 1, canal_web.SEL_ENVIAR: 1,
     }
     for sel, n in unicos.items():
         assert page.locator(sel).count() == n, sel
@@ -186,7 +186,8 @@ def test_dom_seletores_da_tabela_existem_na_fixture_real(abrir):
     assert page.locator(canal_web.SEL_LEGENDA_BALAO).count() == 3
     rotulos = page.locator(canal_web.SEL_STATUS_BALAO).evaluate_all("e => e.map(x => x.getAttribute('aria-label'))")
     assert rotulos and all(canal_web.status_confirmado(r) for r in rotulos)     # real: " Enviada "
-    assert page.locator('input[type="file"]').count() == 1                     # o oculto do footer
+    assert page.locator('#main footer input[type="file"]').count() == 1      # existe, mas nao e usado
+    assert not hasattr(canal_web, "SEL_INPUT_FOTO")
 
 
 @pytest.mark.parametrize("modo", ["colar", "digitar"])
@@ -250,29 +251,6 @@ def test_dom_previa_aberta_nao_confirma(abrir, foto):
     assert c.confirmar(CHAVE, 2) is False
 
 
-def test_dom_input_ausente_usa_o_anexar(abrir, foto):
-    page, c = abrir(semInput=True)
-    assert page.locator('input[type="file"]').count() == 0
-    assert _postar(c, foto) is True
-    assert page.locator(canal_web.SEL_ANEXAR).get_attribute("aria-expanded") == "true"
-
-
-def test_dom_sem_input_nenhum_usa_fotos_e_videos_com_expect_file_chooser(abrir, foto):
-    page, c = abrir(menuSemInput=True)
-    assert _postar(c, foto) is True
-    assert _envios(page) == [LEGENDA]
-
-
-def test_dom_input_de_arquivo_fora_do_footer_nao_e_usado(abrir, foto):
-    page, c = abrir()
-    page.evaluate("""const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
-        i.id = 'isca'; document.body.prepend(i);""")
-    c.abrir_canal(CANAL)
-    c.anexar(foto)
-    assert page.evaluate("document.getElementById('isca').files.length") == 0
-    assert page.evaluate("document.querySelector('#main footer input[type=file]').files.length") == 1
-
-
 def test_dom_limpar_fecha_a_previa(abrir, foto):
     page, c = abrir()
     c.abrir_canal(CANAL)
@@ -323,58 +301,8 @@ def _canal(page, logs, pasta=None, agora=None):
     return CanalWeb(page, log=logs.append, pasta_log=pasta, agora=agora or datetime.now)
 
 
-def test_anexo_previa_que_abre_em_20s_passa(abrir, foto):
-    page, _ = abrir(atrasoPrevia=20_000)
-    logs = []
-    c = _canal(page, logs)
-    c.abrir_canal(CANAL)
-    c.anexar(foto)                                          # com 15 s de espera falharia
-    linha = next(x for x in logs if x.startswith("[anexo] "))
-    m = re.fullmatch(r"\[anexo\] caminho=input previa_s=(\d+\.\d)", linha)
-    assert m and 20.0 <= float(m.group(1)) < 30.0
-    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 0}
-
-
 def test_anexo_espera_da_previa_e_30s():
     assert canal_web.ESPERA_PREVIA_S == 30
-
-
-def test_anexo_input_sem_previa_cai_para_o_menu_uma_vez(abrir, foto, monkeypatch, tmp_path):
-    monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 2)
-    page, _ = abrir(inputNaoAbre=True, menu=True)
-    logs = []
-    c = _canal(page, logs, tmp_path / "log")
-    assert _postar(c, foto) is True
-    assert not list((tmp_path / "log").glob("falha_*"))                # previa abriu: sem evidencia
-    anexo = [x for x in logs if x.startswith("[anexo] ")]
-    assert anexo[0] == "[anexo] caminho=input previa=nao"
-    assert re.fullmatch(r"\[anexo\] caminho=menu previa_s=\d+\.\d", anexo[1]) and len(anexo) == 2
-    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 1}
-    assert page.evaluate("window.__escapesAntesDoMenu") >= 1            # Escape antes do 2o caminho
-
-
-def test_anexo_os_dois_caminhos_falham_linha_p_sem_d_com_evidencia(abrir, foto, tmp_path, monkeypatch):
-    from datetime import datetime
-
-    from pub_falso import Mundo
-    monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 1)
-    page, _ = abrir(inputNaoAbre=True, menu=True, menuNaoAbre=True)
-    page.evaluate("document.querySelector('#app').insertAdjacentHTML('beforeend', '<span>5511987654321</span>')")
-    pasta = tmp_path / "log"
-    m = Mundo(tmp_path / "mundo")
-    m.fila.nome = CANAL
-    m.pub.pagina = _canal(page, m.logs, pasta, agora=lambda: datetime(2026, 11, 17, 11, 17, 5))
-    i = m.fila.add(m.local())
-    m.volta()
-    assert m.fila.st(i) == ("P", None) and m.pub.falhas_seguidas == 1      # sem D
-    assert _envios(page) == [] and m.avisos == []
-    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 1}
-    assert "[anexo] caminho=input previa=nao" in m.logs and "[anexo] caminho=menu previa=nao" in m.logs
-    png, html = pasta / "falha_1711_111705.png", pasta / "falha_1711_111705.html"
-    assert png.read_bytes()[:4] == bytes([0x89]) + b"PNG"
-    texto = html.read_text(encoding="utf-8")
-    assert "conversation-panel-wrapper" in texto                 # e o DOM da pagina
-    assert not re.search(r"\d{10,}", texto) and "REDACTED" in texto
 
 
 def test_anexo_rotacao_o_21o_arquivo_apaga_o_mais_antigo(tmp_path):
@@ -411,3 +339,173 @@ def test_anexo_sucesso_direto_nao_grava_evidencia(abrir, foto, tmp_path):
     c = _canal(page, [], tmp_path / "log")
     assert _postar(c, foto) is True
     assert not list((tmp_path / "log").glob("falha_*"))
+
+
+
+# --- 2o achado do teste real (17/11, 3fccc36): o caminho do usuario e o menu; clique curto; evidencia --------
+
+
+def _publicador_real(page, tmp_path, pasta, quando=(2026, 11, 17, 13, 9, 0)):
+    from datetime import datetime
+
+    from pub_falso import Mundo
+    m = Mundo(tmp_path / "mundo")
+    m.fila.nome = CANAL
+    m.pub.pagina = _canal(page, m.logs, pasta, agora=lambda: datetime(*quando))
+    return m
+
+
+def _evidencias(pasta):
+    return sorted(p.name for p in pasta.glob("falha_*"))
+
+
+def test_anexo_menu_e_o_caminho_mesmo_com_o_input_oculto(abrir, foto, tmp_path):
+    page, _ = abrir()
+    assert page.locator('#main footer input[type="file"]').count() == 1
+    logs = []
+    c = _canal(page, logs, tmp_path / "log")
+    assert _postar(c, foto) is True
+    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 0, "menu": 1}
+    assert page.evaluate("window.__cliquesAnexar") == 1
+    assert any(re.fullmatch(r"\[anexo\] caminho=menu previa_s=\d+\.\d", x) for x in logs)
+    assert _evidencias(tmp_path / "log") == []                       # sucesso nao grava evidencia
+
+
+def test_anexo_previa_que_abre_em_20s_passa(abrir, foto):
+    page, _ = abrir(atrasoPrevia=20_000)
+    logs = []
+    c = _canal(page, logs)
+    c.abrir_canal(CANAL)
+    c.anexar(foto)                                                    # com 15 s de espera falharia
+    linha = next(x for x in logs if x.startswith("[anexo] caminho="))
+    m = re.fullmatch(r"\[anexo\] caminho=menu previa_s=(\d+\.\d)", linha)
+    assert m and 20.0 <= float(m.group(1)) < 30.0
+
+
+def test_anexo_item_do_menu_ausente_falha_prevista_sem_d_com_evidencia(abrir, foto, tmp_path):
+    page, _ = abrir(semItemMenu=True)
+    pasta = tmp_path / "log"
+    m = _publicador_real(page, tmp_path, pasta)
+    i = m.fila.add(m.local())
+    m.volta()
+    assert m.fila.st(i) == ("P", None) and m.pub.falhas_seguidas == 1 and _envios(page) == []
+    assert m.pagina.recargas == 0 if hasattr(m.pagina, "recargas") else True
+    assert any("Fotos e vídeos nao apareceu" in x for x in m.logs)
+    assert _evidencias(pasta) == ["falha_1711_130900.html", "falha_1711_130900.png"]
+
+
+def test_anexo_camada_que_intercepta_o_clique_falha_em_ate_6s_com_causa(abrir, foto, tmp_path):
+    import time
+    page, _ = abrir(camadaFixa=True)
+    pasta = tmp_path / "log"
+    logs = []
+    c = _canal(page, logs, pasta)
+    c.abrir_canal(CANAL)
+    inicio = time.monotonic()
+    with pytest.raises(ErroPagina) as erro:
+        c.anexar(foto)
+    assert time.monotonic() - inicio <= 6.0                           # clique curto, nao os 30 s do padrao
+    assert "intercepts pointer events" in str(erro.value)
+    assert any("Anexar" in x and "intercepts pointer events" in x for x in logs)
+    assert len(_evidencias(pasta)) == 2
+    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 0, "menu": 0}
+
+
+def test_anexo_camada_que_intercepta_no_publicador_e_p_sem_d(abrir, foto, tmp_path):
+    page, _ = abrir(camadaFixa=True)
+    m = _publicador_real(page, tmp_path, tmp_path / "log")
+    i = m.fila.add(m.local())
+    m.volta()
+    assert m.fila.st(i) == ("P", None) and _envios(page) == [] and m.pub.falhas_seguidas == 1
+
+
+def test_anexo_escape_fecha_a_camada_e_o_footer_volta_antes_de_anexar(abrir, foto, tmp_path):
+    page, _ = abrir(camadaDialogo=True)
+    assert page.locator(canal_web.SEL_DIALOGO).count() == 1
+    c = _canal(page, [], tmp_path / "log")
+    assert _postar(c, foto) is True
+    assert page.evaluate("window.__escapes") >= 1
+    assert page.locator(canal_web.SEL_DIALOGO).count() == 0
+    assert page.locator('[role="dialog"] [data-testid="conversation-subheader"]').count() == 1   # o aviso fica
+
+
+def test_anexo_aviso_fixo_do_canal_nao_e_camada_e_nao_leva_escape(abrir, foto, tmp_path):
+    page, _ = abrir()
+    assert page.locator('[role="dialog"]').count() == 1                    # o aviso real do canal (role=dialog)
+    assert page.locator(canal_web.SEL_DIALOGO).count() == 0
+    c = _canal(page, [], tmp_path / "log")
+    assert _postar(c, foto) is True
+    assert (page.evaluate("window.__escapes") or 0) == 0                    # Escape sem camada fecharia a conversa
+    assert _evidencias(tmp_path / "log") == []
+
+
+def test_anexo_footer_que_nao_volta_falha_prevista_e_recarrega(abrir, foto, tmp_path, monkeypatch):
+    page, _ = abrir(semCaixa=True)
+    recargas = []
+    c = _canal(page, [], tmp_path / "log")
+    monkeypatch.setattr(c, "_recarregar_pagina", lambda: recargas.append(1))
+    with pytest.raises(ErroPagina):
+        c.anexar(foto)
+    assert recargas == [1] and len(_evidencias(tmp_path / "log")) == 2
+    assert page.evaluate("window.__cliquesAnexar || 0") == 0          # nao tentou anexar sem o footer
+
+
+def test_anexo_previa_que_nao_abre_falha_sem_d_com_evidencia_redigida(abrir, foto, tmp_path, monkeypatch):
+    monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 1)
+    page, _ = abrir(menuNaoAbre=True)
+    page.evaluate("document.querySelector('#app').insertAdjacentHTML('beforeend', '<span>5511987654321</span>')")
+    pasta = tmp_path / "log"
+    m = _publicador_real(page, tmp_path, pasta, quando=(2026, 11, 17, 11, 17, 5))
+    i = m.fila.add(m.local())
+    m.volta()
+    assert m.fila.st(i) == ("P", None) and m.pub.falhas_seguidas == 1 and m.avisos == []
+    assert "[anexo] caminho=menu previa=nao" in m.logs
+    png, html = pasta / "falha_1711_111705.png", pasta / "falha_1711_111705.html"
+    assert png.read_bytes()[:4] == bytes([0x89]) + b"PNG"
+    texto = html.read_text(encoding="utf-8")
+    assert "conversation-panel-wrapper" in texto
+    assert not re.search(r"\d{10,}", texto) and "REDACTED" in texto
+
+
+def test_anexo_excecao_inesperada_tambem_grava_evidencia(abrir, foto, tmp_path, monkeypatch):
+    page, _ = abrir()
+    logs = []
+    c = _canal(page, logs, tmp_path / "log")
+    c.abrir_canal(CANAL)
+
+    def quebra():
+        raise RuntimeError("erro inesperado de teste")
+    monkeypatch.setattr(c, "_item_fotos", quebra)
+    with pytest.raises(RuntimeError):
+        c.anexar(foto)
+    assert len(_evidencias(tmp_path / "log")) == 2
+    assert any("RuntimeError" in x and "erro inesperado de teste" in x for x in logs)
+
+
+def test_motivo_do_playwright_e_a_linha_do_porque():
+    erro = Exception(
+        "Locator.click: Timeout 5000ms exceeded.\nCall log:\n"
+        "  - waiting for locator('#main footer button[aria-label=\"Anexar\"]')\n"
+        "  -   locator resolved to <button aria-label=\"Anexar\">…</button>\n"
+        "  - attempting click action\n"
+        "  -     element is visible, enabled and stable\n"
+        "  -     <div data-sim=\"camada-fixa\"></div> intercepts pointer events\n"
+        "  -   retrying click action\n"
+        "  -     waiting 500ms\n")
+    assert canal_web.motivo_playwright(erro) == '<div data-sim="camada-fixa"></div> intercepts pointer events'
+    fora = Exception("Locator.click: Timeout\nCall log:\n  - attempting click action\n"
+                     "  -     element is outside of the viewport\n  -   retrying click action\n")
+    assert canal_web.motivo_playwright(fora) == "element is outside of the viewport"
+    assert canal_web.motivo_playwright(Exception("sem call log\nlinha 2")) == "sem call log"
+
+
+def test_janela_cabe_na_tela_e_usa_no_viewport():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "main_publicador_janela", Path(__file__).resolve().parent.parent / "publish-whatsapp-channel" / "main.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.opcoes_navegador({}) == {"headless": False, "no_viewport": True,
+                                        "args": ["--window-size=1600,880", "--window-position=0,0"]}
+    assert mod.opcoes_navegador({"BESAVE_JANELA": "1366x700"})["args"][0] == "--window-size=1366,700"
+    assert mod.opcoes_navegador({"BESAVE_JANELA": "lixo"})["args"][0] == "--window-size=1600,880"

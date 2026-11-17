@@ -25,7 +25,9 @@ SEL_CELULA = '[data-testid="newsletter-tab-newsletter-cell"][aria-label="Canal {
 SEL_TITULO = '[data-testid="conversation-info-header-chat-title"]'
 SEL_CAIXA_CANAL = '[data-testid="conversation-compose-box-input"][contenteditable="true"]'
 SEL_ANEXAR = '#main footer button[aria-label="Anexar"]'
-SEL_INPUT_FOTO = '#main footer input[type="file"][accept="image/*"]'
+# Camada a fechar com Escape: qualquer [role="dialog"] MENOS o aviso fixo do canal ("Os canais no seu pais...",
+# conversation-subheader), que tambem e role=dialog e nunca some. Escape sem camada aberta fecha a conversa.
+SEL_DIALOGO = '[role="dialog"]:not(:has([data-testid="conversation-subheader"]))'
 TEXTO_MENU_FOTOS = "Fotos e vídeos"
 SEL_LEGENDA = '[data-testid="media-caption-input-container"][contenteditable="true"][role="textbox"]'
 SEL_ENVIAR = 'div[role="button"][aria-label="Enviar 1 item selecionado"]'
@@ -36,7 +38,8 @@ STATUS_CONFIRMADO = frozenset({"enviada", "entregue", "lida"})     # real: " Env
 
 ESPERA_SESSAO_S = 60
 ESPERA_PASSO_S = 15
-ESPERA_INPUT_S = 5
+ESPERA_MENU_S = 5             # o item "Fotos e vídeos" aparece depois do clique no Anexar
+CLIQUE_MS = 5_000             # clique curto: o padrao de 30 s travou o Anexar na inst2 (17/11)
 ESPERA_PREVIA_S = 30          # inst2 (ARM, 4 GB): a previa levou mais de 15 s no teste real de 17/11
 MAX_EVIDENCIAS = 20           # arquivos falha_* guardados em log/ (os mais antigos saem)
 SONDA_MS = 500
@@ -69,6 +72,10 @@ _JS_COLAR = """(el, texto) => {
 
 class ErroPagina(FalhaPasso):
     """Passo da pagina que nao deu: falha antes do clique (a linha continua P)."""
+
+
+class FooterPerdido(ErroPagina):
+    """O footer do canal nao voltou depois do Escape: grava a evidencia e recarrega a pagina."""
 
 
 def _morto(f):
@@ -189,17 +196,17 @@ class CanalWeb:
         aba = self._visivel(SEL_ABA_CANAIS, ESPERA_PASSO_S)
         if aba is None:
             raise ErroPagina("nao achei o botao Canais")
-        aba.click()
+        self._clicar(aba, "Canais")
         busca = self._visivel(SEL_BUSCA_CANAIS, ESPERA_PASSO_S)
         if busca is None:
             raise ErroPagina("nao achei a busca do painel de canais")
-        busca.click()
+        self._clicar(busca, "busca de canais")
         busca.fill("")
         busca.press_sequentially(nome, delay=30)
         celula = self._visivel(SEL_CELULA.format(nome=_aspas(nome)), ESPERA_PASSO_S)
         if celula is None:
             raise ErroPagina("o canal nao apareceu na busca")
-        celula.click()
+        self._clicar(celula, "celula do canal")
         fim = time.monotonic() + ESPERA_PASSO_S
         while not self._canal_aberto(nome):
             if time.monotonic() >= fim:
@@ -208,67 +215,93 @@ class CanalWeb:
         if self._visivel(SEL_CAIXA_CANAL, 5) is None:
             raise ErroPagina("canal aberto sem caixa de mensagem (o numero e admin do canal?)")
 
+    def _clicar(self, alvo, oque: str) -> None:
+        """Clique com timeout curto (CLIQUE_MS). Nao passou -> falha prevista com o motivo do call log."""
+        try:
+            alvo.click(timeout=CLIQUE_MS)
+        except Exception as e:
+            if _FECHADO.search(str(e)):
+                raise
+            raise ErroPagina(f"clique em {oque} nao passou: {motivo_playwright(e)}") from None
+
+    # ------------------------------------------------------------------------------------------- anexo
+
     @_morto
     def anexar(self, foto: Path) -> None:
-        """1o caminho: set_input_files no input oculto do footer (sem ele, Anexar e espera o input; sem ele ainda,
-        o menu). A previa nao abriu em ESPERA_PREVIA_S pelo input: Escape e, uma unica vez, o menu (Anexar ->
-        "Fotos e vídeos" dentro de expect_file_chooser). Nao abriu de novo: evidencia em log/ e falha (sem D).
-        O dialogo do sistema nunca abre solto."""
-        foto = str(foto)
-        caminho = self._por_input(foto) if self._input_disponivel() else self._por_menu(foto)
-        if self._esperar_previa(caminho):
-            return
-        if caminho == "input":
-            self.page.keyboard.press("Escape")
-            caminho = self._por_menu(foto)
-            if self._esperar_previa(caminho):
-                return
-        self._evidencia()
-        raise ErroPagina("a previa da foto nao abriu (sem a legenda da previa)")
+        """Caminho do usuario: Anexar -> "Fotos e vídeos" dentro de expect_file_chooser -> set_files -> previa.
+        O input oculto do footer (junto do microfone) NAO e usado: no teste real de 17/11 ele nao abria a
+        previa com legenda. Antes: camadas fechadas e footer do canal visivel. Toda falha (prevista ou nao)
+        grava evidencia em log/ e fecha as camadas; a linha continua P (sem D)."""
+        try:
+            self._garantir_footer()
+            self._clicar(self._botao_anexar(), "Anexar")
+            item = self._item_fotos()
+            with self.page.expect_file_chooser(timeout=CLIQUE_MS) as escolha:
+                self._clicar(item, TEXTO_MENU_FOTOS)
+            escolha.value.set_files(str(foto))
+            inicio = time.monotonic()
+            if self._visivel(SEL_LEGENDA, ESPERA_PREVIA_S) is None:
+                self.log("[anexo] caminho=menu previa=nao")
+                raise ErroPagina("a previa da foto nao abriu (sem a legenda da previa)")
+            self.log(f"[anexo] caminho=menu previa_s={time.monotonic() - inicio:.1f}")
+        except BrowserMorto:
+            raise
+        except Exception as e:
+            if _FECHADO.search(str(e)):
+                raise
+            self.log(f"[anexo] falha: {_resumo(e)}")
+            self._evidencia()
+            if isinstance(e, FooterPerdido):
+                self._recarregar_pagina()
+            else:
+                self._depois_da_falha()
+            raise
 
-    def _input_disponivel(self) -> bool:
-        if self._existe(SEL_INPUT_FOTO):
-            return True
-        self._clicar_anexar()
-        fim = time.monotonic() + ESPERA_INPUT_S
-        while not self._existe(SEL_INPUT_FOTO) and time.monotonic() < fim:
-            self.page.wait_for_timeout(SONDA_MS)
-        return self._existe(SEL_INPUT_FOTO)
-
-    def _clicar_anexar(self) -> None:
+    def _botao_anexar(self):
         botao = self._visivel(SEL_ANEXAR, 5)
         if botao is None:
             raise ErroPagina("nao achei o botao Anexar")
-        botao.click()
+        return botao
 
-    def _por_input(self, foto: str) -> str:
-        self.page.locator(SEL_INPUT_FOTO).first.set_input_files(foto)
-        return "input"
-
-    def _por_menu(self, foto: str) -> str:
+    def _item_fotos(self):
         item = self.page.get_by_text(TEXTO_MENU_FOTOS, exact=True)
-        if item.count() == 0:
-            self._clicar_anexar()
-            fim = time.monotonic() + ESPERA_INPUT_S
-            while item.count() == 0 and time.monotonic() < fim:
-                self.page.wait_for_timeout(SONDA_MS)
-        if item.count() == 0:
-            self.log("[anexo] caminho=menu previa=nao (sem o item Fotos e vídeos)")
-            self._evidencia()
-            raise ErroPagina("sem o item Fotos e vídeos no menu do Anexar")
-        with self.page.expect_file_chooser(timeout=ESPERA_INPUT_S * 1000) as escolha:
-            item.first.click()
-        escolha.value.set_files(foto)
-        return "menu"
+        fim = time.monotonic() + ESPERA_MENU_S
+        while True:
+            for i in range(item.count()):
+                if item.nth(i).is_visible():
+                    return item.nth(i)
+            if time.monotonic() >= fim:
+                raise ErroPagina(f"o item {TEXTO_MENU_FOTOS} nao apareceu em {ESPERA_MENU_S} s depois do Anexar")
+            self.page.wait_for_timeout(SONDA_MS)
 
-    def _esperar_previa(self, caminho: str) -> bool:
-        inicio = time.monotonic()
-        abriu = self._visivel(SEL_LEGENDA, ESPERA_PREVIA_S) is not None
-        if abriu:
-            self.log(f"[anexo] caminho={caminho} previa_s={time.monotonic() - inicio:.1f}")
-        else:
-            self.log(f"[anexo] caminho={caminho} previa=nao")
-        return abriu
+    def _fechar_camadas(self) -> None:
+        """Escape ate sumir [role="dialog"] e a previa visiveis (no maximo 3)."""
+        for _ in range(3):
+            if self._visivel(SEL_DIALOGO) is None and self._visivel(SEL_LEGENDA) is None:
+                return
+            self.page.keyboard.press("Escape")
+            self.page.wait_for_timeout(400)
+
+    def _garantir_footer(self) -> None:
+        """Camadas fechadas e caixa do canal visivel; senao FooterPerdido (quem pega recarrega a pagina)."""
+        self._fechar_camadas()
+        if self._visivel(SEL_CAIXA_CANAL, 3) is None:
+            raise FooterPerdido("o footer do canal nao voltou depois do Escape; recarregando a pagina")
+
+    def _depois_da_falha(self) -> None:
+        try:
+            self._garantir_footer()
+        except FooterPerdido as e:
+            self.log(f"[anexo] {e}")
+            self._recarregar_pagina()
+
+    def _recarregar_pagina(self) -> None:
+        try:
+            self.page.reload(wait_until="domcontentloaded")
+        except Exception as e:
+            if _FECHADO.search(str(e)):
+                raise BrowserMorto(str(e)[:200]) from e
+            self.log(f"[anexo] WARN recarregar falhou: {_resumo(e)}")
 
     def _evidencia(self) -> None:
         """log/falha_<DDMM_HHMMSS>.png e .html (recorte redigido do --gravar-dom). Guarda os MAX_EVIDENCIAS
@@ -281,7 +314,7 @@ class CanalWeb:
             n, nome = 2, base
             while (self.pasta_log / f"{nome}.png").exists() or (self.pasta_log / f"{nome}.html").exists():
                 nome, n = f"{base}_{n}", n + 1
-            self.page.screenshot(path=str(self.pasta_log / f"{nome}.png"))
+            self.page.screenshot(path=str(self.pasta_log / f"{nome}.png"), timeout=10_000)
             (self.pasta_log / f"{nome}.html").write_text(redigir_dom(self.page.content()), encoding="utf-8")
             self.log(f"[anexo] evidencia em log/{nome}.png e .html")
         except Exception as e:
@@ -301,7 +334,7 @@ class CanalWeb:
         if caixa is None:
             raise ErroPagina("sem a legenda da previa")
         for m in (["colar", "digitar"] if modo == "colar" else ["digitar", "digitar"]):
-            caixa.click()
+            self._clicar(caixa, "legenda da previa")
             self.page.keyboard.press("Control+A")
             self.page.keyboard.press("Delete")
             if m == "colar":
@@ -322,7 +355,7 @@ class CanalWeb:
         botao = self._visivel(SEL_ENVIAR, 5)
         if botao is None:
             raise ErroPagina("nao achei o Enviar da previa")
-        botao.click()
+        self._clicar(botao, "Enviar da previa")
 
     @_morto
     def confirmar(self, chave: str, timeout_s: float) -> bool:
@@ -364,6 +397,30 @@ class CanalWeb:
     def recarregar(self) -> None:
         self.page.reload(wait_until="domcontentloaded")
         self.sessao()
+
+
+_MOTIVOS = re.compile(r"intercepts pointer events|outside of the viewport|not visible|not enabled|not stable|"
+                      r"detached|not attached|is not an? ", re.IGNORECASE)
+
+
+def motivo_playwright(e) -> str:
+    """Motivo de um erro do Playwright: a ultima linha do call log que diz POR QUE (intercepts pointer events,
+    outside of the viewport...); sem ela, a ultima linha util do call log; sem call log, a 1a linha da mensagem."""
+    texto = str(e)
+    linhas = [x.strip(" -\t") for x in texto.split("Call log:", 1)[1].splitlines()] if "Call log:" in texto else []
+    linhas = [x for x in linhas if x]
+    for linha in reversed(linhas):
+        if _MOTIVOS.search(linha):
+            return linha[:300]
+    if linhas:
+        return linhas[-1][:300]
+    return (texto.strip().splitlines() or [type(e).__name__])[0][:300]
+
+
+def _resumo(e) -> str:
+    if isinstance(e, ErroPagina):
+        return str(e).splitlines()[0][:300]
+    return f"{type(e).__name__}: {motivo_playwright(e)}"
 
 
 def rodar_evidencias(pasta: Path, manter: int = MAX_EVIDENCIAS, log=print) -> None:

@@ -20,6 +20,9 @@ T8 → T9 → T10
 ### Phase 6: Achado do teste real (17/11): prévia da foto
 T11 → T12 → T13
 
+### Phase 7: 2º achado do teste real (17/11, 3fccc36): anexo pelo menu
+T14 → T15
+
 ```
 T1 → T2
 T2 → T3
@@ -33,6 +36,8 @@ T9 → T10
 T10 → T11
 T11 → T12
 T12 → T13
+T13 → T14
+T14 → T15
 ```
 
 ## Task Breakdown
@@ -141,6 +146,22 @@ T12 → T13
 **Tests**: `tools/tests/test_pub_canal_web.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py -k anexo`
 
+### T14: Anexo pelo menu, clique curto, camadas e evidência em toda falha ✅
+**What**: caminho único Anexar → "Fotos e vídeos" em `expect_file_chooser` (o input oculto do footer sai); item ausente em 5 s = falha prevista; antes e depois de falha, Escape até sumir camada (`[role="dialog"]` menos o aviso fixo do canal) e a prévia (máx. 3) e caixa do canal visível, senão falha prevista + recarrega; cliques com 5 s e motivo do call log; evidência em toda falha, inclusive inesperada; janela `--window-size` + `no_viewport` (`BESAVE_JANELA`).
+**Where**: `tools/publish-whatsapp-channel/pub/canal_web.py`, `tools/publish-whatsapp-channel/main.py`, `tools/tests/test_pub_canal_web.py`, `tools/tests/fixtures/whatsapp_simulador.js`
+**Depends on**: T13
+**Reqs**: EST-02, FOT-03, LIM-01
+**Tests**: `tools/tests/test_pub_canal_web.py` (`-k anexo`, `motivo`, `janela`)
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py` (WSL: 0 skipped)
+
+### T15: README do anexo pelo menu e da janela
+**What**: fluxo do anexo, camadas, clique curto, evidência e tamanho da janela no README.
+**Where**: `tools/publish-whatsapp-channel/README.md`
+**Depends on**: T14
+**Reqs**: EST-02
+**Tests**: revisão do README
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_isolamento.py`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -151,6 +172,7 @@ T12 → T13
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| EST-02, FOT-03, LIM-01 (anexo pelo menu, clique curto, camadas, evidência, janela) | `tools/tests/test_pub_canal_web.py` | T14 |
 | EST-02, FOT-03 (prévia lenta, 2º caminho, evidência) | `tools/tests/test_pub_canal_web.py` | T11 |
 | LEG-02, EST-02 (lacunas M-n, M-s, M-t) | `tools/tests/test_pub_canal_web.py` | T10 |
 | LEG-01..02, EST-01..03 (seletores reais, fixture real) | `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py` | T8 |
