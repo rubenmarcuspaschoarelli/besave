@@ -8,6 +8,7 @@ nunca as classes x..., XPath ou os ids dinamicos _r_..._. Os icones do WhatsApp 
 import re
 import time
 import unicodedata
+from datetime import datetime
 from functools import wraps
 from pathlib import Path
 
@@ -36,6 +37,8 @@ STATUS_CONFIRMADO = frozenset({"enviada", "entregue", "lida"})     # real: " Env
 ESPERA_SESSAO_S = 60
 ESPERA_PASSO_S = 15
 ESPERA_INPUT_S = 5
+ESPERA_PREVIA_S = 30          # inst2 (ARM, 4 GB): a previa levou mais de 15 s no teste real de 17/11
+MAX_EVIDENCIAS = 20           # arquivos falha_* guardados em log/ (os mais antigos saem)
 SONDA_MS = 500
 
 _FECHADO = re.compile(r"Target page, context or browser has been closed|Target closed|Browser has been closed|"
@@ -129,9 +132,11 @@ def _aspas(nome: str) -> str:
 
 
 class CanalWeb:
-    def __init__(self, page, log=print):
+    def __init__(self, page, log=print, pasta_log: Path | None = None, agora=datetime.now):
         self.page = page
         self.log = log
+        self.pasta_log = Path(pasta_log) if pasta_log is not None else None
+        self.agora = agora
         self._baloes_antes: set[str] = set()
 
     # ------------------------------------------------------------------------------------ auxiliares
@@ -205,28 +210,85 @@ class CanalWeb:
 
     @_morto
     def anexar(self, foto: Path) -> None:
-        """set_input_files no input oculto do footer; sem ele, Anexar e espera o input; sem ele ainda, o item
-        "Fotos e vídeos" dentro de expect_file_chooser. O dialogo do sistema nunca abre solto."""
+        """1o caminho: set_input_files no input oculto do footer (sem ele, Anexar e espera o input; sem ele ainda,
+        o menu). A previa nao abriu em ESPERA_PREVIA_S pelo input: Escape e, uma unica vez, o menu (Anexar ->
+        "Fotos e vídeos" dentro de expect_file_chooser). Nao abriu de novo: evidencia em log/ e falha (sem D).
+        O dialogo do sistema nunca abre solto."""
         foto = str(foto)
-        if not self._existe(SEL_INPUT_FOTO):
-            botao = self._visivel(SEL_ANEXAR, 5)
-            if botao is None:
-                raise ErroPagina("nao achei o botao Anexar")
-            botao.click()
-            fim = time.monotonic() + ESPERA_INPUT_S
-            while not self._existe(SEL_INPUT_FOTO) and time.monotonic() < fim:
-                self.page.wait_for_timeout(SONDA_MS)
+        caminho = self._por_input(foto) if self._input_disponivel() else self._por_menu(foto)
+        if self._esperar_previa(caminho):
+            return
+        if caminho == "input":
+            self.page.keyboard.press("Escape")
+            caminho = self._por_menu(foto)
+            if self._esperar_previa(caminho):
+                return
+        self._evidencia()
+        raise ErroPagina("a previa da foto nao abriu (sem a legenda da previa)")
+
+    def _input_disponivel(self) -> bool:
         if self._existe(SEL_INPUT_FOTO):
-            self.page.locator(SEL_INPUT_FOTO).first.set_input_files(foto)
+            return True
+        self._clicar_anexar()
+        fim = time.monotonic() + ESPERA_INPUT_S
+        while not self._existe(SEL_INPUT_FOTO) and time.monotonic() < fim:
+            self.page.wait_for_timeout(SONDA_MS)
+        return self._existe(SEL_INPUT_FOTO)
+
+    def _clicar_anexar(self) -> None:
+        botao = self._visivel(SEL_ANEXAR, 5)
+        if botao is None:
+            raise ErroPagina("nao achei o botao Anexar")
+        botao.click()
+
+    def _por_input(self, foto: str) -> str:
+        self.page.locator(SEL_INPUT_FOTO).first.set_input_files(foto)
+        return "input"
+
+    def _por_menu(self, foto: str) -> str:
+        item = self.page.get_by_text(TEXTO_MENU_FOTOS, exact=True)
+        if item.count() == 0:
+            self._clicar_anexar()
+            fim = time.monotonic() + ESPERA_INPUT_S
+            while item.count() == 0 and time.monotonic() < fim:
+                self.page.wait_for_timeout(SONDA_MS)
+        if item.count() == 0:
+            self.log("[anexo] caminho=menu previa=nao (sem o item Fotos e vídeos)")
+            self._evidencia()
+            raise ErroPagina("sem o item Fotos e vídeos no menu do Anexar")
+        with self.page.expect_file_chooser(timeout=ESPERA_INPUT_S * 1000) as escolha:
+            item.first.click()
+        escolha.value.set_files(foto)
+        return "menu"
+
+    def _esperar_previa(self, caminho: str) -> bool:
+        inicio = time.monotonic()
+        abriu = self._visivel(SEL_LEGENDA, ESPERA_PREVIA_S) is not None
+        if abriu:
+            self.log(f"[anexo] caminho={caminho} previa_s={time.monotonic() - inicio:.1f}")
         else:
-            item = self.page.get_by_text(TEXTO_MENU_FOTOS, exact=True)
-            if item.count() == 0:
-                raise ErroPagina("sem input de foto e sem o item Fotos e vídeos")
-            with self.page.expect_file_chooser(timeout=ESPERA_INPUT_S * 1000) as escolha:
-                item.first.click()
-            escolha.value.set_files(foto)
-        if self._visivel(SEL_LEGENDA, ESPERA_PASSO_S) is None:
-            raise ErroPagina("a previa da foto nao abriu (sem a legenda da previa)")
+            self.log(f"[anexo] caminho={caminho} previa=nao")
+        return abriu
+
+    def _evidencia(self) -> None:
+        """log/falha_<DDMM_HHMMSS>.png e .html (recorte redigido do --gravar-dom). Guarda os MAX_EVIDENCIAS
+        arquivos mais recentes. Falha aqui so vai ao log: nao muda o resultado da tentativa."""
+        if self.pasta_log is None:
+            return
+        try:
+            self.pasta_log.mkdir(parents=True, exist_ok=True)
+            base = f"falha_{self.agora():%d%m_%H%M%S}"
+            n, nome = 2, base
+            while (self.pasta_log / f"{nome}.png").exists() or (self.pasta_log / f"{nome}.html").exists():
+                nome, n = f"{base}_{n}", n + 1
+            self.page.screenshot(path=str(self.pasta_log / f"{nome}.png"))
+            (self.pasta_log / f"{nome}.html").write_text(redigir_dom(self.page.content()), encoding="utf-8")
+            self.log(f"[anexo] evidencia em log/{nome}.png e .html")
+        except Exception as e:
+            if _FECHADO.search(str(e)):
+                raise
+            self.log(f"[anexo] WARN evidencia nao gravada ({type(e).__name__})")
+        rodar_evidencias(self.pasta_log, MAX_EVIDENCIAS, self.log)
 
     def texto_do_editor(self, caixa) -> str:
         return caixa.evaluate(_JS_TEXTO)
@@ -304,9 +366,21 @@ class CanalWeb:
         self.sessao()
 
 
+def rodar_evidencias(pasta: Path, manter: int = MAX_EVIDENCIAS, log=print) -> None:
+    """Deixa em `pasta` so os `manter` arquivos falha_* mais recentes (mtime; empate pelo nome)."""
+    try:
+        arquivos = sorted((p for p in Path(pasta).glob("falha_*") if p.is_file()),
+                          key=lambda p: (p.stat().st_mtime, p.name))
+        for velho in arquivos[:max(0, len(arquivos) - manter)]:
+            velho.unlink()
+    except OSError as e:
+        log(f"[anexo] WARN rotacao das evidencias falhou ({type(e).__name__})")
+
+
 # --- DOM gravado (para conferir seletores no teste real) ----------------------------------------------
 
 _RE_TELEFONE = re.compile(r"\+?\d[\d\s().-]{7,}\d")
+_RE_NUMERO_LONGO = re.compile(r"\d{10,}")
 _RE_URL = re.compile(r"(?:https?|blob|data):[^\s\"'<>)]+", re.IGNORECASE)
 
 
@@ -315,4 +389,5 @@ def redigir_dom(html: str) -> str:
     que aparecerem na lista NAO sao reconhecidos: o dono revisa o arquivo antes de versionar (regra 11)."""
     html = _RE_URL.sub("REDACTED", html)
     html = re.sub(r'\ssrcset="[^"]*"', "", html)
+    html = _RE_NUMERO_LONGO.sub("REDACTED", html)
     return _RE_TELEFONE.sub("REDACTED", html)

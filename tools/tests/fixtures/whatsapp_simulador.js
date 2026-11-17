@@ -10,6 +10,10 @@
 //   menuSemInput  sem input nenhum; Anexar mostra o item "Fotos e vídeos", que abre o seletor de arquivo
 //   rejeitaTexto  a legenda da previa ignora colar e digitar
 //   rejeitaColar  a legenda da previa ignora so o colar (digitar funciona)
+//   atrasoPrevia  ms ate a previa abrir depois do arquivo escolhido (inst2 lenta)
+//   inputNaoAbre  o input do footer recebe o arquivo e a previa nao abre
+//   menu          Anexar mostra o item "Fotos e vídeos" mesmo com o input do footer
+//   menuNaoAbre   o arquivo escolhido pelo menu tambem nao abre a previa
 (() => {
   const opc = Object.assign({ status: ' Enviada ' }, window.__sim || {});
   window.__envios = [];
@@ -35,25 +39,29 @@
   // --- anexo
   const footer = $('#main footer');
   const anexar = footer.querySelector('button[aria-label="Anexar"]');
-  const abrirPrevia = (inp) => inp.addEventListener('change', () => {
-    if (inp.files.length) { mostrar(previa, true); legenda.innerHTML = ''; }
+  window.__arquivosPorCaminho = { input: 0, menu: 0 };
+  const abrirPrevia = (inp, caminho, naoAbre) => inp.addEventListener('change', () => {
+    if (!inp.files.length) return;
+    window.__arquivosPorCaminho[caminho]++;
+    if (naoAbre) return;
+    setTimeout(() => { mostrar(previa, true); legenda.innerHTML = ''; }, opc.atrasoPrevia || 0);
   });
   let entrada = footer.querySelector('input[type="file"]');
-  if (opc.semInput || opc.menuSemInput) entrada.remove(); else abrirPrevia(entrada);
+  if (opc.semInput || opc.menuSemInput) entrada.remove(); else abrirPrevia(entrada, 'input', opc.inputNaoAbre);
   anexar.addEventListener('click', () => {
     anexar.setAttribute('aria-expanded', 'true');
     if (opc.semInput && !footer.querySelector('input[type="file"]')) {
       entrada = document.createElement('input');
       entrada.type = 'file'; entrada.accept = 'image/*'; entrada.style.display = 'none';
-      footer.appendChild(entrada); abrirPrevia(entrada);
+      footer.appendChild(entrada); abrirPrevia(entrada, 'input', opc.inputNaoAbre);
     }
-    if (opc.menuSemInput) {
+    if ((opc.menuSemInput || opc.menu) && !document.querySelector('[data-sim="menu-fotos"]')) {
       const item = document.createElement('div');
-      item.setAttribute('role', 'button'); item.textContent = 'Fotos e vídeos';
+      item.setAttribute('role', 'button'); item.setAttribute('data-sim', 'menu-fotos'); item.textContent = 'Fotos e vídeos';
       document.body.appendChild(item);
       item.addEventListener('click', () => {
         const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
-        abrirPrevia(i); i.click();
+        abrirPrevia(i, 'menu', opc.menuNaoAbre); i.click();
       });
     }
   });
@@ -82,7 +90,12 @@
     else if (e.key === 'Enter' && e.shiftKey) { e.preventDefault(); document.execCommand('insertLineBreak'); }
   });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { mostrar(previa, false); anexar.setAttribute('aria-expanded', 'false'); }
+    if (e.key === 'Escape') {
+      window.__escapes = (window.__escapes || 0) + 1;
+      window.__escapesAntesDoMenu = window.__arquivosPorCaminho.menu === 0 ? window.__escapes : window.__escapesAntesDoMenu;
+      mostrar(previa, false); anexar.setAttribute('aria-expanded', 'false');
+      const m = document.querySelector('[data-sim="menu-fotos"]'); if (m) m.remove();
+    }
   });
 
   // --- envio: o balao novo e copia de um balao real com legenda (FAKEn), com o texto renderizado (sem * _ ~ `)

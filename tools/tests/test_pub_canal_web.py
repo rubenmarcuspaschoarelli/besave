@@ -313,3 +313,93 @@ def test_dom_canal_aberto_sem_caixa_de_mensagem_nao_envia(abrir, foto):  # M-t
     with pytest.raises(ErroPagina):
         c.abrir_canal(CANAL)
     assert _envios(page) == []
+
+
+# --- achado do teste real na inst2 (17/11): previa lenta ou que nao abre pelo input -------------------
+
+
+def _canal(page, logs, pasta=None, agora=None):
+    from datetime import datetime
+    return CanalWeb(page, log=logs.append, pasta_log=pasta, agora=agora or datetime.now)
+
+
+def test_anexo_previa_que_abre_em_20s_passa(abrir, foto):
+    page, _ = abrir(atrasoPrevia=20_000)
+    logs = []
+    c = _canal(page, logs)
+    c.abrir_canal(CANAL)
+    c.anexar(foto)                                          # com 15 s de espera falharia
+    linha = next(x for x in logs if x.startswith("[anexo] "))
+    m = re.fullmatch(r"\[anexo\] caminho=input previa_s=(\d+\.\d)", linha)
+    assert m and 20.0 <= float(m.group(1)) < 30.0
+    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 0}
+
+
+def test_anexo_espera_da_previa_e_30s():
+    assert canal_web.ESPERA_PREVIA_S == 30
+
+
+def test_anexo_input_sem_previa_cai_para_o_menu_uma_vez(abrir, foto, monkeypatch):
+    monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 2)
+    page, _ = abrir(inputNaoAbre=True, menu=True)
+    logs = []
+    c = _canal(page, logs)
+    assert _postar(c, foto) is True
+    anexo = [x for x in logs if x.startswith("[anexo] ")]
+    assert anexo[0] == "[anexo] caminho=input previa=nao"
+    assert re.fullmatch(r"\[anexo\] caminho=menu previa_s=\d+\.\d", anexo[1]) and len(anexo) == 2
+    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 1}
+    assert page.evaluate("window.__escapesAntesDoMenu") >= 1            # Escape antes do 2o caminho
+
+
+def test_anexo_os_dois_caminhos_falham_linha_p_sem_d_com_evidencia(abrir, foto, tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from pub_falso import Mundo
+    monkeypatch.setattr(canal_web, "ESPERA_PREVIA_S", 1)
+    page, _ = abrir(inputNaoAbre=True, menu=True, menuNaoAbre=True)
+    page.evaluate("document.querySelector('#app').insertAdjacentHTML('beforeend', '<span>5511987654321</span>')")
+    pasta = tmp_path / "log"
+    m = Mundo(tmp_path / "mundo")
+    m.fila.nome = CANAL
+    m.pub.pagina = _canal(page, m.logs, pasta, agora=lambda: datetime(2026, 11, 17, 11, 17, 5))
+    i = m.fila.add(m.local())
+    m.volta()
+    assert m.fila.st(i) == ("P", None) and m.pub.falhas_seguidas == 1      # sem D
+    assert _envios(page) == [] and m.avisos == []
+    assert page.evaluate("window.__arquivosPorCaminho") == {"input": 1, "menu": 1}
+    assert "[anexo] caminho=input previa=nao" in m.logs and "[anexo] caminho=menu previa=nao" in m.logs
+    png, html = pasta / "falha_1711_111705.png", pasta / "falha_1711_111705.html"
+    assert png.read_bytes()[:4] == bytes([0x89]) + b"PNG"
+    texto = html.read_text(encoding="utf-8")
+    assert "conversation-panel-wrapper" in texto                 # e o DOM da pagina
+    assert not re.search(r"\d{10,}", texto) and "REDACTED" in texto
+
+
+def test_anexo_rotacao_o_21o_arquivo_apaga_o_mais_antigo(tmp_path):
+    import os
+    for k in range(21):
+        p = tmp_path / f"falha_{k:02d}.png"
+        p.write_bytes(b"x")
+        os.utime(p, (1_000_000 + k, 1_000_000 + k))
+    (tmp_path / "run_publicador_17_11_111700.log").write_text("x", encoding="utf-8")   # nao e evidencia
+    canal_web.rodar_evidencias(tmp_path, 20)
+    restantes = sorted(p.name for p in tmp_path.glob("falha_*"))
+    assert len(restantes) == 20 and "falha_00.png" not in restantes and "falha_20.png" in restantes
+    assert (tmp_path / "run_publicador_17_11_111700.log").exists()
+
+
+def test_anexo_evidencia_roda_a_rotacao(abrir, tmp_path):
+    import os
+    from datetime import datetime
+    page, _ = abrir()
+    for k in range(20):
+        p = tmp_path / f"falha_0101_0000{k:02d}.png"
+        p.write_bytes(b"x")
+        os.utime(p, (1_000_000 + k, 1_000_000 + k))
+    c = _canal(page, [], tmp_path, agora=lambda: datetime(2026, 11, 17, 11, 35, 0))
+    c._evidencia()
+    nomes = sorted(p.name for p in tmp_path.glob("falha_*"))
+    assert len(nomes) == 20
+    assert "falha_1711_113500.png" in nomes and "falha_1711_113500.html" in nomes
+    assert "falha_0101_000000.png" not in nomes and "falha_0101_000001.png" not in nomes

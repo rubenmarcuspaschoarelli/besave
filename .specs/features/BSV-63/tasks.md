@@ -17,6 +17,9 @@ T7
 ### Phase 5: Seletores reais (mapeamento do dono, 16/11)
 T8 → T9 → T10
 
+### Phase 6: Achado do teste real (17/11): prévia da foto
+T11 → T12
+
 ```
 T1 → T2
 T2 → T3
@@ -27,6 +30,8 @@ T6 → T7
 T7 → T8
 T8 → T9
 T9 → T10
+T10 → T11
+T11 → T12
 ```
 
 ## Task Breakdown
@@ -111,6 +116,22 @@ T9 → T10
 **Tests**: `tools/tests/test_pub_canal_web.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py`
 
+### T11: Prévia da foto lenta ou que não abre ✅
+**What**: `anexar()` espera a prévia `ESPERA_PREVIA_S = 30`; pelo input sem prévia → Escape e, uma vez, Anexar → "Fotos e vídeos" em `expect_file_chooser`; log `[anexo] caminho=input|menu previa_s=<x.x>` ou `previa=nao`; falha da prévia → `log/falha_<DDMM_HHMMSS>.png` + `.html` redigido, 20 mais recentes. Simulador: `atrasoPrevia`, `inputNaoAbre`, `menu`, `menuNaoAbre`.
+**Where**: `tools/publish-whatsapp-channel/pub/canal_web.py`, `tools/publish-whatsapp-channel/main.py`, `tools/tests/test_pub_canal_web.py`, `tools/tests/fixtures/whatsapp_simulador.js`
+**Depends on**: T10
+**Reqs**: EST-02, FOT-03
+**Tests**: `tools/tests/test_pub_canal_web.py` (`-k anexo`)
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py` (WSL: 0 skipped)
+
+### T12: README do anexo e das evidências
+**What**: fluxo do anexo (30 s, segundo caminho, log) e `log/falha_*` no README.
+**Where**: `tools/publish-whatsapp-channel/README.md`
+**Depends on**: T11
+**Reqs**: EST-02
+**Tests**: revisão do README
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_isolamento.py`
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -121,6 +142,7 @@ T9 → T10
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| EST-02, FOT-03 (prévia lenta, 2º caminho, evidência) | `tools/tests/test_pub_canal_web.py` | T11 |
 | LEG-02, EST-02 (lacunas M-n, M-s, M-t) | `tools/tests/test_pub_canal_web.py` | T10 |
 | LEG-01..02, EST-01..03 (seletores reais, fixture real) | `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py` | T8 |
 | RIT-03, FOT-02, LEG-01, EST-01 (lacunas M21, M47, M54, M55) | `tools/tests/test_pub_publicador.py`, `tools/tests/test_pub_canal_web.py` | T7 |

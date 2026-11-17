@@ -87,7 +87,7 @@ def _rodar(a, page, banco, avisar) -> int:
     if a.gravar_dom:
         log(f"DOM gravado em {gravar_dom(page)}; revisar antes de versionar")
         return 0
-    pagina = canal_web.CanalWeb(page, log=log)
+    pagina = canal_web.CanalWeb(page, log=log, pasta_log=RAIZ / "log")
     if pagina.sessao() == OK:
         log(MARCA_AUTENTICADO)
     pub = Publicador(
