@@ -62,6 +62,15 @@ _JS_TEXTO = """(el) => {
   return ps.length ? ps.map(bloco).join('\\n') : bloco(el);
 }"""
 
+# Leitura ATOMICA dos baloes (17/11: com count() + nth(i), a lista virtualizada re-renderizava quando o post novo
+# entrava, nth(i) sumia e o get_attribute esperava 30 s). Um evaluate so, sem auto-wait.
+_JS_BALOES = """els => els.map(e => {
+  const cap = e.querySelector('[data-testid~="image-caption"]');
+  const st = e.querySelector('[data-testid="msg-meta"] [aria-label]');
+  return {tid: e.getAttribute('data-testid'), legenda: cap ? cap.innerText : null,
+          status: st ? st.getAttribute('aria-label') : null};
+})"""
+
 _JS_COLAR = """(el, texto) => {
   el.focus();
   const dt = new DataTransfer();
@@ -124,6 +133,12 @@ def status_confirmado(rotulo: str | None) -> bool:
     return rotulo is not None and rotulo.strip().casefold() in STATUS_CONFIRMADO
 
 
+def balao_confirmado(baloes, antes: set[str], chave: str) -> bool:
+    """Ha balao NOVO (tid fora de `antes`) com `chave` na legenda e status enviada/entregue/lida."""
+    return any(b.get("tid") not in antes and tem_chave(b.get("legenda") or "", chave)
+               and status_confirmado(b.get("status")) for b in baloes)
+
+
 def digitar(teclado, texto: str) -> None:
     """Digita linha a linha. No WhatsApp `Enter` ENVIA: a quebra de linha e `Shift+Enter`."""
     linhas = texto.split("\n")
@@ -168,8 +183,11 @@ class CanalWeb:
         titulo = self._visivel(SEL_TITULO)
         return titulo is not None and normalizar(titulo.inner_text(timeout=2_000)) == normalizar(nome)
 
+    def _ler_baloes(self) -> list[dict]:
+        return self.page.locator(SEL_BALAO).evaluate_all(_JS_BALOES)
+
     def _ids_baloes(self) -> set[str]:
-        return set(self.page.locator(SEL_BALAO).evaluate_all("els => els.map(e => e.getAttribute('data-testid'))"))
+        return {b["tid"] for b in self._ler_baloes()}
 
     # ----------------------------------------------------------------------------------------- sessao
 
@@ -360,28 +378,29 @@ class CanalWeb:
     @_morto
     def confirmar(self, chave: str, timeout_s: float) -> bool:
         """Positiva: a previa fechou, ha balao NOVO (fora dos de antes do clique) cuja legenda tem `chave`
-        (besave.io/{id}) e cujo msg-meta diz enviada/entregue/lida. Qualquer outro estado = nao confirmado."""
+        (besave.io/{id}) e cujo msg-meta diz enviada/entregue/lida. Qualquer outro estado = nao confirmado.
+        Erro de uma sondagem (pagina re-renderizando etc.) vai ao log uma vez e a sondagem segue ate o prazo; so
+        o prazo esgotado devolve False (D). Navegador morto sobe como BrowserMorto."""
         fim = time.monotonic() + timeout_s
+        avisou = False
         while True:
-            if self._visivel(SEL_LEGENDA) is None and self._balao_confirmado(chave):
-                return True
+            try:
+                if self._visivel(SEL_LEGENDA) is None and self._balao_confirmado(chave):
+                    return True
+            except BrowserMorto:
+                raise
+            except Exception as e:
+                if _FECHADO.search(str(e)):
+                    raise
+                if not avisou:
+                    self.log(f"[confirmar] WARN sondagem falhou, seguindo ate o prazo ({_resumo(e)})")
+                    avisou = True
             if time.monotonic() >= fim:
                 return False
             self.page.wait_for_timeout(1_000)
 
     def _balao_confirmado(self, chave: str) -> bool:
-        baloes = self.page.locator(SEL_BALAO)
-        for i in range(baloes.count()):
-            b = baloes.nth(i)
-            if b.get_attribute("data-testid") in self._baloes_antes:
-                continue
-            legenda = b.locator(SEL_LEGENDA_BALAO)
-            if legenda.count() == 0 or not tem_chave(legenda.first.inner_text(timeout=2_000), chave):
-                continue
-            status = b.locator(SEL_STATUS_BALAO)
-            if status.count() > 0 and status_confirmado(status.first.get_attribute("aria-label")):
-                return True
-        return False
+        return balao_confirmado(self._ler_baloes(), self._baloes_antes, chave)
 
     @_morto
     def limpar(self) -> None:

@@ -23,6 +23,9 @@ T11 → T12 → T13
 ### Phase 7: 2º achado do teste real (17/11, 3fccc36): anexo pelo menu
 T14 → T15 → T16
 
+### Phase 8: 3º achado do teste real (17/11, f1b0f5e): re-render na confirmação
+T17
+
 ```
 T1 → T2
 T2 → T3
@@ -39,6 +42,7 @@ T12 → T13
 T13 → T14
 T14 → T15
 T15 → T16
+T16 → T17
 ```
 
 ## Task Breakdown
@@ -171,6 +175,14 @@ T15 → T16
 **Tests**: `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py`
 **Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py tests/test_pub_publicador.py` (WSL: 0 skipped)
 
+### T17: Confirmação com leitura atômica e sem abortar por erro transitório ✅
+**What**: `_ler_baloes` = um `evaluate_all` sobre `[data-testid^="conv-msg-"]` devolvendo `{tid, legenda, status}` (sem `nth(i)` nem auto-wait); `balao_confirmado` puro; `_ids_baloes` reaproveita a leitura; `confirmar` registra o erro de uma sondagem uma vez e segue até o prazo (só o prazo dá D; navegador morto sobe). Simulador: `reRender` (a lista tira 3 balões antigos no meio da leitura).
+**Where**: `tools/publish-whatsapp-channel/pub/canal_web.py`, `tools/tests/test_pub_canal_web.py`, `tools/tests/fixtures/whatsapp_simulador.js`
+**Depends on**: T16
+**Reqs**: EST-01, EST-03, LIM-01
+**Tests**: `tools/tests/test_pub_canal_web.py` (`-k "confirmacao or balao_confirmado"`)
+**Gate**: `cd tools && python -m pytest -q tests/test_pub_canal_web.py` (WSL: 0 skipped)
+
 ## Test Coverage Matrix
 
 | Req | Test file | Task |
@@ -181,6 +193,7 @@ T15 → T16
 | RIT-01, ESC-01, EST-01..04, FOT-03, PAU-01..02, QR-01, CFG-01, LIM-01 | `tools/tests/test_pub_publicador.py` | T4 |
 | LEG-01..02, QR-01 (DOM), ISO-01 | `tools/tests/test_pub_canal_web.py` | T5 |
 | VIG-01, UNI-01 | `tools/tests/test_vigia_publicador.py`, `tools/tests/test_unidades.py` | T6 |
+| EST-01, EST-03, LIM-01 (re-render, erro transitório, prazo, navegador morto na confirmação) | `tools/tests/test_pub_canal_web.py` | T17 |
 | EST-03, EST-02 (Enviar interceptado fica D; M9, M12, M13, M14, M17) | `tools/tests/test_pub_canal_web.py`, `tools/tests/test_pub_publicador.py` | T16 |
 | EST-02, FOT-03, LIM-01 (anexo pelo menu, clique curto, camadas, evidência, janela) | `tools/tests/test_pub_canal_web.py` | T14 |
 | EST-02, FOT-03 (prévia lenta, 2º caminho, evidência) | `tools/tests/test_pub_canal_web.py` | T11 |

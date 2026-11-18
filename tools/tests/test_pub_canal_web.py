@@ -560,3 +560,87 @@ def test_anexo_item_do_menu_que_aparece_em_2s_passa(abrir, foto, tmp_path):  # M
     c = _canal(page, [], tmp_path / "log")
     assert _postar(c, foto) is True
     assert canal_web.ESPERA_MENU_S == 5
+
+
+# --- 3o achado do teste real (17/11, f1b0f5e): re-render da lista durante a confirmacao ----------------
+
+
+def test_confirmacao_com_re_render_da_lista_confirma_sem_excecao(abrir, foto):
+    page, _ = abrir(reRender=True)
+    logs = []
+    c = _canal(page, logs)
+    assert _postar(c, foto, timeout=5) is True
+    assert page.evaluate("window.__reRenderizou") is True             # a lista mudou no meio da leitura
+    assert page.locator('[data-testid^="conv-msg-FAKE"]').count() == 6
+    assert not any("sondagem falhou" in x for x in logs)
+
+
+def test_balao_confirmado_le_uma_lista_atomica():
+    antes = {"conv-msg-FAKE1"}
+    novo = {"tid": "conv-msg-NOVO1", "legenda": f"Promo: https://{CHAVE}?utm_source=whatsapp", "status": " Enviada "}
+    assert canal_web.balao_confirmado([{"tid": "conv-msg-FAKE1", "legenda": CHAVE, "status": "Enviada"}, novo],
+                                      antes, CHAVE)
+    assert not canal_web.balao_confirmado([{**novo, "tid": "conv-msg-FAKE1"}], antes, CHAVE)   # antigo
+    assert not canal_web.balao_confirmado([{**novo, "legenda": None}], antes, CHAVE)            # sem legenda
+    assert not canal_web.balao_confirmado([{**novo, "status": None}], antes, CHAVE)             # sem status
+    assert not canal_web.balao_confirmado([], antes, CHAVE)
+
+
+def test_confirmacao_excecao_transitoria_numa_sondagem_e_confirma_na_seguinte(abrir, foto, monkeypatch):
+    page, _ = abrir()
+    logs = []
+    c = _canal(page, logs)
+    c.abrir_canal(CANAL)
+    c.anexar(foto)
+    c.escrever_legenda(LEGENDA)
+    c.enviar()
+    ler = c._ler_baloes
+    falhas = []
+
+    def instavel():
+        if not falhas:
+            falhas.append(1)
+            raise RuntimeError("Locator.evaluate_all: Execution context was destroyed")
+        return ler()
+    monkeypatch.setattr(c, "_ler_baloes", instavel)
+    assert c.confirmar(CHAVE, 5) is True
+    assert sum("sondagem falhou" in x for x in logs) == 1
+
+
+def test_confirmacao_excecao_em_todas_as_sondagens_fica_d_com_aviso(abrir, foto, tmp_path, monkeypatch):
+    import time
+    page, _ = abrir()
+    m = _publicador_real(page, tmp_path, tmp_path / "log")
+    m.cfg["timeout_post_segundos"] = 3
+    c = m.pub.pagina
+
+    def sempre():
+        raise RuntimeError("Locator.evaluate_all: Execution context was destroyed")
+    i = m.fila.add(m.local())
+    monkeypatch.setattr(c, "enviar", lambda: (CanalWeb.enviar(c), monkeypatch.setattr(c, "_ler_baloes", sempre)))
+    inicio = time.monotonic()
+    m.volta()
+    assert time.monotonic() - inicio >= 3                               # sondou ate o prazo, nao abortou
+    assert m.fila.st(i) == ("D", "enviando") and len(m.avisos) == 1 and "conferir no canal" in m.avisos[0]
+    assert sum("sondagem falhou" in x for x in m.logs) == 1
+    assert not any("erro depois do clique" in x for x in m.logs)       # confirmar nao levantou
+
+
+def test_confirmacao_navegador_morto_fica_d_e_sai_com_1(abrir, foto, tmp_path, monkeypatch):
+    page, _ = abrir()
+    m = _publicador_real(page, tmp_path, tmp_path / "log")
+    c = m.pub.pagina
+
+    def morto():
+        raise RuntimeError("Locator.evaluate_all: Target page, context or browser has been closed")
+    monkeypatch.setattr(c, "enviar", lambda: (CanalWeb.enviar(c), monkeypatch.setattr(c, "_ler_baloes", morto)))
+    i = m.fila.add(m.local())
+    voltas = []
+
+    def dormir(s):
+        voltas.append(s)
+        if len(voltas) >= 3:
+            raise AssertionError("o laco seguiu depois do navegador morto")
+    assert m.pub.rodar(dormir) == 1
+    assert voltas == []                                                # saiu na mesma volta
+    assert m.fila.st(i) == ("D", "enviando") and len(m.avisos) == 1 and "navegador caiu" in m.avisos[0]
