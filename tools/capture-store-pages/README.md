@@ -56,6 +56,10 @@ python main.py --monitorar --intervalo 3    # produção
 python main.py --help
 ```
 
+No `--monitorar` o `controle.ultimo_id_processado` do `config.json` é só informativo: o monitor lê a fila
+inteira (`ST_CAPTURA = '0'`) e ignora o ponteiro. Ponteiro parado por horas (linha retida ou queda de
+conexão seguram o avanço até reiniciar) não perde oferta. Ele só vale para o lote sem `--monitorar`.
+
 ## Manutenção de espaço (VPS)
 
 `manutencao_arquivos.py` compacta o que é antigo em zips em
