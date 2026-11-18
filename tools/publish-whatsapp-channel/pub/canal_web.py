@@ -39,6 +39,7 @@ STATUS_CONFIRMADO = frozenset({"enviada", "entregue", "lida"})     # real: " Env
 ESPERA_SESSAO_S = 60
 ESPERA_PASSO_S = 15
 ESPERA_MENU_S = 5             # o item "Fotos e vídeos" aparece depois do clique no Anexar
+LEITURA_MS = 2_000            # leitura de DOM fora do evaluate da lista: nunca o padrao de 30 s
 CLIQUE_MS = 5_000             # clique curto: o padrao de 30 s travou o Anexar na inst2 (17/11)
 ESPERA_PREVIA_S = 30          # inst2 (ARM, 4 GB): a previa levou mais de 15 s no teste real de 17/11
 MAX_EVIDENCIAS = 20           # arquivos falha_* guardados em log/ (os mais antigos saem)
@@ -181,7 +182,7 @@ class CanalWeb:
     def _canal_aberto(self, nome: str) -> bool:
         """Cabecalho com o titulo do canal: texto normalizado IGUAL ao nome (nao basta conter)."""
         titulo = self._visivel(SEL_TITULO)
-        return titulo is not None and normalizar(titulo.inner_text(timeout=2_000)) == normalizar(nome)
+        return titulo is not None and normalizar(titulo.inner_text(timeout=LEITURA_MS)) == normalizar(nome)
 
     def _ler_baloes(self) -> list[dict]:
         return self.page.locator(SEL_BALAO).evaluate_all(_JS_BALOES)
@@ -342,7 +343,7 @@ class CanalWeb:
         rodar_evidencias(self.pasta_log, MAX_EVIDENCIAS, self.log)
 
     def texto_do_editor(self, caixa) -> str:
-        return caixa.evaluate(_JS_TEXTO)
+        return caixa.evaluate(_JS_TEXTO, timeout=LEITURA_MS)
 
     @_morto
     def escrever_legenda(self, texto: str, modo: str = "colar") -> None:
@@ -356,7 +357,7 @@ class CanalWeb:
             self.page.keyboard.press("Control+A")
             self.page.keyboard.press("Delete")
             if m == "colar":
-                caixa.evaluate(_JS_COLAR, texto)
+                caixa.evaluate(_JS_COLAR, texto, timeout=LEITURA_MS)
             else:
                 digitar(self.page.keyboard, texto)
             self.page.wait_for_timeout(300)

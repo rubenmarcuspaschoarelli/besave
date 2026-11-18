@@ -565,13 +565,63 @@ def test_anexo_item_do_menu_que_aparece_em_2s_passa(abrir, foto, tmp_path):  # M
 # --- 3o achado do teste real (17/11, f1b0f5e): re-render da lista durante a confirmacao ----------------
 
 
+class _ListaVirtualizada:
+    """Modelo do re-render da inst2 (17/11), fora do mundo JS da pagina: logo DEPOIS de cada leitura da lista de
+    baloes (count() ou evaluate_all) pelo publicador, a lista tira 3 baloes antigos do DOM. Quem le em dois passos
+    (count() e depois nth(i)) acha indices que sumiram e espera 30 s; a leitura atomica nao percebe nada."""
+
+    def __init__(self, page):
+        self.page = page
+        self.remocoes = 0
+
+    def __getattr__(self, nome):
+        return getattr(self.page, nome)
+
+    def _re_render(self):
+        if self.remocoes < 2:
+            self.remocoes += 1
+            self.page.evaluate("""() => Array.from(document.querySelectorAll('[data-testid^="conv-msg-FAKE"]'))
+                .slice(0, 3).forEach(b => b.remove())""")
+
+    def locator(self, seletor, *a, **k):
+        loc = self.page.locator(seletor, *a, **k)
+        return _LocatorQueRerenderiza(loc, self) if seletor == canal_web.SEL_BALAO else loc
+
+
+class _LocatorQueRerenderiza:
+    def __init__(self, loc, lista):
+        self._loc, self._lista = loc, lista
+
+    def __getattr__(self, nome):
+        return getattr(self._loc, nome)
+
+    def count(self):
+        n = self._loc.count()
+        self._lista._re_render()
+        return n
+
+    def evaluate_all(self, *a, **k):
+        r = self._loc.evaluate_all(*a, **k)
+        self._lista._re_render()
+        return r
+
+
 def test_confirmacao_com_re_render_da_lista_confirma_sem_excecao(abrir, foto):
-    page, _ = abrir(reRender=True)
+    import time
+    page, _ = abrir(pendenteMs=1_500)                                 # 1a varredura ve o balao novo pendente
     logs = []
     c = _canal(page, logs)
-    assert _postar(c, foto, timeout=5) is True
-    assert page.evaluate("window.__reRenderizou") is True             # a lista mudou no meio da leitura
-    assert page.locator('[data-testid^="conv-msg-FAKE"]').count() == 6
+    c.abrir_canal(CANAL)
+    c.anexar(foto)
+    c.escrever_legenda(LEGENDA)
+    lista = _ListaVirtualizada(page)
+    c.page = lista
+    inicio = time.monotonic()
+    c.enviar()                                                        # _ids_baloes le a lista: 1o re-render
+    assert c.confirmar(CHAVE, 8) is True                              # a confirmacao le de novo: 2o re-render
+    assert time.monotonic() - inicio < 5                              # sem a espera de 30 s do nth(i)
+    assert lista.remocoes == 2
+    assert page.locator('[data-testid^="conv-msg-FAKE"]').count() == 3
     assert not any("sondagem falhou" in x for x in logs)
 
 

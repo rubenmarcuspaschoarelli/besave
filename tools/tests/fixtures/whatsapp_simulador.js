@@ -19,8 +19,7 @@
 //   atrasoMenu    ms ate o item "Fotos e vídeos" aparecer depois do clique no Anexar
 //   dialogoNoAnexar  o clique no Anexar tambem abre uma camada [role="dialog"] (Escape fecha)
 //   dialogoTeimoso   uma camada [role="dialog"] pequena, num canto, que Escape NAO fecha
-//   reRender      depois do envio, a 1a leitura do data-testid de um balao antigo dispara o re-render da lista
-//                 virtualizada (como na inst2 em 17/11): os 3 baloes antigos mais altos saem do DOM no meio da leitura
+//   pendenteMs    o balao novo fica ' Pendente ' por pendenteMs antes do status final
 //   enviarCoberto quando a previa abre, uma camada cobre so o "Enviar 1 item selecionado" (clique interceptado)
 (() => {
   const opc = Object.assign({ status: ' Enviada ' }, window.__sim || {});
@@ -160,22 +159,15 @@
     let renderizado = texto.replace(/[*_~`]/g, '');
     if (opc.semChave) renderizado = renderizado.replace(/besave\.io\/\d+/g, 'besave.io/');
     window.__novoBalao(renderizado, opc.status);
-    if (opc.reRender) armarReRender();
-  }
-  function armarReRender() {
-    // a lista virtualizada do WhatsApp tira baloes do DOM quando o post novo entra; aqui isso acontece na
-    // primeira leitura de um balao antigo, depois do clique: entre um count() e um nth(i), sempre
-    const original = Element.prototype.getAttribute;
-    let armado = true;
-    Element.prototype.getAttribute = function (nome) {
-      const valor = original.call(this, nome);
-      if (armado && nome === 'data-testid' && /^conv-msg-FAKE/.test(valor || '')) {
-        armado = false;
-        Array.from(document.querySelectorAll('[data-testid^="conv-msg-FAKE"]')).slice(0, 3).forEach(b => b.remove());
-        window.__reRenderizou = true;
-      }
-      return valor;
-    };
+    if (opc.pendenteMs) {
+      // o balao novo nasce pendente e so vira o status final depois de pendenteMs (WhatsApp enviando)
+      const b = document.querySelector('[data-testid^="conv-msg-NOVO"]:last-of-type')
+        || Array.from(document.querySelectorAll('[data-testid^="conv-msg-NOVO"]')).pop();
+      const meta = b.querySelector('[data-testid="msg-meta"] [aria-label]');
+      const final = meta.getAttribute('aria-label');
+      meta.setAttribute('aria-label', ' Pendente ');
+      setTimeout(() => meta.setAttribute('aria-label', final), opc.pendenteMs);
+    }
   }
   $('div[role="button"][aria-label="Enviar 1 item selecionado"]').addEventListener('click', enviar);
 })();
