@@ -4,6 +4,207 @@
 
 **Result**: PASS
 
+Reteste do ciclo 6, faixa `f1b0f5e..431df65` (`9a075c1` fix + `431df65` test). `431df65` muda em produção só a leitura
+da legenda (`LEITURA_MS = 2_000`, `cw:42`, usado em `cw:185`, `cw:346`, `cw:360`); o resto é teste e simulador. As duas
+lacunas bloqueantes da 1ª rodada estão fechadas: o re-render agora é disparado do lado Python, fora do mundo JS da
+página, e **A1 e A6 morrem pelo comportamento** (a espera de 30 s do `nth(i)`), sem marca interna. **Toda a lista
+mínima do dono morre.** Sobrevivem só A14 (sem efeito observável) e os 3 mutantes do `LEITURA_MS` (sem teste; baixa).
+Execução real na inst2 continua bloqueando o merge (§C6R.5).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-18.
+- **Árvore real:** no início do reteste `git status --porcelain` = ` M .specs/features/BSV-63/validation.md` (este
+  arquivo, da 1ª rodada) e `?? docs/canal_real.html`. Cópia `git archive 431df65 tools` no scratchpad, removida no fim;
+  nenhum `git stash`; `docs/canal_real.html` intocado; único arquivo editado: este. `T` = `tools/tests/test_pub_canal_web.py`,
+  `SIM` = `tools/tests/fixtures/whatsapp_simulador.js`, `cw` = `.../pub/canal_web.py` (linhas de `431df65`).
+
+### C6R.1 O novo modelo de re-render é honesto? Sim, com um limite
+
+`T:568-606`: `_ListaVirtualizada` embrulha a `page` e devolve `_LocatorQueRerenderiza` só para `locator(SEL_BALAO)`;
+logo **depois** de cada `count()` ou `evaluate_all` (`T:598-606`), `_re_render` (`T:580-584`) tira 3 balões FAKE do DOM
+por `page.evaluate`, no máximo 2 vezes. O balão novo nasce " Pendente " por 1,5 s (`SIM:162-169`, `pendenteMs`), então a
+1ª varredura da confirmação percorre a lista até o fim — como na inst2, onde os índices sumidos foram `nth(6)`/`nth(7)`.
+O teste (`T:609-625`) passa por `enviar()` (1º re-render, no `_ids_baloes`) e pela confirmação (2º) e exige `True` em
+< 5 s, `remocoes == 2`, 3 FAKE restantes e nenhum WARN. É o mesmo modelo que o Verifier usou na 1ª rodada (§C6.3), agora
+no repositório: independe do mundo JS em que o Playwright lê, e quem lê em dois passos acha índice sumido e espera 30 s.
+Medido (3 execuções isoladas): 2,19 / 2,16 / 2,18 s contra o limite de 5 s.
+
+Limite: o gatilho casa pela string exata `SEL_BALAO` em `page.locator`. Uma leitura por outro seletor ou por
+`get_by_test_id` escaparia do re-render. Aceitável: o seletor é a constante do módulo.
+
+### C6R.2 Sensor de discriminação (cópia `431df65`; `timeout 300` em cada; `T -k "confirmacao or balao_confirmado"`, os `B` em `T` inteiro)
+
+| id | mutante | resultado | morto por |
+|---|---|---|---|
+| A1 | `_balao_confirmado` volta ao `count()` + `nth(i)` | **morto (comportamento)** | `T:618`: `False` depois de 32 s (o `get_attribute` de índice sumido esperou 30 s) |
+| A2 | re-levanta na 1ª exceção | morto | `T:639`, `T:660` |
+| A3 | loga a cada sondagem | morto | `T:660` |
+| A4 | engole navegador morto | morto | `T:679` |
+| A5 | `False` na 1ª exceção | morto | `T:639`, `T:660` |
+| A6 | `_ids_baloes` com `count()` + `nth(i)` | **morto (comportamento)** | `T:617`: `TimeoutError: Locator.get_attribute: Timeout 30000ms` em `enviar()` |
+| A7 | status ignorado | morto | `T:628` |
+| A8 | `tid` antigo aceito | morto | `T:628` |
+| A9 | sem o log do aviso | morto | `T:639`, `T:660` |
+| A10 | desiste na 2ª exceção | morto | `T:660` |
+| A12 | legenda sempre `null` | morto | `T:609`, `T:639` |
+| A14 | híbrido: tids do `evaluate_all`, legenda/status por `nth(i)` com índice velho e guarda `count()==0` | sobrevive — **sem efeito observável** | índice sumido → `count()==0` sem espera e a sondagem seguinte acha; confirmação falsa é impossível, porque só o balão novo tem a chave. No máximo atrasa uma sondagem |
+| A14b | o mesmo híbrido sem a guarda (`inner_text` com auto-wait) | morto | `T:618` (`False` em 32 s) |
+| B1 | `LEITURA_MS = 30_000` | sobrevive | nenhum teste da leitura com 2 s |
+| B2 | `texto_do_editor` sem `timeout` | sobrevive | idem |
+| B3 | colar sem `timeout` | sobrevive | idem |
+
+**12 de 16 mortos**: A1–A10, A12 e A14b. Sobrevivem A14 (sem efeito observável) e B1–B3 (sem teste). A11 da 1ª rodada
+(equivalente) não foi reaplicado. Toda a lista mínima do dono morre (A1, A2, A3, A4, A5, A6, A7, A8).
+
+### C6R.3 Gates (lição 21) — cópia de `431df65`, sem carga minha em paralelo
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows) | **821 passed, 7 skipped** (os 7 POSIX antigos), 312 s |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed! |
+| `shellcheck vps/*.sh` | sem saída (ok) |
+| WSL (os mesmos 8 arquivos da 1ª rodada, `--basetemp=/tmp/bsv63c6r`, apagado) | **182 passed, 0 skipped** |
+
+### C6R.4 Lacunas restantes (nenhuma bloqueia)
+
+1. Baixa: B1–B3 sobrevivem. O `timeout=LEITURA_MS` da legenda (`cw:346`, `cw:360`) e do título (`cw:185`) não tem
+   teste. Efeito: caixa que some entre `_visivel` e `evaluate` espera 30 s, antes do clique (fica P, sem D). Correção
+   por leitura confere o item 4.
+2. Baixa: A14 sobrevive sem efeito observável (§C6R.2).
+3. Baixa: o gatilho do re-render casa pela string `SEL_BALAO` (§C6R.1).
+4. Por desenho (o dono aceitou): D é gravado antes de `enviar()`, então erro no `_ids_baloes` vira D.
+
+### C6R.5 Pendência do dono (bloqueia o merge)
+
+Novo teste real na inst2 com 20 posts ou mais. No log, nenhum D deve vir de "erro depois do clique", e
+"[confirmar] WARN sondagem falhou" deve aparecer no máximo uma vez por post.
+
+---
+
+## Histórico: ciclo 6, 1ª rodada (resultado: reprovado; corrigido no reteste acima)
+
+Ciclo 6 (3º achado do teste real, 17/11, `f1b0f5e`: 2 de 27 posts D por `TimeoutError` em `nth(i).get_attribute`
+durante a confirmação). Faixa `f1b0f5e..9a075c1` (um commit, `9a075c1`). **O código de produção atende aos itens 1–4**
+(por leitura e por um teste honesto do Verifier, §C6.3). **Reprova pelos testes**: o teste do re-render não reproduz o
+achado — o gatilho do simulador só dispara quando a leitura passa pelo `Element.prototype.getAttribute` do mundo
+principal, o que só o `evaluate_all` novo faz; com o código antigo (`count()` + `nth(i)`) a lista nunca re-renderiza e a
+confirmação dá `True` em 2,5 s. O mutante "volta ao nth(i)" morre **só pela sentinela** `__reRenderizou` (espelha a
+implementação, regra 1), e o mutante "`_ids_baloes` com nth(i)", da lista mínima do dono, **sobrevive**. Correção só de
+teste (§C6.5). Execução real na inst2 continua bloqueando o merge (§C6.7).
+
+- **Quem verificou:** Verifier independente (sub-agente), autor ≠ verificador. Data 2026-11-18.
+- **Árvore real:** no início `git status --porcelain` = `?? docs/canal_real.html`; no fim, mais este arquivo. Mutantes,
+  gates e WSL numa cópia `git archive 9a075c1 tools` no scratchpad (sem `docs/`), removida no fim. Nenhum `git stash`;
+  `docs/canal_real.html` intocado; único arquivo editado: este.
+
+`cw` = `tools/publish-whatsapp-channel/pub/canal_web.py`, `pb` = `.../pub/publicador.py`,
+`T` = `tools/tests/test_pub_canal_web.py`, `SIM` = `tools/tests/fixtures/whatsapp_simulador.js` (linhas de `9a075c1`).
+
+### C6.1 Itens do pedido
+
+| item | evidência | ok |
+|---|---|---|
+| 1. Leitura atômica: um `evaluate_all` sobre `[data-testid^="conv-msg-"]` → `{tid, legenda (innerText de image-caption), status (aria-label de msg-meta)}`; sem `nth(i)` na confirmação | `cw:67-72` (`_JS_BALOES`), `cw:186-187` (`_ler_baloes`), `cw:402-403` (`_balao_confirmado` = função pura `balao_confirmado`, `cw:136-139`). No caminho de `confirmar` só resta `_visivel(SEL_LEGENDA)` (`count`/`is_visible`, sem auto-wait). JS é monothread: a lista não muda no meio de um `evaluate_all`; elemento removido depois da captura continua legível (array estático) | sim |
+| 2. `confirmar` não aborta por erro transitório; registra UMA vez; só o prazo dá D; navegador morto sobe | `cw:384-400`: `try` por sondagem, `except BrowserMorto: raise`, `_FECHADO` → `raise` (o `@_morto`, `cw:378` e `cw:90-101`, converte em `BrowserMorto`), senão log único (`avisou`) e segue; `return False` só com `time.monotonic() >= fim`. `pb:188-198`: `BrowserMorto` → aviso "navegador caiu" + `raise` → `rodar` devolve 1 (`pb:271-278`); `False` → D + aviso | sim |
+| 3. `_ids_baloes` com `evaluate_all` mantido; nenhuma outra leitura de balão por `nth` | `cw:189-190` reaproveita `_ler_baloes`; `SEL_LEGENDA_BALAO`/`SEL_STATUS_BALAO` (`cw:35-36`) ficaram sem uso em Python (o JS repete os seletores) | sim (código); **teste não discrimina** (A6) |
+| 4. Timeout explícito ≤ 2 s em toda leitura de DOM fora do evaluate | §C6.2 | sim, com 1 observação |
+| Teste: re-render na confirmação → E, sem exceção; o mutante nth(i) morre | `T:568-575` + `SIM:163-180`. **Não é modelo honesto** (§C6.3): A1 morre só por `T:573` (`__reRenderizou is True`) | **não** |
+| Teste: exceção transitória numa sondagem, confirma na seguinte → E | `T:589-607` (log "sondagem falhou" exatamente 1) | sim |
+| Teste: exceção em todas as sondagens → D com aviso | `T:610-626` (≥ 3 s = sondou até o prazo; `("D","enviando")`; 1 aviso "conferir no canal"; 1 log; sem "erro depois do clique") | sim |
+| Teste: navegador morto na confirmação → D + código 1 | `T:629-646` (`rodar` == 1, nenhuma volta extra, aviso "navegador caiu") | sim |
+
+### C6.2 Leituras de DOM fora de `evaluate` em `cw` (item 4)
+
+| leitura | linha | espera |
+|---|---|---|
+| `loc.count()`, `loc.nth(i).is_visible()` em `_visivel` | `cw:171-172` | sem auto-wait (nth sumido → `False`) |
+| `count()` em `_existe` | `cw:179` | sem auto-wait |
+| `titulo.inner_text(timeout=2_000)` em `_canal_aberto` | `cw:184` | 2 s |
+| `item.count()`, `item.nth(i).is_visible()` em `_item_fotos` | `cw:288-289` | sem auto-wait |
+| `menu.count()` em `limpar` | `cw:410` | sem auto-wait |
+| `_ler_baloes` (`Locator.evaluate_all`) | `cw:187` | não espera elemento |
+| `page.content()` na evidência | `cw:336` | não espera elemento |
+
+Observação (não bloqueia; antes do clique → P): `caixa.evaluate(_JS_TEXTO)` (`cw:345`) e `caixa.evaluate(_JS_COLAR)`
+(`cw:359`) são `Locator.evaluate`, que espera o elemento com o timeout padrão (30 s). Pela letra do item 4 estão "dentro
+do evaluate", mas têm auto-wait. Ações com 30 s padrão (`fill`/`press_sequentially` `cw:222-223`, `set_files` `cw:259`,
+`reload`) não são leituras.
+
+### C6.3 O simulador `reRender` é modelo honesto do achado? Não
+
+`SIM:165-180` troca `Element.prototype.getAttribute` no **mundo principal** da página. O Playwright conta e lê atributos
+(`count`, `nth(i).get_attribute`) pelo script injetado no seu mundo **utilitário** (isolado), que não vê o protótipo
+trocado. Medido na cópia, com o mutante A1 (o `_balao_confirmado` de `f1b0f5e`) e `abrir(reRender=True)`: `confirmar` =
+`True` em 2,5 s, `window.__reRenderizou` = `None`, **9** balões FAKE no DOM (nenhum removido). Com o código novo: `True`,
+`__reRenderizou` = `True`, 6 balões. O re-render só acontece quando o código usa `evaluate_all`; a "corrida entre count()
+e nth(i)" nunca é exercitada. A1 morre só porque `T:573` exige que a leitura passe pelo `getAttribute` do mundo
+principal — sentinela de implementação, não de comportamento.
+
+Modelo honesto (rodado só na cópia, `tests/test_zz_verifier_rerender.py`, apagado): `abrir(status=" Pendente ")`;
+depois do `enviar()`, um embrulho de `Locator.count`/`Locator.evaluate_all` (lado Python, independe do mundo JS)
+dispara, na 1ª leitura de `SEL_BALAO`, a remoção dos 3 FAKE mais altos e agenda o status " Enviada " para +1,5 s;
+asserções: `confirmar(CHAVE, 5) is True` em < 5 s e sem "sondagem falhou". Resultado: **HEAD passa (4,4 s); A1 falha**
+com `False` em 32 s — o `nth(i).get_attribute` de índice sumido esperou 30 s, o sintoma da inst2 (o balão novo ainda
+pendente na 1ª varredura leva o laço aos índices sumidos). Confirma que o código de produção corrige o achado; falta o
+teste do repositório provar isso.
+
+### C6.4 Sensor de discriminação
+
+Cópia `9a075c1`; `T -k "confirmacao or balao_confirmado"`; sobreviventes também em `T` + `test_pub_publicador.py`
+inteiros; `timeout 300` em cada execução.
+
+| id | mutante | resultado | morto por |
+|---|---|---|---|
+| A1 | `_balao_confirmado` volta ao `count()` + `nth(i)` (código de `f1b0f5e`) | morto **só pela sentinela** | `T:573`; os outros 3 testes caem porque o mutante não chama o `_ler_baloes` que eles trocam. Comportamento não discriminado (§C6.3) |
+| A2 | `confirmar` re-levanta na 1ª exceção | morto | `T:589`, `T:610` |
+| A3 | loga a cada sondagem | morto | `T:610` (1 log) |
+| A4 | engole navegador morto (sem `_FECHADO` nem `BrowserMorto` no `except`) | morto | `T:629` |
+| A5 | `return False` na 1ª exceção | morto | `T:589`, `T:610` |
+| A6 | `_ids_baloes` com `count()` + `nth(i).get_attribute` | **sobrevive** | 102 passed em `T` + `test_pub_publicador.py`. Não equivalente: `_ids_baloes` roda em `enviar()` (`cw:372`), depois do D gravado; com re-render, `nth(i)` volta a esperar 30 s |
+| A7 | `balao_confirmado` ignora o status | morto | `T:578` |
+| A8 | aceita `tid` antigo | morto | `T:578` |
+| A9 | sem o log do aviso | morto | `T:589`, `T:610` |
+| A10 | desiste (False) na 2ª exceção | morto | `T:610` (≥ 3 s) |
+| A11 | sem o `except BrowserMorto: raise` | sobrevive — **equivalente** | dentro do `try` nada levanta `BrowserMorto` (`_visivel`/`_ler_baloes` não têm `@_morto`); o erro cru com "closed" cai no `_FECHADO` (`cw:393`) |
+| A12 | legenda sempre `null` no JS | morto | `T:568`, `T:589` |
+| A13 | qualquer status não nulo confirma | morto | `T:233` (`Pendente`, `Enviando`; ciclo anterior) |
+| A14 | híbrido: tids pelo `evaluate_all`, legenda/status por `nth(i)` com índice velho | sobrevive | passa também no teste honesto do Verifier (índice sumido → `count()==0`, sem espera; a sondagem seguinte acha). Risco baixo, mas é `nth(i)` na confirmação, que o item 1 proíbe |
+
+**10 de 14 mortos por comportamento** (A1 só pela sentinela; A6 e A14 sobrevivem; A11 equivalente).
+
+### C6.5 Correção pedida (só teste)
+
+1. Trocar o gatilho do `reRender` (ou o teste `T:568`) por um que independa do mundo JS da leitura, como o do §C6.3:
+   remoção na 1ª leitura de `SEL_BALAO` pelo lado Python (embrulho de `Locator.count`/`evaluate_all`), balão novo
+   **pendente** na 1ª varredura e confirmado depois; asserção de comportamento (`True` em < 5 s, sem "sondagem falhou"),
+   sem `__reRenderizou` como critério. A1 tem de morrer por `False`/tempo.
+2. Teste de `_ids_baloes` sob re-render (A6): o mesmo gatilho armado antes do `enviar()`; `enviar()` termina em ≤ 2 s,
+   sem exceção.
+3. Opcional (A14): no teste honesto, uma ordem de balões em que o índice velho leia o balão errado.
+
+### C6.6 Gates (lição 21) — cópia de `9a075c1`, sem carga minha em paralelo
+
+| gate | resultado |
+|---|---|
+| `cd tools && python -m pytest -q` (Windows) | **821 passed, 7 skipped** (os 7 POSIX antigos), 319 s |
+| `ruff check vps/ tests/ publish-whatsapp-channel/` | All checks passed! |
+| `shellcheck vps/*.sh` | sem saída (ok) |
+| WSL: `test_pub_canal_web`, `test_pub_publicador`, `test_pub_fila`, `test_pub_foto`, `test_pub_isolamento`, `test_pub_regras`, `test_vigia_publicador`, `test_unidades` (`--basetemp=/tmp/bsv63c6`, apagado) | **182 passed, 0 skipped** |
+
+### C6.7 Lacunas (ranqueadas) e pendências do dono
+
+1. **Bloqueia (teste):** `T:568` não reproduz o achado; A1 morre só pela sentinela (§C6.3, §C6.5.1).
+2. **Bloqueia (teste):** A6 sobrevive — item 3, na lista mínima do dono (§C6.5.2).
+3. Média: A14 sobrevive (`nth(i)` com índice velho na confirmação).
+4. Baixa: `Locator.evaluate` da legenda (`cw:345`, `cw:359`) com auto-wait de 30 s (antes do clique; fica P).
+5. Baixa: D é gravado antes de `enviar()`; erro no `_ids_baloes` (antes do clique de fato) vira D (`pb:178-198`). Por
+   desenho (D conservador), mas reforça a lacuna 2.
+6. **Pendência do dono (bloqueia o merge):** novo teste real na inst2 com ≥ 20 posts; conferir no log que nenhum D sai de
+   "erro depois do clique" e que "[confirmar] WARN sondagem falhou" aparece no máximo 1 vez por post.
+
+---
+
+## Histórico: ciclo 5, reteste (resultado do ciclo: PASS)
+
 Reteste do ciclo 5, faixa `3fccc36..42aadeb`. `42aadeb` (`test(tools)`) só mexe em testes, simulador e `tasks.md`:
 `git diff a5b172d..42aadeb -- tools/publish-whatsapp-channel` = **vazio** (0 linhas), então a checagem do código de
 produção da 1ª rodada (§C5.1) continua valendo. As 5 lacunas da 1ª rodada (M9, M12, M13, M14, M17) e a asserção vazia da
