@@ -15,9 +15,11 @@ use worker::envio::binario::texto_simulacao;
 use worker::envio::canal::{CanalTelegram, Chamada, ErroCanal, FakeCanal, RelogioFake};
 use worker::envio::fonte::{AvisoCanal, FakeEnvio, LigacaoAviso, RegistroAviso};
 use worker::envio::foto::OrigemFoto;
+use worker::envio::frases::Frases;
 use worker::envio::http::{ConfigCanal, pedido_mensagem};
 use worker::envio::modelo::{LinhaCanal, Parametros};
 use worker::envio::rodada::{Contexto, RelatorioEnvio, rodar, simular};
+use worker::envio::site::Imagens;
 use worker::execucao::Falha;
 use worker::imagens::ErroImagem;
 use worker::modelo::Area;
@@ -65,7 +67,7 @@ fn fonte(n: i64) -> FakeEnvio {
     f
 }
 
-fn foto_rapida(_: Option<&Path>, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
+fn foto_rapida(_: &Imagens, id: i64, area: Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem> {
     Ok((vec![0xFF, 0xD8, id as u8], OrigemFoto::Placeholder(area)))
 }
 
@@ -81,13 +83,18 @@ fn contexto<'a>(
         telegram: tg,
         relogio: r,
         m,
-        dir_imagens: None,
-        dir_avisos,
+        imagens: Imagens::pasta(None),
+        avisos: Imagens::pasta(dir_avisos),
         foto: foto_rapida,
+        frases: &FRASES,
+        espelho_whatsapp: None,
         canal: 1,
         pausa_ate: None,
     }
 }
+
+static FRASES: std::sync::LazyLock<Frases> =
+    std::sync::LazyLock::new(|| Frases::embutidas().unwrap());
 
 fn rodar_em(
     f: &FakeEnvio,

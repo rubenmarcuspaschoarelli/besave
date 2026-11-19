@@ -1,2 +1,4 @@
 pytest
 ruff
+# Pillow: os testes da foto do publicador (BSV-63); ja e dependencia dos dois robos.
+Pillow==12.3.0

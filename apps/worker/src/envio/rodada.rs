@@ -1,5 +1,5 @@
-//! Uma execução do envio (BSV-40): lote da janela (regras 1–7), edições de expiradas (regra 8) e
-//! limites do Telegram (regra 9).
+//! Uma execução do envio (BSV-40): lote da janela (regras 1–7), edições de expiradas (regra 8),
+//! limites do Telegram (regra 9) e o espelho na fila do WhatsApp (BSV-62).
 
 use std::path::Path;
 use std::time::Duration;
@@ -7,14 +7,16 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
-use crate::envio::aviso::{devido, foto_aviso, legenda_aviso};
+use crate::envio::aviso::{devido, foto_aviso_de, legenda_aviso};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio};
-use crate::envio::fonte::FonteEnvio;
+use crate::envio::fonte::{FilaWhatsapp, FonteEnvio};
 use crate::envio::foto::OrigemFoto;
+use crate::envio::frases::Frases;
 use crate::envio::janela::{esperado, inicio_do_dia, lote_devido, silencioso};
-use crate::envio::legenda::{legenda, legenda_encerrada};
-use crate::envio::modelo::para_canal;
-use crate::envio::selecao::selecionar;
+use crate::envio::legenda::{legenda, legenda_encerrada, legenda_whatsapp};
+use crate::envio::modelo::{Parametros, para_canal};
+use crate::envio::selecao::{Candidata, selecionar};
+use crate::envio::site::Imagens;
 use crate::execucao::Falha;
 use crate::fonte::ErroFonte;
 use crate::imagens::ErroImagem;
@@ -56,6 +58,10 @@ pub struct RelatorioEnvio {
     pub aviso: Option<i64>,
     /// O aviso falhou (Oracle ou Telegram ≠ 429); o lote de ofertas seguiu.
     pub aviso_falhou: bool,
+    /// Linhas `P` novas em `ENVIO_WHATSAPP` (BSV-62).
+    pub espelhados: u32,
+    /// Inserções na fila do WhatsApp que falharam (WARN); o Telegram seguiu.
+    pub espelho_falhas: u32,
 }
 
 impl RelatorioEnvio {
@@ -68,7 +74,7 @@ impl RelatorioEnvio {
             Some(Parada::Pausa) => "pausa",
         };
         format!(
-            "canal={} enviados_hoje={} devido={} enviados={} editadas={} edicoes_descartadas={} aviso={} aviso_falhou={} retry_after={} parada={parada} tempo_ms={tempo_ms}",
+            "canal={} enviados_hoje={} devido={} enviados={} editadas={} edicoes_descartadas={} aviso={} aviso_falhou={} espelhados={} espelho_falhas={} retry_after={} parada={parada} tempo_ms={tempo_ms}",
             self.canal,
             self.enviados_hoje,
             self.devido,
@@ -78,25 +84,31 @@ impl RelatorioEnvio {
             self.aviso
                 .map_or_else(|| "-".to_owned(), |id| id.to_string()),
             u8::from(self.aviso_falhou),
+            self.espelhados,
+            self.espelho_falhas,
             self.retry_after
                 .map_or_else(|| "-".to_owned(), |s| s.to_string()),
         )
     }
 }
 
-/// Monta a foto do post: `envio::foto::foto` em produção.
-pub type Fotografo = fn(Option<&Path>, i64, Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem>;
+/// Monta a foto do post: `envio::foto::foto_de` em produção.
+pub type Fotografo = fn(&Imagens, i64, Area) -> Result<(Vec<u8>, OrigemFoto), ErroImagem>;
 
 pub struct Contexto<'a> {
     pub fonte: &'a dyn FonteEnvio,
     pub telegram: &'a dyn CanalTelegram,
     pub relogio: &'a dyn Relogio,
     pub m: &'a Mapeamento,
-    /// `BESAVE_IMAGENS_DIR`; `None` → placeholder.
-    pub dir_imagens: Option<&'a Path>,
-    /// `BESAVE_AVISOS_DIR`; `None` → avisos vão sem foto.
-    pub dir_avisos: Option<&'a Path>,
+    /// `BESAVE_IMAGENS_URL` (vence) ou `BESAVE_IMAGENS_DIR`; nenhuma → placeholder.
+    pub imagens: Imagens<'a>,
+    /// `BESAVE_AVISOS_URL` (vence) ou `BESAVE_AVISOS_DIR`; nenhuma → avisos vão sem foto.
+    pub avisos: Imagens<'a>,
     pub foto: Fotografo,
+    /// Frase de aviso do fim do post (BSV-62): embutidas ou `BESAVE_FRASES_CANAL`.
+    pub frases: &'a Frases,
+    /// `BESAVE_ENVIO_ESPELHO_WHATSAPP`: canal da fila do WhatsApp; `None` = sem espelho.
+    pub espelho_whatsapp: Option<i64>,
     pub canal: i64,
     /// Fim da espera de um 429 anterior (segundos Unix).
     pub pausa_ate: Option<i64>,
@@ -181,8 +193,8 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
     let candidatas =
         selecionar(fonte, ctx.m, &p, ctx.canal, agora, rel.devido as usize).map_err(ler)?;
     for c in candidatas {
-        let texto = legenda(&c.oferta, c.caiu, &p);
-        let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
+        let texto = legenda(&c.oferta, c.caiu, &p, ctx.frases);
+        let (jpeg, origem) = (ctx.foto)(&ctx.imagens, c.oferta.id, c.area)
             .map_err(|e| Falha::execucao("foto", &e))?;
         // Regra 7: a linha existe antes do envio; sem ela, nada vai ao Telegram.
         let id_envio = fonte
@@ -199,6 +211,9 @@ pub fn rodar(ctx: &Contexto) -> Result<RelatorioEnvio, Falha> {
                     .map_err(|e| Falha::execucao("confirmacao_oracle", &e))?;
                 rel.enviados += 1;
                 info!(id = c.oferta.id, message_id, silencioso = mudo, foto = ?origem, caiu = c.caiu, "oferta enviada ao canal");
+                if let Some(wa) = ctx.espelho_whatsapp {
+                    espelhar(ctx, wa, &c, id_envio, &p, &mut rel);
+                }
             }
             Err(e) => {
                 cancelar(fonte, id_envio, c.oferta.id);
@@ -276,7 +291,7 @@ fn enviar_aviso(
     let a = devido(&avisos, ctx.relogio.agora())?;
     let id = a.aviso.id;
     let texto = legenda_aviso(a);
-    let foto = foto_aviso(ctx.dir_avisos, id, a.aviso.imagem.as_deref());
+    let foto = foto_aviso_de(&ctx.avisos, id, a.aviso.imagem.as_deref());
     // Regra 4: a linha existe antes do envio; sem ela, nada vai ao Telegram.
     let id_envio = match fonte.reservar_aviso(id, ctx.canal, ctx.relogio.agora()) {
         Ok(i) => i,
@@ -317,6 +332,34 @@ fn enviar_aviso(
             warn!(id, erro = %e, "aviso recusado pelo Telegram; segue o lote de ofertas");
             rel.aviso_falhou = true;
             None
+        }
+    }
+}
+
+/// Põe na fila do WhatsApp o post confirmado no Telegram. Falha → WARN e segue (o WhatsApp nunca
+/// atrasa nem desfaz o Telegram); duplicata → nada (a linha já está na fila).
+fn espelhar(
+    ctx: &Contexto,
+    canal_wa: i64,
+    c: &Candidata,
+    id_envio: i64,
+    p: &Parametros,
+    rel: &mut RelatorioEnvio,
+) {
+    let l = FilaWhatsapp {
+        canal: canal_wa,
+        id_oferta: c.oferta.id,
+        id_envio_telegram: id_envio,
+        legenda: legenda_whatsapp(&c.oferta, c.caiu, p, ctx.frases),
+        area_slug: c.area.slug().to_owned(),
+        dt_fila: ctx.relogio.agora(),
+    };
+    match ctx.fonte.enfileirar_whatsapp(&l) {
+        Ok(true) => rel.espelhados += 1,
+        Ok(false) => {}
+        Err(e) => {
+            warn!(id = c.oferta.id, canal = canal_wa, erro = %e, "fila do WhatsApp: oferta não enfileirada");
+            rel.espelho_falhas += 1;
         }
     }
 }
@@ -377,6 +420,8 @@ impl EstadoEnvio {
 pub struct Previa {
     pub id: i64,
     pub legenda: String,
+    /// Com o espelho ligado: a legenda que iria para a fila do WhatsApp.
+    pub legenda_whatsapp: Option<String>,
     pub jpeg: Vec<u8>,
     pub origem: OrigemFoto,
 }
@@ -431,15 +476,18 @@ pub fn simular(ctx: &Contexto) -> Result<Simulacao, Falha> {
     sim.aviso = devido(&avisos, agora).map(|a| PreviaAviso {
         id: a.aviso.id,
         legenda: legenda_aviso(a),
-        jpeg: foto_aviso(ctx.dir_avisos, a.aviso.id, a.aviso.imagem.as_deref()),
+        jpeg: foto_aviso_de(&ctx.avisos, a.aviso.id, a.aviso.imagem.as_deref()),
     });
     let n = sim.devido.max(p.qt_por_execucao) as usize;
     for c in selecionar(fonte, ctx.m, &p, ctx.canal, agora, n).map_err(ler)? {
-        let (jpeg, origem) = (ctx.foto)(ctx.dir_imagens, c.oferta.id, c.area)
+        let (jpeg, origem) = (ctx.foto)(&ctx.imagens, c.oferta.id, c.area)
             .map_err(|e| Falha::execucao("foto", &e))?;
         sim.previas.push(Previa {
             id: c.oferta.id,
-            legenda: legenda(&c.oferta, c.caiu, &p),
+            legenda: legenda(&c.oferta, c.caiu, &p, ctx.frases),
+            legenda_whatsapp: ctx
+                .espelho_whatsapp
+                .map(|_| legenda_whatsapp(&c.oferta, c.caiu, &p, ctx.frases)),
             jpeg,
             origem,
         });

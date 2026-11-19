@@ -126,7 +126,7 @@ def _cupom(valor, id_oferta):
         pass
     return cortado or None
 
-try:                                 # sem a lib instalada -> seguimos so com CSV
+try:                                 # sem a lib instalada -> banco fora (sem id, nada gravado)
     import oracledb
 except Exception:                    # noqa: BLE001
     oracledb = None
@@ -149,8 +149,39 @@ class ErroSemConexao(RuntimeError):
     """Nao ha conexao Oracle utilizavel (nem depois de reconectar)."""
 
 
+class ErroSemId(RuntimeError):
+    """NEXTVAL nao devolveu numero (banco fora, sequence ausente...). Nunca vira id local (BSV-56)."""
+
+
+# ID_OFERTA vem do banco desde a BSV-56 (sql/BSV-56_sequence_id_oferta.sql).
+NOME_SEQUENCE = "SQ_OFERTA_FILA"
+ESPERA_PADRAO_S = 60
+
+_RE_CODIGO = re.compile(r"(?:ORA|DPY|DPI|PLS)-\d+")
+
+
+def _codigo(exc) -> str:
+    """Codigo do erro para log/aviso (ORA-03113...), sem a mensagem: ela pode trazer DSN/host."""
+    m = _RE_CODIGO.search(str(exc))
+    return m.group(0) if m else type(exc).__name__
+
+
 def _erro_conexao(exc) -> bool:
     return isinstance(exc, ErroSemConexao) or bool(_ERROS_CONEXAO.search(str(exc)))
+
+
+# Tempo de chamada esgotado (Connection.call_timeout): DPI-1067 "call timeout of N ms
+# exceeded with ORA-3156" no modo thick, DPY-4024 no thin. A conexao continua utilizavel
+# (se nao estiver, o driver devolve DPI-1080, que ja e erro de conexao). Rede caida sem
+# RST (DROP) congela a chamada em vez de falhar; o call_timeout transforma isso em erro
+# em segundos. NAO reconecta aqui: reconectar com a rede caida trava de novo. E banco
+# fora: o NEXTVAL vira ErroSemId e o insert falha pelo caminho de sempre (BSV-56).
+_ERROS_TEMPO = re.compile(r"DPI-1067|DPY-4024|ORA-0?3156")
+CALL_TIMEOUT_PADRAO_S = 30
+
+
+def _erro_tempo(exc) -> bool:
+    return bool(_ERROS_TEMPO.search(str(exc)))
 
 
 # --- Conversores de tipo (str do CSV -> tipo Oracle) ------------------------
@@ -224,6 +255,32 @@ class OracleDB:
         # falhar (PLS-00306) -- entao perguntamos ao dicionario e so mandamos se
         # existir. Assim codigo novo + banco velho continua gravando.
         self._sp_tem_ds_loja = False
+        # Ids entregues pelo NEXTVAL neste processo: o "voltou" do banco fora so sai
+        # depois de um id de verdade, nao so com o banco respondendo (BSV-56).
+        self.ids_entregues = 0
+
+    @property
+    def configurado(self) -> bool:
+        """Gravacao ligada no config e lib disponivel (independe da conexao estar de pe)."""
+        return bool(self._cfg.get("habilitado")) and oracledb is not None
+
+    @property
+    def espera_segundos(self) -> float:
+        """Intervalo entre tentativas com o banco fora (db.espera_segundos, padrao 60)."""
+        try:
+            v = float(self._cfg.get("espera_segundos", ESPERA_PADRAO_S))
+        except (TypeError, ValueError):
+            return ESPERA_PADRAO_S
+        return v if v > 0 else ESPERA_PADRAO_S
+
+    @property
+    def call_timeout_ms(self) -> int:
+        """Limite de cada ida ao banco (db.call_timeout_segundos, padrao 30), em ms."""
+        try:
+            v = float(self._cfg.get("call_timeout_segundos", CALL_TIMEOUT_PADRAO_S))
+        except (TypeError, ValueError):
+            v = CALL_TIMEOUT_PADRAO_S
+        return int((v if v > 0 else CALL_TIMEOUT_PADRAO_S) * 1000)
 
     # -- ciclo de vida --------------------------------------------------------
     def _montar_dsn(self):
@@ -243,7 +300,7 @@ class OracleDB:
 
     def conectar(self):
         """Abre a conexao. Retorna True se conectou. Best-effort: em erro, loga,
-        marca habilitado=False e retorna False (a captura segue so com CSV)."""
+        marca habilitado=False e retorna False (banco fora: sem id nada e gravado, nem CSV)."""
         if not self.habilitado:
             return False
         global _client_iniciado
@@ -264,14 +321,18 @@ class OracleDB:
                 password=self._cfg.get("senha"),
                 dsn=dsn,
             )
-            print(f"[oracle] Conectado ({modo}) em {dsn}.")
+            # Toda conexao (partida e reconexao passam aqui) com tempo maximo por chamada:
+            # vale para o NEXTVAL, o SELECT 1 e a SP de insert (BSV-56).
+            self._conn.call_timeout = self.call_timeout_ms
+            print(f"[oracle] Conectado ({modo}) em {dsn}; call_timeout {self.call_timeout_ms} ms.")
             self._sp_tem_ds_loja = self._sp_aceita("P_DS_LOJA")
             if not self._sp_tem_ds_loja:
                 print(f"[oracle] {NOME_SP} ainda nao tem P_DS_LOJA: a loja da "
                       f"oferta vai so para o CSV (coluna DS_LOJA).")
             return True
         except Exception as e:  # noqa: BLE001
-            print(f"[oracle] Falha ao conectar ({e}). Seguindo so com CSV.")
+            # So o codigo: a mensagem do driver traz o endereco do banco.
+            print(f"[oracle] Falha ao conectar ({_codigo(e)}): banco fora; aguardando.")
             self.habilitado = False
             self._conn = None
             return False
@@ -319,6 +380,59 @@ class OracleDB:
         self.desconectar()
         return False
 
+    # -- id da oferta (BSV-56) ------------------------------------------------
+    def _consultar_um(self, sql):
+        if self._conn is None:
+            raise ErroSemConexao("sem conexao Oracle")
+        cur = self._conn.cursor()
+        try:
+            cur.execute(sql)
+            linha = cur.fetchone()
+        finally:
+            cur.close()
+        if not linha or linha[0] is None:
+            raise ErroSemId(f"{sql} sem resultado")
+        return linha[0]
+
+    def proximo_id(self) -> int:
+        """
+        Proximo ID_OFERTA: SQ_OFERTA_FILA.NEXTVAL. Erro de conexao reconecta e repete
+        UMA vez; qualquer falha restante levanta ErroSemId (nunca devolve numero local).
+        """
+        if not self.configurado:
+            raise ErroSemId("gravacao no Oracle desligada (db.habilitado)")
+        sql = f"SELECT {NOME_SEQUENCE}.NEXTVAL FROM DUAL"
+        try:
+            valor = int(self._consultar_um(sql))
+        except Exception as e:
+            if not _erro_conexao(e):
+                raise ErroSemId(_codigo(e)) from e
+            print(f"[oracle] Conexao perdida no NEXTVAL ({_codigo(e)}). Reconectando...")
+            if not self._reconectar():
+                raise ErroSemId("sem conexao Oracle") from e
+            try:
+                valor = int(self._consultar_um(sql))
+            except Exception as e2:
+                raise ErroSemId(_codigo(e2)) from e2
+        self.ids_entregues += 1
+        return valor
+
+    def disponivel(self) -> bool:
+        """Banco respondendo? (SELECT 1 FROM DUAL, reconectando uma vez.) Nao gasta numero da sequence."""
+        if not self.configurado:
+            return False
+        if self._responde():
+            return True
+        return self._reconectar() and self._responde()
+
+    def _responde(self) -> bool:
+        try:
+            self._consultar_um("SELECT 1 FROM DUAL")
+        except Exception as e:  # noqa: BLE001
+            print(f"[oracle] Banco nao responde ({_codigo(e)}).")
+            return False
+        return True
+
     # -- execucao -------------------------------------------------------------
     def executar_stored_procedure(self, nome, params, out_vars):
         """
@@ -331,7 +445,7 @@ class OracleDB:
         except Exception as e:  # noqa: BLE001
             if not _erro_conexao(e):
                 raise
-            print(f"[oracle] Conexao perdida ({e}). Reconectando...")
+            print(f"[oracle] Conexao perdida ({_codigo(e)}). Reconectando...")
         if not self._reconectar():
             raise ErroSemConexao("sem conexao Oracle")
         return self._executar_sp(nome, params, out_vars)
@@ -401,7 +515,7 @@ class OracleDB:
                       f"{out.get('PV_ERRO')}")
             return ok
         except Exception as e:  # noqa: BLE001
-            self.sem_conexao = _erro_conexao(e)
+            self.sem_conexao = _erro_conexao(e) or _erro_tempo(e)
             print(f"[oracle] Erro ao inserir ID {linha.get('ID_OFERTA')}: {e}")
             try:
                 self._conn.rollback()

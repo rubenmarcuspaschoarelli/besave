@@ -60,7 +60,7 @@ def test_scope_sobrando_recusa_sem_lancar(amb):  # SCO-03
     assert r.returncode != 0
     assert "besave-whatsapp-robo.scope ainda existe" in r.stderr
     assert "new-session" not in amb.log("tmux.log")
-    assert amb.log("py.log") == ""  # nem o contador chegou a rodar
+    assert amb.log("py.log") == ""  # nenhum python rodou
 
 
 def test_sem_systemd_run_sobe_direto_e_avisa(amb):  # SCO-04
@@ -123,3 +123,22 @@ def test_erro_do_systemd_run_vai_no_abortado(amb):  # SCO-07
     abortado = next(x for x in r.stderr.splitlines() if x.startswith("ABORTADO"))
     assert "captura nao subiu" in abortado and "already loaded or has a fragment file" in abortado
     assert "linha anterior" not in abortado  # e a ULTIMA linha, nao a primeira
+
+
+def test_partida_inteira_sem_checa_contador(amb):  # BSV-56 PAR-01 (lição 14: tudo o que o lancador executa)
+    (amb.est / "contador_rc").write_text("1", encoding="utf-8")  # o checa_contador falso acusaria atraso
+    r = amb.rodar("iniciar_captura.sh")
+    assert r.returncode == 0, r.stderr
+    assert amb.log("py.log") == ""
+    assert amb.log("ordem.log").splitlines() == [
+        "systemctl --user is-active --quiet besave-whatsapp-robo.scope",
+        "systemctl --user reset-failed besave-whatsapp-robo.scope",
+        "systemctl --user revert besave-whatsapp-robo.scope",
+        "tmux new-session",
+    ]
+    linha = next(x for x in amb.log("tmux.log").splitlines() if "new-session" in x)
+    tokens = linha.split()
+    cauda = tokens[tokens.index(amb.env["BESAVE_SYSTEMD_RUN"]):]
+    assert cauda[1:-3] == PREFIXO + ["-p", "MemoryHigh=3500M", "-p", "MemoryMax=4500M", "-p", "MemorySwapMax=0"] + FIXOS
+    assert cauda[-2:] == ["-u", "run_captura.py"]
+    assert "checa_contador" not in amb.log("tmux.log")

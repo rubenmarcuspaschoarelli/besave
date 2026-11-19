@@ -51,8 +51,24 @@ const OPCIONAIS: &[(&str, &str)] = &[
     ("BESAVE_ALERTA_SEM_NOVAS_LEMBRETE_HORAS", "padrão 24 h"),
     ("BESAVE_CANAL_URL", "padrão https://t.me/besaveofertas"),
     (
+        "BESAVE_IMAGENS_URL",
+        "inst1 lê a pasta; a URL é da inst2, no envio.env.example (BSV-61)",
+    ),
+    (
+        "BESAVE_AVISOS_URL",
+        "inst1 lê a pasta; a URL é da inst2, no envio.env.example (BSV-61)",
+    ),
+    (
         "BESAVE_ENVIO_CANAL",
         "padrão ID_CANAL 1 (@besaveofertas, sql/bsv-40.sql)",
+    ),
+    (
+        "BESAVE_ENVIO_ESPELHO_WHATSAPP",
+        "ausente = sem fila do WhatsApp; ligada só na inst2 pelo dono (BSV-62)",
+    ),
+    (
+        "BESAVE_FRASES_CANAL",
+        "ausente = frases_canal.json embutido no binário (BSV-62)",
     ),
 ];
 
@@ -235,4 +251,106 @@ fn modelo_da_vps_traz_toda_variavel_lida() {
         ninguem_le.is_empty(),
         "no modelo mas ninguém lê: {ninguem_le:?}"
     );
+}
+
+fn chaves_e_valores(arquivo: &str) -> Vec<(String, String)> {
+    let texto = fs::read_to_string(raiz().join("../../infra/vps").join(arquivo)).unwrap();
+    texto
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .filter_map(|l| l.split_once('='))
+        .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+        .collect()
+}
+
+/// ENV-01 (BSV-61): o modelo da inst2 traz o que o envio precisa, sem pasta de imagens, com os
+/// segredos vazios e só variáveis que alguém lê.
+#[test]
+fn modelo_do_envio_na_inst2() {
+    let kv = chaves_e_valores("envio.env.example");
+    let chaves: BTreeSet<String> = kv.iter().map(|(k, _)| k.clone()).collect();
+    for k in [
+        "BESAVE_IMAGENS_URL",
+        "BESAVE_AVISOS_URL",
+        "TNS_ADMIN",
+        "BESAVE_LOG_DIR",
+        "BESAVE_ENVIO_LOCK",
+        "BESAVE_ORACLE_DSN",
+        "BESAVE_ORACLE_USER",
+        "BESAVE_ORACLE_PASS",
+        "TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+        "TELEGRAM_CANAL_BOT_TOKEN",
+        "HOSTNAME",
+    ] {
+        assert!(chaves.contains(k), "envio.env.example sem {k}");
+    }
+    for k in [
+        "BESAVE_IMAGENS_DIR",
+        "BESAVE_AVISOS_DIR",
+        "BESAVE_LOCK",
+        "BESAVE_BUCKET",
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+    ] {
+        assert!(!chaves.contains(k), "envio.env.example não deve ter {k}");
+    }
+    for (k, v) in &kv {
+        if [
+            "TELEGRAM_BOT_TOKEN",
+            "TELEGRAM_CHAT_ID",
+            "TELEGRAM_CANAL_BOT_TOKEN",
+            "BESAVE_ORACLE_USER",
+            "BESAVE_ORACLE_PASS",
+        ]
+        .contains(&k.as_str())
+        {
+            assert!(v.is_empty(), "{k} tem valor no modelo");
+        }
+    }
+    for k in ["BESAVE_IMAGENS_URL", "BESAVE_AVISOS_URL"] {
+        let v = &kv.iter().find(|(c, _)| c == k).unwrap().1;
+        assert!(
+            worker::envio::site::base(k, v).is_ok(),
+            "{k}={v} não passa na validação do envio"
+        );
+    }
+    let lidas = lidas_no_codigo();
+    let externas = nomes(EXTERNAS);
+    let ninguem_le: Vec<_> = chaves
+        .iter()
+        .filter(|k| !lidas.contains(*k) && !externas.contains(*k))
+        .collect();
+    assert!(
+        ninguem_le.is_empty(),
+        "no modelo mas ninguém lê: {ninguem_le:?}"
+    );
+}
+
+/// BSV-62: o modelo da inst2 traz as duas variáveis do WhatsApp comentadas (opcionais), cada uma
+/// com uma linha de explicação logo acima.
+#[test]
+fn modelo_do_envio_traz_o_whatsapp_comentado() {
+    let texto = fs::read_to_string(raiz().join("../../infra/vps/envio.env.example")).unwrap();
+    let linhas: Vec<&str> = texto.lines().collect();
+    for alvo in [
+        "# BESAVE_ENVIO_ESPELHO_WHATSAPP=2",
+        "# BESAVE_FRASES_CANAL=<caminho>",
+    ] {
+        let i = linhas
+            .iter()
+            .position(|l| *l == alvo)
+            .unwrap_or_else(|| panic!("envio.env.example sem {alvo}"));
+        assert!(
+            i > 0 && linhas[i - 1].starts_with("# ") && linhas[i - 1].contains("BSV-62"),
+            "sem explicação acima de {alvo}"
+        );
+    }
+    // Comentadas: não entram como chave ativa.
+    let chaves: BTreeSet<String> = chaves_e_valores("envio.env.example")
+        .into_iter()
+        .map(|(k, _)| k)
+        .collect();
+    assert!(!chaves.contains("BESAVE_ENVIO_ESPELHO_WHATSAPP"));
+    assert!(!chaves.contains("BESAVE_FRASES_CANAL"));
 }

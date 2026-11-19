@@ -90,7 +90,7 @@ def amb(tmp_path):
 
 
 def test_partida_confirmada_nao_avisa(amb):  # REI-01
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=46041.\nGrupo aberto\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0, r.stdout + r.stderr
     assert amb.reiniciou
@@ -113,13 +113,13 @@ def test_log_de_ontem_nao_confirma(amb):  # REI-02: so o log NOVO conta
 
 def test_log_novo_com_sufixo_nao_se_confunde_com_o_antigo(amb):  # REI-02b: X_2.log e novo, mesmo existindo X.log
     amb.arquivo("log_novo_nome", "run_captura_04_11_053001_2.log")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=3.\nGrupo aberto\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0 and amb.avisos == []
 
 
-def test_retomando_contador_sem_grupo_aberto_nao_confirma(amb):  # REI-07: 08/11, laco de QR
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=9.\n"
+def test_log_novo_sem_grupo_aberto_nao_confirma(amb):  # REI-07: 08/11, laco de QR
+    amb.arquivo("log_novo", "[monitor] Oracle: conectado.\n"
                             "[browser] Aguardando o WhatsApp Web carregar...\n")
     r = amb.rodar()
     assert r.returncode != 0
@@ -140,18 +140,18 @@ def test_sem_broken_pipe_no_stderr(amb):  # REI-08
     assert "Broken pipe" not in r.stderr and "write error" not in r.stderr
 
 
-def test_contador_atrasado_avisa_com_o_motivo(amb):  # REI-03
+def test_partida_abortada_avisa_com_o_motivo(amb):  # REI-03
     amb.arquivo("log_novo", "=== Lancador ===\n")
-    amb.arquivo("journal", "ABORTADO: contador atrasado - corrija o config (com backup) antes de relancar.\n")
+    amb.arquivo("journal", "ABORTADO: o perfil user_data esta travado. Rode encerrar_captura.sh e tente de novo.\n")
     r = amb.rodar()
     assert r.returncode != 0
     assert len(amb.avisos) == 1
-    assert "ABORTADO: contador atrasado" in amb.avisos[0]
+    assert "ABORTADO: o perfil user_data esta travado" in amb.avisos[0]
 
 
 def test_unidade_que_nao_sobe_avisa(amb):  # REI-04
     amb.arquivo("estado_depois", "failed")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=1.\n[browser] Grupo aberto, painel pronto.\n")
+    amb.arquivo("log_novo", "[browser] Grupo aberto, painel pronto.\n")
     r = amb.rodar()  # mesmo com 'Grupo aberto' no log, unidade failed nao confirma
     assert r.returncode != 0
     assert len(amb.avisos) == 1 and "failed" in amb.avisos[0]
@@ -175,7 +175,7 @@ def test_unidade_parada_de_proposito_nao_reinicia(tmp_path):  # REI-05
 
 def test_unidade_failed_antes_ainda_reinicia(tmp_path):  # REI-05b: so 'inactive' e parada de proposito
     amb = Ambiente(tmp_path, estado_antes="failed")
-    amb.arquivo("log_novo", "[monitor] Retomando contador de ofertas em ultimo_id_processado=2.\nGrupo aberto\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0 and amb.reiniciou
 

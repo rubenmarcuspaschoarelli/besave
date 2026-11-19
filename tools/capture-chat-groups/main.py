@@ -20,10 +20,10 @@ Uso:
     python main.py "Grupo A" "Grupo B" --seg-grupo 8
 
 Controle de data/hora (por grupo): a cada mensagem gravada o programa anota em
-./config.json a data/hora (do WhatsApp) e o data-id da ultima mensagem lida, alem
-do contador global `controle.ultimo_id_processado` (ID_OFERTA continuo entre
-execucoes). Assim, ao reiniciar, retoma de onde parou sem repetir nem perder
-mensagens. --max e --force-capture-today ignoram esse controle de data.
+./config.json a data/hora (do WhatsApp) e o data-id da ultima mensagem lida. Assim,
+ao reiniciar, retoma de onde parou sem repetir nem perder mensagens. O ID_OFERTA
+vem da sequence SQ_OFERTA_FILA do banco (BSV-56); `controle.ultimo_id_processado`
+e so informativo. --max e --force-capture-today ignoram esse controle de data.
 
 Primeira execucao: o navegador abre e pede o QR Code (leia com o celular).
 Nas proximas, a sessao ja fica salva em ./user_data e entra direto.

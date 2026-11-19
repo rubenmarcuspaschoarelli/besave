@@ -16,11 +16,22 @@ WorkingDirectory=/srv/besave/repo/tools/capture-store-pages
 Environment=BESAVE_DISPLAY=:1
 # a tela :1 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
 ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
-ExecStart=/srv/besave/repo/tools/vps/rodar_em_tmux.sh executar besave-lojas /srv/besave/repo/tools/capture-store-pages /srv/besave/repo/tools/capture-store-pages/destino/log/main_monitorar.log /srv/besave/repo/tools/capture-store-pages/.venv/bin/python -u main.py --monitorar --sem-perguntas
+ExecStart=/srv/besave/repo/tools/vps/iniciar_lojas.sh --aguardar
+# O tmux do Ubuntu poe cada painel num scope proprio (app.slice/tmux-spawn-*.scope): o python e o Chromium NAO
+# ficam nesta unidade. O robo roda no scope besave-lojas-robo (systemd-run, ver iniciar_lojas.sh). O ExecStop
+# manda SIGINT so ao python do scope, espera ele sair (20 s) e entao para o scope (SIGINT a todos e, em 30 s,
+# SIGKILL, que mata ate processo congelado). `systemctl stop scope` direto matava o node do Playwright antes do
+# python, o close estourava e a unidade acabava em `failed`. O '-' deixa o stop passar se o script falhar.
+ExecStop=-/srv/besave/repo/tools/vps/parar_scope.sh besave-lojas-robo
 KillSignal=SIGINT
+# Saida 130 = o python morreu por SIGINT (128+2), que so vem da PARADA (operador, systemd ou vigia): o 2o SIGINT
+# do `stop` do scope estoura dentro de context.close() quando ele passa dos 20 s do parar_scope.sh. Parada de
+# proposito termina `inactive`, nao `failed`. Queda real sai com outro codigo e segue em on-failure.
+SuccessExitStatus=130
 Restart=on-failure
 RestartSec=30
-TimeoutStopSec=30
+# ExecStop: prazo do python (20 s) + stop do scope (ate 30 s) + folga
+TimeoutStopSec=60
 
 [Install]
 WantedBy=default.target

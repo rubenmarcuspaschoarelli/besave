@@ -7,10 +7,17 @@ import pytest
 TOOLS = Path(__file__).resolve().parent.parent
 LOJAS = TOOLS / "capture-store-pages"
 CHAT = TOOLS / "capture-chat-groups"
+PUB = TOOLS / "publish-whatsapp-channel"
 
-for p in (LOJAS, CHAT):
+for p in (LOJAS, CHAT, PUB):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
+
+
+@pytest.fixture(autouse=True)
+def _batimento_em_tmp(tmp_path, monkeypatch):
+    """Nenhum teste grava o conf/batimento.json real dos robos (BSV-57)."""
+    monkeypatch.setenv("BESAVE_BATIMENTO", str(tmp_path / "batimento-do-teste.json"))
 
 
 class Loja:

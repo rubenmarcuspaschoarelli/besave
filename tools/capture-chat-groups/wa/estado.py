@@ -7,10 +7,9 @@ Guarda em ./conf/config.json duas coisas:
     WhatsApp) e o data-id (id unico da mensagem, usado como desempate quando ha
     varias mensagens no MESMO minuto). Assim, ao reiniciar, o monitor retoma
     exatamente de onde parou, sem repetir nem perder mensagens.
-  - "controle": { "ultimo_id_processado": N } — contador GLOBAL e CONTINUO entre
-    execucoes. Vira o ID_OFERTA no CSV. A cada mensagem lida soma 1 e persiste no
-    disco (junto com o estado do grupo), para o arquivo estar sempre atualizado
-    caso o processo caia.
+  - "controle": { "ultimo_id_processado": N } — ultimo ID_OFERTA usado, SO
+    INFORMATIVO (log e diagnostico). Desde a BSV-56 o id vem da sequence
+    SQ_OFERTA_FILA do banco e este valor nao e lido para numerar.
 
 Formato:
 {

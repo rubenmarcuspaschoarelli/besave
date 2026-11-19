@@ -45,8 +45,8 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod, bloqueio, redirecionamento)
-from core import processos
+                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento)
+from core import images, processos, shopee_api
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
 from core.caminhos import DESTINO_DIR, IMG_DIR, em_log
@@ -69,7 +69,10 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 
 # Bloqueio nao sai da fila (BSV-55): a linha fica '0', nada e gravado e o
 # ponteiro nao passa dela (mesma regra da queda de conexao, BSV-52).
-STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel'}
+# API de afiliados da Shopee fora, credencial ou limite (BSV-59): mesma regra.
+SHOPEE_API_INDISPONIVEL = 'shopee_api_indisponivel'
+STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel',
+                SHOPEE_API_INDISPONIVEL}
 
 
 def _url_bloqueada(url):
@@ -479,6 +482,41 @@ def _redirecionar(url, redir, pausa, row, rows_seguintes, captura):
     return url, 'redirecionamento_indisponivel'
 
 
+def _capturar_shopee_api(config, url, captura, img_root):
+    """Shopee pela API de afiliados, sem navegador (BSV-59).
+
+    Devolve (campos, status, detalhe): status 'ok', SHOPEE_API_INDISPONIVEL (passageiro, linha
+    retida) ou o motivo que vai para DS_CAPTURA ('9'). `detalhe` vai para o aviso; nunca credencial.
+    """
+    ids, motivo = shopee_api.resolver(url, timeout=config.timeout)
+    cliente = shopee_api.Cliente.de_config(config)
+    dados = curto = None
+    if ids:
+        dados, motivo = cliente.produto(*ids)
+    if dados:
+        curto, motivo = cliente.link_afiliado(*ids)
+    if motivo:
+        detalhe = f'{motivo}: {cliente.detalhe}' if cliente.detalhe else motivo
+        print(f'[captura {captura}] shopee api: {detalhe}')
+        status = SHOPEE_API_INDISPONIVEL if motivo in shopee_api.PASSAGEIROS else motivo
+        return {}, status, detalhe
+    shop_id, item_id = ids
+    campos = {k: v for k, v in dados.items() if k != 'imagem_url'}
+    campos['url_afiliado'] = curto
+    # URL limpa do item: nada da URL do grupo (utm/afiliado de terceiro).
+    campos['url_final'] = f'https://shopee.com.br/product/{shop_id}/{item_id}'
+    campos['url_besave'] = afiliados.gerar_url('shopee', campos['url_final']) or ''
+    folder = os.path.join(img_root, captura or 'sem_numero')
+    campos['pasta_imagens'] = folder
+    if dados.get('imagem_url'):
+        try:
+            os.makedirs(folder, exist_ok=True)
+            images.download_image(dados['imagem_url'], os.path.join(folder, 'img_1.jpg'))
+        except Exception as e:  # noqa: BLE001 - imagem e best-effort, como no navegador
+            print(f'[captura {captura}] shopee api: imagem: {type(e).__name__}')
+    return campos, 'ok', ''
+
+
 def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, pausa=None, redir=None):
     """Captura cada linha do lote e devolve (out_rows, gravadas, com_erro).
 
@@ -492,6 +530,8 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         pausa = _pausa_padrao()
     if redir is None:
         redir = _redir_padrao()
+    # Lido a cada lote: desligar (habilitado: false) volta ao navegador sem reiniciar (BSV-59).
+    shopee_cfg = shopee_api.ler_config(estado._ler_config())
     out_rows = []
     gravadas = 0
     com_erro = 0
@@ -525,6 +565,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
 
     for pos, row in enumerate(rows):
         cron = _Cronometro()
+        detalhe_api = ''
         out = dict(row)
         url = (row.get('url') or '').strip()
         captura = (row.get('numero_da_captura') or '').strip()
@@ -592,6 +633,18 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 # Fica '0' sem navegar; as outras lojas seguem (BSV-55).
                 out['status_captura'] = 'loja_pausada'
                 pausa.reter(loja, row.get('ID_OFERTA'))
+            elif loja == 'shopee' and shopee_cfg is not None:
+                try:
+                    campos, out['status_captura'], detalhe_api = _capturar_shopee_api(
+                        shopee_cfg, url, captura, img_root)
+                except Exception as e:  # noqa: BLE001
+                    # Inesperado nao queima a linha em '9': passageiro como api_indisponivel
+                    # (retida, conta para a pausa). Log so com tipo + mensagem redigidos.
+                    campos, out['status_captura'] = {}, SHOPEE_API_INDISPONIVEL
+                    detalhe_api = shopee_api.redigir(f'{type(e).__name__}: {e}', shopee_cfg)[:200]
+                    print(f'[captura {captura}] shopee api: excecao inesperada ({detalhe_api})')
+                out.update(campos)
+                cron.marcar('capt')
             else:
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
@@ -675,8 +728,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
             restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
                          if registry.resolver_loja((r.get('url') or '').strip()) == loja]
             motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
+                      else bloqueio.SHOPEE_API if out['status_captura'] == SHOPEE_API_INDISPONIVEL
                       else bloqueio.PAGINA)
-            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes)
+            pausa.registrar_bloqueio(loja, motivo, row.get('ID_OFERTA'), restantes, detalhe=detalhe_api)
         elif loja and out['status_captura'] == 'ok':
             pausa.registrar_sucesso(loja)
 
@@ -863,6 +917,7 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         tempos.setdefault(out['loja'], []).append(cron)
 
         out_rows.append(out)
+        batimento.bater_linha(out['status_captura'])  # BSV-57: linha concluida = progresso
         print(f'[{cron.inicio:%d/%m %H:%M:%S}] linha {captura:>4} | '
               f'loja={out["loja"] or "-":<13} | '
               f'status={out["status_captura"]}{status_db}{marca_afiliado}'
@@ -976,6 +1031,12 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
         # Na janela noturna a pausa e a da janela (cortada no fim dela).
         return janela_mod.espera_s(janela, datetime.now(), normal_s)
 
+    def dormir():
+        # Prazo do batimento = hora de acordar + 10 min (BSV-57): dormir nao e ficar parado.
+        s = espera_s()
+        batimento.bater('dormindo', dorme_s=s)
+        _esperar(s)
+
     print(f'\n[monitor] ligado: varredura a cada {intervalo_min:g} min '
           f'(conf/config.json -> monitor.intervalo_minutos). Ctrl+C para sair.\n')
     if janela:
@@ -992,22 +1053,24 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
             if novo != redir:
                 redir = novo
                 print(redirecionamento.descrever(redir))
+            batimento.bater('varredura')
             pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
+                batimento.bater('validade')  # a varredura de validade e trabalho e pode demorar (BSV-57)
                 _varrer_validade(db)
                 ult_validade = time.monotonic()
             rows = _ler_pendentes_resiliente(db, ultimo_id, args.limite, adiados)
             if rows is None:  # banco fora do ar: tenta na proxima varredura
                 print(f'[monitor] nova tentativa em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
                 continue
             rows, retidas = _sem_lojas_em_pausa(rows, pausa, redir)
             if not rows:
                 print(f'[{datetime.now():%H:%M:%S}] fila vazia'
                       + (f' ({retidas} linha(s) de loja em pausa)' if retidas else '')
                       + f'; proxima leitura em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
                 continue
 
             ciclos += 1
@@ -1029,12 +1092,21 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                       f'(seguem ST_CAPTURA=0): {sorted(adiados)}')
             if janela_mod.dentro(janela, datetime.now()):  # na janela nao rele a fila na hora
                 print(f'[monitor] janela noturna: proxima rodada em {espera_s() / 60:g} min.')
-                _esperar(espera_s())
+                dormir()
     except KeyboardInterrupt:
         print('\n[monitor] interrompido (Ctrl+C).')
     finally:
         print(f'[monitor] {ciclos} varredura(s) com trabalho | '
               f'{total_grav} gravada(s) (1) | {total_erro} com erro (9).')
+
+
+def _fechar_contexto(context):
+    """context.close() com a duracao no log (BSV-57): e o numero que decide o prazo do ExecStop (parar_scope.sh)."""
+    t0 = time.monotonic()
+    try:
+        context.close()
+    finally:
+        print(f'[monitor] contexto fechado em {time.monotonic() - t0:.1f} s', flush=True)
 
 
 def main():
@@ -1184,7 +1256,7 @@ def main():
                 _resumo_oracle(len(out_rows), gravadas, com_erro)
                 _varrer_validade(db)
 
-        context.close()
+        _fechar_contexto(context)
 
     if db:
         db.desconectar()

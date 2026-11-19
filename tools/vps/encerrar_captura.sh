@@ -5,7 +5,7 @@
 # Cuidados:
 #   - filtra por 'run_captura.py' e pelo --user-data-dir do projeto.
 #     NUNCA matar todo python: o capture-store-pages roda na mesma maquina.
-#   - SIGINT primeiro (= Ctrl+C: o `finally` da captura salva o contador; SIGTERM nao roda); SIGKILL so no
+#   - SIGINT primeiro (= Ctrl+C: o `finally` da captura salva os marcadores; SIGTERM nao roda); SIGKILL so no
 #     que sobrar depois de BESAVE_GRACA segundos.
 #   - se a unidade systemd estiver ativa, ela e parada antes; senao o
 #     Restart=on-failure subiria o robo de novo.
@@ -72,7 +72,7 @@ echo
 echo "Restantes: python=$resta_py  navegador=$resta_ch"
 if [ "$resta_py" -eq 0 ] && [ "$resta_ch" -eq 0 ]; then
     echo "OK - perfil liberado."
-    echo "Antes de relancar, o iniciar_captura.sh confere o contador sozinho."
+    echo "Pode relancar com o iniciar_captura.sh (o ID_OFERTA vem da sequence do banco)."
 else
     echo "ATENCAO: sobrou processo - confira antes de relancar." >&2
     exit 1

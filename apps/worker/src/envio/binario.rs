@@ -11,10 +11,12 @@ use tracing::{error, info, warn};
 use crate::alerta::{Alertas, ConfigTelegram, TITULO_ENVIO, host_do_env};
 use crate::ciclo::{ErroCiclo, iniciar_log_em};
 use crate::envio::canal::{CanalTelegram, ErroCanal, Relogio, RelogioSistema};
-use crate::envio::foto::foto;
+use crate::envio::foto::foto_de;
+use crate::envio::frases::Frases;
 use crate::envio::http::{CanalTelegramHttp, ConfigCanal};
 use crate::envio::oracle::OracleEnvio;
 use crate::envio::rodada::{Contexto, EstadoEnvio, RelatorioEnvio, Simulacao, rodar, simular};
+use crate::envio::site::{BaixarHttps, Disco, Imagens, SemHttp, SiteHttps, base_do_env};
 use crate::execucao::{Codigo, Falha};
 use crate::logs::{HoraBrasilia, PREFIXO_ENVIO, arquivo_do_dia_de, limpar_antigos_de};
 use crate::mapeamento::Mapeamento;
@@ -103,6 +105,22 @@ fn canal_do_env() -> Result<i64, ErroBinario> {
     }
 }
 
+/// `BESAVE_ENVIO_ESPELHO_WHATSAPP` (BSV-62): ausente ou vazia → sem espelho; inválida → WARN e sem
+/// espelho (o WhatsApp nunca impede o Telegram).
+pub fn espelho_do_env(valor: Option<&str>) -> Option<i64> {
+    let v = valor.map(str::trim).filter(|v| !v.is_empty())?;
+    match v.parse() {
+        Ok(canal) => Some(canal),
+        Err(_) => {
+            warn!(
+                valor = v,
+                "BESAVE_ENVIO_ESPELHO_WHATSAPP inválida (use o ID_CANAL, inteiro); espelho desligado"
+            );
+            None
+        }
+    }
+}
+
 fn var_caminho(k: &str) -> Option<PathBuf> {
     std::env::var_os(k)
         .filter(|v| !v.is_empty())
@@ -182,6 +200,9 @@ pub fn texto_simulacao(sim: &Simulacao, fotos: &[PathBuf]) -> String {
             "\n--- oferta {} (foto: {:?} → {foto})\n{}",
             p.id, p.origem, p.legenda
         );
+        if let Some(wa) = &p.legenda_whatsapp {
+            let _ = writeln!(t, "\n--- oferta {} na fila do WhatsApp\n{wa}", p.id);
+        }
     }
     t
 }
@@ -314,6 +335,23 @@ impl CanalTelegram for SemTelegram {
     }
 }
 
+/// Loga de onde vêm as imagens: URL e pasta → INFO (vale a URL); nenhuma → WARN.
+fn origem_das_imagens(
+    (var_url, url): (&str, Option<&str>),
+    (var_dir, dir): (&str, Option<&Path>),
+    sem: &str,
+) {
+    match (url, dir) {
+        (Some(u), Some(d)) => info!(
+            url = u,
+            pasta = %d.display(),
+            "{var_url} e {var_dir} definidas: vale a URL, a pasta não é lida"
+        ),
+        (None, None) => warn!("{var_url} e {var_dir} ausentes: {sem}"),
+        _ => {}
+    }
+}
+
 /// Configuração (código 2 se faltar), Oracle e a execução; `None` no `--sim`.
 fn rodar_envio(
     sim: bool,
@@ -323,11 +361,43 @@ fn rodar_envio(
     let m = Mapeamento::carregar_ou_embutido(var_caminho("BESAVE_MAPEAMENTO").as_deref())
         .map_err(|e| Falha::config("config", &e))?;
     let canal = canal_do_env().map_err(|e| Falha::config("config", &e))?;
+    // Arquivo inválido avisa e usa as embutidas; erro só se as embutidas forem inválidas.
+    let frases = Frases::carregar_ou_embutidas(var_caminho("BESAVE_FRASES_CANAL").as_deref())
+        .map_err(|e| Falha::config("config", &e))?;
+    let espelho_whatsapp = espelho_do_env(
+        std::env::var("BESAVE_ENVIO_ESPELHO_WHATSAPP")
+            .ok()
+            .as_deref(),
+    );
     let dir_imagens = var_caminho("BESAVE_IMAGENS_DIR");
     let dir_avisos = var_caminho("BESAVE_AVISOS_DIR");
-    if dir_imagens.is_none() {
-        warn!("BESAVE_IMAGENS_DIR ausente: todas as fotos serão o placeholder da área");
-    }
+    let env = |k: &str| std::env::var(k).ok();
+    let url_imagens =
+        base_do_env("BESAVE_IMAGENS_URL", env).map_err(|e| Falha::config("config", &e))?;
+    let url_avisos =
+        base_do_env("BESAVE_AVISOS_URL", env).map_err(|e| Falha::config("config", &e))?;
+    origem_das_imagens(
+        ("BESAVE_IMAGENS_URL", url_imagens.as_deref()),
+        ("BESAVE_IMAGENS_DIR", dir_imagens.as_deref()),
+        "todas as fotos serão o placeholder da área",
+    );
+    origem_das_imagens(
+        ("BESAVE_AVISOS_URL", url_avisos.as_deref()),
+        ("BESAVE_AVISOS_DIR", dir_avisos.as_deref()),
+        "avisos vão sem foto",
+    );
+    // Só com URL: o cliente HTTPS do site. Se não iniciar, as fotos caem no placeholder (regra 3).
+    let site: Box<dyn BaixarHttps> = if url_imagens.is_some() || url_avisos.is_some() {
+        match SiteHttps::new() {
+            Ok(c) => Box::new(c),
+            Err(e) => {
+                warn!(erro = %e, "cliente HTTPS do site não iniciou; fotos pelo caminho de falha");
+                Box::new(SemHttp)
+            }
+        }
+    } else {
+        Box::new(SemHttp)
+    };
     let telegram = if sim {
         None
     } else {
@@ -344,9 +414,21 @@ fn rodar_envio(
             .map_or(&SemTelegram as &dyn CanalTelegram, |t| t),
         relogio,
         m: &m,
-        dir_imagens: dir_imagens.as_deref(),
-        dir_avisos: dir_avisos.as_deref(),
-        foto,
+        imagens: Imagens {
+            url: url_imagens.as_deref(),
+            dir: dir_imagens.as_deref(),
+            http: site.as_ref(),
+            disco: &Disco,
+        },
+        avisos: Imagens {
+            url: url_avisos.as_deref(),
+            dir: dir_avisos.as_deref(),
+            http: site.as_ref(),
+            disco: &Disco,
+        },
+        foto: foto_de,
+        frases: &frases,
+        espelho_whatsapp,
         canal,
         pausa_ate: anterior.pausa_ate,
     };

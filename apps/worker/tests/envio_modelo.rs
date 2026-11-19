@@ -33,10 +33,10 @@ fn linha() -> LinhaCanal {
     }
 }
 
-/// CON-01 (BSV-40), CON-03 (BSV-36): contrato 1.6.0.
+/// CON-01 (BSV-40), CON-03 (BSV-36), CON-01 (BSV-62): contrato 1.7.0.
 #[test]
-fn contrato_na_versao_1_6_0() {
-    assert_eq!(versao_contrato().unwrap(), "1.6.0");
+fn contrato_na_versao_1_7_0() {
+    assert_eq!(versao_contrato().unwrap(), "1.7.0");
 }
 
 #[test]

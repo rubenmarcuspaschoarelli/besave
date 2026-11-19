@@ -1,0 +1,18 @@
+{
+  "_obs": "Frase de aviso no fim do post (Telegram e WhatsApp). Uma frase e um ícone por oferta.",
+  "icones": ["🚨", "⚠️", "☝️", "❗", "🆘", "🙈", "🏃‍♂️", "🏃‍♀️", "🏃", "🙉", "🙊"],
+  "frases": [
+    "Atenção, esta promoção pode acabar logo!",
+    "Atenção, esta oportunidade pode acabar daqui a pouco...",
+    "Aproveite enquanto o preço ainda está baixo!",
+    "Garanta agora, antes que o preço mude!",
+    "Tudo que é bom dura pouco, aproveite!",
+    "Não deixe para depois, pode acabar!",
+    "Aproveite agora, essa oferta é só por instantes!",
+    "Não fique de fora, a promoção já está no fim!",
+    "Compre hoje e fuja do próximo aumento de preço!",
+    "Atenção, a oferta pode expirar...",
+    "Seja rápido, descontos assim não duram muito tempo!",
+    "Clique e garanta o seu antes que o preço mude!"
+  ]
+}

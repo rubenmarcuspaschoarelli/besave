@@ -1,0 +1,32 @@
+# Publicador do canal do WhatsApp (publish-whatsapp-channel, BSV-63) - unidade de USUARIO, so na inst2.
+# Instalar em ~/.config/systemd/user/ (ver tools/publish-whatsapp-channel/README.md).
+# Roda numa sessao tmux (tmux -L besave-publicador attach) com DISPLAY=:1: o Chromium fica na tela :1 do VNC,
+# onde o dono le o QR. Outro numero, outra maquina e outro perfil que os da captura (inst1).
+[Unit]
+Description=Besave - publicador do canal do WhatsApp
+After=besave-vnc@1.service
+Requires=besave-vnc@1.service
+# Falha de partida (tela ainda subindo) nao deixa a unidade em 'failed': tenta de novo a cada RestartSec.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/besave/repo/tools/publish-whatsapp-channel
+# Teto de memoria do scope, lido pelo iniciar_publicador.sh: provisorio, o dono fecha com o `free -m` de 24 h.
+Environment=BESAVE_DISPLAY=:1 BESAVE_MEM_HIGH=1500M BESAVE_MEM_MAX=2000M BESAVE_MEM_SWAP_MAX=0
+# a tela :1 existe quando o socket X aparece (a unidade do VNC 'ativa' antes disso)
+ExecStartPre=/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'
+ExecStart=/srv/besave/repo/tools/vps/iniciar_publicador.sh --aguardar
+# O python e o Chromium ficam no scope besave-publicador-robo (systemd-run), fora desta unidade (tmux). O stop
+# manda SIGINT so ao python (parar_scope.sh), espera ate 20 s e para o scope; o '-' deixa o stop passar.
+ExecStop=-/srv/besave/repo/tools/vps/parar_scope.sh besave-publicador-robo
+KillSignal=SIGINT
+# 130 = python parado por SIGINT (operador, systemd ou vigia): parada de proposito termina `inactive`.
+# Navegador morto sai com 1 e volta pelo Restart=on-failure.
+SuccessExitStatus=130
+Restart=on-failure
+RestartSec=30
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

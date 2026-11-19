@@ -7,6 +7,12 @@ Windows nada muda: `iniciar_captura.ps1` e `encerrar_captura.ps1` continuam vale
 |---|---|---|---|
 | `capture-chat-groups` (WhatsApp) | `besave-captura-whatsapp` | `besave-whatsapp` | `capture-chat-groups/log/run_captura_DD_MM_HHMMSS.log` (um por partida) |
 | `capture-store-pages` (lojas) | `besave-captura-lojas` | `besave-lojas` | `capture-store-pages/destino/log/main_monitorar.log` |
+| `publish-whatsapp-channel` (publicador, **só na inst2**, BSV-63) | `besave-publicador-whatsapp` | `besave-publicador` | `publish-whatsapp-channel/log/run_publicador_DD_MM_HHMMSS.log` |
+
+O publicador tem instalação própria (outra máquina, outro número): `tools/publish-whatsapp-channel/README.md`.
+O vigia escolhe os robôs da máquina por `BESAVE_VIGIA_ROBOS` (padrão `lojas,whatsapp`; na inst2, o drop-in
+`systemd/inst2/besave-vigia-robos.service.d/robos.conf` põe `publicador`). Na inst1 o `cp systemd/*.service`
+abaixo também copia `besave-publicador-whatsapp.service`: não habilitar lá.
 
 Cada robô tem a **própria tela VNC** (Xfce): lojas em `:1` (porta `5901`), WhatsApp em `:2` (porta `5902`),
 as duas só em `localhost`. Telas separadas evitam que a interação numa janela roube o foco da outra e que as
@@ -60,8 +66,8 @@ rodando à mão, `vncserver -kill :1` antes). Cada robô tem `Requires=` e `Afte
 (`besave-vnc@1` para as lojas, `besave-vnc@2` para o WhatsApp) e espera o socket `/tmp/.X11-unix/XN`
 aparecer (até 60 s) antes de lançar: o `After=` só garante que o VNC foi *iniciado*, não que a tela já
 responde. Parar ou reiniciar uma tela para o robô dela junto.
-Falha de partida (tela ainda subindo, contador atrasado) não deixa a unidade em `failed`: tenta de novo a
-cada 30 s, sem limite (`StartLimitIntervalSec=0`). Um erro permanente, como o contador atrasado,
+Falha de partida (tela ainda subindo, perfil travado) não deixa a unidade em `failed`: tenta de novo a
+cada 30 s, sem limite (`StartLimitIntervalSec=0`). Um erro permanente, como o perfil travado,
 repete a mensagem no `journalctl` a cada 30 s até ser corrigido; para parar o ciclo,
 `systemctl --user stop <unidade>`.
 
@@ -81,7 +87,8 @@ systemctl --user status besave-captura-whatsapp besave-captura-lojas
 ```
 
 O `iniciar_captura.sh` (chamado pela unidade do WhatsApp) recusa subir se: já há um `run_captura.py` vivo,
-um navegador está segurando `user_data/`, ou `diag/checa_contador.py` acusa o contador atrasado. A unidade
+um navegador está segurando `user_data/` ou o scope do robô anterior ainda existe. Não confere mais o
+contador: o `ID_OFERTA` vem da sequence do banco (BSV-56, abaixo). A unidade
 falha com a mensagem no `journalctl`; corrija e suba de novo. Também funciona sem o `systemd`:
 `tools/vps/iniciar_captura.sh` (sobe e volta) ou com `--aguardar`.
 
@@ -205,7 +212,7 @@ systemctl --user stop besave-captura-whatsapp     # ou: tools/vps/encerrar_captu
 ```
 
 O `encerrar_captura.sh` para a unidade do WhatsApp (o `ExecStop=` dela para o scope do robô com `SIGINT`), manda `SIGINT` (Ctrl+C) ao `run_captura.py` (o `finally` salva
-o contador), espera, usa `SIGKILL` no que sobrar, encerra o navegador do perfil e a sessão `tmux`.
+os marcadores), espera, usa `SIGKILL` no que sobrar, encerra o navegador do perfil e a sessão `tmux`.
 Filtra por `run_captura.py` e `--user-data-dir`: nunca mata todo `python`. Para desligar de vez no boot:
 `systemctl --user disable ...`.
 
@@ -239,7 +246,7 @@ Bloco `janela_noturna` no `config.json` de **cada** robô (ausente ou vazio = se
 Dentro dela (relógio do sistema; na VPS, Brasília; pode cruzar a meia-noite; `fim` exclusivo) o robô faz
 uma rodada a cada `intervalo_minutos` e dorme entre elas, com processo e navegador abertos. Às 08:00 volta
 ao ritmo normal. Lojas: a fila acumula e é processada na rodada. WhatsApp: ao acordar retoma cada grupo
-pelo marcador (catch-up), então nada se perde; o contador é salvo no `finally` como sempre. Mudou o bloco:
+pelo marcador (catch-up), então nada se perde; os marcadores são salvos no `finally` como sempre. Mudou o bloco:
 reinicie o robô (a janela é lida no arranque). No log: `Janela noturna ... uma rodada a cada 120 min`.
 
 ## Aviso cobrindo a tela do WhatsApp (BSV-51)
@@ -252,7 +259,7 @@ pode ficar por cima da lista e interceptar o clique no grupo. O robô do WhatsAp
    `[role="dialog"]`: `Fechar`, `OK`, `Agora não`, `Close`, `Not now`. Nada que mude conta, grupo ou mensagem.
 3. Se nada resolver, a volta falha como erro tratado (o rodízio segue). Depois de `destravar.recarregar_voltas`
    voltas seguidas sem abrir nenhum grupo (padrão 8, ~10 min; repete a cada 8) o robô **recarrega o WhatsApp
-   Web** e roda o resgate (catch-up pelo marcador de cada grupo): nada se perde, contador e marcadores não andam.
+   Web** e roda o resgate (catch-up pelo marcador de cada grupo): nada se perde, ids e marcadores não andam.
 
 **No log** (`log/run_captura_DD_MM_HHMMSS.log`): `[destravar] Clique interceptado…`, `Escape destravou o clique` ou
 `Fechei 'agora nao' do aviso: '<texto resumido>'`, `Recarregando o WhatsApp Web…`, e `Rodizio destravado apos N
@@ -274,9 +281,9 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
 
 1. **Reinício a cada 6 h (05:30, 11:30, 17:30, 23:30):** na medição da inst1 (06/11) o renderer cresceu ~0,2 GB/h de dia (1,26 → 3,48 GB entre 06:10 e 17:10) e ficou parado à noite; um reinício só às 05:30 não bastava. `besave-reinicio-whatsapp.timer` (`Persistent=false`) dispara o
    `besave-reinicio-whatsapp.service`, que roda `reiniciar_whatsapp.sh`. Ele registra o RSS do maior
-   processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava o
-   contador) e espera até 3 min a unidade ficar `active` **e** o log novo ter
-   `Grupo aberto`. Confirmou: só log. Não confirmou (contador atrasado, QR pedido, falha de partida): mensagem
+   processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava os
+   marcadores) e espera até 3 min a unidade ficar `active` **e** o log novo ter
+   `Grupo aberto`. Confirmou: só log. Não confirmou (perfil travado, QR pedido, falha de partida): mensagem
    no Telegram com o motivo (`python -m wa.avisar`, token e chat lidos do `alerta` do `config.json`; sem eles,
    só log). Unidade parada de propósito (`inactive`): não reinicia. Só `systemctl restart`; nunca mata
    processo por nome.
@@ -291,12 +298,13 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
    `MemoryMax=300M`). Com `MemorySwapMax=0` o kernel mata o scope ao bater o `MemoryMax`.
    Em `MemoryHigh` o kernel segura; em `MemoryMax` (com swap em 0) o kernel mata o scope (código de saída ≠ 0), a unidade falha
    e o `Restart=on-failure` sobe de novo. O `ExecStop=` da unidade faz `systemctl --user stop besave-whatsapp-robo.scope`
-   (SIGINT, até 30 s: o `finally` grava o contador) antes de o tmux morrer; scope ausente não falha o stop.
+   (SIGINT, até 30 s: o `finally` grava os marcadores) antes de o tmux morrer; scope ausente não falha o stop.
    Se o scope ainda estiver ativo na partida, o lançador recusa subir (não duplica o robô). O `systemd-run` usa `--collect`:
    scope que termina em `failed` (OOM-kill, `kill -9`) seria mantido carregado e todo `systemd-run` seguinte com o
    mesmo `--unit` falharia com "already loaded", em laço. Na partida, com o scope inativo, o lançador ainda roda
    `systemctl --user reset-failed` e `revert` (resíduo de `set-property --runtime`), ignorando erros; se o robô morrer
-   nos primeiros segundos, o `ABORTADO` traz a última linha do log (a mensagem do `systemd-run`). O robô das lojas não muda.
+   nos primeiros segundos, o `ABORTADO` traz a última linha do log (a mensagem do `systemd-run`). O robô das lojas roda no
+   mesmo desenho, sem teto de memória (BSV-57, abaixo).
 
 ```bash
 cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
@@ -311,14 +319,127 @@ Ver o teto e a memória do robô: `systemd-cgls --user-unit besave-whatsapp-robo
 `systemctl --user show besave-whatsapp-robo.scope -p MemoryHigh -p MemoryMax -p MemoryCurrent`.
 Mudou a unidade ou os valores de `BESAVE_MEM_*`: `daemon-reload` e `systemctl --user restart besave-captura-whatsapp`.
 
+## `ID_OFERTA` pela sequence do banco (BSV-56)
+
+O id de cada oferta do WhatsApp vem de `SQ_OFERTA_FILA.NEXTVAL`, pedido logo antes de salvar a imagem (o id é o
+nome do arquivo, a linha do CSV e o `P_ID_OFERTA`). O `controle.ultimo_id_processado` do `config.json` virou só
+informativo (último id usado) e **não é mais lido**; por isso a partida não confere contador e um `kill -9`, OOM ou
+queda da máquina não deixa o robô preso no laço "contador atrasado". A trigger `TRG_OFERTA_FILA_ID` preenche
+`ID_OFERTA` quando ele vem nulo (outros produtores da fila, como o futuro robô de sites). Buracos na numeração são
+normais (id pedido e mensagem que não gravou).
+
+**Banco fora:** sem id nada é gravado (nem CSV) e o marcador do grupo não anda; nenhum grupo anda. O robô avisa no
+Telegram ("Banco Oracle fora", bloco `alerta`), lembra a cada 2 h, tenta de novo a cada `db.espera_segundos`
+(padrão 60) e, quando o banco volta, roda o resgate (catch-up pelo marcador de cada grupo): a mesma mensagem sai
+com id novo. O "voltou" chega depois do resgate de todos os grupos (se o resgate não numerou nada, no 1º id do
+rodízio), não no 1º id do 1º grupo. Sem o bloco `db` ligado no `config.json` o robô nem sobe (código de saída 4).
+
+**Ordem de virada** (uma vez, na inst1):
+
+1. Parar o robô do WhatsApp (`systemctl --user stop besave-captura-whatsapp`) e conferir que nenhum
+   `run_captura.py` está vivo (`pgrep -af run_captura.py`).
+2. Aplicar `tools/capture-chat-groups/sql/BSV-56_sequence_id_oferta.sql` como `BESAVE` (o robô também conecta
+   como `BESAVE`, dono da tabela e da sequence); o bloco de conferência imprime
+   `OK: proximo id N > maior existente M`. O arquivo é reexecutável: com a sequence já criada ele só informa o
+   `LAST_NUMBER` e confere de novo.
+3. Atualizar o código na inst1 (branch da PR) e subir o robô.
+4. Conferir no log a 1ª captura com id = valor inicial da sequence e `db=ok`.
+
+**Conferência real depois da virada** (bloqueia o merge da PR):
+
+1. `INSERT` de teste com `ID_OFERTA` nulo numa transação (`ROLLBACK` no fim): a trigger preenche o id.
+2. `KILL SESSION` da conexão do robô e `kill -9` no `run_captura.py` (a unidade sobe de novo): o robô sobe sem
+   conferência de contador e o id seguinte vem da sequence, **sem id repetido**. Não há aviso de "fora": o
+   `proximo_id` reconecta sozinho.
+3. Banco fora de verdade, de dia: `sudo iptables -I OUTPUT -p tcp --dport 1522 -j DROP` por ~3 min e depois
+   `sudo iptables -D OUTPUT -p tcp --dport 1522 -j DROP`. Esperado: 1 "Banco Oracle fora" no Telegram, nada
+   novo no CSV, marcador do grupo parado; ao liberar, a mesma mensagem sai com id novo e, depois do resgate de
+   todos os grupos, chega o "voltou". Quanto o "fora" demora depende de como a falha chega:
+   - tempo esgotado puro (`DPY-4024`): ~1 min depois da 1ª oferta da janela (30 s de `db.call_timeout_segundos`
+     + a espera);
+   - erro de conexão (`DPY-1001` e afins): o `proximo_id` reconecta e o `connect` fica preso nas tentativas do
+     wallet (`retry_count=20` × ~18 s no `tnsnames.ora`), então o "fora" chega em até ~7 min. Manter o DROP até
+     ele chegar.
+
+   Sem o `call_timeout`, a chamada congelaria até o timeout do TCP (~15 min). Se nenhuma oferta chegar na
+   janela, nada é numerado e nada avisa.
+4. `systemctl --user start besave-reinicio-whatsapp` à mão: reinício confirmado, sem aviso no Telegram.
+
+Não pode haver dois robôs do WhatsApp (PC e VPS) em versões diferentes: o antigo numeraria pelo arquivo e
+colidiria com a sequence.
+
+## Vigia externo dos robôs (BSV-57)
+
+O aviso do robô do WhatsApp (BSV-51) roda **dentro** do processo e cai junto com ele; o das lojas não avisava
+nada. O vigia roda **fora**: `besave-vigia-robos.timer` chama `vigia_robos.py` (só stdlib) a cada 5 min.
+
+**Batimento.** Cada robô grava `conf/batimento.json` (fora do git) por arquivo temporário + `rename`:
+`{"robo","pid","em","prazo","fase"}` e, no WhatsApp, `grupos_falhando`. `prazo` = `em` + 10 min; antes de dormir
+(janela noturna, intervalo) o robô grava `prazo` = hora de acordar + 10 min, e é assim que a madrugada não vira
+alarme. Só bate com **progresso**: WhatsApp = volta em que ao menos um grupo abriu (volta com todos falhando
+não renova; banco fora renova, o robô já avisa sozinho); lojas = linha concluída ou varredura (fila vazia e loja
+em pausa renovam; exceção de navegador fechado não).
+
+**O que o vigia faz**, por robô, nesta ordem:
+
+1. unidade `inactive` (parada de propósito) → nada; reinício diário do WhatsApp em andamento → nada; unidade
+   `failed` (o systemd já desistiu) → **aviso de operador** ("unidade failed: o systemd já desistiu"), **sem
+   restart**, 1 aviso por ocorrência e lembrete a cada 2 h; só unidade `active`/`activating` é reiniciada;
+2. `agora > prazo`, ou o `pid` do batimento fora do scope do robô → **parado**. Processo novo sem batimento
+   ainda, até 10 min depois do início do scope → nada. Os pids vêm do `cgroup.procs` do scope
+   (`besave-whatsapp-robo.scope`, `besave-lojas-robo.scope`), não do `MainPID` da unidade, que é o tmux;
+3. parado com QR pendente (log mais recente com `Aguardando o WhatsApp Web carregar` e sem `Sessao autenticada`
+   depois) ou `ABORTADO:` nas últimas linhas → **avisa o operador e não reinicia**;
+4. grupo em `grupos_falhando` há 2 h ou mais (`BESAVE_GRUPO_FALHA_HORAS`) → aviso de operador **por grupo**, sem
+   reinício (nome mudou ou o número saiu do grupo?); 3 ou mais logs `run_captura_*.log` nos últimos 30 min sem
+   `Grupo aberto` (laço de partidas) → operador, sem reinício;
+5. senão `systemctl --user restart <unidade>` e aviso, **no máximo 2 reinícios por robô em 60 min**; depois disso
+   só "precisa de operador" até o batimento voltar;
+6. batimento novo depois de um aviso → "voltou (parado por N min)".
+
+Uma mensagem por ocorrência (e uma nova a cada mudança de ação: reiniciado 1/2 → 2/2 → operador); lembrete
+a cada 2 h. O texto traz robô, motivo, ação, última linha útil do log (cortada, sem URL e sem token), a memória
+do scope e o RSS do maior `chrome` dele. Token e chat vêm de `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID` do
+`/srv/besave/worker.env` (`BESAVE_WORKER_ENV` troca o caminho); sem eles, só journal. O estado fica em
+`~/.local/state/besave/vigia_robos.json`.
+
+**Rotação de logs** (uma vez por dia, pelo vigia): `log/run_captura_*.log` com mais de `BESAVE_LOG_DIAS` dias
+(padrão 14), nunca o mais recente; `main_monitorar.log` acima de `BESAVE_LOG_MB` (padrão 50) é copiado para
+`main_monitorar_AAAAMMDD.log` e truncado no lugar (o `tee -a` do robô segue escrevendo), cópias com mais de 14
+dias são apagadas. Só esses nomes, só nessas duas pastas. A contagem sai no journal do vigia.
+
+**Robô das lojas no próprio scope.** Como o WhatsApp, o `iniciar_lojas.sh` roda o python por
+`systemd-run --user --scope --collect --unit=besave-lojas-robo -p KillSignal=SIGINT -p TimeoutStopSec=30`
+dentro do painel do tmux (sem teto de memória). O `ExecStop` da unidade roda
+`parar_scope.sh besave-lojas-robo`: SIGINT **só ao python** do scope, espera até 20 s ele sair e então faz
+`systemctl --user stop besave-lojas-robo.scope` (SIGINT a todos e, em 30 s, SIGKILL, que também mata um python
+congelado por `kill -STOP`). O `stop` direto do scope mandava SIGINT também ao node do Playwright: o driver
+morria antes, o `BrowserContext.close` estourava, o python saía com 1 e a unidade ficava `failed` (inst1, 11/11).
+`TimeoutStopSec=60` cobre os 20 s + 30 s. Se o `context.close()` passar dos 20 s, o 2º SIGINT do `stop` do
+scope estoura dentro do `close` e o python sai com **130**: a unidade tem `SuccessExitStatus=130` (só a parada
+manda SIGINT; queda real sai com outro código e segue em `Restart=on-failure`), então termina `inactive`. O robô
+registra `[monitor] contexto fechado em N s` no log: meça antes de mexer nos 20 s. Scope ativo na partida → o lançador recusa subir (não duplica o robô).
+
+```bash
+cp systemd/*.service systemd/*.timer ~/.config/systemd/user/ && systemctl --user daemon-reload
+systemctl --user enable --now besave-vigia-robos.timer
+systemctl --user list-timers besave-vigia-robos.timer                  # próximo disparo
+journalctl --user -u besave-vigia-robos.service --since today          # o que o vigia viu e fez
+```
+
+**Silenciar um robô:** `systemctl --user stop besave-captura-lojas` (ou `…-whatsapp`). Unidade `inactive` o vigia
+nunca religa e não avisa (se ela acabar em `failed`, o vigia só avisa, não religa). Para voltar: `systemctl --user start …`.
+**Desligar o vigia:** `systemctl --user disable --now besave-vigia-robos.timer`.
+Reiniciar o `besave-captura-lojas` com a unidade trocada: `daemon-reload` e `systemctl --user restart besave-captura-lojas`.
+
 ## Voltar para o PC
 
 1. Parar na VPS (acima).
-2. Copiar o `conf/config.json` da VPS de volta (contador e marcadores do WhatsApp) para o PC.
-3. No PC: `diag\checa_contador.py`, depois `iniciar_captura.ps1` (WhatsApp) e `python main.py --monitorar`
+2. Copiar o `conf/config.json` da VPS de volta (marcadores do WhatsApp) para o PC.
+3. No PC, com o código desta versão (id pela sequence): `iniciar_captura.ps1` (WhatsApp) e `python main.py --monitorar`
    (lojas). No PC deixe `navegador.canal` como `"chrome"` (ou sem a chave).
 
-Nunca rode o mesmo robô nos dois lugares ao mesmo tempo (o contador de `ID_OFERTA` é do `config.json`).
+Nunca rode o mesmo robô nos dois lugares ao mesmo tempo (os marcadores dos grupos são do `config.json`).
 
 ## Testes
 

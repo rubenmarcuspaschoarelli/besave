@@ -98,7 +98,7 @@ def test_sh01_dois_processos_recusa_sem_lancar(amb):
     assert r.returncode != 0
     assert "Ja existe captura rodando" in r.stderr
     assert "new-session" not in amb.log("tmux.log")
-    assert amb.log("py.log") == ""  # nem o contador chegou a rodar
+    assert amb.log("py.log") == ""  # nenhum python rodou
 
 
 def test_sh01_um_processo_tambem_recusa(amb):
@@ -118,13 +118,14 @@ def test_sh02_perfil_preso_recusa_sem_lancar(amb):
     assert amb.log("py.log") == ""
 
 
-def test_sh03_contador_atrasado_recusa_sem_lancar(amb):
+def test_sh03_partida_nao_confere_mais_o_contador(amb):  # BSV-56 PAR-01
+    # o checa_contador falso acusaria "atrasado": se o lancador ainda o chamasse, recusaria subir
     amb.contador_atrasado()
     r = amb.rodar("iniciar_captura.sh")
-    assert r.returncode != 0
-    assert "checa_contador.py" in amb.log("py.log")
-    assert "contador atrasado" in r.stderr
-    assert "new-session" not in amb.log("tmux.log")
+    assert r.returncode == 0, r.stderr
+    assert amb.log("py.log") == ""  # nenhum python roda antes do robo (que sobe pelo tmux)
+    assert "contador" not in r.stdout + r.stderr
+    assert "new-session" in amb.log("tmux.log")
 
 
 def test_sh04_tudo_ok_lanca_no_tmux_com_display(amb):
@@ -433,3 +434,9 @@ def test_sh06_iniciar_mata_sessao_velha_antes_e_cria_pasta_do_log(amb):
     assert "-L sess kill-session -t sess" in linhas[0]
     assert "new-session" in linhas[1]
     assert log.parent.is_dir()
+
+
+def test_sh06_esperar_devolve_130_sem_trocar_o_codigo(amb):
+    # BSV-57: python morto por SIGINT sai 130; o SuccessExitStatus=130 da unidade depende de o codigo passar intacto
+    (amb.est / "besave-sess.rc").write_text("130\n")
+    assert amb.rodar("rodar_em_tmux.sh", "esperar", "sess").returncode == 130

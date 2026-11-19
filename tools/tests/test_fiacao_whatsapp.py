@@ -58,6 +58,10 @@ def _rodar(zap, monkeypatch, agora, voltas_max, janela_cfg=CFG):
 
     class Banco:
         habilitado = False
+        configurado = True               # BSV-56: sem banco configurado o robo nao sobe
+
+        def conectar(self):
+            return False
 
         def desconectar(self):
             pass

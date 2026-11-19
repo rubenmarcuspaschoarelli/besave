@@ -1,0 +1,12 @@
+# Vigia externo dos robos (BSV-57): roda a cada 5 min. O 1o disparo vem 5 min depois do boot, tempo para
+# os robos subirem e gravarem o 1o batimento. Sem Persistent: nao recupera disparos perdidos.
+[Unit]
+Description=Besave - vigia dos robos (a cada 5 min)
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
