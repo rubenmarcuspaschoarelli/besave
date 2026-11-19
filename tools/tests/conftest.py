@@ -7,8 +7,9 @@ import pytest
 TOOLS = Path(__file__).resolve().parent.parent
 LOJAS = TOOLS / "capture-store-pages"
 CHAT = TOOLS / "capture-chat-groups"
+PUB = TOOLS / "publish-whatsapp-channel"
 
-for p in (LOJAS, CHAT):
+for p in (LOJAS, CHAT, PUB):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 

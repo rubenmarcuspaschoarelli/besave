@@ -3,7 +3,8 @@
 Vigia externo dos robos de captura (BSV-57). So stdlib; roda a cada 5 min por
 besave-vigia-robos.timer (unidade --user do `besave`).
 
-Para cada robo (lojas, whatsapp), lendo o batimento.json que o proprio robo grava so com progresso:
+Para cada robo da maquina (BESAVE_VIGIA_ROBOS, padrao `lojas,whatsapp`; na inst2 `publicador`, BSV-63),
+lendo o batimento.json que o proprio robo grava so com progresso:
   1. unidade parada de proposito (inactive) -> nada; `failed` -> avisa o operador, NUNCA reinicia;
   2. reinicio diario do WhatsApp em andamento -> nada (aquele script confere e avisa sozinho);
   3. `agora > prazo` ou pid do batimento fora do scope do robo -> PARADO;
@@ -17,7 +18,7 @@ So age pela unidade: nunca `kill` nem busca de processo por nome. Os pids do rob
 do scope (o MainPID da unidade e o tmux). Falha do vigia (log ilegivel, Telegram fora) so vai ao journal.
 Token e chat vem de TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID do worker.env; nada disso entra em log ou mensagem.
 
-Env: BESAVE_TOOLS, BESAVE_VIGIA_ESTADO, BESAVE_WORKER_ENV, BESAVE_GRUPO_FALHA_HORAS (2),
+Env: BESAVE_VIGIA_ROBOS, BESAVE_TOOLS, BESAVE_VIGIA_ESTADO, BESAVE_WORKER_ENV, BESAVE_GRUPO_FALHA_HORAS (2),
 BESAVE_LOG_DIAS (14), BESAVE_LOG_MB (50).
 """
 
@@ -50,6 +51,15 @@ SAUDAVEL, PARADO, INDETERMINADO = "saudavel", "parado", "indeterminado"
 PADRAO_URL = re.compile(r"https?://\S+", re.IGNORECASE)
 PADRAO_TOKEN = re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{20,}\b")
 PADRAO_LOG_PARTIDA = re.compile(r"^run_captura_(\d{2})_(\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?\.log$")
+# um log por partida, com a hora no nome: WhatsApp (run_captura_*) e publicador (run_publicador_*, BSV-63)
+PADRAO_LOG_ROBO = {
+    "whatsapp": ("run_captura_*.log", PADRAO_LOG_PARTIDA),
+    "publicador": ("run_publicador_*.log",
+                   re.compile(r"^run_publicador_(\d{2})_(\d{2})_(\d{2})(\d{2})(\d{2})(?:_\d+)?\.log$")),
+}
+# robos com WhatsApp Web: o log tem as marcas do QR
+ROBOS_COM_QR = ("whatsapp", "publicador")
+ROBOS_PADRAO = "lojas,whatsapp"
 PADRAO_COPIA_LOJAS = re.compile(r"^main_monitorar_\d{8}\.log$")
 MARCA_BANNER_QR = "Aguardando o WhatsApp Web carregar"
 MARCA_AUTENTICADO = "Sessao autenticada"
@@ -89,15 +99,34 @@ class Robo:
 
     @property
     def pasta_log(self) -> Path:
-        return self.pasta / "log" if self.nome == "whatsapp" else self.pasta / "destino" / "log"
+        return self.pasta / "log" if self.nome in PADRAO_LOG_ROBO else self.pasta / "destino" / "log"
 
 
-def robos_padrao(tools: Path) -> list[Robo]:
+def todos_os_robos(tools: Path) -> list[Robo]:
     return [
         Robo("lojas", "besave-captura-lojas.service", "besave-lojas-robo.scope", tools / "capture-store-pages"),
         Robo("whatsapp", "besave-captura-whatsapp.service", "besave-whatsapp-robo.scope",
              tools / "capture-chat-groups", reinicio="besave-reinicio-whatsapp.service"),
+        Robo("publicador", "besave-publicador-whatsapp.service", "besave-publicador-robo.scope",
+             tools / "publish-whatsapp-channel"),
     ]
+
+
+def robos_padrao(tools: Path) -> list[Robo]:
+    """Os robos da inst1 (o vigia de antes da BSV-63)."""
+    return robos_da_maquina(tools, ROBOS_PADRAO)
+
+
+def robos_da_maquina(tools: Path, nomes: str | None) -> list[Robo]:
+    """Robos vigiados nesta maquina, por nome separado por virgula (BESAVE_VIGIA_ROBOS). Vazio = padrao;
+    nome desconhecido sai com log; nenhum nome valido = padrao."""
+    por_nome = {r.nome: r for r in todos_os_robos(tools)}
+    pedidos = [n.strip().lower() for n in (nomes or ROBOS_PADRAO).split(",") if n.strip()]
+    for n in pedidos:
+        if n not in por_nome:
+            log(f"BESAVE_VIGIA_ROBOS: robo desconhecido {n!r} ignorado (conhecidos: {', '.join(por_nome)})")
+    escolhidos = [por_nome[n] for n in dict.fromkeys(pedidos) if n in por_nome]
+    return escolhidos or robos_da_maquina(tools, ROBOS_PADRAO)
 
 
 def _rodar_real(cmd: list[str]) -> tuple[int, str]:
@@ -231,12 +260,13 @@ def ler_cauda(caminho: Path, n_bytes: int = CAUDA_BYTES) -> str:
 
 
 def log_mais_recente(robo: Robo) -> Path | None:
-    """WhatsApp: maior mtime em log/run_captura_*.log. Lojas: destino/log/main_monitorar.log."""
-    if robo.nome == "lojas":
+    """WhatsApp/publicador: maior mtime em log/run_*.log. Lojas: destino/log/main_monitorar.log."""
+    if robo.nome not in PADRAO_LOG_ROBO:
         alvo = robo.pasta_log / "main_monitorar.log"
         return alvo if alvo.exists() else None
+    glob, padrao = PADRAO_LOG_ROBO[robo.nome]
     try:
-        logs = [p for p in robo.pasta_log.glob("run_captura_*.log") if PADRAO_LOG_PARTIDA.match(p.name)]
+        logs = [p for p in robo.pasta_log.glob(glob) if padrao.match(p.name)]
         return max(logs, key=lambda p: p.stat().st_mtime) if logs else None
     except OSError:
         return None
@@ -466,7 +496,7 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
     if laco:
         operador = f"{laco} partidas em 30 min sem abrir grupo (laco de partidas)"
     elif status == PARADO:
-        if robo.nome == "whatsapp" and pede_qr(texto_log):
+        if robo.nome in ROBOS_COM_QR and pede_qr(texto_log):
             operador = "o WhatsApp pede QR Code (reiniciar nao resolve)"
         else:
             abortado = tem_abortado(texto_log)
@@ -540,7 +570,8 @@ def _vigiar_grupos(amb: Ambiente, robo: Robo, bat: Batimento, ocorrencias: dict,
 
 
 def rotacionar_logs(amb: Ambiente, estado: dict, agora: datetime) -> None:
-    """Uma vez por dia (marca no estado). So `run_captura_*.log` e `main_monitorar*.log`, so nas pastas de log."""
+    """Uma vez por dia (marca no estado). So `run_captura_*.log`, `run_publicador_*.log` e `main_monitorar*.log`,
+    so nas pastas de log."""
     hoje = agora.astimezone(amb.tz).strftime("%Y-%m-%d")
     if estado.get("rotacao_em") == hoje:
         return
@@ -549,8 +580,9 @@ def rotacionar_logs(amb: Ambiente, estado: dict, agora: datetime) -> None:
     apagados = 0
     for robo in amb.robos:
         try:
-            if robo.nome == "whatsapp":
-                logs = [p for p in robo.pasta_log.glob("run_captura_*.log") if PADRAO_LOG_PARTIDA.match(p.name)]
+            if robo.nome in PADRAO_LOG_ROBO:
+                glob, padrao = PADRAO_LOG_ROBO[robo.nome]
+                logs = [p for p in robo.pasta_log.glob(glob) if padrao.match(p.name)]
                 recente = max(logs, key=lambda p: p.stat().st_mtime) if logs else None
                 for p in logs:
                     if p != recente and datetime.fromtimestamp(p.stat().st_mtime, UTC) < limite:
@@ -625,7 +657,7 @@ def ambiente_real(env=None) -> Ambiente:
     token, chat = ler_credenciais(Path(env.get("BESAVE_WORKER_ENV") or "/srv/besave/worker.env"))
     _SEGREDOS[:] = [token, chat]
     amb = Ambiente(
-        robos=robos_padrao(tools), estado_path=estado,
+        robos=robos_da_maquina(tools, env.get("BESAVE_VIGIA_ROBOS")), estado_path=estado,
         grupo_falha=timedelta(hours=float(env.get("BESAVE_GRUPO_FALHA_HORAS") or 2)),
         log_dias=int(env.get("BESAVE_LOG_DIAS") or 14), log_mb=int(env.get("BESAVE_LOG_MB") or 50),
     )

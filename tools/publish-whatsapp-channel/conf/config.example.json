@@ -1,0 +1,19 @@
+{
+    "habilitado": true,
+    "intervalo_minutos": 15,
+    "max_horas_fila": 3,
+    "timeout_post_segundos": 60,
+    "id_canal": 2,
+    "modo_legenda": "colar",
+    "_obs": "Lido a cada volta: habilitado=false para o publicador na volta seguinte, sem reiniciar. intervalo_minutos tem variacao de +-30%. Linha P na fila ha mais de max_horas_fila vira X velha. timeout_post_segundos: espera pelo balao confirmado depois do clique; passou, a linha fica D e nunca e reenviada. modo_legenda: colar (padrao; se o texto nao chegar identico, tenta digitar) ou digitar. Teto e janela vem de PARAMETROS_ENVIO do id_canal. Gravar com permissao 600 (install -m 600).",
+    "oracle": {
+        "modo": "thick",
+        "instant_client_dir": "",
+        "config_dir": "",
+        "dsn": "",
+        "usuario": "",
+        "senha": "",
+        "call_timeout_segundos": 30,
+        "_obs": "Igual ao bloco db da captura (Instant Client e wallet da BSV-61). BESAVE_ORACLE_PASS no ambiente vence a senha daqui."
+    }
+}

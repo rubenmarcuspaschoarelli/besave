@@ -21,8 +21,8 @@ def _ler(caminho):
 
 def test_existem_as_duas_unidades():
     assert [u.name for u in UNIDADES] == [
-        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-reinicio-whatsapp.service",
-        "besave-vigia-robos.service", "besave-vnc@.service",
+        "besave-captura-lojas.service", "besave-captura-whatsapp.service", "besave-publicador-whatsapp.service",
+        "besave-reinicio-whatsapp.service", "besave-vigia-robos.service", "besave-vnc@.service",
     ]
 
 
@@ -202,3 +202,44 @@ def test_saida_130_da_parada_nao_deixa_a_unidade_failed_e_queda_real_sim():
     assert 130 in ok                       # SIGINT (128 + 2) da parada: inactive
     assert 1 not in ok and 137 not in ok   # queda real e SIGKILL seguem em failed -> on-failure
     assert s["Restart"] == "on-failure"
+
+
+# --- BSV-63: publicador do canal do WhatsApp (inst2) --------------------------------------------------
+PUBLICADOR_SERVICE = {
+    "ExecStartPre": "/bin/sh -c 'for i in $$(seq 1 60); do [ -S /tmp/.X11-unix/X1 ] && exit 0; sleep 1; done; exit 1'",
+    "ExecStart": "/srv/besave/repo/tools/vps/iniciar_publicador.sh --aguardar",
+    "ExecStop": "-/srv/besave/repo/tools/vps/parar_scope.sh besave-publicador-robo",
+    "KillSignal": "SIGINT",
+    "SuccessExitStatus": "130",
+    "Restart": "on-failure",
+    "RestartSec": "30",
+    "TimeoutStopSec": "60",
+    "Type": "simple",
+    "WorkingDirectory": "/srv/besave/repo/tools/publish-whatsapp-channel",
+    "Environment": "BESAVE_DISPLAY=:1 BESAVE_MEM_HIGH=1500M BESAVE_MEM_MAX=2000M BESAVE_MEM_SWAP_MAX=0",
+}
+
+
+def test_uni01_publicador_unit_inteira():  # licao 14: comparar inteiro
+    cfg = _ler(VPS / "systemd" / "besave-publicador-whatsapp.service")
+    assert dict(cfg["Service"]) == PUBLICADOR_SERVICE
+    assert cfg["Unit"]["After"] == cfg["Unit"]["Requires"] == "besave-vnc@1.service"
+    assert cfg["Unit"]["StartLimitIntervalSec"] == "0"
+    assert cfg["Install"]["WantedBy"] == "default.target"
+
+
+def test_uni01_lancador_do_publicador_usa_o_scope_e_o_log_por_partida():
+    texto = (VPS / "iniciar_publicador.sh").read_text(encoding="utf-8")
+    assert "SCOPE=besave-publicador-robo" in texto
+    assert 'scope_preparar "$SCOPE"' in texto
+    assert '"$PY" -u main.py' in texto
+    assert "run_publicador_" in texto
+    assert "capture-" not in texto                      # o publicador nao toca nas pastas da captura
+
+
+def test_uni01_dropin_da_inst2_vigia_so_o_publicador():
+    conf = VPS / "systemd" / "inst2" / "besave-vigia-robos.service.d" / "robos.conf"
+    assert _ler(conf)["Service"]["Environment"] == "BESAVE_VIGIA_ROBOS=publicador"
+    texto = conf.read_text(encoding="utf-8").lower()
+    for palavra in ("senha", "password", "token", "secret"):
+        assert palavra not in texto
