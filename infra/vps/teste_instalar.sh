@@ -12,13 +12,16 @@ falhas=0
 
 falhou() { echo "FALHOU: $caso: $*"; falhas=$((falhas + 1)); }
 
-# Pasta nova com: bin/ (binários antigos), art/ (artefato com SHA256SUMS), fake/gh.
+# Pasta nova com: bin/ (só besave-ciclo e besave-worker antigos), art/ (artefato com SHA256SUMS), fake/gh.
+# bin/ não inicia com besave-envio: o papel ciclo não o instala; INS-08 o adiciona explicitamente.
 preparar() {
   T=$(mktemp -d)
   mkdir -p "$T/bin" "$T/art" "$T/fake"
   for b in "${BINARIOS[@]}"; do
-    printf '#!/bin/sh\necho velho %s\n' "$b" > "$T/bin/$b"
     printf '#!/bin/sh\necho novo %s\n' "$b" > "$T/art/$b"
+  done
+  for b in besave-ciclo besave-worker; do
+    printf '#!/bin/sh\necho velho %s\n' "$b" > "$T/bin/$b"
   done
   (cd "$T/art" && sha256sum "${BINARIOS[@]}" > SHA256SUMS)
   cat > "$T/fake/gh" <<'EOF'
@@ -65,12 +68,15 @@ sem_unidades() {
 
 instalado() {
   local id=$1
-  for b in "${BINARIOS[@]}"; do
-    cmp -s "$T/bin/$b" "$T/art/$b" || falhou "$b não é o do artefato"
+  for b in besave-ciclo besave-worker; do
+    cmp -s "$T/bin/$b" "$T/art/$b" || falhou "$b não é do artefato"
     [ -x "$T/bin/$b" ] || falhou "$b não é executável"
   done
   grep -qx "execucao=$id" "$T/bin/VERSAO" || falhou "VERSAO sem execucao=$id"
   grep -qx "commit=$SHA" "$T/bin/VERSAO" || falhou "VERSAO sem commit=$SHA"
+  [ "$(cd "$T/bin" && find . -mindepth 1 | LC_ALL=C sort | tr '\n' ' ')" = \
+    "./VERSAO ./besave-ciclo ./besave-worker " ] \
+    || falhou "bin/ inesperado: $(ls -A "$T/bin")"
   local sobra
   sobra=$(find "$T/bin" -mindepth 1 -name '.*')
   [ -z "$sobra" ] || falhou "sobra temporária: $sobra"
@@ -139,9 +145,16 @@ rodar 123
 [ "$codigo" != 0 ] || falhou "código 0"
 intacto
 
-# INS-04: SHA256SUMS que não lista um dos 3 (o resto confere).
-caso="INS-04 SHA256SUMS incompleto"; preparar
+# INS-04: SHA256SUMS que não lista um dos 3 (o resto confere) — testa os dois binários críticos.
+caso="INS-04 SHA256SUMS sem besave-ciclo"; preparar
 grep -v 'besave-ciclo$' "$T/art/SHA256SUMS" > "$T/s" && mv "$T/s" "$T/art/SHA256SUMS"
+rodar 123
+[ "$codigo" != 0 ] || falhou "código 0"
+intacto
+
+# INS-04: o artefato é um só: SHA256SUMS sem besave-envio falha mesmo no papel ciclo (BSV-64).
+caso="INS-04 SHA256SUMS sem besave-envio (ciclo)"; preparar
+grep -v 'besave-envio$' "$T/art/SHA256SUMS" > "$T/s" && mv "$T/s" "$T/art/SHA256SUMS"
 rodar 123
 [ "$codigo" != 0 ] || falhou "código 0"
 intacto
@@ -162,7 +175,7 @@ for args in "abc" "12a" "-1" "1 2"; do
   intacto
 done
 
-# INS-07: --papel ciclo explícito = o padrão (3 binários, nenhuma unidade).
+# INS-07: --papel ciclo explícito = o padrão (besave-ciclo e besave-worker, nenhuma unidade).
 caso="INS-07 --papel ciclo"; preparar
 rodar --papel ciclo 123
 [ "$codigo" = 0 ] || falhou "código $codigo: $(cat "$T/err")"
@@ -170,6 +183,21 @@ grep -qx "run download 123 -R $REPO -n worker-linux-arm64-abcdef1 -D .*" "$T/gh.
 instalado 123
 grep -qx "papel=ciclo" "$T/bin/VERSAO" || falhou "VERSAO sem papel=ciclo"
 sem_unidades
+
+# INS-08: ciclo com besave-envio antigo em bin/ → intacto (mesmo hash) + AVISO:.
+caso="INS-08 ciclo com besave-envio antigo"; preparar
+printf '#!/bin/sh\necho velho besave-envio\n' > "$T/bin/besave-envio"
+hash_antes=$(sha256sum "$T/bin/besave-envio" | awk '{print $1}')
+rodar --papel ciclo 123
+[ "$codigo" = 0 ] || falhou "código $codigo: $(cat "$T/err")"
+for b in besave-ciclo besave-worker; do
+  cmp -s "$T/bin/$b" "$T/art/$b" || falhou "$b não é do artefato"
+  [ -x "$T/bin/$b" ] || falhou "$b não é executável"
+done
+[ -f "$T/bin/besave-envio" ] || falhou "besave-envio foi apagado"
+hash_depois=$(sha256sum "$T/bin/besave-envio" | awk '{print $1}')
+[ "$hash_antes" = "$hash_depois" ] || falhou "besave-envio foi modificado"
+grep -q "^AVISO:" "$T/err" || falhou "sem AVISO: em stderr: $(cat "$T/err")"
 
 # INS-06: --papel envio → só besave-envio e besave-worker; besave-ciclo intacto; só as 3 unidades.
 UNIDADES_ENVIO="besave-alerta@.service besave-envio.service besave-envio.timer"
