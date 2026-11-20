@@ -147,6 +147,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BESAVE_REPO: ${{ github.repository }}
         run: |
+          sudo install -d -o "$USER" /srv/besave/unidades
           bash infra/vps/instalar.sh --papel envio "$GITHUB_RUN_ID"
           cat /srv/besave/bin/VERSAO
           grep -qx "papel=envio" /srv/besave/bin/VERSAO
