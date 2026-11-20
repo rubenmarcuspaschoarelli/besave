@@ -140,18 +140,21 @@ do plano:** lojas bloqueiam IP de datacenter com mais força que IP residencial.
 1. Binário Linux ARM64, gerado fora das VPS (decisão do dono: nada de compilar Rust nelas). Recomendado:
    job do GitHub Actions com runner Linux ARM, disparado em `main` (ticket próprio; o artefato é baixado e
    copiado). Alternativa: compilação cruzada no PC (`cargo zigbuild --target aarch64-unknown-linux-gnu`).
-   Copiar `besave-ciclo` e `besave-envio` para `/srv/besave/bin/` (sempre do commit de `main`, AD-060).
+   Instalar o papel `ciclo` (só `besave-ciclo` e `besave-worker`, AD-060; `besave-envio` fica na inst2 —
+   ver [Inst2 · envio](#inst2--envio-bsv-61), BSV-64).
 2. `/srv/besave/worker.env` (`chmod 600`, dono `besave`): o mesmo do PC, trocando
    `BESAVE_ORACLE_CLIENT_DIR` (vazia), `TNS_ADMIN=/srv/besave/oracle/wallet`,
-   `BESAVE_IMAGENS_DIR=/srv/besave/imagens/ofertas/img`, e acrescentando `BESAVE_LOG_DIR=/srv/besave/logs`,
-   `BESAVE_LOCK` e `BESAVE_ENVIO_LOCK` (no Linux não existe `LOCALAPPDATA`).
-3. Dois timers `systemd` de 5 min (`besave-ciclo.timer`, `besave-envio.timer`), `Persistent=false`.
-4. Imagens: copiar do PC para `/srv/besave/imagens/` pelo menos as ofertas dos últimos 2 dias (o envio
-   usa a foto local, AD-080; o worker só envia ao S3 imagem que ainda não existe lá).
+   `BESAVE_IMAGENS_DIR=/srv/besave/imagens/ofertas/img`, e acrescentando `BESAVE_LOG_DIR=/srv/besave/logs`
+   e `BESAVE_LOCK` (no Linux não existe `LOCALAPPDATA`). Sem `BESAVE_ENVIO_LOCK` nem
+   `TELEGRAM_CANAL_BOT_TOKEN` — essas são do `besave-envio`, que fica na inst2 (BSV-64).
+3. Timer `systemd` de 5 min (`besave-ciclo.timer`), `Persistent=false`. O `besave-envio.timer` fica
+   na inst2 — ver [Inst2 · envio](#inst2--envio-bsv-61).
+4. Imagens: copiar do PC para `/srv/besave/imagens/` pelo menos as ofertas dos últimos 2 dias (o worker
+   só envia ao S3 imagem que ainda não existe lá; AD-080).
 
-**Conferência 6 (na virada):** desabilitar as tarefas `Besave Worker` e `Besave Envio` **no PC**,
-ligar os timers na inst1. Primeiro ciclo: zero escritas, leitura do banco em < 2 s (mesma região).
-Nunca os dois lugares ao mesmo tempo: o envio postaria em dobro no canal.
+**Conferência 6 (na virada):** desabilitar a tarefa `Besave Worker` **no PC**, ligar `besave-ciclo.timer`
+na inst1. Primeiro ciclo: zero escritas, leitura do banco em < 2 s (mesma região). O `besave-envio`
+(canal) já está na inst2; a virada dele é descrita em [Inst2 · envio](#inst2--envio-bsv-61).
 
 ---
 
@@ -214,11 +217,21 @@ antes de a oferta ou o aviso poderem ir ao canal. Sem ciclo, sem robôs, sem `BE
    → `inactive`.
 2. Só então, na **inst2**: `free -m` (antes), `sudo systemctl enable --now besave-envio.timer`,
    `systemctl list-timers 'besave-*'`.
-3. Depois de um dia normal de envio (lotes, cota, silêncio fora de 9–21 h, "Oferta encerrada"): `free -m`
-   na inst2; tirar `besave-envio` do papel padrão do `instalar.sh` (ticket do dono) e apagar
-   `/etc/systemd/system/besave-envio.{service,timer}` da inst1 (`daemon-reload`).
+3. **Limpeza da inst1 (BSV-64):** depois de um dia normal de envio (`enviados` no relatório da inst2):
+   - Conferir: `systemctl is-enabled besave-envio.timer` → `disabled`; `systemctl is-active besave-envio.timer`
+     → `inactive` (se não, parar aqui).
+   - `sudo rm /etc/systemd/system/besave-envio.{service,timer}`; se existir:
+     `sudo rmdir /etc/systemd/system/besave-envio.service.d`; depois:
+     `sudo systemctl daemon-reload && sudo systemctl reset-failed`;
+     confirmar: `systemctl list-unit-files 'besave-*'` → sem `besave-envio`.
+   - `sudo rm /srv/besave/bin/besave-envio`.
+   - Editar `/srv/besave/worker.env` na inst1: remover `BESAVE_ENVIO_LOCK` e `TELEGRAM_CANAL_BOT_TOKEN`
+     (guardar cópia em modo `600` antes; apagar a cópia depois dos dois ciclos abaixo).
+   - Dois ciclos seguidos com `Result=success`; `systemd-analyze verify` das unidades do ciclo e do
+     `besave-alerta@.service` sem erro (o alerta continua usando `besave-worker`).
 
-Volta: `disable --now` na inst2 e `enable --now` na inst1 (a inst1 continua com o binário e a pasta de
-imagens até o passo 3).
+Volta de emergência: `disable --now` na inst2 → `instalar.sh --papel envio` na inst1 → restaurar
+`.env` (com `BESAVE_ENVIO_LOCK` e `TELEGRAM_CANAL_BOT_TOKEN`) → `install -m 644 unidades/* /etc/systemd/system/` →
+`daemon-reload` → `enable --now besave-envio.timer` na inst1. Nunca as duas máquinas com o timer ativo.
 
 As unidades são de sistema (`User=besave`, `/etc/systemd/system`), por isso `sudo systemctl`, não `--user`.

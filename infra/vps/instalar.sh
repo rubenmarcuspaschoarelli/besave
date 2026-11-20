@@ -6,7 +6,7 @@
 #   instalar.sh --papel envio [ID]
 #                          inst2 (mensageria, BSV-61): só besave-envio e besave-worker (alerta), e as
 #                          unidades besave-envio.{service,timer} e besave-alerta@ em BESAVE_UNIDADES
-# Papel padrão: ciclo (inst1), os 3 binários e nenhuma unidade.
+# Papel padrão: ciclo (inst1), besave-ciclo e besave-worker; nenhuma unidade.
 # Variáveis: BESAVE_BIN (padrão /srv/besave/bin), BESAVE_REPO (padrão rubenmarcuspaschoarelli/besave),
 # BESAVE_UNIDADES (padrão /srv/besave/unidades; o roteiro copia de lá para /etc/systemd/system).
 set -euo pipefail
@@ -33,7 +33,7 @@ if [ "${1:-}" = --papel ]; then
 fi
 case $papel in
   ciclo)
-    BINARIOS=(besave-ciclo besave-envio besave-worker)
+    BINARIOS=(besave-ciclo besave-worker)
     UNIDADES=() ;;
   envio)
     BINARIOS=(besave-envio besave-worker)
@@ -81,6 +81,10 @@ printf 'execucao=%s\ncommit=%s\nramo=%s\nevento=%s\npapel=%s\ninstalado_em=%s\n'
 
 # Cada rename é atômico: um timer nunca executa binário pela metade; quem já roda segue com o antigo.
 for f in "${BINARIOS[@]}" VERSAO; do mv -f "$tmp/$f" "$BIN/$f"; done
+
+if [ "$papel" = ciclo ] && [ -f "$BIN/besave-envio" ]; then
+  echo "AVISO: $BIN/besave-envio sobrou do papel anterior; para remover, como root: sudo rm $BIN/besave-envio" >&2
+fi
 
 if [ ${#UNIDADES[@]} -gt 0 ]; then
   mkdir -p "$UNID"
