@@ -40,8 +40,12 @@ deixou esse passo como "ticket do dono" (Virada, passo 3); este é o ticket.
 4. Sem dependência nova.
 
 ## Fora de escopo
-- Qualquer mudança em `besave-envio`, `besave-ciclo` ou no workflow `worker-arm64.yml`.
-- Inst2 e papel `envio`.
+- Qualquer mudança em `besave-envio` ou `besave-ciclo`.
+- **Exceção autorizada (20/11/2026):** o job `vps` de `worker-arm64.yml` foi ajustado para
+  separar o `systemd-analyze verify` por papel (`ciclo` / `envio`) e acrescentar os passos
+  `instalar.sh --papel envio` e o verify do envio, necessários para o job vps não falhar
+  após a separação dos papéis (BSV-61/BSV-64).
+- Inst2 e papel `envio` (além do acima).
 - Revogar o token do bot do canal no BotFather (decisão do dono; a remoção do `.env` da inst1 basta para este
   ticket).
 
