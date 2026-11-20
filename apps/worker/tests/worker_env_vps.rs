@@ -70,6 +70,14 @@ const OPCIONAIS: &[(&str, &str)] = &[
         "BESAVE_FRASES_CANAL",
         "ausente = frases_canal.json embutido no binário (BSV-62)",
     ),
+    (
+        "BESAVE_ENVIO_LOCK",
+        "só besave-envio (inst2); não entra no worker.env.example da inst1 (BSV-64)",
+    ),
+    (
+        "TELEGRAM_CANAL_BOT_TOKEN",
+        "só besave-envio (inst2); não entra no worker.env.example da inst1 (BSV-64)",
+    ),
 ];
 
 /// Do modelo, mas lidas por bibliotecas (não aparecem em `src/`).

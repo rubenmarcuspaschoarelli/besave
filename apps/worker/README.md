@@ -770,7 +770,7 @@ o lote de ofertas segue; 429 encerra a execução como nas ofertas. `--sim` most
 
 ## Rodar no Linux (VPS)
 
-`besave-ciclo` e `besave-envio` rodam na instância 1 da OCI (Ubuntu 24.04 ARM64) pelo `systemd`, com
+`besave-ciclo` roda na instância 1 da OCI (Ubuntu 24.04 ARM64) e `besave-envio` na instância 2 (BSV-61; ver [Inst2 · envio](../../docs/infra/VPS-INSTANCIA-1.md#inst2--envio-bsv-61)), ambos pelo `systemd`, com
 o mesmo comportamento do Agendador do Windows. **Nada se compila na VPS** (BSV-43): o workflow
 `worker-arm64.yml` gera no runner ARM, a cada push em `main` que toca o worker (e em cada PR para
 `develop`), o artefato `worker-linux-arm64-<sha7>` com `besave-ciclo`, `besave-envio`,
