@@ -176,4 +176,4 @@ jobs:
       # de tools/: a ordem de imports (isort) depende do diretorio de trabalho.
       - name: ruff
         working-directory: tools
-        run: ruff check vps/ tests/
+        run: ruff check vps/ tests/ capture-web-apoio/

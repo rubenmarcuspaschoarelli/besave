@@ -1,0 +1,54 @@
+{
+  "_obs": "Copie para conf/config.json (fora do git). Chave invalida = padrao com WARN no log.",
+  "db": {
+    "modo": "thick",
+    "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
+    "config_dir": "",
+    "dsn": "",
+    "host": "LOCALHOST",
+    "porta": 1521,
+    "servico": "XE",
+    "usuario": "BESAVE_WEB",
+    "senha": "",
+    "_obs": "Senha de preferencia na variavel BESAVE_WEB_SENHA (vence a do arquivo). dsn = alias do tnsnames.ora do wallet (config_dir); vazio = host/porta/servico. modo thin com wallet: config_dir e, se houver, wallet_senha."
+  },
+  "alerta": {
+    "telegram_token": "",
+    "telegram_chat_id": "",
+    "_obs": "Opcional, mesmo formato do robo das lojas. Vazio = so log. Uma mensagem por rodada, so com problema."
+  },
+  "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+  "pausa_s": [3, 6],
+  "por_menu": 5,
+  "teto_rodada": 30,
+  "idade_max_horas": 24,
+  "sites": {
+    "PELANDO": {
+      "habilitado": true,
+      "menus": [
+        "https://www.pelando.com.br/recentes",
+        "https://www.pelando.com.br/mais-baratos",
+        "https://www.pelando.com.br/mais-quentes"
+      ]
+    },
+    "PROMOBIT": {
+      "habilitado": true,
+      "menus": [
+        "https://www.promobit.com.br/",
+        "https://www.promobit.com.br/promocoes/recentes/",
+        "https://www.promobit.com.br/promocoes/em-alta/",
+        "https://www.promobit.com.br/promocoes/menor-preco/"
+      ]
+    },
+    "PECHINCHOU": {
+      "habilitado": true,
+      "menus": [
+        "https://pechinchou.com.br/recentes",
+        "https://pechinchou.com.br/destaques",
+        "https://pechinchou.com.br/menor-preco",
+        "https://pechinchou.com.br/mais-pontuados",
+        "https://pechinchou.com.br/pechinchas"
+      ]
+    }
+  }
+}
