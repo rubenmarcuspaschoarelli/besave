@@ -8,11 +8,15 @@ T1 → T2 → T3
 ### Phase 2: Vigia e documentação
 T4 → T5
 
+### Phase 3: Lacunas do Verifier (ciclo 1)
+T6
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
+T5 → T6
 ```
 
 ## Task Breakdown
@@ -56,6 +60,14 @@ T4 → T5
 **Reqs**: DOC-01
 **Tests**: none (documentação)
 **Gate**: `cd tools && pytest`
+
+### T6: Lacunas do Verifier (ciclo 1) ✅
+**What**: testes para os mutantes sobreviventes M24 (`loja_pausada` fora de `tentativas_navegador`), M28 (lote sem `--monitorar`), M34 (linha que vai para `'9'` fora de `retidas`), M39 (aba nova zera o `crash`).
+**Where**: `tools/tests/test_navegador_lote.py`, `tools/tests/test_navegador_recuperacao.py`
+**Depends on**: T5
+**Reqs**: VIG-01, REC-01, TEL-01
+**Tests**: `tools/tests/test_navegador_lote.py`, `tools/tests/test_navegador_recuperacao.py`
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
 ## Test Coverage Matrix
 

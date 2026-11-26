@@ -299,3 +299,28 @@ def test_vig01_campos_do_batimento_andam_so_com_navegador(amb, monkeypatch):
     amb.rodar([4])
     assert amb.bat[-1]["tentativas_navegador"] == 0
     assert amb.bat[-1]["ultimo_ok_navegador"] == "2026-11-25T12:00:00Z"
+
+
+def test_vig01_loja_pausada_nao_conta_em_tentativas(amb, lojas, monkeypatch):
+    class L(Loja):
+        def capture(self, page):
+            raise RuntimeError("seletor sumiu")
+    amb.rodar([1], L)
+    assert amb.bat[-1]["tentativas_navegador"] == 1
+
+    class Pausada(PausaFalsa):
+        def em_pausa(self, loja):
+            return True
+    monkeypatch.setattr(lojas.registry, "get_store", lambda loja: Loja())
+    rows = [{"ID_OFERTA": 2, "url": "https://amazon.com.br/p/2", "numero_da_captura": "2", "DS_ORIGEM": "g"}]
+    saidas, _, _ = lojas._processar_lote(Pagina(), rows, Db(), True, "img", set(), Pausada())
+    assert saidas[0]["status_captura"] == "loja_pausada"
+    assert amb.bat[-1]["tentativas_navegador"] == 1                     # a pausada renova, mas nao conta
+
+
+def test_tel01_linha_que_vai_para_9_no_terceiro_timeout_nao_conta_como_retida(amb):
+    amb.goto[1] = _timeout()
+    for _ in range(3):
+        amb.lojas.NAV.seq_timeouts = 0                                  # isola da regra dos seguidos
+        amb.rodar([1])
+    assert amb.lojas.NAV.retidas == 2                                   # 2 retidas; a 3a foi para '9'

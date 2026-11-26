@@ -402,3 +402,38 @@ def test_pre01_janela_noturna_relanca_na_rodada(rec, monkeypatch):
                      3, janela, sessao=rec.sessao)
     ev = [e for e in rec.eventos if not e.startswith("batimento")]
     assert ev == ["dorme", "fecha_contexto@ctx0", "launch", "nova_aba@ctx1", "dorme"]
+
+
+def test_rec01_aba_nova_zera_o_crash_e_nao_relanca(rec, monkeypatch):
+    """Evento `crash` na aba velha: a aba nova nasce limpa; a linha seguinte sai ok sem relancamento."""
+    aba_velha = rec.sessao.page
+
+    def navegar(page, url, timeout=0):
+        if page is aba_velha:
+            page.handlers["crash"](page)
+            raise RuntimeError("Page.goto: Page crashed")
+        page.url = url
+    monkeypatch.setattr(rec.lojas, "_goto_robusto", navegar)
+    db = _monitor(rec, monkeypatch, [_rows(1, 2), _rows(1, 2), []])
+    assert db.capturas == [1, 2] and db.erros == []
+    assert rec.lancados == []
+    assert rec.enviados == [ABA_1, VOLTOU_1]
+
+
+def test_rec01_lote_sem_monitor_recupera_e_segue_da_linha_retida(rec, monkeypatch):
+    aba_velha = rec.sessao.page
+    visitas = []
+
+    def navegar(page, url, timeout=0):
+        visitas.append((page is aba_velha, url[-1]))
+        if page is aba_velha:
+            raise RuntimeError("Page.goto: Page crashed")
+        page.url = url
+    monkeypatch.setattr(rec.lojas, "_goto_robusto", navegar)
+    db = Db()
+    out, gravadas, com_erro = rec.lojas._lote_com_recuperacao(rec.sessao, _rows(1, 2, 3), db, True, "img", None)
+    assert visitas == [(True, "1"), (False, "1"), (False, "2"), (False, "3")]
+    assert [o["ID_OFERTA"] for o in out] == [1, 1, 2, 3]
+    assert db.capturas == [1, 2, 3] and db.erros == []
+    assert (gravadas, com_erro) == (3, 0)
+    assert rec.enviados == [ABA_1, VOLTOU_1]
