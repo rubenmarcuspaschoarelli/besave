@@ -195,3 +195,15 @@ def test_redirect_promobit_so_com_o_link_do_p():
 @pytest.mark.parametrize('pagina', ['<html><body>nada</body></html>', '<p><a href="#">x</a></p>', '', None])
 def test_redirect_promobit_sem_url(pagina):
     assert url_redirect_promobit(pagina) is None
+
+
+def test_preco_de_igual_ao_por_vira_none():
+    pec = {'id': 1, 'slug': 's', 'title': 'T', 'price': '10.00', 'old_price': '10.00', 'status': 'ACTIVE',
+           'long_url': 'https://www.amazon.com.br/dp/B000000001', 'created_at': '2026-11-25T20:00:00-03:00'}
+    assert extrair_pechinchou(pagina_pechinchou([pec])).ofertas[0].preco_de is None
+    pro = {'offerId': 1, 'offerTitle': 'T', 'offerPrice': 10, 'offerOldPrice': 10, 'offerPriceType': 'NORMAL',
+           'offerStatusName': 'RECENTS', 'offerPublished': '2026-11-25T20:00:00-0300',
+           'storeDomain': 'amazon.com.br'}
+    assert extrair_promobit(pagina_promobit([pro])).ofertas[0].preco_de is None
+    assert extrair_promobit(pagina_promobit([dict(pro, offerOldPrice=10.01)])).ofertas[0].preco_de == \
+        Decimal('10.01')

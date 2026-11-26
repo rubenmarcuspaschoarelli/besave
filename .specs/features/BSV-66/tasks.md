@@ -8,12 +8,16 @@ T1 → T2 → T3
 ### Phase 2: Rodada e operação
 T4 → T5 → T6
 
+### Phase 3: Correções do Verifier (ciclo 1)
+T7
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
 T5 → T6
+T6 → T7
 ```
 
 ## Test Coverage Matrix
@@ -81,3 +85,11 @@ T5 → T6
 **Reqs**: OPS-01, OPS-02
 **Tests**: `tools/tests/test_web_config.py`
 **Gate**: `cd tools && python -m pytest -q && python -m ruff check vps/ tests/ capture-web-apoio/`
+
+### T7: Testes dos 4 mutantes sobreviventes do ciclo 1 ✅
+**What**: título com trim e corte em 350 no INSERT; `preco_de` igual ao `por` vira `NULL`; linha inteira do resumo (`lidas`/`validas`); descartes transitórios fora do estado local.
+**Where**: `tools/tests/test_web_filtros.py`
+**Depends on**: T6
+**Reqs**: GRV-01, LER-03, FIL-02
+**Tests**: `tools/tests/test_web_filtros.py`, `tools/tests/test_web_extrair.py`, `tools/tests/test_web_rodada.py`
+**Gate**: `cd tools && python -m pytest -q tests/test_web_*.py`

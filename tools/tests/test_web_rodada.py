@@ -291,3 +291,11 @@ def test_log_de_arquivo_com_rotacao_14_dias(tmp_path, argv):
             logging.getLogger('captura_web').removeHandler(h)
             h.close()
         logging.getLogger('captura_web').propagate = True
+
+
+def test_resumo_lidas_validas_gravadas_e_descartes_da_fixture():
+    from webapoio.rodada import linhas_resumo
+    res, *_ = rodar({PEL: Resposta(200, fixture('pelando_lista.html'))}, cfg(('PELANDO',)))
+    assert linhas_resumo(res) == [
+        ('[resumo] Pelando /recentes: lidas=6 validas=4 gravadas=3 descartes: loja_fora=1, status=1, tipo=1 '
+        'ids=[1001, 1002, 1003]')]

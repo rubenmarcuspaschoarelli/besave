@@ -221,3 +221,27 @@ def test_estado_local_ilegivel_comeca_vazio(tmp_path):
     caminho = tmp_path / 'vistas.json'
     caminho.write_text('{quebrado', encoding='utf-8')
     assert ler_vistas(str(caminho), AGORA) == {}
+
+
+def test_titulo_com_trim_e_corte_em_350_no_insert():
+    res, _, _, banco = rodar({PEL: Resposta(200, pagina_pelando([deal_pelando(1, title='  ' + 'x' * 400)]))})
+    assert res.gravadas == 1
+    assert banco.gravadas[0]['titulo'] == 'x' * 350
+
+
+def test_descartes_transitorios_nao_entram_no_estado_local():
+    deals = [deal_pelando(1, criada=iso(30)),                                       # futura
+             deal_pelando(2, url='https://amzn.to/sem-location'),                    # encurtador_nao_resolvido
+             deal_pelando(3, criada=iso(-60 * 25)),                                  # antiga
+             deal_pelando(4, url='https://www.magazineluiza.com.br/x/p/abc/'),       # loja_fora
+             deal_pelando(5)]                                                        # gravada
+    rotas = {PEL: Resposta(200, pagina_pelando(deals)), 'https://amzn.to/sem-location': Resposta(200, '')}
+    _, rodada, _, _ = rodar(rotas)
+    assert sorted(rodada.novas_vistas) == ['PELANDO:p3', 'PELANDO:p4', 'PELANDO:p5']
+
+
+def test_promobit_sem_url_nao_entra_no_estado_local():
+    rotas = {PRO: Resposta(200, pagina_promobit([oferta_promobit(2)])),
+             'https://www.promobit.com.br/Redirect/to/2/': Resposta(200, '<html>sem link</html>')}
+    _, rodada, _, _ = rodar(rotas, cfg(('PROMOBIT',)))
+    assert rodada.novas_vistas == {}
