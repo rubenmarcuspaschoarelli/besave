@@ -49,7 +49,7 @@ T4 → T5
 **Tests**: `tools/tests/test_vigia_navegador.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T5: README e config de exemplo
+### T5: README e config de exemplo ✅
 **What**: seção "Navegador quebrado", código 3, preventivo, SQL; `config.example.json`.
 **Where**: `tools/capture-store-pages/README.md`, `tools/capture-store-pages/conf/config.example.json`
 **Depends on**: T4

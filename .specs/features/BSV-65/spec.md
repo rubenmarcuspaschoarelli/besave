@@ -84,24 +84,24 @@ Como dono, quero que um Chromium quebrado não mande linhas para `'9'`, se recup
 
 | Requirement ID | Story | Phase | Status |
 | -------------- | ----- | ----- | ------ |
-| CLS-01 | P1 | T1 | Pending |
-| CLS-02 | P1 | T1 | Pending |
-| LIN-01 | P1 | T2 | Pending |
-| LIN-02 | P1 | T2 | Pending |
-| REC-01 | P1 | T3 | Pending |
-| REC-02 | P1 | T3 | Pending |
-| REC-03 | P1 | T3 | Pending |
-| TMO-01 | P1 | T2 | Pending |
-| TMO-02 | P1 | T2 | Pending |
-| TMO-03 | P1 | T2 | Pending |
-| TEL-01 | P1 | T2/T3 | Pending |
-| TEL-02 | P1 | T2/T3 | Pending |
-| TEL-03 | P1 | T2/T3 | Pending |
-| VIG-01 | P1 | T1/T2/T4 | Pending |
-| VIG-02 | P1 | T1/T2/T4 | Pending |
-| DIA-01 | P1 | T1/T3 | Pending |
-| PRE-01 | P1 | T1/T3 | Pending |
-| DOC-01 | P1 | T5 | Pending |
+| CLS-01 | P1 | T1 | Done |
+| CLS-02 | P1 | T1 | Done |
+| LIN-01 | P1 | T2 | Done |
+| LIN-02 | P1 | T2 | Done |
+| REC-01 | P1 | T3 | Done |
+| REC-02 | P1 | T3 | Done |
+| REC-03 | P1 | T3 | Done |
+| TMO-01 | P1 | T2 | Done |
+| TMO-02 | P1 | T2 | Done |
+| TMO-03 | P1 | T2 | Done |
+| TEL-01 | P1 | T2/T3 | Done |
+| TEL-02 | P1 | T2/T3 | Done |
+| TEL-03 | P1 | T2/T3 | Done |
+| VIG-01 | P1 | T1/T2/T4 | Done |
+| VIG-02 | P1 | T1/T2/T4 | Done |
+| DIA-01 | P1 | T1/T3 | Done |
+| PRE-01 | P1 | T1/T3 | Done |
+| DOC-01 | P1 | T5 | Done |
 
 ## Success Criteria
 - `pytest` e `ruff check vps/ tests/` em `tools/` verdes; testes do vigia no WSL.
