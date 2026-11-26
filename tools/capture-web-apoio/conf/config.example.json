@@ -1,16 +1,13 @@
 {
   "_obs": "Copie para conf/config.json (fora do git). Chave invalida = padrao com WARN no log.",
   "db": {
-    "modo": "thick",
-    "instant_client_dir": "C:\\oraclexe\\app\\instantclient_19_30",
-    "config_dir": "",
-    "dsn": "",
-    "host": "LOCALHOST",
-    "porta": 1521,
-    "servico": "XE",
+    "modo": "thin",
+    "config_dir": "C:\\caminho\\da\\pasta\\do\\wallet",
+    "dsn": "bsvdb_tp",
     "usuario": "BESAVE_WEB",
     "senha": "",
-    "_obs": "Senha de preferencia na variavel BESAVE_WEB_SENHA (vence a do arquivo). dsn = alias do tnsnames.ora do wallet (config_dir); vazio = host/porta/servico. modo thin com wallet: config_dir e, se houver, wallet_senha."
+    "wallet_senha": "",
+    "_obs": "Autonomous Database (AD-100): modo thin, sem Instant Client. config_dir = pasta do wallet (tnsnames.ora, ewallet.pem); dsn = alias do tnsnames.ora. wallet_senha = senha do wallet escolhida no download (vazio se o ewallet.pem nao tiver senha). Senha do usuario de preferencia na variavel BESAVE_WEB_SENHA (vence a do arquivo). Alternativa thick: ver README."
   },
   "alerta": {
     "telegram_token": "",

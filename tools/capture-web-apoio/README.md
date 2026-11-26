@@ -26,9 +26,23 @@ python -m venv .venv
 copy conf\config.example.json conf\config.json
 ```
 
-Edite `conf\config.json` (fora do git): bloco `db` como no robô das lojas (`modo`, `instant_client_dir`,
-`config_dir`/`dsn` do wallet) com `usuario` = `BESAVE_WEB`; bloco `alerta` com o mesmo bot/chat do robô das
-lojas (vazio = só log). A senha fica de preferência na variável `BESAVE_WEB_SENHA` (vence a do arquivo):
+Edite `conf\config.json` (fora do git). Bloco `db`: o Autonomous Database (AD-100) em modo **thin**, que
+dispensa o Instant Client:
+
+| chave | valor |
+|---|---|
+| `modo` | `"thin"` |
+| `config_dir` | pasta do wallet (`tnsnames.ora`, `ewallet.pem`), a mesma que os robôs usam |
+| `dsn` | `"bsvdb_tp"` (alias do `tnsnames.ora`) |
+| `usuario` | `"BESAVE_WEB"` |
+| `wallet_senha` | senha do wallet escolhida no download; vazio se o `ewallet.pem` não tiver senha |
+
+Alternativa, só se o thin não conectar: `"modo": "thick"` com `instant_client_dir` apontando para um
+Instant Client 19c ou mais novo (o thick lê o `cwallet.sso` da mesma `config_dir` e ignora `wallet_senha`).
+O XE local não é mais usado.
+
+Bloco `alerta` com o mesmo bot/chat do robô das lojas (vazio = só log). A senha do usuário fica de
+preferência na variável `BESAVE_WEB_SENHA` (vence a do arquivo):
 
 ```powershell
 [Environment]::SetEnvironmentVariable('BESAVE_WEB_SENHA', '<senha>', 'User')
