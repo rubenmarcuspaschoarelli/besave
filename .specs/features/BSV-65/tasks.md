@@ -33,7 +33,7 @@ T4 → T5
 **Tests**: `tools/tests/test_navegador_lote.py`
 **Gate**: `cd tools && pytest`
 
-### T3: Recuperação, código 3 e preventivo
+### T3: Recuperação, código 3 e preventivo ✅
 **What**: `_Sessao`, `_recuperar_navegador`, `_relancar`, saída 3, preventivo no `_monitorar`, lote sem monitor, evento `crash`.
 **Where**: `tools/capture-store-pages/main.py`
 **Depends on**: T2
