@@ -41,7 +41,7 @@ T4 → T5
 **Tests**: `tools/tests/test_navegador_recuperacao.py`
 **Gate**: `cd tools && pytest`
 
-### T4: Vigia vê captura por navegador
+### T4: Vigia vê captura por navegador ✅
 **What**: `Batimento` com os dois campos opcionais; aviso sem reinício, lembrete e "voltou".
 **Where**: `tools/vps/vigia_robos.py`
 **Depends on**: T3
