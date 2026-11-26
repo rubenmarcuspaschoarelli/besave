@@ -25,7 +25,7 @@ T4 → T5
 **Tests**: `tools/tests/test_navegador_lojas.py`
 **Gate**: `cd tools && pytest tests/test_navegador_lojas.py tests/test_batimento_lojas.py`
 
-### T2: Lote: linha retida, timeouts e parada
+### T2: Lote: linha retida, timeouts e parada ✅
 **What**: `_processar_lote` retém a linha, conta timeouts, para o lote, avisa "voltou", atualiza os campos do batimento.
 **Where**: `tools/capture-store-pages/main.py`
 **Depends on**: T1

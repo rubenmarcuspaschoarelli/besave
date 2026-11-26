@@ -45,7 +45,8 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento)
+                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento,
+                  navegador, alerta)
 from core import images, processos, shopee_api
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -73,6 +74,11 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 SHOPEE_API_INDISPONIVEL = 'shopee_api_indisponivel'
 STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel',
                 SHOPEE_API_INDISPONIVEL}
+
+
+# Estado do navegador nesta execucao (BSV-65): timeouts seguidos, retidas, ocorrencia, relancamentos.
+# main() liga o aviso do Telegram e o relancamento preventivo; os testes trocam o objeto inteiro.
+NAV = navegador.Controle()
 
 
 def _url_bloqueada(url):
@@ -162,6 +168,8 @@ def _resolver_ponte(page, url, captura):
             return None, None, PONTE_CLOUDFLARE
         destino, loja = pontes.resolver_destino(page)
     except Exception as e:
+        if navegador.sinal(e):
+            raise                       # navegador quebrado: a linha fica retida (BSV-65)
         print(f'[captura {captura}] ponte: {e}')
         return None, None, None
     if destino:
@@ -576,6 +584,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
 
         expirada = False
         status_pre = None
+        quebrado = None          # sinal de navegador quebrado nesta linha (BSV-65)
+        timeout_retida = False   # timeout de navegacao: linha retida, conta na sequencia
+        por_navegador = False    # linha de loja capturada pelo navegador (batimento e "voltou")
         if url and loja is None:
             url, status_pre = _redirecionar(url, redir, pausa, row, rows[pos + 1:], captura)
             cron.marcar('redir')
@@ -584,11 +595,20 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         if url and loja is None and status_pre is None:
             # Pode ser uma pagina-ponte de divulgador: a oferta esta la, mas
             # quem vende e outra loja. A URL de origem continua em out['url'].
-            destino, loja, marca = _resolver_ponte(page, url, captura)
+            try:
+                NAV.navegou()
+                destino, loja, marca = _resolver_ponte(page, url, captura)
+            except Exception as e:  # noqa: BLE001 - so navegador quebrado sobe da ponte
+                destino, loja, marca = None, None, None
+                quebrado = navegador.sinal(e)
+                status_pre = _status_erro(e)
+                print(f'[captura {captura}] ponte: navegador quebrado: {e}')
             cron.marcar('ponte')
             expirada = marca == PONTE_EXPIRADA
             chave = _chave_pausa(url, redir)
-            if marca != PONTE_CLOUDFLARE:
+            if quebrado:
+                pass
+            elif marca != PONTE_CLOUDFLARE:
                 pausa.registrar_sucesso(chave)      # dominio que bloqueava voltou a responder
             else:
                 # Encurtador novo bloqueando o IP da inst1: retida, nunca '9' (BSV-58).
@@ -646,13 +666,20 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 out.update(campos)
                 cron.marcar('capt')
             else:
+                por_navegador = True
+                fase = 'goto'
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
+                    NAV.navegou()
                     _goto_robusto(page, url, timeout=60000)
+                    fase = 'pagina'
+                    NAV.aba_nova = False   # a primeira navegacao da aba nova passou
                     # Hook por loja: fecha popup / clica "Ir para produto" (ML) etc.
                     try:
                         store.prepare(page)
                     except Exception as e:
+                        if navegador.sinal(e):
+                            raise
                         print(f'[captura {captura}] prepare: {e}')
                     # SPA: espera o container do produto (Shopee). Amazon nao define.
                     if store.ready_selector:
@@ -722,9 +749,28 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 except Exception as e:
                     out['status_captura'] = _status_erro(e)
                     print(f'[captura {captura}] erro: {e}')
+                    quebrado = navegador.sinal(e)
+                    if not quebrado and fase == 'goto' and navegador.e_timeout(e):
+                        # 3 timeouts da MESMA linha: link morto, vai para '9' com o motivo de hoje.
+                        timeout_retida = not NAV.timeout(row.get('ID_OFERTA'))
+                if not quebrado and NAV.crash:
+                    # Evento 'crash' da aba numa fase que engole excecao (imagens, descarte...).
+                    quebrado = 'Page crashed'
+                    out['status_captura'] = 'erro: navegador: Page crashed'
+
+        if quebrado:
+            NAV.quebrou(quebrado)
+            print(f'[navegador] quebrado ({quebrado}) na linha {captura}: retida; lote interrompido.')
+        retida_navegador = bool(quebrado) or timeout_retida
+        if por_navegador:
+            batimento.registrar_navegador(out['status_captura'] == 'ok')
+            if out['status_captura'] == 'ok':
+                NAV.ok()
 
         # Contagem de bloqueios seguidos por loja (pagina ou sessao de afiliado).
-        if loja and out['status_captura'] in STATUS_RETER:
+        if retida_navegador:
+            pass                        # navegador nao e bloqueio da loja: nao conta para a pausa
+        elif loja and out['status_captura'] in STATUS_RETER:
             restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
                          if registry.resolver_loja((r.get('url') or '').strip()) == loja]
             motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
@@ -877,6 +923,11 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
                     _adiar(id_oferta, db.sem_conexao)
+            elif retida_navegador:
+                # Navegador quebrado ou timeout (BSV-65): nunca '9', nada gravado; o ponteiro para
+                # antes dela, como STATUS_RETER.
+                status_db = ' | oracle=retida(0)'
+                _travar(id_oferta)
             elif out['status_captura'] in STATUS_RETER:
                 # Transitorio (sessao/captcha): relida na proxima varredura,
                 # sem entrar em `adiados`; o ponteiro para antes dela.
@@ -922,6 +973,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
               f'loja={out["loja"] or "-":<13} | '
               f'status={out["status_captura"]}{status_db}{marca_afiliado}'
               f' | {cron.resumo()}')
+        if NAV.pendente:
+            # Navegador quebrado ou timeouts seguidos: as linhas seguintes nao sao tentadas nesta aba.
+            break
 
     _resumo_tempos(tempos)
     return out_rows, gravadas, com_erro
