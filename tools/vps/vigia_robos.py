@@ -12,7 +12,9 @@ lendo o batimento.json que o proprio robo grava so com progresso:
      grupo em `grupos_falhando` ha 2 h ou mais e laco de partidas (3 logs em 30 min sem `Grupo aberto`)
      -> operador, sem reinicio;
   5. senao `systemctl --user restart <unidade>` (no maximo 2 por robo em 60 min) e aviso;
-  6. batimento novo depois de um aviso -> "voltou (parado por N min)".
+  6. batimento novo depois de um aviso -> "voltou (parado por N min)";
+  7. lojas vivo sem captura por navegador (`tentativas_navegador` >= 10 e `ultimo_ok_navegador` ha mais de
+     60 min, BSV-65) -> avisa, NAO reinicia; lembrete a cada 2 h; "voltou" quando o campo anda.
 
 So age pela unidade: nunca `kill` nem busca de processo por nome. Os pids do robo vem do `cgroup.procs`
 do scope (o MainPID da unidade e o tmux). Falha do vigia (log ilegivel, Telegram fora) so vai ao journal.
@@ -45,6 +47,8 @@ TIMEOUT_SYSTEMCTL_S = 150      # um restart da unidade das lojas espera o stop (
 CAUDA_BYTES = 65536
 LINHAS_ABORTADO = 20
 LINHA_MAX = 200
+NAVEGADOR_TENTATIVAS = 10                  # linhas por navegador sem ok (BSV-65)
+NAVEGADOR_SEM_OK = timedelta(minutes=60)
 
 SAUDAVEL, PARADO, INDETERMINADO = "saudavel", "parado", "indeterminado"
 
@@ -227,20 +231,35 @@ class Batimento:
     prazo: datetime
     fase: str
     grupos_falhando: dict
+    ultimo_ok_navegador: datetime | None = None    # BSV-65; ausente = robo de versao antiga
+    tentativas_navegador: int | None = None
 
 
 def _iso_para_dt(valor) -> datetime:
     return datetime.strptime(str(valor), "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
 
 
+def _campos_navegador(d: dict) -> tuple[datetime | None, int | None]:
+    """Os dois campos da captura por navegador (BSV-65); faltando ou ilegiveis, (None, None)."""
+    try:
+        ok, tentativas = d["ultimo_ok_navegador"], d["tentativas_navegador"]
+        if isinstance(tentativas, bool) or not isinstance(tentativas, int):
+            return None, None
+        return _iso_para_dt(ok), tentativas
+    except (KeyError, ValueError, TypeError):
+        return None, None
+
+
 def ler_batimento(caminho: Path) -> Batimento | None:
     try:
         d = json.loads(caminho.read_text(encoding="utf-8"))
         grupos = d.get("grupos_falhando") or {}
+        ok_nav, tentativas = _campos_navegador(d)
         return Batimento(
             pid=int(d["pid"]), em=_iso_para_dt(d["em"]), prazo=_iso_para_dt(d["prazo"]),
             fase=str(d.get("fase") or ""),
             grupos_falhando={str(k): _iso_para_dt(v) for k, v in grupos.items()},
+            ultimo_ok_navegador=ok_nav, tentativas_navegador=tentativas,
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
@@ -531,6 +550,7 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
             del ocorrencias["parado"]
             avisar(amb, f"Vigia dos robos: {robo.nome} voltou (parado por {minutos} min).")
         _vigiar_grupos(amb, robo, bat, ocorrencias, agora)
+        _vigiar_navegador(amb, robo, bat, ocorrencias, agora)
 
 
 def _avisar_unidade_failed(amb: Ambiente, robo: Robo, ocorrencias: dict, pids: set[int], agora: datetime) -> None:
@@ -564,6 +584,28 @@ def _vigiar_grupos(amb: Ambiente, robo: Robo, bat: Batimento, ocorrencias: dict,
             minutos = int((bat.em - _iso_para_dt(ocorrencias[chave]["desde"])).total_seconds() // 60)
             del ocorrencias[chave]
             avisar(amb, f"Vigia dos robos: grupo {nome!r} do WhatsApp voltou a abrir (falhou por {minutos} min).")
+
+
+def _vigiar_navegador(amb: Ambiente, robo: Robo, bat: Batimento, ocorrencias: dict, agora: datetime) -> None:
+    """Captura por navegador parada com o robo vivo (BSV-65, licao 33): so aviso, nunca reinicio."""
+    ok, tentativas = bat.ultimo_ok_navegador, bat.tentativas_navegador
+    if ok is None or tentativas is None:          # batimento de versao antiga: sem esta conferencia
+        return
+    oc = ocorrencias.get("navegador")
+    if oc and ok > _iso_para_dt(oc["desde"]):
+        minutos = int((ok - _iso_para_dt(oc["desde"])).total_seconds() // 60)
+        del ocorrencias["navegador"]
+        avisar(amb, f"Vigia dos robos: {robo.nome} voltou a capturar pelo navegador (sem ok por {minutos} min).")
+        return
+    if tentativas < NAVEGADOR_TENTATIVAS or agora - ok <= NAVEGADOR_SEM_OK:
+        return
+    tipo = _abrir_ou_atualizar(ocorrencias, "navegador", "operador", ok, agora)
+    if tipo is not None:
+        texto = (f"Vigia dos robos: {robo.nome} sem captura por navegador desde {_brasilia(ok)} (Brasilia): "
+                 f"{tentativas} linha(s) sem ok. Acao: nenhuma (o robo segue vivo; ver o log e o VNC).")
+        if tipo == "lembrete":
+            texto = "Lembrete. " + texto
+        avisar(amb, texto)
 
 
 # ------------------------------------------------------------------------------------------ rotacao

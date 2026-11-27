@@ -45,6 +45,8 @@ def lojas(monkeypatch):
     from core import estado
     monkeypatch.setattr(estado, "ler_raiz_s3", lambda *a, **k: "/s3-falso")
     mod = falsos.importar(monkeypatch, "main_lojas", LOJAS / "main.py")
+    # Estado da captura por navegador (BSV-65) e por processo: cada teste comeca do zero.
+    monkeypatch.setattr(mod.batimento, "_navegador", {"ultimo_ok": None, "tentativas": 0})
     for nome, valor in [("resolver_loja", lambda url: "AMAZON"), ("get_store", lambda loja: Loja()),
                         ("loja_ativa", lambda *a: True)]:
         monkeypatch.setattr(mod.registry, nome, valor)

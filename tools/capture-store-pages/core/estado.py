@@ -55,6 +55,21 @@ def ler_intervalo_monitor(caminho=CONFIG_PATH, padrao=3):
     return valor if valor > 0 else padrao
 
 
+def ler_relancar_navegador_horas(caminho=CONFIG_PATH, padrao=6.0):
+    """Horas entre relancamentos preventivos do navegador (BSV-65): "monitor.relancar_navegador_horas".
+
+    Opcional: ausente = padrao (6). 0 desliga. Invalida (texto, negativa, booleano) = padrao com WARN.
+    """
+    monitor = _ler_config(caminho).get('monitor') or {}
+    if not isinstance(monitor, dict) or 'relancar_navegador_horas' not in monitor:
+        return padrao
+    valor = monitor.get('relancar_navegador_horas')
+    if isinstance(valor, (int, float)) and not isinstance(valor, bool) and valor >= 0:
+        return float(valor)
+    print(f'[WARN] monitor.relancar_navegador_horas invalido ({valor!r}); usando {padrao:g} h.')
+    return padrao
+
+
 def ler_lojas_ativas(caminho=CONFIG_PATH, padrao=PADRAO_LOJAS_ATIVAS):
     """Nomes COMERCIAIS das lojas que entram em producao (ST_ATIVO = '1').
 
