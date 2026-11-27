@@ -17,6 +17,9 @@ class Pagina:
     def set_default_timeout(self, ms):
         pass
 
+    def on(self, evento, funcao):    # evento 'crash' da aba (BSV-65)
+        pass
+
     def is_closed(self):
         return False
 

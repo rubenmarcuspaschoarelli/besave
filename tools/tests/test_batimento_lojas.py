@@ -204,7 +204,9 @@ def test_bat06_escrita_real_em_disco_e_json_valido(lojas, tmp_path, monkeypatch)
     assert bat.bater("varredura", dorme_s=60) is True
     dados = json.loads(alvo.read_text(encoding="utf-8"))
     assert dados == {"robo": "lojas", "pid": os.getpid(), "em": iso(T0), "prazo": iso(T0 + timedelta(minutes=11)),
-                     "fase": "varredura"}
+                     "fase": "varredura",
+                     # BSV-65 Saida 6: campos da captura por navegador
+                     "ultimo_ok_navegador": iso(T0), "tentativas_navegador": 0}
     assert sorted(p.name for p in alvo.parent.iterdir()) == ["batimento.json"]
 
 

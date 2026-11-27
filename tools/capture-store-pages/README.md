@@ -149,3 +149,78 @@ lembrete a cada 6 h e "voltou" quando a API responde de novo.
 
 Retidas antigas da Shopee (preço velho) são descartadas antes de ligar:
 `sql/BSV-59_retidas_shopee.sql`.
+
+## Navegador quebrado (BSV-65)
+
+Em 18–23/11 e em 24/11 o Chromium morreu com o processo Python vivo: toda navegação dava `Page crashed`,
+milhares de linhas foram para `'9'` e nada avisou. Agora o robô reconhece o navegador quebrado, não queima a
+linha, se recupera sozinho e avisa.
+
+**Sinais** (uma função só, `core/navegador.sinal`; mensagem da exceção em minúsculas): `page crashed`,
+`target crashed`, `has been closed`, `target closed`, `target page, context or browser`. O evento `crash` da
+aba também conta (vale para as fases que engolem exceção, como imagens).
+
+**A linha:** navegador quebrado em qualquer fase (`goto`, `prepare`, captura, imagens, link de afiliado, página
+ponte) deixa a linha em `'0'` (`oracle=retida(0)` no log, com o erro em `status=`), sem gravar `DS_CAPTURA`, e o
+ponteiro para antes dela. O lote para ali: as linhas seguintes não são tentadas na aba quebrada. A linha não
+renova o batimento.
+
+**Timeouts:** `TimeoutError` no `goto` de loja por navegador também retém a linha. **3 seguidos** (qualquer loja,
+sem uma linha `ok` no meio) disparam a recuperação. A mesma linha com **3 timeouts** na execução vai para `'9'`
+com o motivo de sempre (`erro: TimeoutError: …`): link morto não trava o ponteiro para sempre.
+
+**Recuperação**, antes da próxima linha:
+
+1. fecha a aba e abre outra no mesmo contexto;
+2. se abrir a aba falhar, ou se quebrar de novo sem nenhuma linha `ok` desde a recuperação anterior (inclusive
+   na primeira navegação da aba nova), fecha o contexto e relança o navegador com o mesmo perfil
+   (`.chrome_perfil`), refazendo a permissão de área de transferência do link de afiliado;
+3. se o relançamento falhar, ou se seria o **3º relançamento em 60 min**, sai com **código 3**, sem gravar
+   batimento. O `Restart=on-failure` da unidade sobe o robô de novo em 30 s; se não subir, o vigia reinicia
+   pelo prazo do batimento (BSV-57).
+
+| código de saída | quando |
+|---|---|
+| 0 | fim normal (lote) ou Ctrl+C |
+| 1 | sem Oracle, CSV ausente, Chrome não abriu no arranque, opções incompatíveis |
+| 2 | `--sem-perguntas` com navegador aberto no arranque (BSV-55) |
+| 3 | navegador não reabriu, ou 3 relançamentos em 60 min (BSV-65) |
+
+**Telegram** (bloco `alerta`, como a pausa por loja; uma mensagem por ocorrência, sem URL nem caminho):
+
+- `Robo das lojas: navegador quebrou (Page crashed); aba nova. 1 linha(s) retida(s).` — o sinal pode ser
+  `3 timeouts seguidos`; a ação, `navegador relancado`;
+- `Robo das lojas: navegador nao reabriu; saindo (codigo 3) para o vigia reiniciar.`;
+- `Robo das lojas: navegador voltou (N linha(s) retida(s) voltam a ser processadas).` — na primeira linha `ok`
+  de loja por navegador depois da ocorrência (a Shopee pela API não conta).
+
+**Vigia:** o batimento leva `ultimo_ok_navegador` (última linha `ok` por navegador; antes da primeira, a partida
+do processo) e `tentativas_navegador` (linhas por navegador sem `ok` desde então; Shopee pela API e loja em pausa
+não contam). Com `tentativas_navegador ≥ 10` e o último `ok` há mais de 60 min, o vigia avisa (sem reiniciar),
+lembra a cada 2 h e diz "voltou" quando o campo anda.
+
+**Diagnóstico** (a causa ainda não se sabe): em cada recuperação, no relançamento preventivo e no evento
+`crash`, o log ganha
+
+```
+[navegador] diagnostico: mem_disponivel=4300 MB | chromium=12 | rss_chromium=1500 MB | maior=600 MB | desde_lancamento=95 min | navegacoes=210
+```
+
+`MemAvailable` do `/proc/meminfo`; quantidade, soma e maior RSS dos Chromium descendentes do robô (de `/proc`,
+sem `ps` nem root); minutos e navegações desde o último lançamento. Leitura que falha vira `?`; fora do Linux
+só os dois últimos. Não vai ao Telegram. `grep 'diagnostico:' destino/log/main_monitorar.log`.
+
+**Relançamento preventivo:** `monitor.relancar_navegador_horas` (opcional; padrão `6`; `0` desliga; inválido
+vira `6` com `[WARN]`). Entre lotes, nunca no meio de uma linha (na janela noturna, na rodada), o robô loga o
+diagnóstico, fecha o contexto e relança pelo mesmo caminho da recuperação. Não manda Telegram e não conta para os
+3 em 60 min; se falhar, sai com código 3 como acima.
+
+**Reprocessar por motivo** (SQL do dono, depois de corrigir a causa; só ofertas de até 24 h):
+
+```sql
+UPDATE OFERTA_FILA_CAPTURA SET ST_CAPTURA = '0'
+ WHERE ST_CAPTURA = '9'
+   AND (DS_CAPTURA LIKE '%Page crashed%' OR DS_CAPTURA LIKE '%has been closed%'
+        OR DS_CAPTURA LIKE '%Target closed%' OR DS_CAPTURA LIKE '%Timeout 60000ms exceeded%')
+   AND DT_OFERTA >= SYSDATE - 1;
+```

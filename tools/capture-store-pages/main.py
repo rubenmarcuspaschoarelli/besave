@@ -45,7 +45,8 @@ from playwright.sync_api import sync_playwright
 
 from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas,
                   cupons, link_afiliado, imagens_produto, imagens_oferta, duplicidade,
-                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento)
+                  validade, janela as janela_mod, bloqueio, redirecionamento, batimento,
+                  navegador, alerta)
 from core import images, processos, shopee_api
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
@@ -73,6 +74,11 @@ MARCAS_BLOQUEIO = ('verify/', 'account-verification', 'captcha', 'buyer/login',
 SHOPEE_API_INDISPONIVEL = 'shopee_api_indisponivel'
 STATUS_RETER = {'bloqueado_ou_login', 'sessao_afiliado_ausente', 'redirecionamento_indisponivel',
                 SHOPEE_API_INDISPONIVEL}
+
+
+# Estado do navegador nesta execucao (BSV-65): timeouts seguidos, retidas, ocorrencia, relancamentos.
+# main() liga o aviso do Telegram e o relancamento preventivo; os testes trocam o objeto inteiro.
+NAV = navegador.Controle()
 
 
 def _url_bloqueada(url):
@@ -162,6 +168,8 @@ def _resolver_ponte(page, url, captura):
             return None, None, PONTE_CLOUDFLARE
         destino, loja = pontes.resolver_destino(page)
     except Exception as e:
+        if navegador.sinal(e):
+            raise                       # navegador quebrado: a linha fica retida (BSV-65)
         print(f'[captura {captura}] ponte: {e}')
         return None, None, None
     if destino:
@@ -432,10 +440,99 @@ def _resumo_tempos(tempos):
               f'(pior {pior:5.1f})  = ' + ' | '.join(partes))
 
 
+def _ao_crash(*_):
+    """Evento 'crash' da aba (BSV-65): marca a aba e loga o diagnostico. A linha decide no fim."""
+    NAV.crash = True
+    print(NAV.diagnostico(), flush=True)
+
+
 def _nova_page(context):
     page = context.new_page()
     page.set_default_timeout(15000)
+    page.on('crash', _ao_crash)
     return page
+
+
+class _Sessao:
+    """Playwright, contexto e aba atuais: a recuperacao do navegador troca os dois ultimos (BSV-65)."""
+
+    def __init__(self, p, context, page, capturar_link=False):
+        self.p = p
+        self.context = context
+        self.page = page
+        self.capturar_link = capturar_link
+
+
+def _primeira_linha(e):
+    return (str(e).strip().splitlines() or [''])[0][:200]
+
+
+def _sair_codigo_3(motivo):
+    """Navegador nao reabriu: sai com codigo 3, sem gravar batimento; o vigia reinicia pelo prazo."""
+    print(f'[navegador] {motivo}; saindo com codigo {navegador.CODIGO_SAIDA}.', flush=True)
+    NAV.avisar(navegador.MSG_NAO_REABRIU)
+    raise SystemExit(navegador.CODIGO_SAIDA)
+
+
+def _relancar(sessao, preventivo=False):
+    """Fecha o contexto e relanca o navegador com o mesmo perfil, como no arranque (Saida 3b)."""
+    try:
+        _fechar_contexto(sessao.context)
+    except Exception as e:  # noqa: BLE001 - contexto de um navegador morto pode nao fechar limpo
+        print(f'[navegador] fechar o contexto falhou ({type(e).__name__}); relancando assim mesmo.')
+    try:
+        context = launch_persistent(sessao.p, headless=False)
+        if sessao.capturar_link:
+            link_afiliado.preparar_contexto(context)
+        page = _nova_page(context)
+    except Exception as e:  # noqa: BLE001
+        _sair_codigo_3(f'relancamento falhou ({type(e).__name__}: {_primeira_linha(e)})')
+    sessao.context, sessao.page = context, page
+    NAV.relancou(preventivo=preventivo)
+    print(f'[navegador] navegador relancado (perfil {os.path.basename(PERFIL_DIR)}).', flush=True)
+
+
+def _recuperar_navegador(sessao):
+    """Depois de um lote parado por navegador quebrado ou timeouts seguidos (Saida 3).
+
+    Aba nova no mesmo contexto; se a aba nova ja quebrou sem nenhuma linha ok no meio (inclusive na
+    primeira navegacao), ou se abrir a aba falhar, relanca o navegador; o 3o relancamento por falha em
+    60 min, ou um relancamento que falha, sai com codigo 3.
+    """
+    sinal_txt = NAV.pendente
+    NAV.pendente = None
+    print(NAV.diagnostico(), flush=True)
+    acao = None
+    if NAV.aba_nova or NAV.aberta:
+        print('[navegador] quebrou de novo sem linha ok desde a ultima recuperacao; relancando o navegador.')
+    else:
+        try:
+            try:
+                sessao.page.close()
+            except Exception:  # noqa: BLE001 - aba morta pode recusar o close
+                pass
+            sessao.page = _nova_page(sessao.context)
+            NAV.aba_nova = True
+            NAV.crash = False
+            acao = navegador.ACAO_ABA
+            print('[navegador] aba nova aberta no mesmo contexto.', flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f'[navegador] abrir aba nova falhou ({type(e).__name__}); relancando o navegador.')
+    if acao is None:
+        if not NAV.pode_relancar():
+            _sair_codigo_3(f'{navegador.MAX_RELANCAMENTOS} relancamentos em 60 min')
+        _relancar(sessao)
+        acao = navegador.ACAO_RELANCADO
+    NAV.aberta = True
+    NAV.avisar(navegador.msg_quebrou(sinal_txt, acao, NAV.retidas))
+
+
+def _relancar_preventivo(sessao):
+    """Relancamento preventivo entre lotes (Saida 9): sem Telegram, fora da conta dos 3 em 60 min."""
+    print(f'[navegador] relancamento preventivo (monitor.relancar_navegador_horas = '
+          f'{NAV.relancar_horas:g} h).', flush=True)
+    print(NAV.diagnostico(), flush=True)
+    _relancar(sessao, preventivo=True)
 
 
 def _pausa_padrao():
@@ -576,6 +673,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
 
         expirada = False
         status_pre = None
+        quebrado = None          # sinal de navegador quebrado nesta linha (BSV-65)
+        timeout_retida = False   # timeout de navegacao: linha retida, conta na sequencia
+        por_navegador = False    # linha de loja capturada pelo navegador (batimento e "voltou")
         if url and loja is None:
             url, status_pre = _redirecionar(url, redir, pausa, row, rows[pos + 1:], captura)
             cron.marcar('redir')
@@ -584,11 +684,20 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
         if url and loja is None and status_pre is None:
             # Pode ser uma pagina-ponte de divulgador: a oferta esta la, mas
             # quem vende e outra loja. A URL de origem continua em out['url'].
-            destino, loja, marca = _resolver_ponte(page, url, captura)
+            try:
+                NAV.navegou()
+                destino, loja, marca = _resolver_ponte(page, url, captura)
+            except Exception as e:  # noqa: BLE001 - so navegador quebrado sobe da ponte
+                destino, loja, marca = None, None, None
+                quebrado = navegador.sinal(e)
+                status_pre = _status_erro(e)
+                print(f'[captura {captura}] ponte: navegador quebrado: {e}')
             cron.marcar('ponte')
             expirada = marca == PONTE_EXPIRADA
             chave = _chave_pausa(url, redir)
-            if marca != PONTE_CLOUDFLARE:
+            if quebrado:
+                pass
+            elif marca != PONTE_CLOUDFLARE:
                 pausa.registrar_sucesso(chave)      # dominio que bloqueava voltou a responder
             else:
                 # Encurtador novo bloqueando o IP da inst1: retida, nunca '9' (BSV-58).
@@ -646,13 +755,20 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 out.update(campos)
                 cron.marcar('capt')
             else:
+                por_navegador = True
+                fase = 'goto'
                 try:
                     # goto segue os redirects dos encurtadores (amzn.divulguei.app etc.)
+                    NAV.navegou()
                     _goto_robusto(page, url, timeout=60000)
+                    fase = 'pagina'
+                    NAV.aba_nova = False   # a primeira navegacao da aba nova passou
                     # Hook por loja: fecha popup / clica "Ir para produto" (ML) etc.
                     try:
                         store.prepare(page)
                     except Exception as e:
+                        if navegador.sinal(e):
+                            raise
                         print(f'[captura {captura}] prepare: {e}')
                     # SPA: espera o container do produto (Shopee). Amazon nao define.
                     if store.ready_selector:
@@ -722,9 +838,28 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                 except Exception as e:
                     out['status_captura'] = _status_erro(e)
                     print(f'[captura {captura}] erro: {e}')
+                    quebrado = navegador.sinal(e)
+                    if not quebrado and fase == 'goto' and navegador.e_timeout(e):
+                        # 3 timeouts da MESMA linha: link morto, vai para '9' com o motivo de hoje.
+                        timeout_retida = not NAV.timeout(row.get('ID_OFERTA'))
+                if not quebrado and NAV.crash:
+                    # Evento 'crash' da aba numa fase que engole excecao (imagens, descarte...).
+                    quebrado = 'Page crashed'
+                    out['status_captura'] = 'erro: navegador: Page crashed'
+
+        if quebrado:
+            NAV.quebrou(quebrado)
+            print(f'[navegador] quebrado ({quebrado}) na linha {captura}: retida; lote interrompido.')
+        retida_navegador = bool(quebrado) or timeout_retida
+        if por_navegador:
+            batimento.registrar_navegador(out['status_captura'] == 'ok')
+            if out['status_captura'] == 'ok':
+                NAV.ok()
 
         # Contagem de bloqueios seguidos por loja (pagina ou sessao de afiliado).
-        if loja and out['status_captura'] in STATUS_RETER:
+        if retida_navegador:
+            pass                        # navegador nao e bloqueio da loja: nao conta para a pausa
+        elif loja and out['status_captura'] in STATUS_RETER:
             restantes = [r.get('ID_OFERTA') for r in rows[pos + 1:]
                          if registry.resolver_loja((r.get('url') or '').strip()) == loja]
             motivo = (bloqueio.AFILIADO if out['status_captura'] == 'sessao_afiliado_ausente'
@@ -877,6 +1012,11 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
                     print(f'[captura {captura}] oracle: {erro}')
                     # A linha continua '0'; nao insistir nela a cada varredura.
                     _adiar(id_oferta, db.sem_conexao)
+            elif retida_navegador:
+                # Navegador quebrado ou timeout (BSV-65): nunca '9', nada gravado; o ponteiro para
+                # antes dela, como STATUS_RETER.
+                status_db = ' | oracle=retida(0)'
+                _travar(id_oferta)
             elif out['status_captura'] in STATUS_RETER:
                 # Transitorio (sessao/captcha): relida na proxima varredura,
                 # sem entrar em `adiados`; o ponteiro para antes dela.
@@ -922,6 +1062,9 @@ def _processar_lote(page, rows, db, atualiza_banco, img_root, adiados=None, paus
               f'loja={out["loja"] or "-":<13} | '
               f'status={out["status_captura"]}{status_db}{marca_afiliado}'
               f' | {cron.resumo()}')
+        if NAV.pendente:
+            # Navegador quebrado ou timeouts seguidos: as linhas seguintes nao sao tentadas nesta aba.
+            break
 
     _resumo_tempos(tempos)
     return out_rows, gravadas, com_erro
@@ -1009,14 +1152,17 @@ def _sem_lojas_em_pausa(rows, pausa, redir=None):
     return ficam, len(rows) - len(ficam)
 
 
-def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None):
+def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=None, sessao=None):
     """Varre a fila ate o usuario interromper (Ctrl+C).
 
     Cada varredura que encontra pendentes vira um lote normal, com seu proprio
     CSV de seguranca; achando a fila vazia, dorme `intervalo_min`. Depois de um
     lote a fila e relida NA HORA — o lote pode ter demorado e algo novo pode ter
     entrado nesse meio tempo.
+
+    `sessao` (_Sessao) leva o Playwright para relancar o navegador (BSV-65); None = so a aba e o contexto.
     """
+    sessao = sessao or _Sessao(None, context, page)
     # Ponteiro ignorado por padrao aqui: toda linha processada sai da fila
     # sozinha (vira '1' ou '9') e uma linha devolvida para '0' na mao (ID antigo)
     # precisa ser vista. --desde continua mandando quando informado.
@@ -1054,6 +1200,8 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
                 redir = novo
                 print(redirecionamento.descrever(redir))
             batimento.bater('varredura')
+            if NAV.preventivo_vencido():  # entre lotes; na janela noturna, so na rodada (BSV-65)
+                _relancar_preventivo(sessao)
             pausa.lembrar()
             _recuperar_publicacoes(db, adiados)
             if time.monotonic() - ult_validade >= VALIDADE_A_CADA_S:
@@ -1077,12 +1225,14 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
             print(f'\n[{datetime.now():%H:%M:%S}] varredura {ciclos}: '
                   f'{len(rows)} oferta(s) pendente(s).')
             # A janela pode ter sido fechada na mao entre as varreduras.
-            if page.is_closed():
+            if sessao.page.is_closed():
                 print('[monitor] a aba foi fechada; abrindo outra.')
-                page = _nova_page(context)
+                sessao.page = _nova_page(sessao.context)
 
             out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, True, img_root, adiados, pausa, redir)
+                sessao.page, rows, db, True, img_root, adiados, pausa, redir)
+            if NAV.pendente:  # lote parado por navegador: recupera antes da proxima linha (BSV-65)
+                _recuperar_navegador(sessao)
             total_grav += gravadas
             total_erro += com_erro
             _gravar_csv(out_rows, header, f'oracle_{datetime.now():%d_%m_%Y_%H_%M_%S}')
@@ -1098,6 +1248,22 @@ def _monitorar(context, page, db, args, header, img_root, intervalo_min, janela=
     finally:
         print(f'[monitor] {ciclos} varredura(s) com trabalho | '
               f'{total_grav} gravada(s) (1) | {total_erro} com erro (9).')
+
+
+def _lote_com_recuperacao(sessao, rows, db, atualiza_banco, img_root, redir):
+    """Lote sem --monitorar: lote parado por navegador recupera e segue da linha retida (BSV-65)."""
+    out_rows, gravadas, com_erro = [], 0, 0
+    pausa = _pausa_padrao()
+    while rows:
+        out, g, e = _processar_lote(sessao.page, rows, db, atualiza_banco, img_root, pausa=pausa, redir=redir)
+        out_rows += out
+        gravadas += g
+        com_erro += e
+        if not NAV.pendente:
+            break
+        _recuperar_navegador(sessao)
+        rows = rows[len(out) - 1:]      # a linha retida volta; as seguintes nem foram tentadas
+    return out_rows, gravadas, com_erro
 
 
 def _fechar_contexto(context):
@@ -1230,6 +1396,11 @@ def main():
             link_afiliado.preparar_contexto(context)
         # Aba nova propria (o perfil real pode restaurar abas antigas).
         page = _nova_page(context)
+        # Navegador quebrado (BSV-65): aviso pelo bloco "alerta" e relancamento preventivo.
+        NAV.avisar = alerta.Avisador(estado._ler_config()).avisar
+        NAV.relancar_horas = estado.ler_relancar_navegador_horas()
+        NAV.relancou(preventivo=True)   # marca o lancamento (nao conta para os 3 em 60 min)
+        sessao = _Sessao(p, context, page, capturar_link)
 
         if args.monitorar:
             # 2) Monitor: o login da Shopee e decidido UMA vez, no arranque.
@@ -1238,7 +1409,7 @@ def main():
             if capturar_link:
                 _gates_login_afiliados(page)
             _monitorar(context, page, db, args, header, img_root, intervalo_min,
-                       janela_mod.ler_janela(estado._ler_config()))
+                       janela_mod.ler_janela(estado._ler_config()), sessao=sessao)
         else:
             # 2) Login manual da Shopee (so quando o lote tem produtos da Shopee).
             if tem_shopee:
@@ -1249,14 +1420,14 @@ def main():
                 _gates_login_afiliados(page)
             redir = _redir_padrao()
             print(redirecionamento.descrever(redir))
-            out_rows, gravadas, com_erro = _processar_lote(
-                page, rows, db, atualiza_banco, img_root, redir=redir)
+            out_rows, gravadas, com_erro = _lote_com_recuperacao(
+                sessao, rows, db, atualiza_banco, img_root, redir)
             _gravar_csv(out_rows, header, base)
             if atualiza_banco:
                 _resumo_oracle(len(out_rows), gravadas, com_erro)
                 _varrer_validade(db)
 
-        _fechar_contexto(context)
+        _fechar_contexto(sessao.context)
 
     if db:
         db.desconectar()

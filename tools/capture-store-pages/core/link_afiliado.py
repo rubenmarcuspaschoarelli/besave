@@ -45,6 +45,8 @@ a area de transferencia e zerada antes de cada clique.
 
 import re
 
+from core import navegador
+
 # Campos produzidos aqui -> colunas DS_*_AFILIADO (ver core/oracle_db.MAPA_CAMPOS).
 CAMPOS = ('url_afiliado', 'categoria_afiliado', 'taxa_comissao_afiliado',
           'id_produto_afiliado')
@@ -516,7 +518,7 @@ def capturar(page, loja, url_final=''):
 
     Devolve sempre um dict com todas as chaves de CAMPOS ('' quando nao veio)
     e MOTIVO (SESSAO/OUTRO quando nao veio link, '' quando veio). Nunca levanta
-    excecao: loja sem fluxo, sessao deslogada ou layout mudado resultam em
+    excecao (so navegador quebrado sobe, BSV-65): loja sem fluxo, sessao deslogada ou layout mudado resultam em
     campos vazios; quem chama decide o que fazer com MOTIVO=SESSAO."""
     resultado = vazio()
     resultado[MOTIVO] = ''
@@ -532,6 +534,8 @@ def capturar(page, loja, url_final=''):
         motivo = dados.get(MOTIVO) or ''
         resultado.update({k: v for k, v in dados.items() if k in CAMPOS and v})
     except Exception as e:  # noqa: BLE001
+        if navegador.sinal(e):
+            raise                       # navegador quebrado e do lote, nao da loja (BSV-65)
         print(f'[link_afiliado] {loja}: {type(e).__name__}: {str(e).splitlines()[0]}')
     veio = bool(resultado['url_afiliado'])
     resultado[MOTIVO] = '' if veio else (motivo or OUTRO)

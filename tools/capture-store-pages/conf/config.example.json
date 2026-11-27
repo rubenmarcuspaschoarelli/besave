@@ -16,7 +16,9 @@
     "publicacao_pendente": []
   },
   "monitor": {
-    "intervalo_minutos": 3
+    "intervalo_minutos": 3,
+    "relancar_navegador_horas": 6,
+    "_obs_relancar": "Opcional (BSV-65): relanca o navegador entre lotes a cada N horas (padrao 6; 0 desliga; invalido = 6 com WARN)."
   },
   "afiliados": {
     "confirmar_no_arranque": true,
