@@ -293,7 +293,9 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
    (sessão sabidamente boa), `user_data/` vai para `capture-chat-groups/user_data.copia/` sem `Default/Cache`,
    `Default/Code Cache`, `Default/GPUCache`, `GPUPersistentCache`, `Default/Service Worker/CacheStorage` e as
    travas `Singleton*` (~260 MB em 27/11), primeiro em `user_data.copia.nova/` e depois por `mv`; grava
-   `copiada_em` (UTC). Log: `[reinicio] … copia da sessao: 262 MB em 4 s`. Falha da cópia (ou do `stop`) avisa
+   `copiada_em` (UTC). Log: `[reinicio] … copia da sessao: 262 MB em 4 s`. Antes de copiar, o mesmo `ps` do passo 2
+   confere se algum processo ainda tem o perfil nos argumentos (o Chromium principal roda num scope próprio e
+   pode ficar órfão): se tiver, pula a cópia e avisa. Falha da cópia (ou do `stop`) avisa
    no Telegram e a unidade parte mesmo assim. O robô restaura a cópia sozinho quando cai na tela de login
    (`tools/capture-chat-groups/README.md`).
 2. **Teto de memória no scope do robô:** o tmux do Ubuntu 24.04 põe cada painel num scope próprio

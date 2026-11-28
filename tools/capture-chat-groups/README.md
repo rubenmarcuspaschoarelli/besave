@@ -28,7 +28,8 @@ vincular (QR, número ou código). Na tela de vincular:
 | `WhatsApp desconectado. No celular: WhatsApp > Aparelhos conectados > Conectar aparelho > Conectar com numero de telefone e digite ABCD-EFGH (pedido as HH:MM, Brasilia).` | no celular do número configurado, seguir o caminho e digitar o código (vale ~10 min; vencido, o robô manda outro). |
 | `WhatsApp: vinculado de novo pelo codigo; captura retomada.` | nada. |
 | `WhatsApp desconectado: limite de codigos atingido; proximo pedido as HH:MM (Brasilia).` | esperar o horário (no máximo 3 códigos por hora cheia e 12 por dia, hora de Brasília: o WhatsApp pode bloquear vínculo por excesso de tentativas), ou ler o QR pelo VNC. |
-| `WhatsApp desconectado e sem pareamento.numero no config: ler o QR pela tela VNC :2.` | abrir a tela VNC `:2` e ler o QR com o celular. Também sai quando o campo do número não ficou com o número do config (máscara da página mudou). |
+| `WhatsApp desconectado e sem pareamento.numero no config: ler o QR pela tela VNC :2.` | abrir a tela VNC `:2` e ler o QR com o celular. |
+| `WhatsApp desconectado: o campo nao aceitou o numero do config (***1234); ler o QR pela tela VNC :2.` | a máscara do campo mudou e o robô não avançou (não pede mais código nesta partida): ler o QR pelo VNC `:2` e avisar para revisar `wa/pareamento.py`. |
 | `Vigia dos robos: whatsapp aguardando vinculo pelo celular ha N h.` | lembrete do vigia a cada 6 h enquanto o robô espera; usar o último código recebido ou o VNC. |
 | `Vigia dos robos: whatsapp reiniciado por memoria 2 vezes em 6 h (maior chrome: N MB).` | o Chromium está crescendo rápido; sem ação imediata (o reinício programado já rodou duas vezes). |
 

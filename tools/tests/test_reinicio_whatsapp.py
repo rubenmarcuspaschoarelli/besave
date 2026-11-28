@@ -59,7 +59,7 @@ esac
 exit 0
 ''')
         _script(bin_ / "journalctl", f'cat "{e}/journal" 2>/dev/null; exit 0\n')
-        _script(bin_ / "ps", f'cat "{e}/ps" 2>/dev/null; exit 0\n')
+        _script(bin_ / "ps", f'echo "$@" >> "{e}/ps.log"; cat "{e}/ps" 2>/dev/null; exit 0\n')
         _script(self.chat / ".venv" / "bin" / "python", f'echo "$@" >> "{e}/py.log"\nexit 0\n')
         self.env = {
             **os.environ,
@@ -304,3 +304,43 @@ def test_stop_que_falha_nao_copia_e_parte(amb):  # COP-01: copia so com a unidad
     assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: o stop de besave-captura-whatsapp.service "
                           "falhou (estado: active); sem copia da sessao.")]
     assert r.returncode == 0
+
+
+def _perfil_como_o_bash_ve(amb):
+    raiz = subprocess.run([BASH, "-c", f'cd "{amb.chat.as_posix()}" && pwd -P'], check=False, capture_output=True,
+                          text=True).stdout.strip()
+    return f"--user-data-dir={raiz}/user_data"
+
+
+def test_perfil_ainda_em_uso_pula_a_copia_e_avisa(amb):  # COP-03: Chromium orfao fora do scope (inst1, 28/11)
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps", f"3400000 /usr/lib/chromium/chromium --type=browser {perfil} --no-first-run\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo rss=,args="]   # passo 2 e antes da copia
+    assert re.search(r"^\[reinicio\] \d\d/\d\d/\d{4} \d\d:\d\d:\d\d copia da sessao: pulada \(perfil ainda em uso "
+                     r"por 1 processo\(s\)\)$", r.stdout, re.MULTILINE)
+    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (perfil ainda "
+                           "em uso por 1 processo(s); a anterior continua valendo); a captura parte mesmo assim.")]
+    assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
+
+
+def test_outros_perfis_no_ps_nao_seguram_a_copia(amb):  # COP-02: so o caminho exato do perfil conta
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps", "\n".join([
+        f"  90000 /usr/lib/chromium/chromium --type=renderer {perfil}.copia",
+        "9990000 /usr/bin/chrome --type=renderer --user-data-dir=/outro/perfil",
+        "",
+    ]))
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.avisos == []
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo rss=,args="]

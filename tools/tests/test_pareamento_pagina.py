@@ -131,5 +131,6 @@ def test_vinculo_completo_e_ddi_duplicado_com_a_pagina(abrir, tmp_path):  # PAR-
 
     p.Vinculo(tela2, NUMERO, 10, p.Teto(tmp_path / "b.json"), enviados2.append, lambda: None,
               relogio=lambda: t2[0], dormir=dormir2).aguardar()
-    assert enviados2 == [p.MSG_SEM_NUMERO]
+    assert enviados2 == [("WhatsApp desconectado: o campo nao aceitou o numero do config (***0000); "
+                         "ler o QR pela tela VNC :2.")]
     assert page2.evaluate("window.__avancos") == 0

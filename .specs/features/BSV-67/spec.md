@@ -32,7 +32,7 @@ caiu na tela do QR e o robô saiu a cada 5,5 min (254 partidas) sem ninguém pod
 | Teto atingido no dia | próximo pedido às 00:00 de Brasília do dia seguinte; no da hora, na hora cheia seguinte | Saída 3 | n |
 | Persistência do teto | `conf/pareamento_pedidos.json` (instantes UTC das últimas 24 h), fora do git | partida nova não zera o teto (regra 5) | n |
 | Datas da cópia | `user_data.copia/copiada_em` (ISO UTC, gravado pelo script) e `user_data.copia/restaurada_em` (ISO UTC, gravado pelo robô); nenhum dos dois vai para o `user_data/` restaurado | Saída 2 pede a data e a marca no diretório da cópia | n |
-| Número divergente na máscara | não avança; manda a mensagem do VNC da Saída 3 e espera vivo, sem novo pedido nessa partida | Saída 3 | n |
+| Número divergente na máscara | não avança; manda a mensagem própria (revisão do arquiteto) e espera vivo, sem novo pedido nessa partida | Saída 3 | n |
 | Código inválido ou que não aparece em 30 s | conta como pedido (o WhatsApp registrou), log de erro e novo pedido na volta seguinte (dentro do teto) | Saída 1 "erro e novo pedido"; regra 5 | n |
 | Intervalo da espera viva | 5 s entre voltas; batimento `fase: "pareamento"` com prazo `em + 15 min` | Saída 3 | n |
 | Disparo do reinício por memória | `systemctl --user start --no-block besave-reinicio-whatsapp.service` | a unidade é oneshot (até 300 s); `start` bloqueante estouraria o timeout de 150 s do vigia | n |
@@ -62,7 +62,7 @@ caiu na tela do QR e o robô saiu a cada 5,5 min (254 partidas) sem ninguém pod
 ### P1: Código de pareamento pelo Telegram ⭐ MVP
 
 1. WHEN sem sessão AND `pareamento.numero` preenchido THEN o robô SHALL abrir a tela do número, limpar o campo, digitar `+` e os dígitos, conferir os dígitos do `value`, avançar, ler `data-link-code` (8 `[A-Z0-9]`) e mandar `WhatsApp desconectado. No celular: WhatsApp > Aparelhos conectados > Conectar aparelho > Conectar com numero de telefone e digite ABCD-EFGH (pedido as HH:MM, Brasilia).` (PAR-01)
-2. WHEN os dígitos do campo divergem do config THEN o robô SHALL não avançar, logar sem o número e mandar a mensagem do VNC. (PAR-02)
+2. WHEN os dígitos do campo divergem do config THEN o robô SHALL não avançar, logar sem o número e mandar `WhatsApp desconectado: o campo nao aceitou o numero do config (***1234); ler o QR pela tela VNC :2.` (PAR-02, revisão do arquiteto)
 3. WHILE espera o vínculo THEN o robô SHALL ficar vivo, gravar batimento `fase: "pareamento"` com prazo de 15 min a cada volta e, quando `#pane-side` aparecer, logar `[sessao] vinculado pelo codigo` e mandar `WhatsApp: vinculado de novo pelo codigo; captura retomada.` (PAR-03)
 4. WHEN o código expira (página voltou ao QR ou ao número, ou passou `pareamento.validade_min`, padrão 10) THEN o robô SHALL pedir outro. (PAR-04)
 5. WHEN já houve 3 pedidos na hora ou 12 no dia THEN o robô SHALL não pedir, mandar uma vez `WhatsApp desconectado: limite de codigos atingido; proximo pedido as HH:MM (Brasilia).` e pedir de novo a partir do próximo horário. (PAR-05)
@@ -78,7 +78,7 @@ caiu na tela do QR e o robô saiu a cada 5,5 min (254 partidas) sem ninguém pod
 
 1. WHEN o reinício programado roda THEN o script SHALL fazer `stop`, cópia e `start`, nessa ordem, e contar a espera por `Grupo aberto` a partir do `start`. (COP-01)
 2. WHEN o log da partida parada tem `Grupo aberto` THEN o script SHALL copiar `user_data/` sem os caches da lista para `user_data.copia.nova/`, gravar `copiada_em`, trocar por `mv` e logar `copia da sessao: N MB em S s`; sem `Grupo aberto` SHALL não copiar. (COP-02)
-3. WHEN a cópia falha THEN o script SHALL avisar no Telegram e partir a unidade mesmo assim. (COP-03)
+3. WHEN a cópia falha, ou algum processo ainda tem o perfil nos argumentos (`ps` do passo 2), THEN o script SHALL pular a cópia, avisar no Telegram e partir a unidade mesmo assim. (COP-03, revisão do arquiteto)
 
 ### P1: Reinício antes do teto de memória
 

@@ -143,7 +143,8 @@ def test_campo_com_ddi_duplicado_nao_avanca_e_manda_o_vnc(tmp_path, capsys):  # 
     c = Cenario(tmp_path, valor="+55 +55 11 98765-0000", vincula_em=T0 + timedelta(minutes=5))
     c.rodar()
     assert "avancar" not in c.tela.acoes
-    assert c.enviados == [p.MSG_SEM_NUMERO]
+    assert c.enviados == [("WhatsApp desconectado: o campo nao aceitou o numero do config (***0000); "
+                          "ler o QR pela tela VNC :2.")]
     assert c.tela.acoes.count("informar_numero") == 1       # nao insiste nesta partida
     log = capsys.readouterr().out
     assert NUMERO not in log and "***0000" in log

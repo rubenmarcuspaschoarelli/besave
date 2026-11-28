@@ -83,6 +83,15 @@ copiar_sessao() {
         registrar "copia da sessao: pulada (a partida parada nao chegou a '$PADRAO_OK')."
         return 0
     fi
+    # o Chromium principal roda num scope proprio, fora do scope do robo (inst1, 28/11): um stop morto por tempo
+    # deixa o principal orfao com o perfil aberto. Mesmo `ps` do passo 2; casa so o perfil exato (nao user_data.copia)
+    local em_uso
+    em_uso=$("$PS_BIN" -eo rss=,args= 2>/dev/null | awk -v p="$PERFIL" 'index($0, p " ") || substr($0, length($0) - length(p) + 1) == p { n++ } END { print n + 0 }')
+    if [ "${em_uso:-0}" -gt 0 ]; then
+        registrar "copia da sessao: pulada (perfil ainda em uso por $em_uso processo(s))"
+        falha_copia "perfil ainda em uso por $em_uso processo(s)"
+        return 1
+    fi
     rm -rf "$nova" "$velha"
     if ! { [ -d "$perfil" ] && mkdir -p "$nova" &&
            (set -o pipefail; tar -C "$perfil" --anchored "${EXCLUIR[@]}" -cf - . | tar -C "$nova" -xf -) &&

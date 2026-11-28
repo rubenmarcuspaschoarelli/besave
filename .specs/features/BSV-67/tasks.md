@@ -14,12 +14,16 @@ T5
 ### Phase 4: Lacunas do Verifier (ciclo 1)
 T6
 
+### Phase 5: Revisão do arquiteto
+T7
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
 T5 → T6
+T6 → T7
 ```
 
 ## Task Breakdown
@@ -70,6 +74,14 @@ T5 → T6
 **Depends on**: T5
 **Reqs**: PAR-04, PAR-05, COP-03
 **Tests**: `tools/tests/test_pareamento.py`, `tools/tests/test_reinicio_whatsapp.py`
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
+### T7: Revisão do arquiteto ✅
+**What**: cópia pulada (com aviso) quando algum processo ainda tem o perfil nos argumentos (Chromium principal fora do scope do robô); mensagem própria para o número recusado pelo campo.
+**Where**: `tools/vps/reiniciar_whatsapp.sh`, `tools/capture-chat-groups/wa/pareamento.py`
+**Depends on**: T6
+**Reqs**: COP-02, COP-03, PAR-02
+**Tests**: `tools/tests/test_reinicio_whatsapp.py`, `tools/tests/test_pareamento.py`, `tools/tests/test_pareamento_pagina.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
 ## Test Coverage Matrix

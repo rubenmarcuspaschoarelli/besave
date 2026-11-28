@@ -73,6 +73,11 @@ def msg_codigo(codigo: str, pedido_em: datetime) -> str:
             f"(pedido as {hhmm_brasilia(pedido_em)}, Brasilia).")
 
 
+def msg_numero_recusado(numero) -> str:
+    return (f"WhatsApp desconectado: o campo nao aceitou o numero do config ({mascarar(numero)}); "
+            "ler o QR pela tela VNC :2.")
+
+
 def msg_teto(proximo: datetime) -> str:
     return f"WhatsApp desconectado: limite de codigos atingido; proximo pedido as {hhmm_brasilia(proximo)} (Brasilia)."
 
@@ -271,7 +276,7 @@ class Vinculo:
             if so_digitos(valor) != self.numero:
                 print(f"[sessao] o campo nao ficou com o numero do config ({mascara}); nao avancei.")
                 self.vnc = True
-                self.avisar(MSG_SEM_NUMERO)
+                self.avisar(msg_numero_recusado(self.numero))
                 return
             self.teto.registrar(agora)
             self.pediu = True
