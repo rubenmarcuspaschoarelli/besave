@@ -25,7 +25,16 @@ de telefone). Não precisa de câmera, de VNC nem de outra tela: dá para fazer 
 1. **Detectar a tela de login.** Em `wa/browser.py`, `abrir_whatsapp` espera o que vier primeiro: `#pane-side`
    (logado, segue como hoje) ou a tela de vincular (o canvas do QR ou o link "Entrar com número de telefone").
    Seletores por texto visível (pt-BR **e** en) ou `data-testid`/`aria-label`; nunca classe ofuscada (regra do
-   próprio arquivo). Os seletores saem da página real (fixture da Saída 7), não de memória (regra 8).
+   próprio arquivo). Os seletores saem da página real (fixture da Saída 7), não de memória (regra 8). Elementos
+   colhidos pelo dono na página real em 27/11 (pt-BR):
+
+   | passo | elemento | seletor |
+   |---|---|---|
+   | tela do QR | `<canvas role="img" aria-label="Escaneie o QR code para conectar um dispositivo">` | `canvas[aria-label*="QR code"]` |
+   | trocar para número | `<div>` com o texto `Entrar com número de telefone` | texto visível (en: confirmar na fixture) |
+   | número | `<input data-testid="phone-number-input" aria-label="Insira seu número de telefone para entrar no WhatsApp." value="+55 ">` (vem com `+55 ` e o DDI aparece num `span` ao lado) | `input[data-testid="phone-number-input"]` |
+   | avançar | `<span>` com o texto `Avançar` | texto visível / `role=button` |
+   | código | `<div data-testid="link-with-phone-number-code-cells" data-link-code="R,H,S,D,E,V,N,N">` (8 `span`, um por caractere, e um `-` decorativo) | ler o atributo `data-link-code`, tirar as vírgulas: 8 caracteres `[A-Z0-9]`; fora disso → erro e novo pedido |
 2. **Restaurar a sessão guardada, uma vez.** Tela de login e cópia da Saída 5 existente e ainda não tentada:
    fecha o contexto, move `user_data/` para `user_data.qr/` (substitui a anterior; fica para diagnóstico),
    restaura a cópia para `user_data/`, relança e volta à Saída 1. A tentativa é marcada no próprio diretório da
@@ -34,7 +43,9 @@ de telefone). Não precisa de câmera, de VNC nem de outra tela: dá para fazer 
    Telegram `WhatsApp: sessao perdida e restaurada da copia de <data Brasilia> (sem acao).`
 3. **Código de pareamento pelo Telegram.** Sem cópia, ou a cópia também cai na tela de login:
    - clica em "Entrar com número de telefone", informa `pareamento.numero` (só dígitos, com DDI; chave nova no
-     `config.json`, fora do git), avança e lê o código de 8 caracteres;
+     `config.json`, fora do git), avança e lê o código de 8 caracteres. O campo já vem com `+55 `: o robô limpa o
+     campo, digita `+` e os dígitos com DDI e confere que os dígitos do `value` final são os do config (máscara
+     do campo não pode duplicar o DDI); divergente → não avança, log sem o número e mensagem do VNC (abaixo);
    - Telegram (mensagem inteira, comparada no teste):
      `WhatsApp desconectado. No celular: WhatsApp > Aparelhos conectados > Conectar aparelho > Conectar com numero de telefone e digite ABCD-EFGH (pedido as HH:MM, Brasilia).`
    - fica **vivo** esperando: não sai a cada 5 min. `#pane-side` apareceu → `[sessao] vinculado pelo codigo`,
@@ -67,11 +78,13 @@ de telefone). Não precisa de câmera, de VNC nem de outra tela: dá para fazer 
    não confirmar e agora faz a cópia da Saída 5). No máximo **1 por 60 min**; não conta para os 2 reinícios/h de
    robô parado. Telegram só no 2º disparo em 6 h:
    `Vigia dos robos: whatsapp reiniciado por memoria 2 vezes em 6 h (maior chrome: N MB).` Log do vigia sempre.
-7. **Fixtures da página.** `tools/tests/fixtures/whatsapp/`: recorte redigido do DOM real da tela do QR, da tela
-   do número e da tela do código, capturado pelo agente num perfil **temporário** no PC (fora de `user_data/`)
-   até a tela do número, **sem** pedir código; a tela do código é capturada pelo dono no teste real (passo 3) e
-   entra na PR redigida (código e número viram `REDACTED`). Os testes de página usam essas fixtures num simulador
-   só de teste (como na AD-120).
+7. **Fixtures da página.** `tools/tests/fixtures/whatsapp/`: recorte do DOM real da tela do QR, da tela do
+   número e da tela do código. Base: os elementos da tabela da Saída 1 (colhidos pelo dono, já sem o número);
+   o agente confere e completa (textos em en, contêineres) num perfil **temporário** no PC (fora de
+   `user_data/`) até a tela do número, **sem** pedir código. Na tela do código, `data-link-code` e os `span`
+   levam um código inventado (`T,E,S,T,E,1,2,3`); número sempre `REDACTED`; elementos de extensão do navegador
+   (ex.: `kpm-field-badge`, de gerenciador de senhas) saem do recorte. Os testes de página usam essas fixtures
+   num simulador só de teste (como na AD-120).
 8. **README** de `capture-chat-groups`: o que fazer com cada mensagem nova, a chave `pareamento`, como forçar a
    leitura do QR pelo VNC (`pareamento.numero` vazio), onde ficam `user_data.copia/` e `user_data.qr/` e como
    restaurar à mão. `config.example.json` com `pareamento: {numero: "", validade_min: 10, _obs}`.
@@ -113,7 +126,7 @@ de telefone). Não precisa de câmera, de VNC nem de outra tela: dá para fazer 
      cópia, abre grupo, Telegram da Saída 2;
   3. desvincular o aparelho pelo celular: o robô cai na tela de login, a cópia não resolve (já tentada ou sessão
      desvinculada no servidor), chega o código no Telegram, o dono digita no celular, `Grupo aberto` e Telegram
-     de vinculado; o dono captura a tela do código para a fixture (redigida);
+     de vinculado; o dono confere que a fixture da tela do código bate com a página do dia (redigida);
   4. `BESAVE_WHATSAPP_RSS_MAX_MB=500` no vigia (só no teste): reinício por memória com cópia e `Grupo aberto`;
      volta ao padrão;
   5. `journalctl` do vigia sem reinício durante o passo 3.
