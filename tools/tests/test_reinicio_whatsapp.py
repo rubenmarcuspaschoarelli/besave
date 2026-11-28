@@ -312,11 +312,12 @@ def _perfil_como_o_bash_ve(amb):
     return f"--user-data-dir={raiz}/user_data"
 
 
-def test_perfil_ainda_em_uso_pula_a_copia_e_avisa(amb):  # COP-03: Chromium orfao fora do scope (inst1, 28/11)
+@pytest.mark.parametrize("depois", [" --no-first-run", ""])     # perfil no meio ou no fim da linha
+def test_perfil_ainda_em_uso_pula_a_copia_e_avisa(amb, depois):  # COP-03: Chromium orfao fora do scope (inst1, 28/11)
     _perfil(amb)
     _log_parado(amb, "Grupo aberto\n")
     perfil = _perfil_como_o_bash_ve(amb)
-    amb.arquivo("ps", f"3400000 /usr/lib/chromium/chromium --type=browser {perfil} --no-first-run\n")
+    amb.arquivo("ps", f"3400000 /usr/lib/chromium/chromium --type=browser {perfil}{depois}\n")
     amb.arquivo("log_novo", "Grupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0, r.stdout + r.stderr

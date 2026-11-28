@@ -15,7 +15,7 @@ T5
 T6
 
 ### Phase 5: Revisão do arquiteto
-T7
+T7 → T8
 
 ```
 T1 → T2
@@ -24,6 +24,7 @@ T3 → T4
 T4 → T5
 T5 → T6
 T6 → T7
+T7 → T8
 ```
 
 ## Task Breakdown
@@ -83,6 +84,14 @@ T6 → T7
 **Reqs**: COP-02, COP-03, PAR-02
 **Tests**: `tools/tests/test_reinicio_whatsapp.py`, `tools/tests/test_pareamento.py`, `tools/tests/test_pareamento_pagina.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
+### T8: Lacuna do Verifier (ciclo 3) ✅
+**What**: perfil no fim da linha do `ps` também segura a cópia (mutante M45 sobrevivente).
+**Where**: `tools/tests/test_reinicio_whatsapp.py`
+**Depends on**: T7
+**Reqs**: COP-03
+**Tests**: `tools/tests/test_reinicio_whatsapp.py`
+**Gate**: `cd tools && pytest tests/test_reinicio_whatsapp.py && ruff check vps/ tests/`
 
 ## Test Coverage Matrix
 
