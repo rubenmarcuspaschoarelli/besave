@@ -1,6 +1,7 @@
 """BSV-54 REI-01..06: reiniciar_whatsapp.sh com systemctl, journalctl, ps, log e Python falsos
 (nada real e reiniciado nem enviado)."""
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -35,12 +36,21 @@ class Ambiente:
         self.estado(estado_antes)
         self.arquivo("estado_depois", estado_depois)
         bin_ = raiz / "bin"
-        # systemctl: is-active le 'estado'; restart troca para 'estado_depois' e cria o log novo
+        copia = (self.chat / "user_data.copia").as_posix()
+        # systemctl: is-active le 'estado'; stop deixa inactive; start troca para 'estado_depois' e cria o log
+        # novo. stop e start anotam em eventos.log se a copia da sessao ja existia (ordem stop, copia, start).
         _script(bin_ / "systemctl", f'''echo "$@" >> "{e}/systemctl.log"
+copia_agora() {{ if [ -e "{copia}/copiada_em" ]; then echo "copia:$(cat "{copia}/copiada_em")"; else echo "copia:ausente"; fi; }}
 case " $* " in
   *" is-active "*) cat "{e}/estado"; exit 0;;
-  *" restart "*)
-    [ -e "{e}/restart_rc" ] && exit "$(cat "{e}/restart_rc")"
+  *" stop "*)
+    echo "$*" >> "{e}/eventos.log"; copia_agora >> "{e}/eventos.log"
+    [ -e "{e}/stop_rc" ] && exit "$(cat "{e}/stop_rc")"
+    echo inactive > "{e}/estado"
+    exit 0;;
+  *" start "*)
+    echo "$*" >> "{e}/eventos.log"; copia_agora >> "{e}/eventos.log"
+    [ -e "{e}/start_rc" ] && exit "$(cat "{e}/start_rc")"
     cp "{e}/estado_depois" "{e}/estado"
     nome=$(cat "{e}/log_novo_nome" 2>/dev/null || echo run_captura_05_11_053001.log)
     [ -e "{e}/log_novo" ] && cp "{e}/log_novo" "{log_dir}/$nome"
@@ -81,7 +91,9 @@ exit 0
 
     @property
     def reiniciou(self):
-        return any(" restart " in f" {linha} " for linha in self.ler("systemctl.log").splitlines())
+        """Parou e partiu a unidade (BSV-67: stop + copia + start no lugar do restart)."""
+        linhas = self.ler("systemctl.log").splitlines()
+        return any(" start " in f" {x} " for x in linhas) and any(" stop " in f" {x} " for x in linhas)
 
 
 @pytest.fixture
@@ -157,11 +169,11 @@ def test_unidade_que_nao_sobe_avisa(amb):  # REI-04
     assert len(amb.avisos) == 1 and "failed" in amb.avisos[0]
 
 
-def test_restart_que_falha_avisa(amb):  # REI-04b
-    amb.arquivo("restart_rc", "1")
+def test_start_que_falha_avisa(amb):  # REI-04b (BSV-67: o restart virou stop + copia + start)
+    amb.arquivo("start_rc", "1")
     r = amb.rodar()
     assert r.returncode != 0
-    assert len(amb.avisos) == 1 and "restart" in amb.avisos[0]
+    assert len(amb.avisos) == 1 and "o start de besave-captura-whatsapp.service falhou" in amb.avisos[0]
 
 
 def test_unidade_parada_de_proposito_nao_reinicia(tmp_path):  # REI-05
@@ -199,3 +211,95 @@ def test_nao_mata_processo_por_nome():  # regra 1: so systemctl
     corpo = (VPS / "reiniciar_whatsapp.sh").read_text(encoding="utf-8")
     for proibido in ("pkill", "killall", "kill ", "encerrar_captura"):
         assert proibido not in corpo
+
+
+# --- BSV-67 COP-01..03: copia da sessao boa entre o stop e o start ---------------------------------------
+
+UNID = "besave-captura-whatsapp.service"
+FICAM = ["Default/Preferences", "Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000003.log",
+         "Default/Local Storage/leveldb/CURRENT", "Default/Service Worker/Database/MANIFEST", "Local State"]
+CACHES = ["Default/Cache/Cache_Data/data_0", "Default/Code Cache/js/index", "Default/GPUCache/data_1",
+          "GPUPersistentCache/index", "Default/Service Worker/CacheStorage/abc/index"]
+
+
+def _perfil(amb):
+    for rel in FICAM + CACHES + ["SingletonLock"]:
+        arq = amb.chat / "user_data" / rel
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text("x" * 10, encoding="utf-8")
+
+
+def _arquivos(raiz: Path):
+    return sorted(p.relative_to(raiz).as_posix() for p in raiz.rglob("*") if p.is_file())
+
+
+def _log_parado(amb, texto):
+    """Log da partida em andamento (o de maior mtime)."""
+    p = amb.chat / "log" / "run_captura_05_11_000001.log"
+    p.write_text(texto, encoding="utf-8")
+    t = os.path.getmtime(amb.chat / "log" / "run_captura_04_11_053001.log") + 3600
+    os.utime(p, (t, t))
+
+
+def test_copia_sem_os_caches_entre_stop_e_start(amb):  # COP-01, COP-02
+    _perfil(amb)
+    _log_parado(amb, "[browser] Grupo aberto, painel de mensagens pronto.\n")
+    velha = amb.chat / "user_data.copia"
+    velha.mkdir()
+    (velha / "restaurada_em").write_text("2026-11-26T10:00:00Z", encoding="utf-8")
+    (velha / "arquivo_da_copia_velha").write_text("v", encoding="utf-8")
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    eventos = amb.ler("eventos.log").splitlines()
+    assert eventos[0] == f"--user stop {UNID}" and eventos[1] == "copia:ausente"
+    assert eventos[2] == f"--user start {UNID}" and re.fullmatch(r"copia:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", eventos[3])
+    assert len(eventos) == 4
+    assert _arquivos(amb.chat / "user_data.copia") == sorted(FICAM + ["copiada_em"])   # sem restaurada_em
+    assert not (amb.chat / "user_data.copia.nova").exists() and not (amb.chat / "user_data.copia.velha").exists()
+    assert re.search(r"\[reinicio\] .* copia da sessao: \d+ MB em \d+ s", r.stdout)
+    assert amb.avisos == []
+    assert _arquivos(amb.chat / "user_data") == sorted(FICAM + CACHES + ["SingletonLock"])  # perfil intocado
+
+
+def test_sem_grupo_aberto_na_partida_parada_nao_copia(amb):  # COP-02
+    _perfil(amb)
+    _log_parado(amb, "[browser] Aguardando o WhatsApp Web carregar...\n")   # o de ontem tem Grupo aberto
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("eventos.log").splitlines() == [f"--user stop {UNID}", "copia:ausente",
+                                                    f"--user start {UNID}", "copia:ausente"]
+    assert "copia da sessao: pulada" in r.stdout
+
+
+def test_copia_que_falha_avisa_e_parte_mesmo_assim(amb):  # COP-03
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    anterior = amb.chat / "user_data.copia"
+    anterior.mkdir()
+    (anterior / "copiada_em").write_text("2026-11-26T08:30:00Z", encoding="utf-8")
+    falso = amb.est.parent / "bin_tar"
+    _script(falso / "tar", "exit 2\n")
+    amb.env["PATH"] = falso.as_posix() + os.pathsep + amb.env["PATH"]
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert amb.ler("eventos.log").splitlines() == [f"--user stop {UNID}", "copia:2026-11-26T08:30:00Z",
+                                                    f"--user start {UNID}", "copia:2026-11-26T08:30:00Z"]
+    assert len(amb.avisos) == 1 and "a copia da sessao falhou" in amb.avisos[0]
+    assert "a captura parte mesmo assim" in amb.avisos[0]
+    assert not (amb.chat / "user_data.copia.nova").exists()
+
+
+def test_stop_que_falha_nao_copia_e_parte(amb):  # COP-01: copia so com a unidade parada (regra 2)
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    amb.arquivo("stop_rc", "1")
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
+    assert len(amb.avisos) == 1 and "o stop de besave-captura-whatsapp.service falhou" in amb.avisos[0]
+    assert r.returncode == 0

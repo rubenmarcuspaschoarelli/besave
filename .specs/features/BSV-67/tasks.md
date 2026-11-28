@@ -36,7 +36,7 @@ T4 → T5
 **Tests**: `tools/tests/test_sessao_whatsapp.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T3: Cópia da sessão no reinício programado
+### T3: Cópia da sessão no reinício programado ✅
 **What**: `reiniciar_whatsapp.sh`: `stop` + cópia (sem caches, `.nova` + `mv`, só com `Grupo aberto`) + `start`.
 **Where**: `tools/vps/reiniciar_whatsapp.sh`
 **Depends on**: T2

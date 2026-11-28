@@ -5,12 +5,18 @@
 # O Chromium do WhatsApp Web cresce ~2,2 GB/dia; reiniciar a unidade devolve a memoria.
 #   1. unidade parada de proposito (inactive, sem falha) -> so registra e sai
 #   2. registra o RSS do maior processo do perfil user_data
-#   3. systemctl --user restart (o ExecStop da unidade para o scope do robo com SIGINT; o `finally`
-#      grava os marcadores; o ID_OFERTA vem da sequence do banco desde a BSV-56)
-#   4. espera ate BESAVE_ESPERA_MAX s: unidade `active` E log novo com "Grupo aberto" (a unica marca de
-#      partida: so sai depois do login/QR, com o rodizio de pe)
+#   3. systemctl --user stop (o ExecStop da unidade para o scope do robo com SIGINT; o `finally`
+#      grava os marcadores; o ID_OFERTA vem da sequence do banco desde a BSV-56), copia da sessao boa
+#      (BSV-67) e systemctl --user start
+#   4. espera ate BESAVE_ESPERA_MAX s, contados do start: unidade `active` E log novo com "Grupo aberto"
+#      (a unica marca de partida: so sai depois do login/QR, com o rodizio de pe)
 #   5. nao confirmou -> aviso no Telegram com o motivo; confirmou -> so log
-# Nunca mata processo por nome: so `systemctl restart`.
+# Nunca mata processo por nome: so `systemctl stop`/`start`.
+#
+# Copia da sessao (BSV-67): so com a unidade parada e so se o log da partida parada tem "Grupo aberto"
+# (sessao sabidamente boa). user_data/ sem os caches vai para user_data.copia.nova/ e troca por `mv`
+# (copia pela metade nunca vira a valida). Falha da copia avisa e a unidade parte mesmo assim. O robo
+# restaura essa copia sozinho quando cai na tela de login (wa/sessao.py).
 #
 # Env (testes e instalacoes fora do padrao): BESAVE_CHAT_DIR, BESAVE_SYSTEMCTL,
 # BESAVE_JOURNALCTL, BESAVE_PS, BESAVE_PY, BESAVE_UNIDADE, BESAVE_ESPERA_MAX,
@@ -50,13 +56,65 @@ fi
 maior_kb=$("$PS_BIN" -eo rss=,args= 2>/dev/null | awk -v p="$PERFIL" 'index($0, p) && $1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
 registrar "RSS do maior processo do perfil antes de parar: $((maior_kb / 1024)) MB"
 
-# --- 3. reiniciar ------------------------------------------------------------
+# --- 3. parar, copiar a sessao boa, partir -----------------------------------
 # glob expandido pelo proprio shell (nao por `ls`): um log por partida pode somar milhares sem estourar ARG_MAX
 logs_antes=$(for f in "$RAIZ"/log/run_captura_*.log; do [ -e "$f" ] && printf '%s\n' "$f"; done)
+log_parado=""          # log da partida que vai ser parada: o de maior mtime
+for f in "$RAIZ"/log/run_captura_*.log; do
+    [ -e "$f" ] || continue
+    if [ -z "$log_parado" ] || [ "$f" -nt "$log_parado" ]; then log_parado=$f; fi
+done
+
+# caches que o Chromium refaz sozinho e as travas de execucao; o resto (~260 MB) e a sessao
+EXCLUIR=(--exclude=./Default/Cache "--exclude=./Default/Code Cache" --exclude=./Default/GPUCache
+         --exclude=./GPUPersistentCache "--exclude=./Default/Service Worker/CacheStorage"
+         --exclude=./SingletonLock --exclude=./SingletonCookie --exclude=./SingletonSocket
+         --exclude=./copiada_em --exclude=./restaurada_em)
+
+falha_copia() {
+    rm -rf "$RAIZ/user_data.copia.nova"
+    avisar "a copia da sessao falhou ($1; a anterior continua valendo); a captura parte mesmo assim."
+}
+
+copiar_sessao() {
+    local perfil="$RAIZ/user_data" nova="$RAIZ/user_data.copia.nova" copia="$RAIZ/user_data.copia"
+    local velha="$RAIZ/user_data.copia.velha" t0=$SECONDS mb
+    if [ -z "$log_parado" ] || ! grep -qF -- "$PADRAO_OK" "$log_parado" 2>/dev/null; then
+        registrar "copia da sessao: pulada (a partida parada nao chegou a '$PADRAO_OK')."
+        return 0
+    fi
+    rm -rf "$nova" "$velha"
+    if ! { [ -d "$perfil" ] && mkdir -p "$nova" &&
+           (set -o pipefail; tar -C "$perfil" --anchored "${EXCLUIR[@]}" -cf - . | tar -C "$nova" -xf -) &&
+           date -u '+%Y-%m-%dT%H:%M:%SZ' > "$nova/copiada_em"; }; then
+        falha_copia "leitura do perfil"
+        return 1
+    fi
+    if [ -e "$copia" ] && ! mv "$copia" "$velha"; then
+        falha_copia "troca"
+        return 1
+    fi
+    if ! mv "$nova" "$copia"; then
+        [ -e "$velha" ] && mv "$velha" "$copia"
+        falha_copia "troca"
+        return 1
+    fi
+    rm -rf "$velha"
+    mb=$(du -sm "$copia" 2>/dev/null | cut -f1)
+    registrar "copia da sessao: ${mb:-?} MB em $((SECONDS - t0)) s"
+}
+
 inicio=$(date '+%Y-%m-%d %H:%M:%S')
-registrar "reiniciando $UNIDADE (estado antes: ${antes:-desconhecido})"
-if ! "$SYSTEMCTL" --user restart "$UNIDADE"; then
-    avisar "o restart de $UNIDADE falhou (estado: $(estado))."
+registrar "parando $UNIDADE (estado antes: ${antes:-desconhecido})"
+if "$SYSTEMCTL" --user stop "$UNIDADE"; then
+    copiar_sessao
+else
+    # sem a certeza de que o Chromium parou, a copia nao le o perfil (pode estar em uso)
+    avisar "o stop de $UNIDADE falhou (estado: $(estado)); sem copia da sessao."
+fi
+registrar "partindo $UNIDADE"
+if ! "$SYSTEMCTL" --user start "$UNIDADE"; then
+    avisar "o start de $UNIDADE falhou (estado: $(estado))."
     exit 1
 fi
 
