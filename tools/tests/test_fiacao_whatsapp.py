@@ -76,7 +76,7 @@ def _rodar(zap, monkeypatch, agora, voltas_max, janela_cfg=CFG):
     monkeypatch.setattr(janela_mod, "datetime", Rel)
     monkeypatch.setattr(time, "sleep", dorme)
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (ctx, Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (ctx, Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: None)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar",

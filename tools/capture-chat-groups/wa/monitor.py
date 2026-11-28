@@ -23,7 +23,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-from . import alerta, batimento as batimento_mod, browser, destravar, estado as estado_mod, janela as janela_mod, oracle_db, parser, storage
+from . import alerta, batimento as batimento_mod, browser, destravar, estado as estado_mod, janela as janela_mod, oracle_db, pareamento, parser, storage
 
 SELETOR_MENSAGENS = '#main [data-testid="conversation-panel-messages"] div[data-id]'
 
@@ -1221,7 +1221,10 @@ def captura_msg_whatsapp(
     with sync_playwright() as pw:
         context = None
         try:
-            context, page = browser.abrir_whatsapp(pw, headless=headless)
+            # Sem sessao, a espera do vinculo pelo codigo bate com fase "pareamento" e prazo de 15 min (BSV-67).
+            dorme = (pareamento.PRAZO_PAREAMENTO - batimento_mod.PRAZO).total_seconds()
+            context, page = browser.abrir_whatsapp(
+                pw, headless=headless, cfg=estado, bater=lambda: batimento.bater("pareamento", dorme_s=dorme))
             hoje_0h = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
             # --- Fase 1: arranque por grupo (sweep / today / catch-up / baseline) ---

@@ -9,40 +9,38 @@ pois a Meta rotaciona essas classes entre deploys.
 
 import re
 import unicodedata
-from pathlib import Path
 
-from . import destravar
-
-WHATSAPP_URL = "https://web.whatsapp.com/"
+from . import avisar, destravar, sessao
+from .pareamento import WHATSAPP_URL
 
 # Diretorio onde a sessao (cookies/login) fica persistida.
-USER_DATA_DIR = str(Path(__file__).resolve().parent.parent / "user_data")
+USER_DATA_DIR = str(sessao.RAIZ / sessao.USER_DATA)
 
 
-def abrir_whatsapp(playwright, headless: bool = False):
-    """
-    Inicia o Chromium com contexto persistente e retorna (context, page).
-
-    Na primeira execucao sera necessario ler o QR Code. Nas proximas o login
-    ja estara salvo em USER_DATA_DIR e a sessao abre direto.
-    """
+def _lancar(playwright, headless: bool):
     context = playwright.chromium.launch_persistent_context(
         USER_DATA_DIR,
         headless=headless,
         viewport={"width": 1280, "height": 900},
         args=["--start-maximized"],
     )
-
     page = context.pages[0] if context.pages else context.new_page()
     page.goto(WHATSAPP_URL, wait_until="domcontentloaded")
-
     print("[browser] Aguardando o WhatsApp Web carregar...")
-    print("[browser] Se aparecer o QR Code, escaneie com o celular (so na 1a vez).")
+    return context, page
 
-    # Espera ate a interface principal estar disponivel (login concluido).
-    # '#pane-side' e o painel de conversas: ancora estavel e independente de
-    # idioma, que so aparece depois de autenticar.
-    page.wait_for_selector("#pane-side", timeout=300_000)  # ate 5 min p/ o QR
+
+def abrir_whatsapp(playwright, headless: bool = False, cfg=None, bater=None):
+    """
+    Inicia o Chromium com contexto persistente e retorna (context, page) com a sessao aberta.
+
+    Espera o primeiro de '#pane-side' (logado) ou a tela de vincular (BSV-67). Na tela de vincular restaura
+    a copia guardada da sessao (uma vez) e, se nao bastar, pede o codigo de pareamento pelo Telegram e
+    fica vivo esperando (wa/sessao.py). `cfg` = config.json (bloco `pareamento`); `bater()` renova o
+    batimento durante a espera.
+    """
+    context, page = sessao.entrar(lambda: _lancar(playwright, headless), cfg, avisar.avisar,
+                                  bater or (lambda: None))
     print("[browser] Sessao autenticada.")
     return context, page
 

@@ -28,7 +28,7 @@ T4 → T5
 **Tests**: `tools/tests/test_pareamento.py`, `tools/tests/test_pareamento_pagina.py`
 **Gate**: `cd tools && pytest tests/test_pareamento.py tests/test_pareamento_pagina.py && ruff check vps/ tests/`
 
-### T2: Restauração da cópia e fiação no robô
+### T2: Restauração da cópia e fiação no robô ✅
 **What**: `wa/sessao.py` (restaurar uma vez, `restaurada_em`, `user_data.qr/`); `browser.abrir_whatsapp` detecta a tela, restaura, pareia; `monitor` passa batimento e config.
 **Where**: `tools/capture-chat-groups/wa/{sessao,browser,monitor}.py`
 **Depends on**: T1

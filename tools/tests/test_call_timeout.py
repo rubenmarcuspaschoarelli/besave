@@ -204,7 +204,7 @@ def test_rede_travada_vira_um_aviso_e_a_mesma_mensagem_sai_com_id_novo(zap, reg,
     monkeypatch.setattr(time, "sleep", dorme)
     monkeypatch.setattr(zap.alerta, "enviar_telegram", enviar)
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: None)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: est)
