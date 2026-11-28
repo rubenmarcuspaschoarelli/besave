@@ -55,7 +55,7 @@ if [ "$antes" = "inactive" ]; then
 fi
 
 # --- 2. memoria do maior processo do perfil ----------------------------------
-maior_kb=$("$PS_BIN" -eo rss=,args= 2>/dev/null | awk -v p="$PERFIL" 'index($0, p) && $1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
+maior_kb=$("$PS_BIN" -eo rss=,args= 2>/dev/null | P="$PERFIL" awk 'BEGIN { p = ENVIRON["P"] } index($0, p) && $1 + 0 > m { m = $1 + 0 } END { print m + 0 }')
 registrar "RSS do maior processo do perfil antes de parar: $((maior_kb / 1024)) MB"
 
 # --- 3. parar, copiar a sessao boa, partir -----------------------------------
@@ -78,9 +78,11 @@ falha_copia() {
     avisar "a copia da sessao falhou ($1; a anterior continua valendo); a captura parte mesmo assim."
 }
 
-# "pid tipo, pid tipo" dos processos com o perfil nos argumentos (tipo = valor de --type=, ou principal); vazio = livre
+# "pid tipo, pid tipo" dos processos com o perfil nos argumentos (tipo = valor de --type=, ou principal); vazio = livre.
+# O perfil entra no awk pelo ambiente, nunca como argumento: senao a linha do proprio awk no `ps` casa (ciclo 5).
 processos_do_perfil() {
-    "$PS_BIN" -eo pid=,args= 2>/dev/null | awk -v p="$PERFIL" '
+    "$PS_BIN" -eo pid=,args= 2>/dev/null | P="$PERFIL" awk '
+        BEGIN { p = ENVIRON["P"] }
         index($0, p " ") || substr($0, length($0) - length(p) + 1) == p {
             tipo = "principal"
             if (match($0, /--type=[^ ]+/)) tipo = substr($0, RSTART + 7, RLENGTH - 7)

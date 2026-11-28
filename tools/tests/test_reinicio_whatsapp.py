@@ -5,6 +5,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -393,3 +394,46 @@ def test_outros_perfis_no_ps_nao_seguram_a_copia(amb):  # COP-02: so o caminho e
     assert amb.avisos == []
     assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo pid=,args="]
     assert amb.ler("sleep.log") == ""
+
+
+# --- ps de verdade (so Linux; rodar no WSL, licao 32): o awk do script nao pode contar a si mesmo -----------
+
+so_linux = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="ps real do Linux (rodar no WSL)")
+
+
+def _ps_real(amb):
+    amb.env.pop("BESAVE_PS", None)
+    amb.env["BESAVE_ESPERA_PERFIL"] = "2"
+
+
+@so_linux
+def test_ps_real_sem_chromium_copia(amb):  # COP-02 com o ps real: a lista vazia e mesmo vazia
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    _ps_real(amb)
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "pulada" not in r.stdout
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.ler("sleep.log") == ""
+
+
+@so_linux
+def test_ps_real_com_processo_do_perfil_pula_com_o_pid(amb):  # COP-03 com o ps real
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    _ps_real(amb)
+    perfil = _perfil_como_o_bash_ve(amb)
+    falso = subprocess.Popen(["bash", "-c", f'exec -a "chromium-falso {perfil}" sleep 60'])
+    try:
+        amb.arquivo("log_novo", "Grupo aberto\n")
+        r = amb.rodar()
+    finally:
+        falso.kill()
+        falso.wait()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    pulada = [x for x in r.stdout.splitlines() if "copia da sessao: pulada" in x]
+    assert len(pulada) == 1
+    assert pulada[0].endswith(f"copia da sessao: pulada (perfil ainda em uso apos 2 s: {falso.pid} principal)")

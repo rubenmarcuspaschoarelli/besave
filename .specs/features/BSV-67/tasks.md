@@ -18,7 +18,7 @@ T6
 T7 → T8
 
 ### Phase 6: Teste real, passo 1 (28/11)
-T9
+T9 → T10
 
 ```
 T1 → T2
@@ -29,6 +29,7 @@ T5 → T6
 T6 → T7
 T7 → T8
 T8 → T9
+T9 → T10
 ```
 
 ## Task Breakdown
@@ -104,6 +105,14 @@ T8 → T9
 **Reqs**: COP-02, COP-03
 **Tests**: `tools/tests/test_reinicio_whatsapp.py`
 **Gate**: `cd tools && pytest tests/test_reinicio_whatsapp.py && ruff check vps/ tests/` (Windows e WSL)
+
+### T10: awk não conta a si mesmo (Verifier, ciclo 5) ✅
+**What**: o perfil entrava no `awk` como argumento (`-v p=`), e a linha do próprio `awk` no `ps` real casava: a cópia nunca aconteceria (provável causa real do FAIL das 11:18). O perfil passa pelo ambiente (`ENVIRON["P"]`) nos dois `awk`; testes com o `ps` real (só Linux, rodados no WSL).
+**Where**: `tools/vps/reiniciar_whatsapp.sh`
+**Depends on**: T9
+**Reqs**: COP-02, COP-03
+**Tests**: `tools/tests/test_reinicio_whatsapp.py`
+**Gate**: WSL: `pytest tests/test_reinicio_whatsapp.py` (0 skip); Windows: `cd tools && pytest && ruff check vps/ tests/`
 
 ## Test Coverage Matrix
 
