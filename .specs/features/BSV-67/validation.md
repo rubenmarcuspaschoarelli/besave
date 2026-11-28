@@ -1,14 +1,108 @@
 # BSV-67 — Validation
 
 **Verdict**: PASS
-**Result**: PASS (ciclo 2)
+**Result**: PASS (ciclo 4)
 
 - **Verificou:** Verifier sub-agente independente (autor ≠ verificador). Não alterou código nem testes.
-- **Ciclo 2** (28/11/2026): diff `b39d155..be75a8b`. O commit `be75a8b` (T6) só muda testes, a quebra de linha de
-  uma condição em `tools/vps/vigia_robos.py:574-575` (mesma lógica) e o comentário de
-  `tools/vps/systemd/besave-reinicio-whatsapp.service`; nenhum código de produção mudou de comportamento.
-- **Ciclo 1** (`b39d155..a8902a5`): FAIL por 1 mutante sobrevivente (M19, "voltou ao campo do número"), além das
-  lacunas L2–L6. Detalhes do ciclo 1 mais abaixo, mantidos como histórico.
+- **Ciclo 4** (28/11/2026): delta `67ad979..400940e` (T8). Só testes e `tasks.md`:
+  `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` passou a ser parametrizado com o perfil no meio
+  (`" --no-first-run"`) e no fim da linha do `ps` (`""`), em `tools/tests/test_reinicio_whatsapp.py:315-330`. Fecha a
+  L7 do ciclo 3. Nenhum código de produção mudou.
+- **Histórico:** ciclo 3 (`be75a8b..67ad979`) FAIL por M45; ciclo 2 (`b39d155..be75a8b`) PASS; ciclo 1
+  (`b39d155..a8902a5`) FAIL por M19. Detalhes abaixo.
+
+## Ciclo 4 — gates
+
+| gate | onde | resultado |
+|---|---|---|
+| `python -m pytest -q -p no:cacheprovider` (de `tools/`) | Windows | **922 passed, 45 skipped**, 281 s (+1 = a variante "fim de linha") |
+| `pytest tests/test_reinicio_whatsapp.py` | Windows | 20 passed |
+| `pytest tests/test_reinicio_whatsapp.py` (`--basetemp=/tmp/bsv67-ver4`) | WSL | 20 passed |
+| `python -m ruff check vps/ tests/` | Windows | All checks passed |
+| `shellcheck vps/*.sh` | Windows | rc 0 |
+
+## Ciclo 4 — sensor de discriminação
+
+Worktree descartável do `400940e` (removido ao fim); `tests/test_reinicio_whatsapp.py` inteiro por mutante.
+
+| # | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M45 | sem o caso "fim de linha" (só `index($0, p " ")`) | **morto** | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa[]` |
+| M41 | sem a checagem de perfil em uso | morto | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa[ --no-first-run]` |
+| M42 | casa por prefixo `index($0, p)` (pegaria `user_data.copia`) | morto | `test_outros_perfis_no_ps_nao_seguram_a_copia` |
+| M44 | `-gt 0` → `-gt 1` | morto | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa[ --no-first-run]` |
+
+**Ciclo 4: 4 injetados, 4 mortos, 0 sobreviventes.** Árvore real: só este `validation.md` alterado, antes e
+depois do sensor.
+
+## Lacunas restantes (nenhuma bloqueia)
+
+1. L2: `TimeoutStartSec=300` só aperta no pior caso; medir o tempo total no passo 1 do teste real.
+2. L5: a espera por `Grupo aberto` conta a partir do `start` por construção; não tem teste próprio.
+3. Fora do delta: o `awk` do RSS do passo 2 (`reiniciar_whatsapp.sh:56`) casa por prefixo; afeta só o número no log.
+4. **Bloqueia o merge (dono, inst1, branch da PR):** os 5 passos reais da spec.
+
+---
+
+# Histórico — ciclo 3 (`be75a8b..67ad979`, veredito do ciclo: reprovado)
+
+## Ciclo 3 — evidência por critério
+
+| critério (spec.md revisado) | evidência | confere? |
+|---|---|---|
+| COP-03: processo ainda com o perfil nos argumentos → pula a cópia, avisa, parte mesmo assim | código `tools/vps/reiniciar_whatsapp.sh:86-94`; teste `tools/tests/test_reinicio_whatsapp.py:315-329`: sem `user_data.copia`, `ps` chamado 2 vezes com o comando inteiro `-eo rss=,args=` (passo 2 e antes da cópia), linha de log inteira por regex ancorada `copia da sessao: pulada (perfil ainda em uso por 1 processo(s))`, aviso inteiro `Reinicio diario do robo do WhatsApp: a copia da sessao falhou (perfil ainda em uso por 1 processo(s); a anterior continua valendo); a captura parte mesmo assim.`, `start` depois | sim |
+| COP-02: só o perfil exato conta (`user_data.copia` e outros perfis não seguram a cópia) | `test_reinicio_whatsapp.py:332-346`: `ps` com `…/user_data.copia` e `--user-data-dir=/outro/perfil` → cópia feita, sem aviso | sim |
+| Perfil exato no **fim** da linha também conta | `reiniciar_whatsapp.sh:89` (`substr(...) == p`) | **sem teste** (M45 sobrevive, L7) |
+| PAR-02: número recusado → `WhatsApp desconectado: o campo nao aceitou o numero do config (***1234); ler o QR pela tela VNC :2.` | código `tools/capture-chat-groups/wa/pareamento.py:76-78,279`; testes `tools/tests/test_pareamento.py:142-151` (lista inteira com `***0000`, sem número no log, não avança, não conta no teto) e `tools/tests/test_pareamento_pagina.py:134-136` (Chromium, `__avancos == 0`) | sim |
+| DOC | `tools/capture-chat-groups/README.md` (linha nova da mensagem; a do VNC deixou de citar a máscara) e `tools/vps/README.md` (checagem do perfil em uso) | sim |
+
+## Ciclo 3 — gates
+
+| gate | onde | resultado |
+|---|---|---|
+| `python -m pytest -q -p no:cacheprovider` (de `tools/`) | Windows | **921 passed, 45 skipped**, 281 s (+2 = os dois testes novos do perfil) |
+| `python -m ruff check vps/ tests/` | Windows | All checks passed |
+| `shellcheck vps/*.sh` | Windows | rc 0 |
+| `python -m unittest discover -s tests` (de `tools/capture-chat-groups`) | Windows | OK |
+| `pytest tests/test_pareamento_pagina.py`, Playwright 1.61.0 + Chromium real | Windows (venv de teste) | **11 passed** |
+| `pytest test_vigia_pareamento test_vigia_robos test_reinicio_whatsapp test_sessao_whatsapp test_pareamento` (`--basetemp=/tmp/bsv67-ver3`) | WSL | **129 passed, 0 skipped** |
+
+## Ciclo 3 — sensor de discriminação
+
+Worktree descartável do `67ad979` (removido ao fim); arquivo de teste inteiro por mutante; mutantes de bash no Git
+Bash pelo próprio teste.
+
+| # | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M41 | sem a checagem de perfil em uso (`if false`) | morto | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` |
+| M42 | casa por prefixo `index($0, p)` (pegaria `user_data.copia`) | morto | `test_outros_perfis_no_ps_nao_seguram_a_copia` |
+| M43 | número recusado volta à mensagem do VNC | morto | `test_campo_com_ddi_duplicado_nao_avanca_e_manda_o_vnc` |
+| M43b | mensagem do número recusado sem a máscara (número inteiro) | morto | idem |
+| M44 | `-gt 0` → `-gt 1` | morto | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` |
+| M45 | **sem o caso "fim de linha"** (só `index($0, p " ")`) | **SOBREVIVEU** (19 passed) | — |
+| M46 | perfil em uso pula sem avisar | morto | `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` |
+| M47 | perfil em uso avisa mas copia mesmo assim (sem `return 1`) | morto | idem |
+
+**Ciclo 3: 8 injetados, 7 mortos, 1 sobrevivente (M45).** Não é equivalente: um processo cujo último argumento é
+`--user-data-dir=<raiz>/user_data` deixa de ser contado e a cópia lê um perfil em uso (regra 2 da spec do dono:
+"a cópia nunca é lida enquanto o Chromium usa o perfil"). O risco real é baixo, porque o Chromium do Playwright
+costuma ter argumentos depois do perfil. Mesmo assim, o código implementa esse caso e o arquiteto o pediu ("espaço
+ou fim de linha"), e nenhum teste o prova. Árvore real: `git status --porcelain` vazio antes e depois.
+
+## Ciclo 3 — lacunas
+
+1. **L7 (motivo do FAIL)**: `tools/tests/test_reinicio_whatsapp.py`: falta um caso com o perfil exato no fim da
+   linha do `ps`. Por exemplo, parametrizar `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` com
+   `f"3400000 /usr/lib/chromium/chromium --type=browser {perfil}"` (sem argumento depois). Mata o M45.
+2. L2 e L5 dos ciclos anteriores continuam abertas e não bloqueiam (ver ciclo 2).
+3. Observação, fora do delta: o `awk` do passo 2 (RSS, `reiniciar_whatsapp.sh:56`) continua casando por prefixo
+   (`index($0, p)`). Ali só soma memória para o log, então um `user_data.copia` aberto à mão inflaria o número sem
+   efeito no comportamento. Não bloqueia.
+4. **Bloqueia o merge (dono, inst1, branch da PR):** os 5 passos reais da spec.
+
+---
+
+# Histórico — ciclo 2 (`b39d155..be75a8b`, veredito do ciclo: aprovado)
 
 ## Ciclo 2 — gates
 
