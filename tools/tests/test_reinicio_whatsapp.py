@@ -288,8 +288,8 @@ def test_copia_que_falha_avisa_e_parte_mesmo_assim(amb):  # COP-03
     assert r.returncode == 0, r.stdout + r.stderr
     assert amb.ler("eventos.log").splitlines() == [f"--user stop {UNID}", "copia:2026-11-26T08:30:00Z",
                                                     f"--user start {UNID}", "copia:2026-11-26T08:30:00Z"]
-    assert len(amb.avisos) == 1 and "a copia da sessao falhou" in amb.avisos[0]
-    assert "a captura parte mesmo assim" in amb.avisos[0]
+    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (leitura do "
+                          "perfil; a anterior continua valendo); a captura parte mesmo assim.")]
     assert not (amb.chat / "user_data.copia.nova").exists()
 
 
@@ -301,5 +301,6 @@ def test_stop_que_falha_nao_copia_e_parte(amb):  # COP-01: copia so com a unidad
     r = amb.rodar()
     assert not (amb.chat / "user_data.copia").exists()
     assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
-    assert len(amb.avisos) == 1 and "o stop de besave-captura-whatsapp.service falhou" in amb.avisos[0]
+    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: o stop de besave-captura-whatsapp.service "
+                          "falhou (estado: active); sem copia da sessao.")]
     assert r.returncode == 0

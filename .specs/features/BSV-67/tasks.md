@@ -11,11 +11,15 @@ T3 → T4
 ### Phase 3: Documentação
 T5
 
+### Phase 4: Lacunas do Verifier (ciclo 1)
+T6
+
 ```
 T1 → T2
 T2 → T3
 T3 → T4
 T4 → T5
+T5 → T6
 ```
 
 ## Task Breakdown
@@ -58,6 +62,14 @@ T4 → T5
 **Depends on**: T4
 **Reqs**: DOC-01
 **Tests**: none (documentação)
+**Gate**: `cd tools && pytest && ruff check vps/ tests/`
+
+### T6: Lacunas do Verifier (ciclo 1) ✅
+**What**: teste do retorno ao campo do número (mutante M19 sobrevivente), teto diário pelo `Vinculo` com a mensagem inteira, avisos do script comparados inteiros, continuação de linha perdida no vigia, comentário da unidade do reinício.
+**Where**: `tools/tests/test_pareamento.py`, `tools/tests/test_reinicio_whatsapp.py`, `tools/vps/vigia_robos.py`, `tools/vps/systemd/besave-reinicio-whatsapp.service`
+**Depends on**: T5
+**Reqs**: PAR-04, PAR-05, COP-03
+**Tests**: `tools/tests/test_pareamento.py`, `tools/tests/test_reinicio_whatsapp.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
 ## Test Coverage Matrix

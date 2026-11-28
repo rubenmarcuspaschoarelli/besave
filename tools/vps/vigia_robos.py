@@ -571,7 +571,8 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
             avisar(amb, f"Vigia dos robos: {robo.nome} voltou (parado por {minutos} min).")
         _vigiar_grupos(amb, robo, bat, ocorrencias, agora)
         _vigiar_navegador(amb, robo, bat, ocorrencias, agora)
-        if robo.reinicio and bat is not None and bat.fase == "rodizio" and foto.rss_mb is not None                 and foto.rss_mb > amb.rss_max_mb:
+        if (robo.reinicio and bat is not None and bat.fase == "rodizio" and foto.rss_mb is not None
+                and foto.rss_mb > amb.rss_max_mb):
             _reiniciar_por_memoria(amb, robo, registro, foto.rss_mb, agora)
 
 

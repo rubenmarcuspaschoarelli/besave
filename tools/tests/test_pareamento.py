@@ -71,10 +71,6 @@ class TelaFalsa:
         self._estado = p.CODIGO
         return self.codigos.pop(0) if self.codigos else codigo_da_fixture()
 
-    def expirar(self):
-        """O WhatsApp troca o codigo vencido pela tela do QR."""
-        self._estado = p.QR
-
 
 class Cenario:
     def __init__(self, tmp_path, numero=NUMERO, validade=10, **tela):
@@ -189,13 +185,14 @@ def test_validade_passou_pede_outro(tmp_path):  # PAR-04
                                           "(pedido as 12:20, Brasilia)."]
 
 
-def test_pagina_voltou_ao_qr_pede_outro_antes_da_validade(tmp_path):  # PAR-04
+@pytest.mark.parametrize("volta", [p.QR, p.NUMERO])
+def test_pagina_voltou_ao_qr_ou_ao_numero_pede_outro_antes_da_validade(tmp_path, volta):  # PAR-04
     c = Cenario(tmp_path, validade=10, vincula_em=T0 + timedelta(minutes=6))
     orig = c.tela.estado
 
     def estado():
         if c.relogio() == T0 + timedelta(minutes=2):
-            c.tela.expirar()
+            c.tela._estado = volta          # o WhatsApp tirou o codigo vencido da tela
         return orig()
 
     c.tela.estado = estado
@@ -232,6 +229,18 @@ def test_teto_por_hora_e_por_dia(tmp_path):  # PAR-05
     assert teto.proximo(T0 + timedelta(hours=4)) == datetime(2026, 11, 28, 3, 0, tzinfo=UTC)
     assert teto.proximo(datetime(2026, 11, 28, 2, 59, tzinfo=UTC)) == datetime(2026, 11, 28, 3, 0, tzinfo=UTC)
     assert teto.proximo(datetime(2026, 11, 28, 3, 0, tzinfo=UTC)) is None
+
+
+def test_decimo_terceiro_no_dia_nao_sai_e_avisa_a_meia_noite(tmp_path):  # PAR-05
+    c = Cenario(tmp_path, validade=10, vincula_em=datetime(2026, 11, 28, 3, 5, tzinfo=UTC))
+    for h in range(4):                      # 12 pedidos ja feitos hoje: 3 por hora das 08 as 11 (Brasilia)
+        for m in (0, 10, 20):
+            c.teto.registrar(T0 - timedelta(hours=4 - h) + timedelta(minutes=m))
+    c.rodar()
+    assert c.enviados[0] == "WhatsApp desconectado: limite de codigos atingido; proximo pedido as 00:00 (Brasilia)."
+    pedidos = [m for m in c.enviados if "digite" in m]
+    assert [m[-28:] for m in pedidos] == ["(pedido as 00:00, Brasilia)."]
+    assert c.enviados == [c.enviados[0], pedidos[0], p.MSG_VINCULADO]
 
 
 def test_teto_sobrevive_a_partida_nova(tmp_path):  # PAR-05: o arquivo guarda a conta
