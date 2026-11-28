@@ -48,5 +48,22 @@ class ParseCamposUrl(unittest.TestCase):
         self.assertEqual(campos["url"], "")
 
 
+    def test_link_vazio_descartado_nao_tampa_o_seguinte(self):
+        campos = parser.parse_campos({"text": "Oferta", "links": ["\u2060", "https://meli.la/AbC123"]})
+        self.assertEqual(campos["url"], "https://meli.la/AbC123")
+
+    def test_convite_com_caractere_no_inicio_e_pulado(self):
+        campos = parser.parse_campos({
+            "text": "Oferta",
+            "links": ["\u2060https://chat.whatsapp.com/Abc", "https://meli.la/AbC123"],
+        })
+        self.assertEqual(campos["url"], "https://meli.la/AbC123")
+
+    def test_so_a_url_muda(self):
+        texto = "Fone XYZ\nDe R$ 299,90\npor R$ 199,90\nCupom: BESAVE10\nhttps://meli.la/AbC123"
+        sujo = parser.parse_campos({"text": texto, "links": ["https://meli.la/AbC123\u2060"]})
+        limpo = parser.parse_campos({"text": texto, "links": ["https://meli.la/AbC123"]})
+        self.assertEqual(sujo, limpo)
+
 if __name__ == "__main__":
     unittest.main()

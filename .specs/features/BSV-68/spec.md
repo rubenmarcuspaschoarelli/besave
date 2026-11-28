@@ -32,8 +32,8 @@ Como dono, quero que link com caractere invisível vire a URL certa, para não p
 |---|---|
 | URL-01 | THE `limpar_url(texto)` SHALL remover todo caractere de categoria `Cf` em qualquer posição, depois `strip()`, e devolver `''` para `None`/vazio, sem mudar nenhum outro caractere. |
 | URL-02 | THE função SHALL existir nos dois robôs (`wa/parser.py` e `core/url.py`) com o mesmo corpo e a mesma tabela de teste. |
-| WA-01 | WHEN `parse_campos` recebe `links`, THE parser SHALL limpar cada link antes de `eh_link_whatsapp` e da escolha do 1º link, descartando link que fica vazio. |
-| LJ-01 | WHEN `_adaptar_linhas` adapta uma linha, THE robô SHALL usar `limpar_url(DS_URL_ORIGEM)` como `url`. |
+| WA-01 | WHEN `parse_campos` recebe `links`, THE parser SHALL limpar cada link antes de `eh_link_whatsapp` e da escolha do 1º link, descartando link que fica vazio; nenhum outro campo muda. |
+| LJ-01 | WHEN `_adaptar_linhas` adapta uma linha, THE robô SHALL usar `limpar_url(DS_URL_ORIGEM)` como `url`, sem regravar `DS_URL_ORIGEM` no banco. |
 | LJ-02 | WHEN a limpeza removeu caractere `Cf`, THE robô SHALL imprimir `[url] linha {ID}: removidos {n} caractere(s) invisivel(is) ({U+XXXX, ...})` com códigos distintos em ordem de aparição; IF nada foi removido THEN nada é impresso. |
 | SH-01 | IF `abrir` levanta `UnicodeError` THEN `resolver` SHALL devolver `(None, URL_NAO_RECONHECIDA)` e imprimir `shopee api: url_nao_reconhecida (resolver: UnicodeEncodeError)` (nome real da exceção). |
 | SH-02 | IF `abrir` levanta outro `ValueError`/`OSError`/`HTTPException` THEN `resolver` SHALL continuar devolvendo `API_INDISPONIVEL`. |
@@ -41,10 +41,12 @@ Como dono, quero que link com caractere invisível vire a URL certa, para não p
 
 ## Acceptance Criteria
 1. WHEN a tabela da Saída 5 é aplicada THEN a lista de pares resultante SHALL ser igual à tabela inteira, nos dois robôs (URL-01, URL-02).
-2. WHEN `links == ["https://chat.whatsapp.com/Abc⁠", "https://meli.la/AbC123⁠"]` THEN `url` SHALL ser `https://meli.la/AbC123`; WHEN `links == ["⁠"]` THEN `url` SHALL ser `""` (WA-01).
+2. WHEN `links == ["https://chat.whatsapp.com/Abc\u2060", "https://meli.la/AbC123\u2060"]` THEN `url` SHALL ser `https://meli.la/AbC123`; WHEN `links == ["\u2060"]` THEN `url` SHALL ser `""`; WHEN `links == ["\u2060", "https://meli.la/AbC123"]` ou o convite tem o caractere no início THEN `url` SHALL ser `https://meli.la/AbC123`; o resto dos campos SHALL ser igual ao da mensagem com link limpo (WA-01).
 3. WHEN `DS_URL_ORIGEM` tem U+2060 THEN `url` SHALL vir limpa e o log SHALL ser a linha inteira esperada; WHEN limpa THEN sem log (LJ-01, LJ-02).
 4. WHEN `abrir` levanta `UnicodeEncodeError` THEN `(None, URL_NAO_RECONHECIDA)`; WHEN `OSError` THEN `API_INDISPONIVEL` (SH-01, SH-02).
 5. WHEN a linha suja segue `_adaptar_linhas` → `_processar_lote` THEN as URLs recebidas por `abrir` SHALL não ter `Cf` (SH-03).
+
+6. Execução real do dono (inst1, branch da PR; bloqueia o merge): linha 64926 devolvida a `'0'` com U+2060 loga `[url] linha 64926: removidos 1 caractere(s) invisivel(is) (U+2060)` e termina pelo motivo da própria oferta; nenhuma linha nova com U+2060 depois do reinício; evidência redigida.
 
 ## Requirement Traceability
 | ID | Status |
