@@ -1,0 +1,2 @@
+# Mesma versao dos outros robos (capture-store-pages/requirements.txt).
+oracledb==4.0.2

@@ -8,8 +8,9 @@ TOOLS = Path(__file__).resolve().parent.parent
 LOJAS = TOOLS / "capture-store-pages"
 CHAT = TOOLS / "capture-chat-groups"
 PUB = TOOLS / "publish-whatsapp-channel"
+WEB = TOOLS / "capture-web-apoio"
 
-for p in (LOJAS, CHAT, PUB):
+for p in (LOJAS, CHAT, PUB, WEB):
     if str(p) not in sys.path:
         sys.path.insert(0, str(p))
 
