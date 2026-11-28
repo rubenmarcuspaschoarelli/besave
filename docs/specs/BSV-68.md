@@ -10,11 +10,14 @@ Em 27/11, a partir de 12:37, um grupo de WhatsApp passou a mandar links com um *
 invisível colado no fim. O WhatsApp Web põe esse caractere dentro do `href` do link; o robô do WhatsApp grava o
 `href` como está em `DS_URL_ORIGEM` (`wa/parser.py`, `parse_campos`). Até as 16:46, cinco linhas:
 
-| linha | link | o que aconteceu |
-|---|---|---|
-| 64926, 65359, 65368 | `meli.la/…⁠` | `'9'` `pagina_sem_produto`: o Chromium abre o link curto com `%E2%81%A0` no fim e cai numa página que não existe — **oferta perdida** |
-| 65104 | `s.shopee.com.br/…⁠` | `'0'` retida para sempre: o HEAD do `urllib` em `shopee_api.resolver` levanta `UnicodeEncodeError`, que é `ValueError` e cai no ramo de rede fora → `api_indisponivel` (passageiro) a cada varredura |
-| 65206 | site próprio do grupo | `loja_desconhecida` (correto, independe do caractere) |
+| linha | link | com o caractere | com a URL limpa (reprocessada em 28/11) |
+|---|---|---|---|
+| 64926 | `meli.la/…⁠` | `'9'` `pagina_sem_produto`: o Chromium abre o link curto com `%E2%81%A0` no fim e cai numa página que não existe | `ok`, publicada — **era oferta perdida** |
+| 65359, 65368 | `meli.la/…⁠` | `'9'` `pagina_sem_produto` (página inexistente) | `'9'` `pagina_sem_produto` de novo, agora pelo motivo certo: lista social do Mercado Livre, não produto |
+| 65104 | `s.shopee.com.br/…⁠` | `'0'` retida para sempre: o HEAD do `urllib` em `shopee_api.resolver` levanta `UnicodeEncodeError`, que é `ValueError` e cai no ramo de rede fora → `api_indisponivel` (passageiro) a cada varredura | `'9'` `url_nao_reconhecida`: o link leva a página de campanha da Shopee |
+| 65206 | site próprio do grupo | `loja_desconhecida` (correto, independe do caractere) | — |
+
+O dano é duplo: oferta de produto perdida (1 em 4 neste dia) e linha presa sem chegar ao motivo verdadeiro.
 
 Antes de 27/11 não havia nenhuma linha com U+2060. Os 6 casos antigos de não-ASCII na fila (✨ e 🚨 em
 `http://✨GA.MA…`) são texto que não é link e foram descartados corretamente; ficam como estão.
@@ -69,24 +72,20 @@ Antes de 27/11 não havia nenhuma linha com U+2060. Os 6 casos antigos de não-A
 - Emoji ou outro texto colado à URL (não é `Cf`); os casos antigos já foram descartados como `loja_desconhecida`.
 - Idade máxima de linha retida por `shopee_api_indisponivel` (outro assunto; com a Saída 4 a causa desta some).
 
-## Recuperação (dono, independe do merge)
-As três ofertas do Mercado Livre perdidas em 27/11 (até 24 h, como no README):
-```sql
-UPDATE OFERTA_FILA_CAPTURA
-   SET DS_URL_ORIGEM = REPLACE(DS_URL_ORIGEM, UNISTR('\2060')), ST_CAPTURA = '0'
- WHERE ID_OFERTA IN (64926, 65359, 65368);
-COMMIT;
-```
-A 65104 fica como está: é o caso do teste real (passo 2).
+## Recuperação (feita)
+Em 27/11 o dono limpou a URL das 4 linhas e as devolveu a `'0'` (`REPLACE(DS_URL_ORIGEM, UNISTR('\2060'))`);
+resultado na tabela do Contexto. Linhas novas com o caractere até o merge: o mesmo SQL, com os ids.
 
 ## Critério de aceite
 - Job `tools` verde: `unittest` de `capture-chat-groups/tests` (onde fica o teste do parser), `pytest` em
   `tools/` e `ruff`; sensor de discriminação com os mutantes da Saída 5.
 - **Real (dono, inst1, branch da PR; bloqueia o merge):**
   1. checkout da branch, reinício de `besave-captura-lojas` e `besave-captura-whatsapp`;
-  2. a 65104 (ou, se já tiver saído da fila, uma linha nova com U+2060) aparece no log com
-     `[url] linha …: removidos 1 caractere(s) invisivel(is) (U+2060)` e termina `ok` (ou com um motivo da
-     própria oferta, nunca `api_indisponivel`/`pagina_sem_produto` por causa do caractere);
+  2. uma linha com U+2060 no robô das lojas: o dono devolve a `'0'` uma das linhas de 27/11 com o caractere
+     reposto (`DS_URL_ORIGEM || UNISTR('\2060')`, ex.: 64926, que é produto) e ela aparece no log com
+     `[url] linha 64926: removidos 1 caractere(s) invisivel(is) (U+2060)` e termina pelo motivo da própria
+     oferta (`ok` ou duplicidade), nunca `pagina_sem_produto` por página inexistente; o SQL de devolver e o de
+     desfazer vão na evidência;
   3. depois do reinício, nenhuma linha nova com caractere `Cf` em `DS_URL_ORIGEM`:
      `SELECT COUNT(*) FROM OFERTA_FILA_CAPTURA WHERE INSTR(ASCIISTR(DS_URL_ORIGEM), '\2060') > 0 AND DT_CAPTACAO > <reinício>`
      = 0 com o grupo tendo mandado link no período (confirmar pelo log do WhatsApp);
