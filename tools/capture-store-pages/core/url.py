@@ -10,3 +10,8 @@ def limpar_url(texto):
     if not texto:
         return ""
     return "".join(c for c in texto if unicodedata.category(c) != "Cf").strip()
+
+
+def invisiveis(texto):
+    """Caracteres Cf de `texto`, na ordem em que aparecem (para o log de quem limpou)."""
+    return [c for c in (texto or "") if unicodedata.category(c) == "Cf"]
