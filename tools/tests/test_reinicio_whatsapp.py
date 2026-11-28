@@ -59,7 +59,18 @@ esac
 exit 0
 ''')
         _script(bin_ / "journalctl", f'cat "{e}/journal" 2>/dev/null; exit 0\n')
-        _script(bin_ / "ps", f'echo "$@" >> "{e}/ps.log"; cat "{e}/ps" 2>/dev/null; exit 0\n')
+        # ps: `-eo rss=,args=` (passo 2) le 'ps'; `-eo pid=,args=` (perfil em uso, BSV-67) le 'ps_pid_<n>' na
+        # n-esima leitura e, sem ele, 'ps_pid'
+        _script(bin_ / "ps", f'''echo "$@" >> "{e}/ps.log"
+case " $* " in
+  *pid=*)
+    n=$(( $(cat "{e}/ps_n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "{e}/ps_n"
+    if [ -e "{e}/ps_pid_$n" ]; then cat "{e}/ps_pid_$n"; else cat "{e}/ps_pid" 2>/dev/null; fi;;
+  *) cat "{e}/ps" 2>/dev/null;;
+esac
+exit 0
+''')
+        _script(bin_ / "sleep", f'echo "$@" >> "{e}/sleep.log"; exit 0\n')
         _script(self.chat / ".venv" / "bin" / "python", f'echo "$@" >> "{e}/py.log"\nexit 0\n')
         self.env = {
             **os.environ,
@@ -69,6 +80,7 @@ exit 0
             "BESAVE_PS": (bin_ / "ps").as_posix(),
             "BESAVE_ESPERA_MAX": "1",
             "BESAVE_INTERVALO": "1",
+            "BESAVE_SLEEP": (bin_ / "sleep").as_posix(),
         }
 
     def estado(self, valor):
@@ -312,29 +324,64 @@ def _perfil_como_o_bash_ve(amb):
     return f"--user-data-dir={raiz}/user_data"
 
 
-@pytest.mark.parametrize("depois", [" --no-first-run", ""])     # perfil no meio ou no fim da linha
-def test_perfil_ainda_em_uso_pula_a_copia_e_avisa(amb, depois):  # COP-03: Chromium orfao fora do scope (inst1, 28/11)
+def test_filho_que_termina_depois_do_stop_espera_e_copia(amb):  # COP-02: inst1, 28/11 11:18 (saiu 1-2 s depois)
     _perfil(amb)
     _log_parado(amb, "Grupo aberto\n")
     perfil = _perfil_como_o_bash_ve(amb)
-    amb.arquivo("ps", f"3400000 /usr/lib/chromium/chromium --type=browser {perfil}{depois}\n")
+    amb.arquivo("ps_pid_1", f"3282277 /usr/lib/chromium/chromium {perfil} --no-first-run\n"
+                            f"3282301 /usr/lib/chromium/chromium --type=renderer {perfil}\n")
+    amb.arquivo("ps_pid_2", f"3282301 /usr/lib/chromium/chromium --type=renderer {perfil}\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")                  # 3a leitura em diante: ps_pid ausente = livre
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo pid=,args=", "-eo pid=,args=", "-eo pid=,args="]
+    assert amb.ler("sleep.log").splitlines() == ["1", "1"]
+    assert amb.avisos == [] and "pulada" not in r.stdout
+
+
+@pytest.mark.parametrize("linhas, restantes", [
+    (["3282277 /usr/lib/chromium/chromium {perfil} --no-first-run"], "3282277 principal"),
+    (["3282277 /usr/lib/chromium/chromium {perfil}",                 # perfil no fim da linha
+      "3282301 /usr/lib/chromium/chromium --type=renderer --lang=pt-BR {perfil} --enable-x"],
+     "3282277 principal, 3282301 renderer"),
+])
+def test_perfil_em_uso_ate_o_prazo_pula_a_copia_com_pid_e_tipo(amb, linhas, restantes):  # COP-03
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps_pid", "".join(x.format(perfil=perfil) + "\n" for x in linhas))
     amb.arquivo("log_novo", "Grupo aberto\n")
     r = amb.rodar()
     assert r.returncode == 0, r.stdout + r.stderr
     assert not (amb.chat / "user_data.copia").exists()
-    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo rss=,args="]   # passo 2 e antes da copia
-    assert re.search(r"^\[reinicio\] \d\d/\d\d/\d{4} \d\d:\d\d:\d\d copia da sessao: pulada \(perfil ainda em uso "
-                     r"por 1 processo\(s\)\)$", r.stdout, re.MULTILINE)
-    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (perfil ainda "
-                           "em uso por 1 processo(s); a anterior continua valendo); a captura parte mesmo assim.")]
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args="] + ["-eo pid=,args="] * 21   # t = 0..20 s
+    assert amb.ler("sleep.log").splitlines() == ["1"] * 20
+    pulada = [x for x in r.stdout.splitlines() if "copia da sessao: pulada" in x]
+    assert len(pulada) == 1
+    assert re.fullmatch(r"\[reinicio\] \d\d/\d\d/\d{4} \d\d:\d\d:\d\d copia da sessao: pulada \(perfil ainda em uso "
+                        r"apos 20 s: " + re.escape(restantes) + r"\)", pulada[0])
+    assert amb.avisos == [(f"-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (perfil ainda "
+                          f"em uso apos 20 s: {restantes}; a anterior continua valendo); a captura parte mesmo assim.")]
     assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
+
+
+def test_prazo_do_perfil_vem_do_ambiente(amb):  # COP-03: BESAVE_ESPERA_PERFIL
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    amb.arquivo("ps_pid", f"3282277 /usr/lib/chromium/chromium {_perfil_como_o_bash_ve(amb)}\n")
+    amb.env["BESAVE_ESPERA_PERFIL"] = "3"
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert amb.ler("sleep.log").splitlines() == ["1"] * 3
+    assert "copia da sessao: pulada (perfil ainda em uso apos 3 s: 3282277 principal)" in r.stdout
 
 
 def test_outros_perfis_no_ps_nao_seguram_a_copia(amb):  # COP-02: so o caminho exato do perfil conta
     _perfil(amb)
     _log_parado(amb, "Grupo aberto\n")
     perfil = _perfil_como_o_bash_ve(amb)
-    amb.arquivo("ps", "\n".join([
+    amb.arquivo("ps_pid", "\n".join([
         f"  90000 /usr/lib/chromium/chromium --type=renderer {perfil}.copia",
         "9990000 /usr/bin/chrome --type=renderer --user-data-dir=/outro/perfil",
         "",
@@ -344,4 +391,5 @@ def test_outros_perfis_no_ps_nao_seguram_a_copia(amb):  # COP-02: so o caminho e
     assert r.returncode == 0, r.stdout + r.stderr
     assert (amb.chat / "user_data.copia" / "copiada_em").exists()
     assert amb.avisos == []
-    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo rss=,args="]
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo pid=,args="]
+    assert amb.ler("sleep.log") == ""

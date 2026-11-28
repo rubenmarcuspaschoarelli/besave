@@ -17,6 +17,9 @@ T6
 ### Phase 5: Revisão do arquiteto
 T7 → T8
 
+### Phase 6: Teste real, passo 1 (28/11)
+T9
+
 ```
 T1 → T2
 T2 → T3
@@ -25,6 +28,7 @@ T4 → T5
 T5 → T6
 T6 → T7
 T7 → T8
+T8 → T9
 ```
 
 ## Task Breakdown
@@ -92,6 +96,14 @@ T7 → T8
 **Reqs**: COP-03
 **Tests**: `tools/tests/test_reinicio_whatsapp.py`
 **Gate**: `cd tools && pytest tests/test_reinicio_whatsapp.py && ruff check vps/ tests/`
+
+### T9: Espera o perfil ficar livre antes da cópia ✅
+**What**: no teste real (inst1, 28/11 11:18) um filho do Chromium terminando 1 s depois do scope fez a cópia ser pulada; a contagem repete a cada 1 s por até `BESAVE_ESPERA_PERFIL` s (20) e a linha de pulada traz pid e tipo de cada processo.
+**Where**: `tools/vps/reiniciar_whatsapp.sh`, `tools/vps/README.md`
+**Depends on**: T8
+**Reqs**: COP-02, COP-03
+**Tests**: `tools/tests/test_reinicio_whatsapp.py`
+**Gate**: `cd tools && pytest tests/test_reinicio_whatsapp.py && ruff check vps/ tests/` (Windows e WSL)
 
 ## Test Coverage Matrix
 

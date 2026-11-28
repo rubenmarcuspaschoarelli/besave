@@ -20,7 +20,7 @@
 #
 # Env (testes e instalacoes fora do padrao): BESAVE_CHAT_DIR, BESAVE_SYSTEMCTL,
 # BESAVE_JOURNALCTL, BESAVE_PS, BESAVE_PY, BESAVE_UNIDADE, BESAVE_ESPERA_MAX,
-# BESAVE_INTERVALO.
+# BESAVE_INTERVALO, BESAVE_ESPERA_PERFIL (20), BESAVE_SLEEP.
 
 set -u
 
@@ -33,6 +33,8 @@ PY=${BESAVE_PY:-$RAIZ/.venv/bin/python}
 UNIDADE=${BESAVE_UNIDADE:-besave-captura-whatsapp.service}
 ESPERA_MAX=${BESAVE_ESPERA_MAX:-180}
 INTERVALO=${BESAVE_INTERVALO:-5}
+ESPERA_PERFIL=${BESAVE_ESPERA_PERFIL:-20}   # s ate o perfil ficar livre depois do stop (BSV-67)
+SLEEP=${BESAVE_SLEEP:-sleep}
 PADRAO_OK='Grupo aberto'
 PERFIL="--user-data-dir=$RAIZ/user_data"
 
@@ -76,6 +78,17 @@ falha_copia() {
     avisar "a copia da sessao falhou ($1; a anterior continua valendo); a captura parte mesmo assim."
 }
 
+# "pid tipo, pid tipo" dos processos com o perfil nos argumentos (tipo = valor de --type=, ou principal); vazio = livre
+processos_do_perfil() {
+    "$PS_BIN" -eo pid=,args= 2>/dev/null | awk -v p="$PERFIL" '
+        index($0, p " ") || substr($0, length($0) - length(p) + 1) == p {
+            tipo = "principal"
+            if (match($0, /--type=[^ ]+/)) tipo = substr($0, RSTART + 7, RLENGTH - 7)
+            lista = lista (lista == "" ? "" : ", ") $1 " " tipo
+        }
+        END { printf "%s", lista }'
+}
+
 copiar_sessao() {
     local perfil="$RAIZ/user_data" nova="$RAIZ/user_data.copia.nova" copia="$RAIZ/user_data.copia"
     local velha="$RAIZ/user_data.copia.velha" t0=$SECONDS mb
@@ -84,14 +97,20 @@ copiar_sessao() {
         return 0
     fi
     # o Chromium principal roda num scope proprio, fora do scope do robo (inst1, 28/11): um stop morto por tempo
-    # deixa o principal orfao com o perfil aberto. Mesmo `ps` do passo 2; casa so o perfil exato (nao user_data.copia)
-    local em_uso
-    em_uso=$("$PS_BIN" -eo rss=,args= 2>/dev/null | awk -v p="$PERFIL" 'index($0, p " ") || substr($0, length($0) - length(p) + 1) == p { n++ } END { print n + 0 }')
-    if [ "${em_uso:-0}" -gt 0 ]; then
-        registrar "copia da sessao: pulada (perfil ainda em uso por $em_uso processo(s))"
-        falha_copia "perfil ainda em uso por $em_uso processo(s)"
-        return 1
-    fi
+    # deixa o principal orfao com o perfil aberto; no stop normal os filhos ainda saem 1-2 s depois do scope.
+    # Conta a cada 1 s por ate ESPERA_PERFIL s; so copia com 0. Casa so o perfil exato (nao user_data.copia).
+    local restantes espera=0
+    while :; do
+        restantes=$(processos_do_perfil)
+        [ -z "$restantes" ] && break
+        if [ "$espera" -ge "$ESPERA_PERFIL" ]; then
+            registrar "copia da sessao: pulada (perfil ainda em uso apos $ESPERA_PERFIL s: $restantes)"
+            falha_copia "perfil ainda em uso apos $ESPERA_PERFIL s: $restantes"
+            return 1
+        fi
+        "$SLEEP" 1
+        espera=$((espera + 1))
+    done
     rm -rf "$nova" "$velha"
     if ! { [ -d "$perfil" ] && mkdir -p "$nova" &&
            (set -o pipefail; tar -C "$perfil" --anchored "${EXCLUIR[@]}" -cf - . | tar -C "$nova" -xf -) &&
