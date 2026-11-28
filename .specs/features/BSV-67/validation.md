@@ -1,15 +1,177 @@
 # BSV-67 — Validation
 
 **Verdict**: PASS
-**Result**: PASS (ciclo 4)
+**Result**: PASS (ciclo 6)
 
 - **Verificou:** Verifier sub-agente independente (autor ≠ verificador). Não alterou código nem testes.
-- **Ciclo 4** (28/11/2026): delta `67ad979..400940e` (T8). Só testes e `tasks.md`:
-  `test_perfil_ainda_em_uso_pula_a_copia_e_avisa` passou a ser parametrizado com o perfil no meio
-  (`" --no-first-run"`) e no fim da linha do `ps` (`""`), em `tools/tests/test_reinicio_whatsapp.py:315-330`. Fecha a
-  L7 do ciclo 3. Nenhum código de produção mudou.
-- **Histórico:** ciclo 3 (`be75a8b..67ad979`) FAIL por M45; ciclo 2 (`b39d155..be75a8b`) PASS; ciclo 1
-  (`b39d155..a8902a5`) FAIL por M19. Detalhes abaixo.
+- **Ciclo 6** (28/11/2026): delta `ce24c45..7b0c13c` em `tools/` (T10). Corrige o D1 do ciclo 5: nos dois `awk` de
+  `tools/vps/reiniciar_whatsapp.sh` (passo 2, `:58`, e `processos_do_perfil`, `:83-92`) o perfil entra pelo
+  ambiente (`P="$PERFIL" awk 'BEGIN { p = ENVIRON["P"] } …'`), fora do argv. Entram dois testes com o `ps` real,
+  só em Linux (`tools/tests/test_reinicio_whatsapp.py:409-439`); rodam no WSL e no job `tools` do CI
+  (ubuntu-latest).
+- **Histórico:** ciclo 5 reprovado (D1, `awk` casava a si mesmo); ciclo 4 aprovado; ciclo 3 reprovado (M45);
+  ciclo 2 aprovado; ciclo 1 reprovado (M19).
+
+## Ciclo 6 — prova com o `ps` real (WSL, sem Chromium; mesma extração da função do HEAD do ciclo 5)
+
+```
+gawk leitura 1: []
+gawk leitura 2: []
+gawk leitura 3: []
+mawk leitura 1: []          <- mawk 1.3.4 20260129
+mawk leitura 2: []
+mawk leitura 3: []
+mawk com isca 501: [501 renderer]     <- exec -a "chromium-falso <perfil> --type=renderer" sleep 30
+gawk com isca 501: [501 renderer]
+passo 2 sem chromium: maior_kb=0      <- antes contava o RSS do proprio awk
+```
+
+Sem Chromium a lista fica vazia nos dois `awk`; com o processo-isca, sai o pid dele e o tipo certo, igual em gawk
+e mawk. O D1 está corrigido.
+
+## Ciclo 6 — evidência por critério
+
+| critério | evidência | confere? |
+|---|---|---|
+| Com o `ps` real e sem Chromium, a cópia acontece (o `awk` não conta a si mesmo) | `test_reinicio_whatsapp.py:409-419` (`test_ps_real_sem_chromium_copia`): sem "pulada", `copiada_em` existe, nenhum `sleep` | sim |
+| Com o `ps` real e um processo com o perfil exato, pula com o pid dele | `test_reinicio_whatsapp.py:422-439`: processo `exec -a "chromium-falso <perfil>" sleep 60`, sem cópia, uma linha que termina com a mensagem inteira `copia da sessao: pulada (perfil ainda em uso apos 2 s: <pid> principal)` | sim |
+| Critérios do ciclo 5 (espera, prazo, pid e tipo, só o perfil exato) | testes do ciclo 5 inalterados (`:327-395`), verdes | sim |
+
+## Ciclo 6 — gates
+
+| gate | onde | resultado |
+|---|---|---|
+| `python -m pytest -q -p no:cacheprovider` (de `tools/`) | Windows | **934 passed, 47 skipped**, 453 s (+2 skips = os dois testes só-Linux) |
+| `pytest tests/test_reinicio_whatsapp.py` | Windows | 22 passed, 2 skipped (os de `ps` real) |
+| `pytest -rs tests/test_reinicio_whatsapp.py` (`--basetemp=/tmp/bsv67-ver6`) | WSL | **24 passed, 0 skipped** |
+| `python -m ruff check vps/ tests/` | Windows | All checks passed |
+| `shellcheck vps/*.sh` | Windows | rc 0 |
+| `processos_do_perfil` com `ps` real em gawk e mawk | WSL | vazia sem Chromium; pid e tipo com a isca |
+
+## Ciclo 6 — sensor de discriminação
+
+Worktree descartável do `7b0c13c` (removido ao fim). Mutantes rodados **no WSL**, para os testes de `ps` real
+contarem (no Windows eles são pulados, lição 32). `tests/test_reinicio_whatsapp.py` inteiro por mutante.
+
+| # | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M56 | `-v p="$PERFIL"` de volta em `processos_do_perfil` (o defeito do ciclo 5) | morto | `test_ps_real_sem_chromium_copia` |
+| M57 | perfil no ambiente mas lido errado (`ENVIRON["X"]`, p vazio) | morto | `test_outros_perfis_no_ps_nao_seguram_a_copia` |
+| M48 | sem espera: pula na 1ª leitura | morto | `test_filho_que_termina_depois_do_stop_espera_e_copia` |
+| M50 | tipo sempre `principal` | morto | `test_perfil_em_uso_ate_o_prazo_pula_a_copia_com_pid_e_tipo[…renderer]` |
+| M53 | checagem por prefixo | morto | `test_outros_perfis_no_ps_nao_seguram_a_copia` |
+| M58 | `-v p=` de volta só no `awk` do passo 2 (RSS) | sobreviveu: **fora do comportamento exigido** | — |
+
+**Ciclo 6: 6 injetados, 5 mortos, 1 sobrevivente fora da spec (M58).** O passo 2 só escreve no log "RSS do maior
+processo do perfil antes de parar". Com o mutante, sem Chromium, o número vira o RSS do próprio `awk` (alguns
+MB, que dão 0–1 MB depois da divisão por 1024). Com Chromium rodando, o maior continua sendo o Chromium. Nenhuma
+decisão do script nem do vigia lê esse valor, e a spec não pede nada além da linha de log. Por isso não reprova. Árvore real: só este `validation.md` alterado, antes e depois.
+
+## Ciclo 6 — lacunas (nenhuma bloqueia)
+
+1. M58: o `awk` do passo 2 não tem teste com `ps` real. Se quiserem travar a correção também ali, basta
+   `test_ps_real_sem_chromium_copia` conferir `RSS do maior processo do perfil antes de parar: 0 MB`. Opcional.
+2. L2: o `TimeoutStartSec=300` agora soma stop (≤45 s), espera do perfil (≤20 s), cópia, start e espera de até
+   180 s. Cabe no caso normal; medir no passo 1 real.
+3. L5 (espera desde o `start`, por construção) continua.
+4. **Bloqueia o merge (dono, inst1, branch da PR):** os 5 passos reais, com o passo 1 refeito com este binário.
+
+---
+
+# Histórico — ciclo 5 (`10fe81c..ce24c45`, veredito do ciclo: reprovado)
+
+## Ciclo 5 — D1: prova com o `ps` real (WSL, sem nenhum Chromium aberto)
+
+A função foi extraída do script do HEAD (`sed` de `processos_do_perfil() {` até `}`) e rodou com o `ps` real,
+`RAIZ=/tmp/bsv67-auto` (perfil inexistente):
+
+```
+leitura 1: [441 [^]
+leitura 2: [444 [^]
+leitura 3: [447 [^]
+leitura 4: [450 [^]
+leitura 5: [453 [^]
+awk usado: /usr/bin/gawk
+mawk: [481 [^]                       <- mesma função com mawk 1.3.4 20260129
+contagem T7 sem chromium: 1          <- awk do ciclo 3/4 (o que rodou às 11:18 na inst1)
+```
+
+- O pid muda a cada leitura (é o `awk` daquela leitura); o tipo é `[^`. Nenhum Chromium existe.
+- **O código do ciclo 3/4 tinha o mesmo defeito**: contava 1 processo sem Chromium nenhum. É uma explicação mais
+  provável para o passo 1 de 28/11 11:18 ("cópia pulada sem órfão nenhum") do que o filho que saiu 1 s depois. Vale
+  conferir no log: o T7 mostrava só "por 1 processo(s)", sem pid.
+- Os testes não pegam porque o `ps` é simulado (arquivo fixo) e não lista o próprio `awk`.
+- **mawk:** o programa roda igual no mawk 1.3.4 (`match`, `RSTART`, `RLENGTH`, `substr`, ternário, `printf`).
+  Com `ps` simulado o mawk devolve `3282277 principal, 3282301 renderer`, idêntico ao gawk. O problema não é de
+  dialeto do awk.
+- Sugestão de correção (decisão do autor): tirar o perfil do argv do `awk`, por exemplo
+  `P="$PERFIL" awk 'BEGIN { p = ENVIRON["P"] } …'`, ou descartar a linha do próprio pipeline. E um teste que
+  rode `processos_do_perfil` com o `ps` **real** só em Linux (WSL e CI ubuntu; pulado no Windows, lição 32),
+  esperando vazio sem Chromium e o pid de um processo-isca com `--user-data-dir=<tmp>/user_data` nos argumentos
+  (ex.: `sleep` sob `exec -a`). O `awk` do passo 2 (RSS, `:58`) também casa a si mesmo, mas só soma alguns KB ao
+  log.
+
+## Ciclo 5 — evidência por critério (com `ps` simulado)
+
+| critério | evidência | confere? |
+|---|---|---|
+| Filho que sai depois do stop: espera e copia quando a lista fica vazia (some na 3ª leitura) | `tools/tests/test_reinicio_whatsapp.py:327-341`: cópia feita, `ps.log` inteiro `["-eo rss=,args=", "-eo pid=,args=" ×3]`, `sleep.log == ["1","1"]`, sem aviso | sim |
+| Nunca some → pula depois de `BESAVE_ESPERA_PERFIL` (20) com a linha inteira e o aviso inteiro | `test_reinicio_whatsapp.py:344-366`: 21 leituras (t = 0..20 s), 20 `sleep 1`, `re.fullmatch` da linha `copia da sessao: pulada (perfil ainda em uso apos 20 s: <pid tipo, …>)`, aviso inteiro, `start` depois; parametrizado com `principal` e `principal, renderer` (perfil no fim da linha e `--type=` antes do perfil) | sim |
+| Prazo vem do ambiente | `test_reinicio_whatsapp.py:369-377` (3 → 3 sleeps e a linha com "apos 3 s") | sim |
+| Só o perfil exato conta, sem espera à toa | `test_reinicio_whatsapp.py:380-395` (`user_data.copia` e outro perfil: copia, 1 leitura, `sleep.log` vazio) | sim |
+| Funciona com o `ps` real | prova acima | **não (D1)** |
+
+## Ciclo 5 — gates
+
+| gate | onde | resultado |
+|---|---|---|
+| `python -m pytest -q -p no:cacheprovider` (de `tools/`) | Windows | **934 passed, 45 skipped**, 306 s (inclui os testes da BSV-68 que vieram no merge) |
+| `pytest tests/test_reinicio_whatsapp.py` | Windows | 22 passed (dentro do pytest completo) |
+| `pytest tests/test_reinicio_whatsapp.py` (`--basetemp=/tmp/bsv67-ver5`) | WSL | 22 passed |
+| `python -m ruff check vps/ tests/` | Windows | All checks passed |
+| `shellcheck vps/*.sh` | Windows | rc 0 |
+| `processos_do_perfil` com `ps` real, gawk e mawk | WSL | **falha (D1)** |
+
+## Ciclo 5 — sensor de discriminação
+
+Worktree descartável do `ce24c45` (removido ao fim); `tests/test_reinicio_whatsapp.py` inteiro por mutante.
+
+| # | mutante | resultado | teste que matou |
+|---|---|---|---|
+| M48 | sem espera: pula na 1ª leitura | morto | `test_filho_que_termina_depois_do_stop_espera_e_copia` |
+| M49 | limite ignorado (espera até ficar livre) | morto | `test_perfil_em_uso_ate_o_prazo_pula_a_copia_com_pid_e_tipo[…principal]` |
+| M50 | tipo sempre `principal` | morto | `…[…principal, 3282301 renderer]` |
+| M51 | separador `; ` na lista | morto | idem |
+| M52 | `-ge` → `-gt` no prazo | morto | `…[…principal]` |
+| M53 | checagem por prefixo `index($0, p)` | morto | `test_outros_perfis_no_ps_nao_seguram_a_copia` |
+| M54 | prazo fixo 20 (ignora `BESAVE_ESPERA_PERFIL`) | morto | `test_prazo_do_perfil_vem_do_ambiente` |
+| M55 | lista sem o pid | morto | `test_perfil_em_uso_ate_o_prazo_pula_a_copia_com_pid_e_tipo[…principal]` |
+
+**Ciclo 5: 8 injetados, 8 mortos, 0 sobreviventes.** Árvore real: só este `validation.md` alterado, antes e depois. O sensor só mede o que o `ps` simulado mostra. O D1 é um defeito que nenhum mutante revela: o
+simulador não contém a linha do próprio `awk`.
+
+## Ciclo 5 — lacunas
+
+1. **D1 (bloqueia):** `tools/vps/reiniciar_whatsapp.sh:82-90`: o `awk` de `processos_do_perfil` se conta; em
+   produção a cópia nunca acontece. Falta também, em `tools/tests/test_reinicio_whatsapp.py`, um teste com o `ps`
+   real só em Linux (acima).
+2. **L2 (piora):** a espera do perfil soma até 20 s à unidade oneshot (`TimeoutStartSec=300`): stop até 45 s, mais
+   perfil até 20 s, mais cópia, mais start, mais espera de até 180 s. No caso normal ainda cabe, mas a folga
+   diminuiu; medir no teste real.
+3. L5 e a observação do RSS do passo 2 continuam (não bloqueiam).
+4. **Bloqueia o merge (dono, inst1, branch da PR):** os 5 passos reais. O passo 1 deve ser refeito depois da
+   correção do D1.
+
+## Lições propostas (ciclo 5)
+
+- Filtro de `ps` com `awk`/`grep` que recebe o padrão por argumento casa a si mesmo. Teste de detecção de
+  processo precisa de uma execução com o `ps` real (Linux), não só com `ps` simulado.
+- Antes de atribuir uma falha real a uma corrida ("o filho saiu 1 s depois"), reproduzir a detecção sem o alvo
+  e conferir que ela dá vazio.
+
+---
+
+# Histórico — ciclo 4 (`67ad979..400940e`, veredito do ciclo: aprovado)
 
 ## Ciclo 4 — gates
 
@@ -175,7 +337,7 @@ novo, nos mutantes "b").
 
 ---
 
-# Histórico — ciclo 1 (`b39d155..a8902a5`, Verdict: FAIL)
+# Histórico — ciclo 1 (`b39d155..a8902a5`, veredito do ciclo: reprovado)
 
 ## Gates (job `tools` do CI + Chromium + WSL)
 
@@ -327,3 +489,7 @@ da volta ao QR). Árvore real: `git status --porcelain` vazio antes e depois do 
   deixa a outra viva (M19).
 - Quando um ticket aumenta o trabalho de uma unidade oneshot, a spec deve pedir revisão do `TimeoutStartSec`
   com a soma medida das fases (L2).
+
+## Nota do autor depois do ciclo 6
+
+M58 (o `-v p=` de volta só no `awk` do passo 2) agora morre: `test_ps_real_sem_chromium_copia` confere `RSS do maior processo do perfil antes de parar: 0 MB` com o `ps` real (WSL: 24 passed; com o mutante, 1 failed). Conferido pelo autor, não pelo Verifier.

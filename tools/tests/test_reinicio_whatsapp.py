@@ -417,6 +417,7 @@ def test_ps_real_sem_chromium_copia(amb):  # COP-02 com o ps real: a lista vazia
     assert "pulada" not in r.stdout
     assert (amb.chat / "user_data.copia" / "copiada_em").exists()
     assert amb.ler("sleep.log") == ""
+    assert re.search(r"^\[reinicio\] .* RSS do maior processo do perfil antes de parar: 0 MB$", r.stdout, re.MULTILINE)
 
 
 @so_linux
