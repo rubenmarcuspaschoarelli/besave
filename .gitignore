@@ -19,6 +19,12 @@ tools/**/conf/batimento.json*
 tools/**/conf/*.bak*
 tools/**/conf/*.csv
 tools/**/user_data/
+# BSV-67: copia da sessao do WhatsApp, perfil perdido guardado e contagem de codigos pedidos
+tools/**/user_data.copia/
+tools/**/user_data.copia.nova/
+tools/**/user_data.copia.velha/
+tools/**/user_data.qr/
+tools/**/conf/pareamento_pedidos.json*
 tools/**/captura/
 .venv/
 __pycache__/

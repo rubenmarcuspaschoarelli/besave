@@ -52,7 +52,7 @@ T4 → T5
 **Tests**: `tools/tests/test_vigia_pareamento.py`
 **Gate**: `cd tools && pytest && ruff check vps/ tests/`
 
-### T5: README, config de exemplo e .gitignore
+### T5: README, config de exemplo e .gitignore ✅
 **What**: mensagens novas, chave `pareamento`, VNC, cópia e restauração à mão; `config.example.json`; `.gitignore` das pastas novas.
 **Where**: `tools/capture-chat-groups/README.md` (novo), `tools/capture-chat-groups/conf/config.example.json`, `.gitignore`, `tools/vps/README.md`
 **Depends on**: T4

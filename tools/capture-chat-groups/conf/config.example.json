@@ -28,6 +28,11 @@
         "telegram_chat_id": "",
         "_obs": "Captura parada: se (fora da janela noturna) nenhum grupo abrir por sem_abrir_minutos, manda aviso ao Telegram e outro quando voltar. Sem token/chat so grava no log."
     },
+    "pareamento": {
+        "numero": "",
+        "validade_min": 10,
+        "_obs": "Sessao perdida sem copia boa (BSV-67): o robo pede o codigo de 8 caracteres para este numero (so digitos, com DDI, ex.: 5511987654321) e manda pelo Telegram (bloco alerta). Vazio = nao pede: avisa para ler o QR pela tela VNC :2. validade_min: depois disso pede outro codigo (no maximo 3 por hora e 12 por dia)."
+    },
     "destravar": {
         "recarregar_voltas": 8,
         "_obs": "Voltas seguidas sem abrir nenhum grupo ate recarregar o WhatsApp Web (~10 min); depois o resgate roda."
