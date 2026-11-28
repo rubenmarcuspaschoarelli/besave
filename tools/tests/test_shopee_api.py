@@ -357,6 +357,18 @@ def test_res_protocolo_quebrado_e_passageiro(api):
     assert api.resolver(CURTO, abrir=abrir) == (None, "api_indisponivel")
 
 
+# BSV-68 SH-01/SH-02: URL que nao codifica nao e rede fora; nao prende a linha.
+def test_res_unicode_nao_codifica_e_nao_reconhecida(api, capsys):
+    erro = UnicodeEncodeError("ascii", "XyZ\u2060", 3, 4, "ordinal not in range(128)")
+    assert api.resolver(CURTO, abrir=Saltos({CURTO: erro})) == (None, "url_nao_reconhecida")
+    assert capsys.readouterr().out == "shopee api: url_nao_reconhecida (resolver: UnicodeEncodeError)\n"
+
+
+@pytest.mark.parametrize("erro", [OSError("rede fora"), ValueError("outro valor")])
+def test_res_outros_erros_seguem_passageiros(api, erro):
+    assert api.resolver(CURTO, abrir=Saltos({CURTO: erro})) == (None, "api_indisponivel")
+
+
 def test_res_404_nao_reconhecida(api):
     assert api.resolver(CURTO, abrir=Saltos({CURTO: (404, None)})) == (None, "url_nao_reconhecida")
 

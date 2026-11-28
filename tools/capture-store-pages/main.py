@@ -48,6 +48,7 @@ from core import (registry, csv_io, estado, pontes, afiliados, produtos, ofertas
                   validade, janela as janela_mod, bloqueio, redirecionamento, batimento,
                   navegador, alerta)
 from core import images, processos, shopee_api
+from core.url import invisiveis, limpar_url
 from core.browser import launch_persistent, PERFIL_DIR
 from core.oracle_db import OracleDB, COLUNAS_FILA
 from core.caminhos import DESTINO_DIR, IMG_DIR, em_log
@@ -341,7 +342,14 @@ def _adaptar_linhas(linhas):
     originais ficam na linha e vao inteiras para o CSV de seguranca.
     """
     for linha in linhas:
-        linha['url'] = (linha.get('DS_URL_ORIGEM') or '').strip()
+        bruta = linha.get('DS_URL_ORIGEM') or ''
+        linha['url'] = limpar_url(bruta)
+        # Caractere invisivel colado no link (U+2060 do WhatsApp Web, BSV-68): limpo aqui, logado.
+        tirados = invisiveis(bruta)
+        if tirados:
+            codigos = ', '.join(f'U+{ord(c):04X}' for c in dict.fromkeys(tirados))
+            print(f"[url] linha {linha.get('ID_OFERTA')}: removidos {len(tirados)} "
+                  f"caractere(s) invisivel(is) ({codigos})")
         linha['numero_da_captura'] = str(linha.get('ID_OFERTA') or '')
     return linhas
 
