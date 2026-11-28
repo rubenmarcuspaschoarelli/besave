@@ -262,6 +262,23 @@ def test_res02_url_nao_reconhecida_vira_9(amb):
     assert db.erros == [(1, "url_nao_reconhecida")] and amb.api.pedidos == []
 
 
+def test_bsv68_url_suja_da_fila_chega_limpa_ao_resolver(amb, lojas, monkeypatch):
+    """SH-03: DS_URL_ORIGEM com U+2060 passa por _adaptar_linhas; o abrir nunca ve caractere Cf."""
+    import unicodedata
+    amb.shopee(1)
+    recebidas = []
+
+    def abrir(url, timeout):
+        recebidas.append(url)
+        return 301, amb.redirects[url]
+    monkeypatch.setattr(lojas.shopee_api, "abrir_sem_seguir", abrir)
+    rows = lojas._adaptar_linhas([{"ID_OFERTA": 1, "DS_URL_ORIGEM": CURTO.format(1) + "\u2060", "DS_ORIGEM": "g"}])
+    saidas, _, _ = lojas._processar_lote(Pagina(), rows, Db(), True, amb.img, set(), amb.pausa)
+    assert recebidas == [CURTO.format(1)]
+    assert not any(unicodedata.category(c) == "Cf" for u in recebidas for c in u)
+    assert saidas[0]["status_captura"] == "ok"
+
+
 # --- FAL-01 / ERR-01 ------------------------------------------------------------------------------
 def test_fal01_timeout_retida_nada_gravado_ponteiro_travado(amb, lojas, capsys):
     amb.cfg["shopee_afiliado"]["timeout_segundos"] = 1     # piso do timeout (TIMEOUT_MIN)

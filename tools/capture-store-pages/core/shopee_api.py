@@ -277,7 +277,7 @@ def resolver(url, abrir=None, timeout=TIMEOUT_PADRAO):
     """URL do grupo -> ((shopId, itemId), None) ou (None, motivo).
 
     Ate MAX_PEDIDOS pedidos sem seguir redirect, so a hosts da Shopee. Rede fora,
-    5xx ou 429 -> API_INDISPONIVEL (passageiro); o resto -> URL_NAO_RECONHECIDA.
+    5xx ou 429 -> API_INDISPONIVEL (passageiro); URL que nao codifica e o resto -> URL_NAO_RECONHECIDA.
     """
     abrir = abrir or abrir_sem_seguir
     atual = (url or '').strip()
@@ -289,6 +289,10 @@ def resolver(url, abrir=None, timeout=TIMEOUT_PADRAO):
             break
         try:
             status, destino = abrir(atual, timeout)
+        except UnicodeError as e:
+            # URL que nao codifica (caractere invisivel, BSV-68) nao melhora sozinha: nao prende a linha.
+            print(f'shopee api: {URL_NAO_RECONHECIDA} (resolver: {type(e).__name__})')
+            return None, URL_NAO_RECONHECIDA
         except (OSError, ValueError, http.client.HTTPException) as e:
             print(f'shopee api: {API_INDISPONIVEL} (resolver: {type(e).__name__})')
             return None, API_INDISPONIVEL

@@ -12,6 +12,7 @@ Toda a extracao textual e feita por CONTEUDO (regex), nunca por classe CSS.
 """
 
 import re
+import unicodedata
 from datetime import datetime
 from urllib.parse import urlparse
 
@@ -559,6 +560,13 @@ _RE_LINK_WHATSAPP = re.compile(
     r"^https?://(?:[\w-]+\.)*(?:whatsapp\.com|wa\.me)(?:[/?#]|$)", re.IGNORECASE)
 
 
+def limpar_url(texto):
+    """Tira todo caractere Unicode de formatacao (categoria Cf), em qualquer posicao, e as pontas (BSV-68)."""
+    if not texto:
+        return ""
+    return "".join(c for c in texto if unicodedata.category(c) != "Cf").strip()
+
+
 def eh_link_whatsapp(url: str) -> bool:
     """True para link do proprio WhatsApp (convite de grupo, canal, wa.me)."""
     return bool(_RE_LINK_WHATSAPP.match((url or "").strip()))
@@ -588,7 +596,9 @@ def parse_campos(bruto: dict) -> dict:
     linhas = _limpar_linhas(text)
     # 1o link (decisao do usuario), pulando os do proprio WhatsApp: convite de
     # grupo/canal nunca e a oferta (44 de 44 no historico eram divulgacao de grupo).
-    links = [ln for ln in (bruto.get("links") or []) if not eh_link_whatsapp(ln)]
+    # O WhatsApp Web deixa caractere invisivel (U+2060) no href: limpa antes (BSV-68).
+    limpos = [limpar_url(ln) for ln in (bruto.get("links") or [])]
+    links = [ln for ln in limpos if ln and not eh_link_whatsapp(ln)]
     url = links[0] if links else ""
 
     campos = _campos_vazios()
