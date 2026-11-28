@@ -79,6 +79,8 @@ class Mundo:
         if args[0] == "restart":
             self._depois_do_restart(args[1])
             return self.restart_rc, ""
+        if args[0] == "start":                 # BSV-67: reinicio programado por memoria
+            return 0, ""
         if args[0] == "show":
             nome = args[-1]
             if "ControlGroup" in args:

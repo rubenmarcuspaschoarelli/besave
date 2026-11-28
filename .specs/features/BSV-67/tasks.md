@@ -44,7 +44,7 @@ T4 → T5
 **Tests**: `tools/tests/test_reinicio_whatsapp.py`
 **Gate**: `cd tools && pytest tests/test_reinicio_whatsapp.py && ruff check vps/ tests/`
 
-### T4: Vigia: fase pareamento e reinício por memória
+### T4: Vigia: fase pareamento e reinício por memória ✅
 **What**: `vigia_robos.py`: espera do pareamento sem reinício nem laço, lembrete de 6 h; vencido reinicia; RSS > limite dispara o reinício programado (1/60 min, aviso no 2º em 6 h).
 **Where**: `tools/vps/vigia_robos.py`
 **Depends on**: T3
