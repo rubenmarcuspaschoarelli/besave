@@ -1,9 +1,11 @@
 """BSV-54 REI-01..06: reiniciar_whatsapp.sh com systemctl, journalctl, ps, log e Python falsos
 (nada real e reiniciado nem enviado)."""
 import os
+import re
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -35,12 +37,21 @@ class Ambiente:
         self.estado(estado_antes)
         self.arquivo("estado_depois", estado_depois)
         bin_ = raiz / "bin"
-        # systemctl: is-active le 'estado'; restart troca para 'estado_depois' e cria o log novo
+        copia = (self.chat / "user_data.copia").as_posix()
+        # systemctl: is-active le 'estado'; stop deixa inactive; start troca para 'estado_depois' e cria o log
+        # novo. stop e start anotam em eventos.log se a copia da sessao ja existia (ordem stop, copia, start).
         _script(bin_ / "systemctl", f'''echo "$@" >> "{e}/systemctl.log"
+copia_agora() {{ if [ -e "{copia}/copiada_em" ]; then echo "copia:$(cat "{copia}/copiada_em")"; else echo "copia:ausente"; fi; }}
 case " $* " in
   *" is-active "*) cat "{e}/estado"; exit 0;;
-  *" restart "*)
-    [ -e "{e}/restart_rc" ] && exit "$(cat "{e}/restart_rc")"
+  *" stop "*)
+    echo "$*" >> "{e}/eventos.log"; copia_agora >> "{e}/eventos.log"
+    [ -e "{e}/stop_rc" ] && exit "$(cat "{e}/stop_rc")"
+    echo inactive > "{e}/estado"
+    exit 0;;
+  *" start "*)
+    echo "$*" >> "{e}/eventos.log"; copia_agora >> "{e}/eventos.log"
+    [ -e "{e}/start_rc" ] && exit "$(cat "{e}/start_rc")"
     cp "{e}/estado_depois" "{e}/estado"
     nome=$(cat "{e}/log_novo_nome" 2>/dev/null || echo run_captura_05_11_053001.log)
     [ -e "{e}/log_novo" ] && cp "{e}/log_novo" "{log_dir}/$nome"
@@ -49,7 +60,18 @@ esac
 exit 0
 ''')
         _script(bin_ / "journalctl", f'cat "{e}/journal" 2>/dev/null; exit 0\n')
-        _script(bin_ / "ps", f'cat "{e}/ps" 2>/dev/null; exit 0\n')
+        # ps: `-eo rss=,args=` (passo 2) le 'ps'; `-eo pid=,args=` (perfil em uso, BSV-67) le 'ps_pid_<n>' na
+        # n-esima leitura e, sem ele, 'ps_pid'
+        _script(bin_ / "ps", f'''echo "$@" >> "{e}/ps.log"
+case " $* " in
+  *pid=*)
+    n=$(( $(cat "{e}/ps_n" 2>/dev/null || echo 0) + 1 )); echo "$n" > "{e}/ps_n"
+    if [ -e "{e}/ps_pid_$n" ]; then cat "{e}/ps_pid_$n"; else cat "{e}/ps_pid" 2>/dev/null; fi;;
+  *) cat "{e}/ps" 2>/dev/null;;
+esac
+exit 0
+''')
+        _script(bin_ / "sleep", f'echo "$@" >> "{e}/sleep.log"; exit 0\n')
         _script(self.chat / ".venv" / "bin" / "python", f'echo "$@" >> "{e}/py.log"\nexit 0\n')
         self.env = {
             **os.environ,
@@ -59,6 +81,7 @@ exit 0
             "BESAVE_PS": (bin_ / "ps").as_posix(),
             "BESAVE_ESPERA_MAX": "1",
             "BESAVE_INTERVALO": "1",
+            "BESAVE_SLEEP": (bin_ / "sleep").as_posix(),
         }
 
     def estado(self, valor):
@@ -81,7 +104,9 @@ exit 0
 
     @property
     def reiniciou(self):
-        return any(" restart " in f" {linha} " for linha in self.ler("systemctl.log").splitlines())
+        """Parou e partiu a unidade (BSV-67: stop + copia + start no lugar do restart)."""
+        linhas = self.ler("systemctl.log").splitlines()
+        return any(" start " in f" {x} " for x in linhas) and any(" stop " in f" {x} " for x in linhas)
 
 
 @pytest.fixture
@@ -157,11 +182,11 @@ def test_unidade_que_nao_sobe_avisa(amb):  # REI-04
     assert len(amb.avisos) == 1 and "failed" in amb.avisos[0]
 
 
-def test_restart_que_falha_avisa(amb):  # REI-04b
-    amb.arquivo("restart_rc", "1")
+def test_start_que_falha_avisa(amb):  # REI-04b (BSV-67: o restart virou stop + copia + start)
+    amb.arquivo("start_rc", "1")
     r = amb.rodar()
     assert r.returncode != 0
-    assert len(amb.avisos) == 1 and "restart" in amb.avisos[0]
+    assert len(amb.avisos) == 1 and "o start de besave-captura-whatsapp.service falhou" in amb.avisos[0]
 
 
 def test_unidade_parada_de_proposito_nao_reinicia(tmp_path):  # REI-05
@@ -199,3 +224,217 @@ def test_nao_mata_processo_por_nome():  # regra 1: so systemctl
     corpo = (VPS / "reiniciar_whatsapp.sh").read_text(encoding="utf-8")
     for proibido in ("pkill", "killall", "kill ", "encerrar_captura"):
         assert proibido not in corpo
+
+
+# --- BSV-67 COP-01..03: copia da sessao boa entre o stop e o start ---------------------------------------
+
+UNID = "besave-captura-whatsapp.service"
+FICAM = ["Default/Preferences", "Default/IndexedDB/https_web.whatsapp.com_0.indexeddb.leveldb/000003.log",
+         "Default/Local Storage/leveldb/CURRENT", "Default/Service Worker/Database/MANIFEST", "Local State"]
+CACHES = ["Default/Cache/Cache_Data/data_0", "Default/Code Cache/js/index", "Default/GPUCache/data_1",
+          "GPUPersistentCache/index", "Default/Service Worker/CacheStorage/abc/index"]
+
+
+def _perfil(amb):
+    for rel in FICAM + CACHES + ["SingletonLock"]:
+        arq = amb.chat / "user_data" / rel
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text("x" * 10, encoding="utf-8")
+
+
+def _arquivos(raiz: Path):
+    return sorted(p.relative_to(raiz).as_posix() for p in raiz.rglob("*") if p.is_file())
+
+
+def _log_parado(amb, texto):
+    """Log da partida em andamento (o de maior mtime)."""
+    p = amb.chat / "log" / "run_captura_05_11_000001.log"
+    p.write_text(texto, encoding="utf-8")
+    t = os.path.getmtime(amb.chat / "log" / "run_captura_04_11_053001.log") + 3600
+    os.utime(p, (t, t))
+
+
+def test_copia_sem_os_caches_entre_stop_e_start(amb):  # COP-01, COP-02
+    _perfil(amb)
+    _log_parado(amb, "[browser] Grupo aberto, painel de mensagens pronto.\n")
+    velha = amb.chat / "user_data.copia"
+    velha.mkdir()
+    (velha / "restaurada_em").write_text("2026-11-26T10:00:00Z", encoding="utf-8")
+    (velha / "arquivo_da_copia_velha").write_text("v", encoding="utf-8")
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    eventos = amb.ler("eventos.log").splitlines()
+    assert eventos[0] == f"--user stop {UNID}" and eventos[1] == "copia:ausente"
+    assert eventos[2] == f"--user start {UNID}" and re.fullmatch(r"copia:\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", eventos[3])
+    assert len(eventos) == 4
+    assert _arquivos(amb.chat / "user_data.copia") == sorted(FICAM + ["copiada_em"])   # sem restaurada_em
+    assert not (amb.chat / "user_data.copia.nova").exists() and not (amb.chat / "user_data.copia.velha").exists()
+    assert re.search(r"\[reinicio\] .* copia da sessao: \d+ MB em \d+ s", r.stdout)
+    assert amb.avisos == []
+    assert _arquivos(amb.chat / "user_data") == sorted(FICAM + CACHES + ["SingletonLock"])  # perfil intocado
+
+
+def test_sem_grupo_aberto_na_partida_parada_nao_copia(amb):  # COP-02
+    _perfil(amb)
+    _log_parado(amb, "[browser] Aguardando o WhatsApp Web carregar...\n")   # o de ontem tem Grupo aberto
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("eventos.log").splitlines() == [f"--user stop {UNID}", "copia:ausente",
+                                                    f"--user start {UNID}", "copia:ausente"]
+    assert "copia da sessao: pulada" in r.stdout
+
+
+def test_copia_que_falha_avisa_e_parte_mesmo_assim(amb):  # COP-03
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    anterior = amb.chat / "user_data.copia"
+    anterior.mkdir()
+    (anterior / "copiada_em").write_text("2026-11-26T08:30:00Z", encoding="utf-8")
+    falso = amb.est.parent / "bin_tar"
+    _script(falso / "tar", "exit 2\n")
+    amb.env["PATH"] = falso.as_posix() + os.pathsep + amb.env["PATH"]
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert amb.ler("eventos.log").splitlines() == [f"--user stop {UNID}", "copia:2026-11-26T08:30:00Z",
+                                                    f"--user start {UNID}", "copia:2026-11-26T08:30:00Z"]
+    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (leitura do "
+                          "perfil; a anterior continua valendo); a captura parte mesmo assim.")]
+    assert not (amb.chat / "user_data.copia.nova").exists()
+
+
+def test_stop_que_falha_nao_copia_e_parte(amb):  # COP-01: copia so com a unidade parada (regra 2)
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    amb.arquivo("stop_rc", "1")
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
+    assert amb.avisos == [("-m wa.avisar Reinicio diario do robo do WhatsApp: o stop de besave-captura-whatsapp.service "
+                          "falhou (estado: active); sem copia da sessao.")]
+    assert r.returncode == 0
+
+
+def _perfil_como_o_bash_ve(amb):
+    raiz = subprocess.run([BASH, "-c", f'cd "{amb.chat.as_posix()}" && pwd -P'], check=False, capture_output=True,
+                          text=True).stdout.strip()
+    return f"--user-data-dir={raiz}/user_data"
+
+
+def test_filho_que_termina_depois_do_stop_espera_e_copia(amb):  # COP-02: inst1, 28/11 11:18 (saiu 1-2 s depois)
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps_pid_1", f"3282277 /usr/lib/chromium/chromium {perfil} --no-first-run\n"
+                            f"3282301 /usr/lib/chromium/chromium --type=renderer {perfil}\n")
+    amb.arquivo("ps_pid_2", f"3282301 /usr/lib/chromium/chromium --type=renderer {perfil}\n")
+    amb.arquivo("log_novo", "Grupo aberto\n")                  # 3a leitura em diante: ps_pid ausente = livre
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo pid=,args=", "-eo pid=,args=", "-eo pid=,args="]
+    assert amb.ler("sleep.log").splitlines() == ["1", "1"]
+    assert amb.avisos == [] and "pulada" not in r.stdout
+
+
+@pytest.mark.parametrize("linhas, restantes", [
+    (["3282277 /usr/lib/chromium/chromium {perfil} --no-first-run"], "3282277 principal"),
+    (["3282277 /usr/lib/chromium/chromium {perfil}",                 # perfil no fim da linha
+      "3282301 /usr/lib/chromium/chromium --type=renderer --lang=pt-BR {perfil} --enable-x"],
+     "3282277 principal, 3282301 renderer"),
+])
+def test_perfil_em_uso_ate_o_prazo_pula_a_copia_com_pid_e_tipo(amb, linhas, restantes):  # COP-03
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps_pid", "".join(x.format(perfil=perfil) + "\n" for x in linhas))
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args="] + ["-eo pid=,args="] * 21   # t = 0..20 s
+    assert amb.ler("sleep.log").splitlines() == ["1"] * 20
+    pulada = [x for x in r.stdout.splitlines() if "copia da sessao: pulada" in x]
+    assert len(pulada) == 1
+    assert re.fullmatch(r"\[reinicio\] \d\d/\d\d/\d{4} \d\d:\d\d:\d\d copia da sessao: pulada \(perfil ainda em uso "
+                        r"apos 20 s: " + re.escape(restantes) + r"\)", pulada[0])
+    assert amb.avisos == [(f"-m wa.avisar Reinicio diario do robo do WhatsApp: a copia da sessao falhou (perfil ainda "
+                          f"em uso apos 20 s: {restantes}; a anterior continua valendo); a captura parte mesmo assim.")]
+    assert amb.ler("eventos.log").splitlines()[2] == f"--user start {UNID}"
+
+
+def test_prazo_do_perfil_vem_do_ambiente(amb):  # COP-03: BESAVE_ESPERA_PERFIL
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    amb.arquivo("ps_pid", f"3282277 /usr/lib/chromium/chromium {_perfil_como_o_bash_ve(amb)}\n")
+    amb.env["BESAVE_ESPERA_PERFIL"] = "3"
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert amb.ler("sleep.log").splitlines() == ["1"] * 3
+    assert "copia da sessao: pulada (perfil ainda em uso apos 3 s: 3282277 principal)" in r.stdout
+
+
+def test_outros_perfis_no_ps_nao_seguram_a_copia(amb):  # COP-02: so o caminho exato do perfil conta
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    perfil = _perfil_como_o_bash_ve(amb)
+    amb.arquivo("ps_pid", "\n".join([
+        f"  90000 /usr/lib/chromium/chromium --type=renderer {perfil}.copia",
+        "9990000 /usr/bin/chrome --type=renderer --user-data-dir=/outro/perfil",
+        "",
+    ]))
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.avisos == []
+    assert amb.ler("ps.log").splitlines() == ["-eo rss=,args=", "-eo pid=,args="]
+    assert amb.ler("sleep.log") == ""
+
+
+# --- ps de verdade (so Linux; rodar no WSL, licao 32): o awk do script nao pode contar a si mesmo -----------
+
+so_linux = pytest.mark.skipif(not sys.platform.startswith("linux"), reason="ps real do Linux (rodar no WSL)")
+
+
+def _ps_real(amb):
+    amb.env.pop("BESAVE_PS", None)
+    amb.env["BESAVE_ESPERA_PERFIL"] = "2"
+
+
+@so_linux
+def test_ps_real_sem_chromium_copia(amb):  # COP-02 com o ps real: a lista vazia e mesmo vazia
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    _ps_real(amb)
+    amb.arquivo("log_novo", "Grupo aberto\n")
+    r = amb.rodar()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "pulada" not in r.stdout
+    assert (amb.chat / "user_data.copia" / "copiada_em").exists()
+    assert amb.ler("sleep.log") == ""
+    assert re.search(r"^\[reinicio\] .* RSS do maior processo do perfil antes de parar: 0 MB$", r.stdout, re.MULTILINE)
+
+
+@so_linux
+def test_ps_real_com_processo_do_perfil_pula_com_o_pid(amb):  # COP-03 com o ps real
+    _perfil(amb)
+    _log_parado(amb, "Grupo aberto\n")
+    _ps_real(amb)
+    perfil = _perfil_como_o_bash_ve(amb)
+    falso = subprocess.Popen(["bash", "-c", f'exec -a "chromium-falso {perfil}" sleep 60'])
+    try:
+        amb.arquivo("log_novo", "Grupo aberto\n")
+        r = amb.rodar()
+    finally:
+        falso.kill()
+        falso.wait()
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert not (amb.chat / "user_data.copia").exists()
+    pulada = [x for x in r.stdout.splitlines() if "copia da sessao: pulada" in x]
+    assert len(pulada) == 1
+    assert pulada[0].endswith(f"copia da sessao: pulada (perfil ainda em uso apos 2 s: {falso.pid} principal)")

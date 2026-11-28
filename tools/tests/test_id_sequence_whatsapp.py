@@ -255,7 +255,7 @@ def _rodar(zap, reg, monkeypatch, volta_apos, fora_na_partida=True, est=None, gr
     monkeypatch.setattr(zap.alerta, "enviar_telegram",
                         lambda t, c, m: (enviados.append((t, c, m)), db.eventos.append(f"tg:{m}")))
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", lambda page, nome: db.eventos.append(f"abrir:{nome}"))
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: est)
@@ -375,7 +375,7 @@ def test_fora03_ao_vivo_banco_fora_nenhum_grupo_anda(zap, reg, monkeypatch):
     monkeypatch.setattr(time, "sleep", dorme)
     monkeypatch.setattr(zap.alerta, "enviar_telegram", lambda t, c, m: None)
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: est)

@@ -6,5 +6,5 @@ Description=Besave - reinicio diario do robo do WhatsApp
 [Service]
 Type=oneshot
 ExecStart=/srv/besave/repo/tools/vps/reiniciar_whatsapp.sh
-# restart (<=30 s) + espera de ate 3 min pela confirmacao
+# stop (<=30 s) + copia da sessao (BSV-67, ~260 MB: segundos) + start + espera de ate 3 min pela confirmacao
 TimeoutStartSec=300

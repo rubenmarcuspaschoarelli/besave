@@ -102,7 +102,7 @@ def _rodar(zap, monkeypatch, abre, voltas_max=8, janela_dorme_s=None, banco_fora
     monkeypatch.setattr(batim, "gravar_atomico", lambda caminho, dados: gravados.append(dict(dados)) or True)
     monkeypatch.setattr(time, "sleep", lambda s: None)
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: estado)
@@ -322,7 +322,7 @@ def _arranque(zap, monkeypatch, abrem, min_por_grupo, banco_cai_no_1o_catchup=Fa
                         lambda caminho, dados: gravados.append((rel["t"], dict(dados))) or True)
     monkeypatch.setattr(time, "sleep", lambda s: None)
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), PaginaOk()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), PaginaOk()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: {"grupos": json.loads(json.dumps(MARCADORES)),

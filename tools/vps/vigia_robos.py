@@ -14,14 +14,21 @@ lendo o batimento.json que o proprio robo grava so com progresso:
   5. senao `systemctl --user restart <unidade>` (no maximo 2 por robo em 60 min) e aviso;
   6. batimento novo depois de um aviso -> "voltou (parado por N min)";
   7. lojas vivo sem captura por navegador (`tentativas_navegador` >= 10 e `ultimo_ok_navegador` ha mais de
-     60 min, BSV-65) -> avisa, NAO reinicia; lembrete a cada 2 h; "voltou" quando o campo anda.
+     60 min, BSV-65) -> avisa, NAO reinicia; lembrete a cada 2 h; "voltou" quando o campo anda;
+  8. whatsapp esperando o vinculo pelo celular (batimento em dia com `fase: "pareamento"`, BSV-67) -> nada:
+     sem reinicio, sem laco de partidas, sem aviso (o robo ja avisou); so um lembrete a cada 6 h. Vencido na
+     fase `pareamento` -> regra de parado (reinicio), sem a excecao do QR pendente;
+  9. whatsapp saudavel no `rodizio` com o maior chrome do scope acima de BESAVE_WHATSAPP_RSS_MAX_MB (2500)
+     -> `systemctl --user start --no-block` do reinicio programado (que espera `Grupo aberto` e guarda a copia
+     da sessao), no maximo 1 por 60 min, fora da conta dos reinicios de robo parado; Telegram so no 2o
+     disparo em 6 h (BSV-67).
 
 So age pela unidade: nunca `kill` nem busca de processo por nome. Os pids do robo vem do `cgroup.procs`
 do scope (o MainPID da unidade e o tmux). Falha do vigia (log ilegivel, Telegram fora) so vai ao journal.
 Token e chat vem de TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID do worker.env; nada disso entra em log ou mensagem.
 
 Env: BESAVE_VIGIA_ROBOS, BESAVE_TOOLS, BESAVE_VIGIA_ESTADO, BESAVE_WORKER_ENV, BESAVE_GRUPO_FALHA_HORAS (2),
-BESAVE_LOG_DIAS (14), BESAVE_LOG_MB (50).
+BESAVE_LOG_DIAS (14), BESAVE_LOG_MB (50), BESAVE_WHATSAPP_RSS_MAX_MB (2500).
 """
 
 import json
@@ -49,6 +56,11 @@ LINHAS_ABORTADO = 20
 LINHA_MAX = 200
 NAVEGADOR_TENTATIVAS = 10                  # linhas por navegador sem ok (BSV-65)
 NAVEGADOR_SEM_OK = timedelta(minutes=60)
+FASE_PAREAMENTO = "pareamento"             # BSV-67
+LEMBRETE_PAREAMENTO = timedelta(hours=6)
+RSS_MAX_PADRAO_MB = 2500
+JANELA_MEMORIA = timedelta(minutes=60)     # no maximo 1 reinicio por memoria nessa janela
+AVISO_MEMORIA = timedelta(hours=6)         # Telegram so no 2o disparo nessa janela
 
 SAUDAVEL, PARADO, INDETERMINADO = "saudavel", "parado", "indeterminado"
 
@@ -157,6 +169,7 @@ class Ambiente:
     grupo_falha: timedelta = timedelta(hours=2)
     log_dias: int = 14
     log_mb: int = 50
+    rss_max_mb: int = RSS_MAX_PADRAO_MB          # BSV-67: maior chrome do whatsapp antes do teto do scope
     extras: dict = field(default_factory=dict)
 
     def systemctl(self, *args: str) -> tuple[int, str]:
@@ -510,12 +523,19 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
     texto_log = ler_cauda(alvo_log) if alvo_log is not None else ""
     foto = tirar_foto(amb, robo, pids, texto_log)     # antes de qualquer restart
 
+    em_pareamento = bat is not None and bat.fase == FASE_PAREAMENTO
+    if status == SAUDAVEL and em_pareamento:          # esperando o celular: o robo ja avisou (BSV-67)
+        _vigiar_pareamento(amb, robo, ocorrencias, agora)
+        return
+    ocorrencias.pop("pareamento", None)
+
     laco = laco_de_partidas(amb, robo, agora) if robo.nome == "whatsapp" else 0
     operador = None
     if laco:
         operador = f"{laco} partidas em 30 min sem abrir grupo (laco de partidas)"
     elif status == PARADO:
-        if robo.nome in ROBOS_COM_QR and pede_qr(texto_log):
+        # vencido na espera do vinculo: o laco de espera travou; reiniciar refaz a deteccao (BSV-67)
+        if robo.nome in ROBOS_COM_QR and not em_pareamento and pede_qr(texto_log):
             operador = "o WhatsApp pede QR Code (reiniciar nao resolve)"
         else:
             abortado = tem_abortado(texto_log)
@@ -551,6 +571,39 @@ def vigiar_robo(amb: Ambiente, robo: Robo, estado: dict, agora: datetime) -> Non
             avisar(amb, f"Vigia dos robos: {robo.nome} voltou (parado por {minutos} min).")
         _vigiar_grupos(amb, robo, bat, ocorrencias, agora)
         _vigiar_navegador(amb, robo, bat, ocorrencias, agora)
+        if (robo.reinicio and bat is not None and bat.fase == "rodizio" and foto.rss_mb is not None
+                and foto.rss_mb > amb.rss_max_mb):
+            _reiniciar_por_memoria(amb, robo, registro, foto.rss_mb, agora)
+
+
+def _vigiar_pareamento(amb: Ambiente, robo: Robo, ocorrencias: dict, agora: datetime) -> None:
+    """Espera viva do vinculo pelo codigo (BSV-67): sem reinicio nem aviso; lembrete a cada 6 h."""
+    oc = ocorrencias.get("pareamento")
+    if oc is None:
+        ocorrencias["pareamento"] = {"desde": _iso(agora), "avisado_em": _iso(agora)}
+        log(f"{robo.nome} aguardando vinculo pelo celular (fase pareamento); sem reinicio")
+        return
+    if agora - _iso_para_dt(oc["avisado_em"]) >= LEMBRETE_PAREAMENTO:
+        horas = int((agora - _iso_para_dt(oc["desde"])).total_seconds() // 3600)
+        oc["avisado_em"] = _iso(agora)
+        avisar(amb, f"Vigia dos robos: {robo.nome} aguardando vinculo pelo celular ha {horas} h.")
+
+
+def _reiniciar_por_memoria(amb: Ambiente, robo: Robo, registro: dict, rss_mb: int, agora: datetime) -> None:
+    """Maior chrome acima do limite com o robo saudavel: dispara o reinicio programado antes do MemoryHigh."""
+    disparos = [t for t in registro.get("memoria", []) if agora - _iso_para_dt(t) < AVISO_MEMORIA]
+    registro["memoria"] = disparos
+    if disparos and agora - _iso_para_dt(disparos[-1]) < JANELA_MEMORIA:
+        log(f"{robo.nome}: maior chrome {rss_mb} MB > {amb.rss_max_mb} MB; reinicio por memoria ja disparado "
+            f"ha menos de 60 min")
+        return
+    # --no-block: a unidade do reinicio e oneshot (ate 300 s) e o vigia espera cada systemctl ate 150 s
+    rc, _ = amb.systemctl("start", "--no-block", robo.reinicio)
+    disparos.append(_iso(agora))
+    log(f"{robo.nome}: maior chrome {rss_mb} MB > {amb.rss_max_mb} MB; reinicio programado disparado "
+        f"({len(disparos)} em 6 h)" + ("" if rc == 0 else f"; o start falhou (rc {rc})"))
+    if len(disparos) == 2:
+        avisar(amb, f"Vigia dos robos: {robo.nome} reiniciado por memoria 2 vezes em 6 h (maior chrome: {rss_mb} MB).")
 
 
 def _avisar_unidade_failed(amb: Ambiente, robo: Robo, ocorrencias: dict, pids: set[int], agora: datetime) -> None:
@@ -702,6 +755,7 @@ def ambiente_real(env=None) -> Ambiente:
         robos=robos_da_maquina(tools, env.get("BESAVE_VIGIA_ROBOS")), estado_path=estado,
         grupo_falha=timedelta(hours=float(env.get("BESAVE_GRUPO_FALHA_HORAS") or 2)),
         log_dias=int(env.get("BESAVE_LOG_DIAS") or 14), log_mb=int(env.get("BESAVE_LOG_MB") or 50),
+        rss_max_mb=int(env.get("BESAVE_WHATSAPP_RSS_MAX_MB") or RSS_MAX_PADRAO_MB),
     )
     if token and chat:
         amb.enviar = lambda texto: enviar_telegram(token, chat, texto)

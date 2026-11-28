@@ -93,7 +93,7 @@ def _rodar(zap, monkeypatch, abre, estado=None, voltas_max=12, janela=None, resg
     monkeypatch.setattr(zap.alerta, "datetime", Rel)
     monkeypatch.setattr(zap.alerta, "enviar_telegram", lambda t, c, m: enviados.append(m))
     monkeypatch.setattr(zap, "sync_playwright", lambda: PW())
-    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False: (Ctx(), Pagina()))
+    monkeypatch.setattr(zap.browser, "abrir_whatsapp", lambda pw, headless=False, **k: (Ctx(), Pagina()))
     monkeypatch.setattr(zap.browser, "abrir_grupo", abrir)
     monkeypatch.setattr(zap.storage, "novo_csv", lambda: "csv")
     monkeypatch.setattr(zap.estado_mod, "carregar", lambda: estado)

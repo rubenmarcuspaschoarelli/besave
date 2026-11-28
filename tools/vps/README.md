@@ -281,12 +281,25 @@ A aba do WhatsApp Web cresce ~2,2 GB/dia (o `chrome --type=renderer` do `user_da
 
 1. **Reinício a cada 6 h (05:30, 11:30, 17:30, 23:30):** na medição da inst1 (06/11) o renderer cresceu ~0,2 GB/h de dia (1,26 → 3,48 GB entre 06:10 e 17:10) e ficou parado à noite; um reinício só às 05:30 não bastava. `besave-reinicio-whatsapp.timer` (`Persistent=false`) dispara o
    `besave-reinicio-whatsapp.service`, que roda `reiniciar_whatsapp.sh`. Ele registra o RSS do maior
-   processo do perfil, faz `systemctl --user restart besave-captura-whatsapp` (SIGINT: o `finally` grava os
-   marcadores) e espera até 3 min a unidade ficar `active` **e** o log novo ter
+   processo do perfil, faz `systemctl --user stop besave-captura-whatsapp` (SIGINT: o `finally` grava os
+   marcadores), guarda a cópia da sessão (BSV-67, abaixo), faz `systemctl --user start` e espera até 3 min,
+   contados do `start`, a unidade ficar `active` **e** o log novo ter
    `Grupo aberto`. Confirmou: só log. Não confirmou (perfil travado, QR pedido, falha de partida): mensagem
    no Telegram com o motivo (`python -m wa.avisar`, token e chat lidos do `alerta` do `config.json`; sem eles,
-   só log). Unidade parada de propósito (`inactive`): não reinicia. Só `systemctl restart`; nunca mata
+   só log). Unidade parada de propósito (`inactive`): não reinicia. Só `systemctl stop`/`start`; nunca mata
    processo por nome.
+
+   **Cópia da sessão (BSV-67):** entre o `stop` e o `start`, se o log da partida parada tem `Grupo aberto`
+   (sessão sabidamente boa), `user_data/` vai para `capture-chat-groups/user_data.copia/` sem `Default/Cache`,
+   `Default/Code Cache`, `Default/GPUCache`, `GPUPersistentCache`, `Default/Service Worker/CacheStorage` e as
+   travas `Singleton*` (~260 MB em 27/11), primeiro em `user_data.copia.nova/` e depois por `mv`; grava
+   `copiada_em` (UTC). Log: `[reinicio] … copia da sessao: 262 MB em 4 s`. Antes de copiar, o mesmo `ps` do passo 2
+   confere se algum processo ainda tem o perfil nos argumentos (o Chromium principal roda num scope próprio e
+   pode ficar órfão; no stop normal os filhos saem 1–2 s depois do scope): repete a cada 1 s por até
+   `BESAVE_ESPERA_PERFIL` s (padrão 20) e só copia com o perfil livre; passou do prazo, pula a cópia e avisa, com pid
+   e tipo de cada processo restante (`copia da sessao: pulada (perfil ainda em uso apos 20 s: 3282277 principal)`). Falha da cópia (ou do `stop`) avisa
+   no Telegram e a unidade parte mesmo assim. O robô restaura a cópia sozinho quando cai na tela de login
+   (`tools/capture-chat-groups/README.md`).
 2. **Teto de memória no scope do robô:** o tmux do Ubuntu 24.04 põe cada painel num scope próprio
    (`app.slice/tmux-spawn-*.scope`), fora da unidade: `MemoryHigh`/`MemoryMax` na unidade não pegavam o
    Chromium, e o `KillSignal=SIGINT` da unidade chegava só ao servidor tmux (o python morria por SIGHUP, sem o
@@ -395,7 +408,16 @@ em pausa renovam; exceção de navegador fechado não).
    `Grupo aberto` (laço de partidas) → operador, sem reinício;
 5. senão `systemctl --user restart <unidade>` e aviso, **no máximo 2 reinícios por robô em 60 min**; depois disso
    só "precisa de operador" até o batimento voltar;
-6. batimento novo depois de um aviso → "voltou (parado por N min)".
+6. batimento novo depois de um aviso → "voltou (parado por N min)";
+7. WhatsApp com batimento em dia na fase `pareamento` (esperando o vínculo pelo celular, BSV-67) → nada: sem
+   reinício, sem laço de partidas, sem aviso (o robô já mandou o código); só o lembrete
+   `Vigia dos robos: whatsapp aguardando vinculo pelo celular ha N h.` a cada 6 h. Batimento vencido nessa fase
+   → reinício (o passo 3 não vale: o robô estava vivo esperando);
+8. WhatsApp saudável no `rodizio` com o maior `chrome` do scope acima de `BESAVE_WHATSAPP_RSS_MAX_MB` (padrão
+   2500) → `systemctl --user start --no-block besave-reinicio-whatsapp.service` (o reinício programado acima, com
+   a cópia da sessão), no máximo 1 por 60 min e fora da conta dos 2 reinícios/h. Log sempre; Telegram só no 2º
+   disparo em 6 h: `Vigia dos robos: whatsapp reiniciado por memoria 2 vezes em 6 h (maior chrome: N MB).`
+   Para testar: `BESAVE_WHATSAPP_RSS_MAX_MB=500` num drop-in do `besave-vigia-robos.service` (e tirar depois).
 
 Uma mensagem por ocorrência (e uma nova a cada mudança de ação: reiniciado 1/2 → 2/2 → operador); lembrete
 a cada 2 h. O texto traz robô, motivo, ação, última linha útil do log (cortada, sem URL e sem token), a memória
